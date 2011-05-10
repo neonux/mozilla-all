@@ -1,0 +1,35 @@
+<!ENTITY aboutPermissions.title          "about:permissions">
+
+<!ENTITY sites.search                    "Search Sites">
+
+<!ENTITY permissions.header              "Permissions for">
+<!ENTITY permissions.forgetSite          "Forget About This Site">
+
+<!ENTITY permissions.allSites            "All Sites">
+<!ENTITY permissions.defaults            "Default Permissions for All Sites">
+<!ENTITY permissions.manageDefaults      "Manage Default Permissions">
+<!ENTITY permissions.restoreDefaults     "Restore Default Permissions">
+<!ENTITY permissions.applyToAllSites     "Apply to All Sites">
+
+<!ENTITY permission.alwaysAsk            "Always Ask">
+<!ENTITY permission.allow                "Allow">
+<!ENTITY permission.allowForSession      "Allow for Session">
+<!ENTITY permission.block                "Block">
+
+<!ENTITY password.label                  "Store Passwords">
+<!ENTITY password.manage                 "Manage Passwords…">
+
+<!ENTITY cookie.label                    "Set Cookies">
+<!ENTITY cookie.clear                    "Clear Cookies">
+<!ENTITY cookie.clearAll                 "Clear All Cookies">
+
+<!ENTITY geo.label                       "Share Location">
+
+<!ENTITY indexedDB.label                 "Maintain Offline Database Storage">
+<!ENTITY indexedDB.clear                 "Clear Offline Database Storage">
+
+<!ENTITY install.label                   "Install Extensions or Themes">
+
+<!ENTITY popup.label                     "Open Pop-up Windows">
+
+<!ENTITY image.label                     "Load Images">
