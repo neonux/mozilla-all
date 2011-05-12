@@ -26,11 +26,12 @@
 /* sites box */
 
 #sites-box {
-  width: 25em;
   padding: 10px;
 }
 
 .site {
+  width: 250px;
+  overflow-x: hidden;
   padding: 4px;
   border-bottom: 1px solid ThreeDLightShadow;
 }
@@ -39,6 +40,10 @@
   height: 16px;
   width: 16px;
   -moz-margin-end: 4px;
+}
+
+.site-domain {
+  max-width: 200px; /* crop set in XBL will ellipsize the domain if it's too long */
 }
 
 /* permissions box */
@@ -106,8 +111,4 @@
 .pref-menulist {
   margin-left: 6px;
   margin-right: 6px;
-}
-
-.pref-menulist:not([default]):not([open]) {
-  font-weight: bold;
 }

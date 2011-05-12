@@ -41,10 +41,6 @@ let TEST_EXACT_PERM_TYPES = ["geo"];
 
 /**
  * Site object represents a single site, uniquely identified by a host.
- *
- * TODO: If sites are going to be uniquely identified by hosts, we need to deal
- * with them having multiple URIs (http://, https://). should we expose multiple URIs
- * to the user? -- it seems most permissions are set per URI, not host.
  */
 function Site(host) {
   this.host = host;
@@ -95,6 +91,8 @@ Site.prototype = {
   },
 
   setPermission: function Site_setPermission(aType, aPerm) {
+    // Using httpURI is kind of bogus, but the permission manager stores the
+    // permission for the host, so the right thing happens in the end.
     Services.perms.add(this.httpURI, aType, aPerm);
   },
 
@@ -128,18 +126,15 @@ Site.prototype = {
    * @returns An array of the logins stored for the site.
    */
   get logins() {
+    // There could be more logins for different schemes/ports, but this covers
+    // the vast majority of cases.
     let httpLogins = Services.logins.findLogins({}, this.httpURI.prePath, "", null);
     let httpsLogins = Services.logins.findLogins({}, this.httpsURI.prePath, "", null);
     return httpLogins.concat(httpsLogins);
   },
 
-  clearLogins: function Site_clearLogins(aLoginArray) {
-    aLoginArray.forEach(function(aLogin) {
-      Services.logins.removeLogin(aLogin);
-    });
-  },
-
   get loginSavingEnabled() {
+    // Only say that login saving is blocked if it is blocked for both http and https.
     return Services.logins.getLoginSavingEnabled(this.httpURI.prePath) &&
            Services.logins.getLoginSavingEnabled(this.httpsURI.prePath);
   },
@@ -154,10 +149,12 @@ Site.prototype = {
    *        A function that implements nsIIndexedDatabaseUsageCallback.
    */
   getIndexedDBStorage: function Site_getIndexedDBStorage(aCallback) {
+    // TODO: This needs to get all storage for the host, not just the httpURI.
     indexedDBService.getUsageForURI(this.httpURI, aCallback);
   },
 
   clearIndexedDBStorage: function Site_clearIndexedDBStorage() {
+    // TODO: This needs to clear all storage for the host, not just the httpURI.
     indexedDBService.clearDatabasesForURI(this.httpURI);
   },
 
@@ -242,6 +239,8 @@ let PermissionDefaults = {
   },
 
   get install() {
+    // TODO: This is copied from pageinfo, but it doesn't really reflect reality.
+    // Looks like bug 643385.
     try {
       if (!Services.prefs.getBoolPref("xpinstall.whitelist.required"))
         return this.ALLOW;
@@ -251,8 +250,6 @@ let PermissionDefaults = {
     return this.DENY;
   },
   set install(aValue) {
-    // TODO: Do we want to expose this? It makes it easy for users to unknowingly
-    // expose themselves to vulnerability.
     let value = (aValue == this.DENY);
     Services.prefs.setBoolPref("xpinstall.whitelist.required", value);
   },
@@ -283,9 +280,16 @@ let AboutPermissions = {
    */
   _sites: {},
 
+  _sitesList: null,
   _selectedSite: null,
 
-  // TODO: potential additions: "sts/use", "sts/subd"
+  /**
+   * This reflects the permissions that we expose in the UI. These correspond
+   * to permission type strings in the permission manager, PermissionDefaults,
+   * and element ids in aboutPermissions.xul.
+   *
+   * Potential future additions: "sts/use", "sts/subd"
+   */
   _supportedPermissions: ["password", "cookie", "geo", "indexedDB", "install",
                           "popup", "image"],
 
@@ -293,16 +297,19 @@ let AboutPermissions = {
    * Called on page load.
    */
   init: function() {
-    this.getSites(function(){
-      AboutPermissions.enumerateServices();
-      AboutPermissions.buildSitesList();
-    });
+    this.sitesList = document.getElementById("sites-list");
+
+    this.getSitesFromPlaces();
+    this.enumerateServices();
 
     // Attach observers in case data changes while the page is open.
     Services.obs.addObserver(this, "perm-changed", false);
     Services.obs.addObserver(this, "passwordmgr-storage-changed", false);
     Services.obs.addObserver(this, "cookie-changed", false);
     Services.obs.addObserver(this, "browser:purge-domain-data", false);
+
+    // Notify oberservers for testing purposes.
+    Services.obs.notifyObservers(null, "browser-permissions-initialized", null);
   },
 
   /**
@@ -340,7 +347,7 @@ let AboutPermissions = {
    * Creates Site objects for the top-frecency sites in the places database and stores
    * them in _sites. The number of sites created is controlled by PLACES_SITES_LIMIT.
    */
-  getSites: function(aCallback) {
+  getSitesFromPlaces: function(aCallback) {
     let hs = Cc["@mozilla.org/browser/nav-history-service;1"].
              getService(Ci.nsINavHistoryService);
     let db = hs.QueryInterface(Ci.nsPIPlacesDatabase).DBConnection;
@@ -356,16 +363,20 @@ let AboutPermissions = {
         let row;
         while (row = aResults.getNextRow()) {
           let host = row.getResultByName("host");
-          if (!(host in AboutPermissions._sites))
-            AboutPermissions._sites[host] = new Site(host);
+          if (!(host in AboutPermissions._sites)) {
+            let site = new Site(host);
+            AboutPermissions._sites[host] = site;
+            AboutPermissions.addToSitesList(site);
+          }
         }
       },
       handleError: function(aError) {
-        // TODO: Add some error handling.
+        // If there's an error, there's not really much we can do about it, and
+        // it won't kill the interface.
       },
       handleCompletion: function(aReason) {
-        if (aReason == Ci.mozIStorageStatementCallback.REASON_FINISHED)
-          aCallback();
+        // Notify oberservers for testing purposes.
+        Services.obs.notifyObservers(null, "browser-permissions-statement-completed", null);
       }
     });
     stmt.finalize();
@@ -376,17 +387,20 @@ let AboutPermissions = {
    * them if they are not already stored in _sites.
    */
   enumerateServices: function() {
-    // Login manager
     let logins = Services.logins.getAllLogins();
     logins.forEach(function(aLogin) {
-      // aLogin.hostname is a string in origin URL format (e.g. "http://foo.com")
       try {
+        // aLogin.hostname is a string in origin URL format (e.g. "http://foo.com")
         let uri = Services.io.newURI(aLogin.hostname, null, null);
         let host = uri.host;
-        if (!(host in AboutPermissions._sites))
-          AboutPermissions._sites[host] = new Site(host);
+        if (!(host in AboutPermissions._sites)) {
+          let site = new Site(host)
+          AboutPermissions._sites[host] = site;
+          AboutPermissions.addToSitesList(site);
+        }
       } catch (e) {
-        dump("login URI excpetion: " + e + "\n");
+        // newURI will throw for logins stored for add-ons, but luckily, 
+        // we don't care about those!
       }
     });
 
@@ -395,55 +409,62 @@ let AboutPermissions = {
       // aHostname is a string in origin URL format (e.g. "http://foo.com")
       let uri = Services.io.newURI(aHostname, null, null);
       let host = uri.host;
-      if (!(host in AboutPermissions._sites))
-        AboutPermissions._sites[host] = new Site(host);
-      
-      AboutPermissions._sites[host].disabledHosts.push(aHostname);
+      if (!(host in AboutPermissions._sites)) {
+        let site = new Site(host)
+        AboutPermissions._sites[host] = site;
+        AboutPermissions.addToSitesList(site);
+      }
     });
 
-    // Permission manager
     let (enumerator = Services.perms.enumerator) {
       while (enumerator.hasMoreElements()) {
         let permission = enumerator.getNext().QueryInterface(Ci.nsIPermission);
         let host = permission.host;
-        // Only include sites with exceptions set for supported permission types
+        // Only include sites with exceptions set for supported permission types.
         if (this._supportedPermissions.indexOf(permission.type) != -1 &&
-            !(host in AboutPermissions._sites))
-          AboutPermissions._sites[host] = new Site(host);
+            !(host in AboutPermissions._sites)) {
+          let site = new Site(host)
+          AboutPermissions._sites[host] = site;
+          AboutPermissions.addToSitesList(site);
+        }
       }
     }
   },
 
   /**
-   * Populates sites-list richlistbox from sites stored in _sites.
+   * Populates sites-list richlistbox with data from Site object.
+   * @param aSite
+   *        A Site object.
    */
-  buildSitesList: function() {
-    for each (let site in this._sites) {
-      let item = document.createElement("richlistitem");
-      item.setAttribute("class", "site");
-      item.setAttribute("value", site.host);
-      item.setAttribute("favicon", site.favicon);
-      site.listitem = item;
+  addToSitesList: function(aSite) {
+    let item = document.createElement("richlistitem");
+    item.setAttribute("class", "site");
+    item.setAttribute("value", aSite.host);
+    item.setAttribute("favicon", aSite.favicon);
+    aSite.listitem = item;
 
-      document.getElementById("sites-list").appendChild(item);      
-    }
-
-    Services.obs.notifyObservers(null, "browser-permissions-initialized", null);
+    // TODO: We can do this differently if we want sites to appear in a
+    // specific order.
+    this.sitesList.appendChild(item);    
   },
 
   /**
    * Hides sites in richlistbox based on search text in sites-filter textbox.
    */
   filterSitesList: function() {
-    let filterValue = document.getElementById("sites-filter").value;
+    let sites = this.sitesList.children;
+    let filterValue = document.getElementById("sites-filter").value.toLowerCase();
     if (filterValue == "") {
-      for each (let site in this._sites)
-        site.listitem.collapsed = false;
+      for (let i = 0; i < sites.length; i++) {
+        sites[i].collapsed = false;
+      }
       return;
     }
 
-    for each (let site in this._sites)
-      site.listitem.collapsed = site.host.indexOf(filterValue) == -1;
+    for (let i = 0; i < sites.length; i++) {
+      let siteValue = sites[i].value.toLowerCase();
+      sites[i].collapsed = siteValue.indexOf(filterValue) == -1;
+    }
   },
 
   /**
@@ -459,7 +480,6 @@ let AboutPermissions = {
    * from _sites and removes their corresponding elements from the DOM.
    */
   deleteSite: function(aHost) {
-    let sitesList = document.getElementById("sites-list");
     for each (let site in this._sites) {
       if (site.host.hasRootDomain(aHost)) {
         if (site == this._selectedSite) {
@@ -469,7 +489,7 @@ let AboutPermissions = {
           this._selectedSite = null;
         }
         
-        sitesList.removeChild(site.listitem);
+        this.sitesList.removeChild(site.listitem);
         delete this._sites[site.host];
       }
     }    
@@ -522,7 +542,8 @@ let AboutPermissions = {
   },
 
   /**
-   * Shows interface for managing default permissions.
+   * Shows interface for managing default permissions. This corresponds to
+   * the "All Sites" list item.
    */
   manageDefaultPermissions: function() {
     this._selectedSite = null;
@@ -543,7 +564,9 @@ let AboutPermissions = {
 
     this.updatePasswordsCount();
     this.updateCookiesCount();
-    this.updateIndexedDBUsage();
+
+    // Disabled until URI issue is sorted out.
+    //this.updateIndexedDBUsage();
 
     document.getElementById("permissions-box").hidden = false;
   },
@@ -572,7 +595,7 @@ let AboutPermissions = {
     }
 
     permissionMenulist.selectedItem = document.getElementById(aType + "#" + permissionValue);
-    
+
     if (permissionValue == PermissionDefaults[aType])
       permissionMenulist.setAttribute("default", true);
     else
@@ -618,6 +641,12 @@ let AboutPermissions = {
     document.getElementById("passwords-count").hidden = false;
   },
 
+  managePasswords: function() {
+    // TODO: Pre-filter list for selected site when bug 656145 is fixed.
+    window.openDialog("chrome://passwordmgr/content/passwordManager.xul",
+                      "Toolkit:PasswordManager", "");
+  },
+
   updateCookiesCount: function() {
     if (!this._selectedSite) {
       document.getElementById("cookies-count").hidden = true;
@@ -634,6 +663,12 @@ let AboutPermissions = {
     document.getElementById("cookies-clear-button").disabled = (cookiesCount < 1);
     document.getElementById("cookies-clear-all-button").hidden = true;
     document.getElementById("cookies-count").hidden = false;
+  },
+
+  clearCookies: function() {
+    let site = this._selectedSite;
+    site.clearCookies(site.cookies);
+    this.updateCookiesCount();
   },
 
   updateIndexedDBUsage: function() {
@@ -655,34 +690,6 @@ let AboutPermissions = {
     }
 
     this._selectedSite.getIndexedDBStorage(callback);
-  },
-
-  // not used
-  clearPasswords: function() {
-    let site = this._selectedSite;
-    site.clearLogin(site.logins);
-    this.updatePasswordsCount();
-  },
-  
-  managePasswords: function() {
-    let win = window.openDialog("chrome://passwordmgr/content/passwordManager.xul",
-                                "Toolkit:PasswordManager", "");
-
-    /* Filtering won't work until password manager is updated to handle it
-    if (this._selectedSite) {
-      let filterValue = this._selectedSite.host;
-      win.addEventListener("load", function() {
-        let filter = win.document.getElementById("filter");
-        filter.value = filterValue;
-        filter.doCommand();
-      }, false);
-    }*/
-  },
-
-  clearCookies: function() {
-    let site = this._selectedSite;
-    site.clearCookies(site.cookies);
-    this.updateCookiesCount();
   },
 
   clearIndexedDBStorage: function() {

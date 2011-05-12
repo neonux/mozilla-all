@@ -86,7 +86,8 @@
             &permissions.header;<label id="site-label"/>
           </description>
           <spacer flex="1"/>
-          <!--button label="&permissions.restoreDefaults;"
+          <!-- Disabled until permission inheritance issue is sorted out.
+              button label="&permissions.restoreDefaults;"
                   oncommand="AboutPermissions.restoreDefaultPermissions();"/-->
           <button label="&permissions.forgetSite;"
                   oncommand="AboutPermissions.forgetSite();"/>
@@ -196,12 +197,13 @@
               </menupopup>
             </menulist>
           </hbox>
-          <hbox id="indexedDB-usage" align="center">
+          <!-- Disabled until URI issue is sorted out.
+             hbox id="indexedDB-usage" align="center">
             <label id="indexedDB-label"/>
             <button id="indexedDB-clear-button"
                     label="&indexedDB.clear;"
                     oncommand="AboutPermissions.clearIndexedDBStorage();"/>
-          </hbox>
+          </hbox-->
         </vbox>
       </hbox>  
 

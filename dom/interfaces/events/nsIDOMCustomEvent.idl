@@ -1,4 +1,4 @@
-/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* vim: set shiftwidth=2 tabstop=8 autoindent cindent expandtab: */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
@@ -12,14 +12,14 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is mozilla.org code.
+ * The Original Code is nsIDOMCustomEvent.
  *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
+ * The Initial Developer of the Original Code is the Mozilla Foundation.
+ * Portions created by the Initial Developer are Copyright (C) 2011
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
+ *   Olli Pettay <Olli.Pettay@helsinki.fi> (Original Author)
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -35,35 +35,17 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-#include "nsISupports.idl"
-#include "nspluginroot.idl"
+#include "nsIDOMEvent.idl"
+interface nsIVariant;
 
-%{C++
-#include "npapi.h"
-
-#define MOZ_PLUGIN_CONTRACTID \
-  "@mozilla.org/plugin/plugin;1"
-%}
-
-interface nsIPluginInstance;
-
-[uuid(94C32FEA-5C50-49D3-9D3D-9047CD342777)]
-interface nsIPlugin : nsISupports
+[scriptable, uuid(e93f84c5-e72f-4429-b797-f0c28d87890f)]
+interface nsIDOMCustomEvent : nsIDOMEvent
 {
-  /**
-   * Creates a new plugin instance, based on a MIME type. This
-   * allows different impelementations to be created depending on
-   * the specified MIME type.
-   */
-  void createPluginInstance(out nsIPluginInstance aResult);
 
-  /**
-   * Called when the browser is done with the plugin factory, or when
-   * the plugin is disabled by the user.
-   *
-   * (Corresponds to NPP_Shutdown.)
-   *
-   * @result - NS_OK if this operation was successful
-   */
-  void shutdown();
+  readonly attribute nsIVariant detail;
+
+  void initCustomEvent(in DOMString  typeArg, 
+                       in boolean    canBubbleArg, 
+                       in boolean    cancelableArg, 
+                       in nsIVariant detailArg);
 };
