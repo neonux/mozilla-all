@@ -579,6 +579,7 @@ const PRInt32 nsCSSProps::kAppearanceKTable[] = {
   eCSSKeyword__moz_window_button_restore,     NS_THEME_WINDOW_BUTTON_RESTORE,
   eCSSKeyword__moz_window_button_box,         NS_THEME_WINDOW_BUTTON_BOX,
   eCSSKeyword__moz_window_button_box_maximized, NS_THEME_WINDOW_BUTTON_BOX_MAXIMIZED,
+  eCSSKeyword__moz_win_exclude_glass,         NS_THEME_WIN_EXCLUDE_GLASS,
   eCSSKeyword_UNKNOWN,-1
 };
 
@@ -1035,6 +1036,12 @@ const PRInt32 nsCSSProps::kListStyleKTable[] = {
   eCSSKeyword__moz_ethiopic_halehame_ti_er, NS_STYLE_LIST_STYLE_MOZ_ETHIOPIC_HALEHAME_TI_ER,
   eCSSKeyword__moz_ethiopic_halehame_ti_et, NS_STYLE_LIST_STYLE_MOZ_ETHIOPIC_HALEHAME_TI_ET,
   eCSSKeyword_UNKNOWN,-1
+};
+
+const PRInt32 nsCSSProps::kOrientKTable[] = {
+  eCSSKeyword_horizontal, NS_STYLE_ORIENT_HORIZONTAL,
+  eCSSKeyword_vertical,   NS_STYLE_ORIENT_VERTICAL,
+  eCSSKeyword_UNKNOWN,    -1
 };
 
 // Same as kBorderStyleKTable except 'hidden'.

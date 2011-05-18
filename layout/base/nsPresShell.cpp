@@ -148,7 +148,7 @@
 
 #include "nsPIDOMWindow.h"
 #include "nsFocusManager.h"
-#include "nsIPluginInstance.h"
+#include "nsNPAPIPluginInstance.h"
 #include "nsIObjectFrame.h"
 #include "nsIObjectLoadingContent.h"
 #include "nsNetUtil.h"
@@ -1850,12 +1850,9 @@ PresShell::Init(nsIDocument* aDocument,
   // Important: this has to happen after the selection has been set up
 #ifdef SHOW_CARET
   // make the caret
-  nsresult  err = NS_NewCaret(getter_AddRefs(mCaret));
-  if (NS_SUCCEEDED(err))
-  {
-    mCaret->Init(this);
-    mOriginalCaret = mCaret;
-  }
+  mCaret = new nsCaret();
+  mCaret->Init(this);
+  mOriginalCaret = mCaret;
 
   //SetCaretEnabled(PR_TRUE);       // make it show in browser windows
 #endif  
@@ -5863,8 +5860,7 @@ nsresult PresShell::AddCanvasBackgroundColorItem(nsDisplayListBuilder& aBuilder,
   }
 
   return aList.AppendNewToBottom(
-      new (&aBuilder) nsDisplaySolidColor(&aBuilder, aFrame, aBounds, bgcolor,
-        !!(aFlags & nsIPresShell::ROOT_CONTENT_DOC_BG)));
+      new (&aBuilder) nsDisplaySolidColor(&aBuilder, aFrame, aBounds, bgcolor));
 }
 
 static PRBool IsTransparentContainerElement(nsPresContext* aPresContext)
@@ -6726,10 +6722,15 @@ PresShell::HandleEvent(nsIView         *aView,
       }
     }
 
+    PRBool isWindowLevelMouseExit = (aEvent->message == NS_MOUSE_EXIT) &&
+      (static_cast<nsMouseEvent*>(aEvent)->exit == nsMouseEvent::eTopLevel);
+
     // Get the frame at the event point. However, don't do this if we're
     // capturing and retargeting the event because the captured frame will
-    // be used instead below.
-    if (!captureRetarget) {
+    // be used instead below. Also keep using the root frame if we're dealing
+    // with a window-level mouse exit event since we want to start sending
+    // mouse out events at the root EventStateManager.
+    if (!captureRetarget && !isWindowLevelMouseExit) {
       nsPoint eventPoint
           = nsLayoutUtils::GetEventCoordinatesRelativeTo(aEvent, frame);
       {
@@ -7759,7 +7760,7 @@ ThawElement(nsIContent *aContent, void *aShell)
 {
   nsCOMPtr<nsIObjectLoadingContent> objlc(do_QueryInterface(aContent));
   if (objlc) {
-    nsCOMPtr<nsIPluginInstance> inst;
+    nsRefPtr<nsNPAPIPluginInstance> inst;
     objlc->EnsureInstantiation(getter_AddRefs(inst));
   }
 }

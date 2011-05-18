@@ -414,6 +414,28 @@ toolbarbutton.choice-remotetabs {
   list-style-image: url(chrome://browser/skin/images/remotetabs-48.png);
 }
 
+/* awesomescreen panels ---------------------------------------------------- */
+historylist > hbox.history-throbber-box,
+remotetabslist > hbox.remotetabs-throbber-box {
+  display: none;
+}
+
+.history-throbber-box > image,
+.remotetabs-throbber-box > image {
+  list-style-image: url("chrome://browser/skin/images/throbber.png");
+}
+
+historylist[loading="true"] > hbox.history-throbber-box,
+remotetabslist[loading="true"] > hbox.remotetabs-throbber-box {
+  background-color: white;
+  display: -moz-box;
+}
+
+historylist[loading="true"] > richlistbox.history-list-children,
+remotetabslist[loading="true"] > richlistbox.remotetabs-list-children {
+  visibility: collapse;
+}
+
 /* browsers ---------------------------------------------------------------- */
 .input-overlay:-moz-focusring {
   outline: 0 !important;
@@ -1436,10 +1458,14 @@ richlistitem.appmenu-downloads-button > image,
 }
 
 /* Sidebar peeking */
-.sidebar[mode="discovery"], #browsers[mode="discovery"] {
+:-moz-any(.sidebar, #browsers)[mode="discovery"] {
   -moz-animation-delay: 1s;
   -moz-animation-duration: 5s;
   -moz-animation-name: sidebardiscovery;
+}
+
+:-moz-any(.sidebar, #browsers)[mode="discovery"]:-moz-locale-dir(rtl) {
+  -moz-animation-name: sidebardiscoveryrtl;
 }
 
 @-moz-keyframes sidebardiscovery {
@@ -1448,5 +1474,14 @@ richlistitem.appmenu-downloads-button > image,
   45% { -moz-transform: translateX(-moz-calc(121px + @border_width_large@ + 2*@padding_normal@)); }
   55% { -moz-transform: translateX(-@sidebar_width_minimum@); }
   90% { -moz-transform: translateX(-@sidebar_width_minimum@); }
+  to { -moz-transform: translateX(0); }
+}
+
+@-moz-keyframes sidebardiscoveryrtl {
+  from { -moz-transform: translateX(0); }
+  10% { -moz-transform: translateX(-moz-calc(-121px - @border_width_large@ - 2*@padding_normal@)); }
+  45% { -moz-transform: translateX(-moz-calc(-121px - @border_width_large@ - 2*@padding_normal@)); }
+  55% { -moz-transform: translateX(@sidebar_width_minimum@); }
+  90% { -moz-transform: translateX(@sidebar_width_minimum@); }
   to { -moz-transform: translateX(0); }
 }

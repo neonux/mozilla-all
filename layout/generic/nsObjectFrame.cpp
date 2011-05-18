@@ -87,7 +87,6 @@ enum { XKeyPress = KeyPress };
 #include "nsIURL.h"
 #include "nsNetUtil.h"
 #include "nsIPluginInstanceOwner.h"
-#include "nsIPluginInstance.h"
 #include "nsNPAPIPluginInstance.h"
 #include "nsIPluginTagInfo.h"
 #include "plstr.h"
@@ -283,8 +282,6 @@ public:
   virtual ~nsPluginInstanceOwner();
 
   NS_DECL_ISUPPORTS
-
-  //nsIPluginInstanceOwner interface
   NS_DECL_NSIPLUGININSTANCEOWNER
 
   NS_IMETHOD GetURL(const char *aURL, const char *aTarget,
@@ -435,6 +432,7 @@ public:
     aDescription.Truncate();
     if (mInstance && mPluginHost) {
       nsCOMPtr<nsIPluginTag> pluginTag;
+      
       mPluginHost->GetPluginTagForInstance(mInstance,
                                            getter_AddRefs(pluginTag));
       if (pluginTag) {
@@ -509,13 +507,13 @@ private:
   void FixUpURLS(const nsString &name, nsAString &value);
 
   nsPluginNativeWindow       *mPluginWindow;
-  nsCOMPtr<nsIPluginInstance> mInstance;
+  nsRefPtr<nsNPAPIPluginInstance> mInstance;
   nsObjectFrame              *mObjectFrame; // owns nsPluginInstanceOwner
   nsCOMPtr<nsIContent>        mContent;
   nsCString                   mDocumentBase;
   char                       *mTagText;
   nsCOMPtr<nsIWidget>         mWidget;
-  nsCOMPtr<nsIPluginHost>     mPluginHost;
+  nsRefPtr<nsPluginHost>      mPluginHost;
 
 #ifdef XP_MACOSX
   NP_CGContext                              mCGPluginPortCopy;
@@ -924,6 +922,7 @@ nsObjectFrame::CreateWidget(nscoord aWidth,
   } else {
 #ifndef XP_MACOSX
     rpc->RegisterPluginForGeometryUpdates(this);
+    rpc->RequestUpdatePluginGeometry(this);
 #endif
   }
 
@@ -1182,9 +1181,9 @@ nsObjectFrame::CallSetWindow(PRBool aCheckIsHidden)
   NPWindow *win = nsnull;
  
   nsresult rv = NS_ERROR_FAILURE;
-  nsCOMPtr<nsIPluginInstance> pi; 
+  nsRefPtr<nsNPAPIPluginInstance> pi;
   if (!mInstanceOwner ||
-      NS_FAILED(rv = mInstanceOwner->GetInstance(*getter_AddRefs(pi))) ||
+      NS_FAILED(rv = mInstanceOwner->GetInstance(getter_AddRefs(pi))) ||
       !pi ||
       NS_FAILED(rv = mInstanceOwner->GetWindow(win)) || 
       !win)
@@ -1344,8 +1343,7 @@ public:
   virtual nsRect GetBounds(nsDisplayListBuilder* aBuilder);
   virtual PRBool ComputeVisibility(nsDisplayListBuilder* aBuilder,
                                    nsRegion* aVisibleRegion,
-                                   const nsRect& aAllowVisibleRegionExpansion,
-                                   PRBool& aContainsRootContentDocBG);
+                                   const nsRect& aAllowVisibleRegionExpansion);
 
   NS_DISPLAY_DECL_NAME("PluginReadback", TYPE_PLUGIN_READBACK)
 
@@ -1378,12 +1376,10 @@ nsDisplayPluginReadback::GetBounds(nsDisplayListBuilder* aBuilder)
 PRBool
 nsDisplayPluginReadback::ComputeVisibility(nsDisplayListBuilder* aBuilder,
                                            nsRegion* aVisibleRegion,
-                                           const nsRect& aAllowVisibleRegionExpansion,
-                                           PRBool& aContainsRootContentDocBG)
+                                           const nsRect& aAllowVisibleRegionExpansion)
 {
   if (!nsDisplayItem::ComputeVisibility(aBuilder, aVisibleRegion,
-                                        aAllowVisibleRegionExpansion,
-                                        aContainsRootContentDocBG))
+                                        aAllowVisibleRegionExpansion))
     return PR_FALSE;
 
   nsRect expand;
@@ -1412,13 +1408,11 @@ nsDisplayPlugin::Paint(nsDisplayListBuilder* aBuilder,
 PRBool
 nsDisplayPlugin::ComputeVisibility(nsDisplayListBuilder* aBuilder,
                                    nsRegion* aVisibleRegion,
-                                   const nsRect& aAllowVisibleRegionExpansion,
-                                   PRBool& aContainsRootContentDocBG)
+                                   const nsRect& aAllowVisibleRegionExpansion)
 {
   mVisibleRegion.And(*aVisibleRegion, GetBounds(aBuilder));  
   return nsDisplayItem::ComputeVisibility(aBuilder, aVisibleRegion,
-                                          aAllowVisibleRegionExpansion,
-                                          aContainsRootContentDocBG);
+                                          aAllowVisibleRegionExpansion);
 }
 
 nsRegion
@@ -1579,8 +1573,8 @@ nsObjectFrame::IsTransparentMode() const
     return PR_FALSE;
 
   nsresult rv;
-  nsCOMPtr<nsIPluginInstance> pi;
-  rv = mInstanceOwner->GetInstance(*getter_AddRefs(pi));
+  nsRefPtr<nsNPAPIPluginInstance> pi;
+  rv = mInstanceOwner->GetInstance(getter_AddRefs(pi));
   if (NS_FAILED(rv) || !pi)
     return PR_FALSE;
 
@@ -1697,8 +1691,8 @@ nsObjectFrame::PrintPlugin(nsRenderingContext& aRenderingContext,
     return;
 
   // finally we can get our plugin instance
-  nsCOMPtr<nsIPluginInstance> pi;
-  if (NS_FAILED(objectFrame->GetPluginInstance(*getter_AddRefs(pi))) || !pi)
+  nsRefPtr<nsNPAPIPluginInstance> pi;
+  if (NS_FAILED(objectFrame->GetPluginInstance(getter_AddRefs(pi))) || !pi)
     return;
 
   // now we need to setup the correct location for printing
@@ -2237,8 +2231,8 @@ nsObjectFrame::PaintPlugin(nsDisplayListBuilder* aBuilder,
         return;
       }
 
-      nsCOMPtr<nsIPluginInstance> inst;
-      GetPluginInstance(*getter_AddRefs(inst));
+      nsRefPtr<nsNPAPIPluginInstance> inst;
+      GetPluginInstance(getter_AddRefs(inst));
       if (!inst) {
         NS_WARNING("null plugin instance during PaintPlugin");
         nativeDrawing.EndNativeDrawing();
@@ -2324,8 +2318,8 @@ nsObjectFrame::PaintPlugin(nsDisplayListBuilder* aBuilder,
     }
   }
 #elif defined(XP_WIN)
-  nsCOMPtr<nsIPluginInstance> inst;
-  GetPluginInstance(*getter_AddRefs(inst));
+  nsRefPtr<nsNPAPIPluginInstance> inst;
+  GetPluginInstance(getter_AddRefs(inst));
   if (inst) {
     gfxRect frameGfxRect =
       PresContext()->AppUnitsToGfxUnits(aPluginRect);
@@ -2428,8 +2422,8 @@ nsObjectFrame::PaintPlugin(nsDisplayListBuilder* aBuilder,
     ctx->SetMatrix(currentMatrix);
   }
 #elif defined(XP_OS2)
-  nsCOMPtr<nsIPluginInstance> inst;
-  GetPluginInstance(*getter_AddRefs(inst));
+  nsRefPtr<nsNPAPIPluginInstance> inst;
+  GetPluginInstance(getter_AddRefs(inst));
   if (inst) {
     // Look if it's windowless
     NPWindow *window;
@@ -2592,9 +2586,9 @@ nsObjectFrame::HandlePress(nsPresContext* aPresContext,
 #endif
 
 nsresult
-nsObjectFrame::GetPluginInstance(nsIPluginInstance*& aPluginInstance)
+nsObjectFrame::GetPluginInstance(nsNPAPIPluginInstance** aPluginInstance)
 {
-  aPluginInstance = nsnull;
+  *aPluginInstance = nsnull;
 
   if (!mInstanceOwner)
     return NS_OK;
@@ -2750,8 +2744,8 @@ nsObjectFrame::Instantiate(const char* aMimeType, nsIURI* aURI)
 void
 nsObjectFrame::TryNotifyContentObjectWrapper()
 {
-  nsCOMPtr<nsIPluginInstance> inst;
-  mInstanceOwner->GetInstance(*getter_AddRefs(inst));
+  nsRefPtr<nsNPAPIPluginInstance> inst;
+  mInstanceOwner->GetInstance(getter_AddRefs(inst));
   if (inst) {
     // The plugin may have set up new interfaces; we need to mess with our JS
     // wrapper.  Note that we DO NOT want to call this if there is no plugin
@@ -2787,7 +2781,7 @@ NS_IMPL_ISUPPORTS_INHERITED1(nsStopPluginRunnable, nsRunnable, nsITimerCallback)
 
 #if defined(XP_MACOSX) || defined (XP_WIN)
 static const char*
-GetMIMEType(nsIPluginInstance *aPluginInstance)
+GetMIMEType(nsNPAPIPluginInstance *aPluginInstance)
 {
   if (aPluginInstance) {
     const char* mime = nsnull;
@@ -2827,13 +2821,13 @@ DoDelayedStop(nsPluginInstanceOwner *aInstanceOwner, PRBool aDelayedStop)
 static void
 DoStopPlugin(nsPluginInstanceOwner *aInstanceOwner, PRBool aDelayedStop)
 {
-  nsCOMPtr<nsIPluginInstance> inst;
-  aInstanceOwner->GetInstance(*getter_AddRefs(inst));
+  nsRefPtr<nsNPAPIPluginInstance> inst;
+  aInstanceOwner->GetInstance(getter_AddRefs(inst));
   if (inst) {
     NPWindow *win;
     aInstanceOwner->GetWindow(win);
     nsPluginNativeWindow *window = (nsPluginNativeWindow *)win;
-    nsCOMPtr<nsIPluginInstance> nullinst;
+    nsRefPtr<nsNPAPIPluginInstance> nullinst;
 
     if (window) 
       window->CallSetWindow(nullinst);
@@ -2849,7 +2843,7 @@ DoStopPlugin(nsPluginInstanceOwner *aInstanceOwner, PRBool aDelayedStop)
 
     nsCOMPtr<nsIPluginHost> pluginHost = do_GetService(MOZ_PLUGIN_HOST_CONTRACTID);
     NS_ASSERTION(pluginHost, "Without a pluginHost, how can we have an instance to destroy?");
-    pluginHost->StopPluginInstance(inst);
+    static_cast<nsPluginHost*>(pluginHost.get())->StopPluginInstance(inst);
 
     // the frame is going away along with its widget so tell the
     // window to forget its widget too
@@ -2904,9 +2898,9 @@ nsObjectFrame::StopPlugin()
 {
   PRBool delayedStop = PR_FALSE;
 #ifdef XP_WIN
-  nsCOMPtr<nsIPluginInstance> inst;
+  nsRefPtr<nsNPAPIPluginInstance> inst;
   if (mInstanceOwner)
-    mInstanceOwner->GetInstance(*getter_AddRefs(inst));
+    mInstanceOwner->GetInstance(getter_AddRefs(inst));
   if (inst) {
     // Delayed stop for Real plugin only; see bug 420886, 426852.
     const char* pluginType = ::GetMIMEType(inst);
@@ -2999,8 +2993,8 @@ nsObjectFrame::GetCursor(const nsPoint& aPoint, nsIFrame::Cursor& aCursor)
     return NS_ERROR_FAILURE;
   }
 
-  nsCOMPtr<nsIPluginInstance> inst;
-  mInstanceOwner->GetInstance(*getter_AddRefs(inst));
+  nsRefPtr<nsNPAPIPluginInstance> inst;
+  mInstanceOwner->GetInstance(getter_AddRefs(inst));
   if (!inst) {
     return NS_ERROR_FAILURE;
   }
@@ -3059,8 +3053,8 @@ nsObjectFrame::GetNextObjectFrame(nsPresContext* aPresContext, nsIFrame* aRoot)
   while (child) {
     nsIObjectFrame* outFrame = do_QueryFrame(child);
     if (outFrame) {
-      nsCOMPtr<nsIPluginInstance> pi;
-      outFrame->GetPluginInstance(*getter_AddRefs(pi));  // make sure we have a REAL plugin
+      nsRefPtr<nsNPAPIPluginInstance> pi;
+      outFrame->GetPluginInstance(getter_AddRefs(pi));  // make sure we have a REAL plugin
       if (pi)
         return outFrame;
     }
@@ -3315,8 +3309,8 @@ NS_INTERFACE_MAP_BEGIN(nsPluginInstanceOwner)
   NS_INTERFACE_MAP_ENTRY_AMBIGUOUS(nsISupports, nsIPluginInstanceOwner)
 NS_INTERFACE_MAP_END
 
-NS_IMETHODIMP
-nsPluginInstanceOwner::SetInstance(nsIPluginInstance *aInstance)
+nsresult
+nsPluginInstanceOwner::SetInstance(nsNPAPIPluginInstance *aInstance)
 {
   NS_ASSERTION(!mInstance || !aInstance, "mInstance should only be set or unset!");
 
@@ -3392,10 +3386,12 @@ NS_IMETHODIMP nsPluginInstanceOwner::GetDOMElement(nsIDOMElement* *result)
   return CallQueryInterface(mContent, result);
 }
 
-NS_IMETHODIMP nsPluginInstanceOwner::GetInstance(nsIPluginInstance *&aInstance)
+nsresult nsPluginInstanceOwner::GetInstance(nsNPAPIPluginInstance **aInstance)
 {
-  NS_IF_ADDREF(aInstance = mInstance);
+  NS_ENSURE_ARG_POINTER(aInstance);
 
+  NS_IF_ADDREF(mInstance);
+  *aInstance = mInstance;
   return NS_OK;
 }
 
@@ -4397,9 +4393,7 @@ void nsPluginInstanceOwner::RenderCoreAnimation(CGContextRef aCGContext,
   if (!mIOSurface || 
       (mIOSurface->GetWidth() != (size_t)aWidth || 
        mIOSurface->GetHeight() != (size_t)aHeight)) {
-    if (mIOSurface) {
-      delete mIOSurface;
-    }
+    delete mIOSurface;
 
     // If the renderer is backed by an IOSurface, resize it as required.
     mIOSurface = nsIOSurface::CreateIOSurface(aWidth, aHeight);
@@ -5769,8 +5763,7 @@ nsPluginInstanceOwner::Destroy()
 #endif
 #ifdef XP_MACOSX
   RemoveFromCARefreshTimer(this);
-  if (mIOSurface)
-    delete mIOSurface;
+  delete mIOSurface;
   if (mColorProfile)
     ::CGColorSpaceRelease(mColorProfile);  
 #endif
@@ -6357,7 +6350,7 @@ nsPluginInstanceOwner::Renderer::DrawWithXlib(gfxXlibSurface* xsurface,
     return NS_ERROR_UNEXPECTED;
   }
 
-  nsIPluginInstance *instance = mInstanceOwner->mInstance;
+  nsNPAPIPluginInstance *instance = mInstanceOwner->mInstance;
   if (!instance)
     return NS_ERROR_FAILURE;
 
@@ -6745,7 +6738,7 @@ NS_IMETHODIMP nsPluginInstanceOwner::CreateWidget(void)
 
 void nsPluginInstanceOwner::SetPluginHost(nsIPluginHost* aHost)
 {
-  mPluginHost = aHost;
+  mPluginHost = static_cast<nsPluginHost*>(aHost);
 }
 
 #ifdef MOZ_USE_IMAGE_EXPOSE

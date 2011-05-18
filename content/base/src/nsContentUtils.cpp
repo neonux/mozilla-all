@@ -695,8 +695,10 @@ nsContentUtils::InitializeEventTable() {
     ,
     { nsGkAtoms::onanimationstart,              NS_ANIMATION_START, EventNameType_None, NS_ANIMATION_EVENT },
     { nsGkAtoms::onanimationend,                NS_ANIMATION_END, EventNameType_None, NS_ANIMATION_EVENT },
-    { nsGkAtoms::onanimationiteration,          NS_ANIMATION_ITERATION, EventNameType_None, NS_ANIMATION_EVENT }
+    { nsGkAtoms::onanimationiteration,          NS_ANIMATION_ITERATION, EventNameType_None, NS_ANIMATION_EVENT },
 #endif
+    { nsGkAtoms::onbeforeprint,                 NS_BEFOREPRINT, EventNameType_HTMLXUL, NS_EVENT },
+    { nsGkAtoms::onafterprint,                  NS_AFTERPRINT, EventNameType_HTMLXUL, NS_EVENT }
   };
 
   sAtomEventTable = new nsDataHashtable<nsISupportsHashKey, EventNameMapping>;
@@ -1521,24 +1523,6 @@ nsContentUtils::ReparentContentWrappersInScope(nsIScriptGlobalObject *aOldScope,
   return sXPConnect->MoveWrappers(cx, oldScopeObj, newScopeObj);
 }
 
-nsIDocShell *
-nsContentUtils::GetDocShellFromCaller()
-{
-  JSContext *cx = nsnull;
-  sThreadJSContextStack->Peek(&cx);
-
-  if (cx) {
-    nsIScriptGlobalObject *sgo = nsJSUtils::GetDynamicScriptGlobal(cx);
-    nsCOMPtr<nsPIDOMWindow> win(do_QueryInterface(sgo));
-
-    if (win) {
-      return win->GetDocShell();
-    }
-  }
-
-  return nsnull;
-}
-
 nsPIDOMWindow *
 nsContentUtils::GetWindowFromCaller()
 {
@@ -1842,53 +1826,6 @@ nsContentUtils::ComparePoints(nsINode* aParent1, PRInt32 aOffset1,
 
   nsINode* child1 = parents1.ElementAt(--pos1);
   return parent->IndexOf(child1) < aOffset2 ? -1 : 1;
-}
-
-nsIContent*
-nsContentUtils::FindFirstChildWithResolvedTag(nsIContent* aParent,
-                                              PRInt32 aNamespace,
-                                              nsIAtom* aTag)
-{
-  nsIDocument* doc;
-  if (!aParent || !(doc = aParent->GetOwnerDoc())) {
-    return nsnull;
-  }
-  
-  nsBindingManager* bindingManager = doc->BindingManager();
-
-  PRInt32 namespaceID;
-  PRUint32 count = aParent->GetChildCount();
-
-  PRUint32 i;
-
-  for (i = 0; i < count; i++) {
-    nsIContent *child = aParent->GetChildAt(i);
-    nsIAtom* tag =  bindingManager->ResolveTag(child, &namespaceID);
-    if (tag == aTag && namespaceID == aNamespace) {
-      return child;
-    }
-  }
-
-  // now look for children in XBL
-  nsCOMPtr<nsIDOMNodeList> children;
-  bindingManager->GetXBLChildNodesFor(aParent, getter_AddRefs(children));
-  if (!children) {
-    return nsnull;
-  }
-
-  PRUint32 length;
-  children->GetLength(&length);
-  for (i = 0; i < length; i++) {
-    nsCOMPtr<nsIDOMNode> childNode;
-    children->Item(i, getter_AddRefs(childNode));
-    nsCOMPtr<nsIContent> childContent = do_QueryInterface(childNode);
-    nsIAtom* tag = bindingManager->ResolveTag(childContent, &namespaceID);
-    if (tag == aTag && namespaceID == aNamespace) {
-      return childContent;
-    }
-  }
-
-  return nsnull;
 }
 
 inline PRBool
@@ -3597,15 +3534,6 @@ nsContentUtils::CheckForBOM(const unsigned char* aBuffer, PRUint32 aLength,
   }
 
   return found;
-}
-
-/* static */
-nsIContent*
-nsContentUtils::GetReferencedElement(nsIURI* aURI, nsIContent *aFromContent)
-{
-  nsReferencedElement ref;
-  ref.Reset(aFromContent, aURI);
-  return ref.get();
 }
 
 /* static */
@@ -6100,89 +6028,6 @@ nsContentUtils::CreateStructuredClone(JSContext* cx,
   *rval = output;
   return NS_OK;
 }
-
-// static
-nsresult
-nsContentUtils::ReparentClonedObjectToScope(JSContext* cx,
-                                            JSObject* obj,
-                                            JSObject* scope)
-{
-  JSAutoRequest ar(cx);
-
-  scope = JS_GetGlobalForObject(cx, scope);
-
-  nsAutoTArray<ReparentObjectData, 20> objectData;
-  objectData.AppendElement(ReparentObjectData(cx, obj));
-
-  while (!objectData.IsEmpty()) {
-    ReparentObjectData& data = objectData[objectData.Length() - 1];
-
-    if (!data.ids) {
-      NS_ASSERTION(!data.index, "Shouldn't have index here");
-
-      // Typed arrays are special and don't need to be enumerated.
-      if (js_IsTypedArray(data.obj)) {
-        if (!js_ReparentTypedArrayToScope(cx, data.obj, scope)) {
-          return NS_ERROR_FAILURE;
-        }
-
-        // No need to enumerate anything here.
-        objectData.RemoveElementAt(objectData.Length() - 1);
-        continue;
-      }
-
-      JSProtoKey key = JSCLASS_CACHED_PROTO_KEY(JS_GET_CLASS(cx, data.obj));
-      if (!key) {
-        // We should never be reparenting an object that doesn't have a standard
-        // proto key.
-        return NS_ERROR_FAILURE;
-      }
-
-      // Fix the prototype and parent first.
-      JSObject* proto;
-      if (!js_GetClassPrototype(cx, scope, key, &proto) ||
-          !JS_SetPrototype(cx, data.obj, proto) ||
-          !JS_SetParent(cx, data.obj, scope)) {
-        return NS_ERROR_FAILURE;
-      }
-
-      // Primitive arrays don't need to be enumerated either but the proto and
-      // parent needed to be fixed above. Now we can just move on.
-      if (js_IsDensePrimitiveArray(data.obj)) {
-        objectData.RemoveElementAt(objectData.Length() - 1);
-        continue;
-      }
-
-      // And now enumerate the object's properties.
-      if (!(data.ids = JS_Enumerate(cx, data.obj))) {
-        return NS_ERROR_FAILURE;
-      }
-    }
-
-    // If we've gone through all the object's properties then we're done with
-    // this frame.
-    if (data.index == data.ids->length) {
-      objectData.RemoveElementAt(objectData.Length() - 1);
-      continue;
-    }
-
-    // Get the id and increment!
-    jsid id = data.ids->vector[data.index++];
-
-    jsval prop;
-    if (!JS_GetPropertyById(cx, data.obj, id, &prop)) {
-      return NS_ERROR_FAILURE;
-    }
-
-    // Push a new frame if this property is an object.
-    if (!JSVAL_IS_PRIMITIVE(prop)) {
-      objectData.AppendElement(ReparentObjectData(cx, JSVAL_TO_OBJECT(prop)));
-    }
-  }
-
-  return NS_OK;
-}
-
 struct ClassMatchingInfo {
   nsAttrValue::AtomArray mClasses;
   nsCaseTreatment mCaseTreatment;

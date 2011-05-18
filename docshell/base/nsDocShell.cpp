@@ -1389,6 +1389,11 @@ nsDocShell::LoadURI(nsIURI * aURI,
         }
     }
 
+    if (aLoadFlags & LOAD_FLAGS_DISALLOW_INHERIT_OWNER) {
+        inheritOwner = PR_FALSE;
+        owner = do_CreateInstance("@mozilla.org/nullprincipal;1");
+    }
+
     PRUint32 flags = 0;
 
     if (inheritOwner)
@@ -6475,6 +6480,10 @@ nsDocShell::CreateAboutBlankContentViewer(nsIPrincipal* aPrincipal,
     // from inside this pagehide.
     mLoadingURI = nsnull;
     
+    // Stop any in-progress loading, so that we don't accidentally trigger any
+    // PageShow notifications from Embed() interrupting our loading below.
+    Stop();
+
     // Notify the current document that it is about to be unloaded!!
     //
     // It is important to fire the unload() notification *before* any state
@@ -7747,8 +7756,12 @@ nsDocShell::SetDocCurrentStateObj(nsISHEntry *shEntry)
     NS_ENSURE_TRUE(document, NS_ERROR_FAILURE);
 
     nsCOMPtr<nsIStructuredCloneContainer> scContainer;
-    nsresult rv = shEntry->GetStateData(getter_AddRefs(scContainer));
-    NS_ENSURE_SUCCESS(rv, rv);
+    if (shEntry) {
+        nsresult rv = shEntry->GetStateData(getter_AddRefs(scContainer));
+        NS_ENSURE_SUCCESS(rv, rv);
+
+        // If shEntry is null, just set the document's state object to null.
+    }
 
     // It's OK for scContainer too be null here; that just means there's no
     // state data associated with this history entry.
@@ -9692,6 +9705,18 @@ nsDocShell::AddState(nsIVariant *aData, const nsAString& aTitle,
         document->SetDocumentURI(newURI);
 
         AddURIVisit(newURI, oldURI, oldURI, 0);
+
+        // AddURIVisit doesn't set the title for the new URI in global history,
+        // so do that here.
+        if (mUseGlobalHistory) {
+            nsCOMPtr<IHistory> history = services::GetHistoryService();
+            if (history) {
+                history->SetURITitle(newURI, mTitle);
+            }
+            else if (mGlobalHistory) {
+                mGlobalHistory->SetPageTitle(newURI, mTitle);
+            }
+        }
     }
     else {
         FireDummyOnLocationChange();

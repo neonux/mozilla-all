@@ -21,12 +21,12 @@
 
 <!ENTITY cookie.label                    "Set Cookies">
 <!ENTITY cookie.clear                    "Clear Cookies">
+<!ENTITY cookie.manage                   "Manage Cookies…">
 <!ENTITY cookie.clearAll                 "Clear All Cookies">
 
 <!ENTITY geo.label                       "Share Location">
 
 <!ENTITY indexedDB.label                 "Maintain Offline Database Storage">
-<!ENTITY indexedDB.clear                 "Clear Offline Database Storage">
 
 <!ENTITY install.label                   "Install Extensions or Themes">
 
