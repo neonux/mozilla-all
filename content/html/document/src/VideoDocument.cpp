@@ -129,9 +129,11 @@ VideoDocument::CreateSyntheticVideoDocument(nsIChannel* aChannel,
   if (nsContentUtils::IsChildOfSameType(this)) {
     // Video documents that aren't toplevel should fill their frames and
     // not have margins
-    element->SetAttr(kNameSpaceID_None, nsGkAtoms::style,
-        NS_LITERAL_STRING("position:absolute; top:0; left:0; width:100%; height:100%"),
-        PR_TRUE);
+    element->SetAttr(kNameSpaceID_None, nsGkAtoms::_class, 
+        NS_LITERAL_STRING("fit"), PR_TRUE);
+  } else {
+    element->SetAttr(kNameSpaceID_None, nsGkAtoms::_class, 
+        NS_LITERAL_STRING("fitIfBigger"), PR_TRUE);
   }
 
   return body->AppendChildTo(element, PR_FALSE);

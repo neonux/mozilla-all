@@ -241,9 +241,7 @@ MediaDocument::CreateSyntheticDocument()
   NS_ENSURE_TRUE(nodeInfo, NS_ERROR_OUT_OF_MEMORY);
 
   nsRefPtr<nsGenericHTMLElement> root = NS_NewHTMLHtmlElement(nodeInfo.forget());
-  if (!root) {
-    return NS_ERROR_OUT_OF_MEMORY;
-  }
+  NS_ENSURE_TRUE(root, NS_ERROR_OUT_OF_MEMORY);
 
   NS_ASSERTION(GetChildCount() == 0, "Shouldn't have any kids");
   rv = AppendChildTo(root, PR_FALSE);
@@ -256,9 +254,24 @@ MediaDocument::CreateSyntheticDocument()
 
   // Create a <head> so our title has somewhere to live
   nsRefPtr<nsGenericHTMLElement> head = NS_NewHTMLHeadElement(nodeInfo.forget());
-  if (!head) {
-    return NS_ERROR_OUT_OF_MEMORY;
-  }
+  NS_ENSURE_TRUE(head, NS_ERROR_OUT_OF_MEMORY);
+
+  nodeInfo = mNodeInfoManager->GetNodeInfo(nsGkAtoms::link, nsnull,
+                                           kNameSpaceID_XHTML,
+                                           nsIDOMNode::ELEMENT_NODE);
+  NS_ENSURE_TRUE(nodeInfo, NS_ERROR_OUT_OF_MEMORY);
+
+  nsRefPtr<nsGenericHTMLElement> link = NS_NewHTMLLinkElement(nodeInfo.forget());
+  NS_ENSURE_TRUE(link, NS_ERROR_OUT_OF_MEMORY);
+
+  link->SetAttr(kNameSpaceID_None, nsGkAtoms::rel, 
+                NS_LITERAL_STRING("stylesheet"), PR_TRUE);
+
+  link->SetAttr(kNameSpaceID_None, nsGkAtoms::href, 
+                NS_LITERAL_STRING("resource://gre/res/nsMediaDocument.css"),
+                PR_TRUE);
+
+  head->AppendChildTo(link, PR_FALSE);
 
   root->AppendChildTo(head, PR_FALSE);
 
@@ -268,9 +281,7 @@ MediaDocument::CreateSyntheticDocument()
   NS_ENSURE_TRUE(nodeInfo, NS_ERROR_OUT_OF_MEMORY);
 
   nsRefPtr<nsGenericHTMLElement> body = NS_NewHTMLBodyElement(nodeInfo.forget());
-  if (!body) {
-    return NS_ERROR_OUT_OF_MEMORY;
-  }
+  NS_ENSURE_TRUE(body, NS_ERROR_OUT_OF_MEMORY);
 
   root->AppendChildTo(body, PR_FALSE);
 
