@@ -49,17 +49,13 @@
 
 <page xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
       xmlns:xhtml="http://www.w3.org/1999/xhtml"
-      id="permissions-page" title="&aboutPermissions.title;"
+      id="permissions-page" title="&permissionsManager.title;"
       onload="AboutPermissions.init();"
       onunload="AboutPermissions.cleanUp();"
       role="application">
 
   <script type="application/javascript"
           src="chrome://browser/content/preferences/aboutPermissions.js"/>
-
-  <hbox>
-    <label id="permissions-header" value="&aboutPermissions.title;"/>
-  </hbox>
 
   <hbox flex="1" id="permissions-content">
 
@@ -74,7 +70,7 @@
                    onselect="AboutPermissions.onSitesListSelect(event);">
         <richlistitem id="all-sites-item"
                       class="site"
-                      value="&permissions.allSites;"/>                
+                      value="&sites.allSites;"/>                
       </richlistbox>
     </vbox>
 
@@ -83,7 +79,7 @@
       <deck id="header-deck">
         <hbox id="site-header" class="pref-item" align="center">
           <description id="site-description">
-            &permissions.header;<label id="site-label"/>
+            &header.site.start;<label id="site-label"/>&header.site.end;
           </description>
           <label id="site-visit-count"/>
           <spacer flex="1"/>
@@ -94,16 +90,14 @@
 
         <hbox id="defaults-header" class="pref-item" align="center">
           <description id="defaults-description">
-            &permissions.defaults;
+            &header.defaults;
           </description>
-          <spacer flex="1"/>
-          <button label="&permissions.applyToAllSites;"
-                  oncommand="AboutPermissions.restoreAllDefaultPermissions();"/>
         </hbox>
       </deck>
 
       <!-- Passwords -->
-      <hbox class="pref-item" align="top">
+      <hbox id="password-pref-item"
+            class="pref-item" align="top">
         <image class="pref-icon" type="password"/>
         <vbox>
           <label class="pref-title" value="&password.label;"/>
@@ -131,7 +125,8 @@
       </hbox>
 
       <!-- Geolocation -->
-      <hbox class="pref-item" align="top">
+      <hbox id="geo-pref-item"
+            class="pref-item" align="top">
         <image class="pref-icon" type="geo"/>
         <vbox>
           <label class="pref-title" value="&geo.label;"/>
@@ -151,7 +146,8 @@
       </hbox>
 
       <!-- Cookies -->
-      <hbox class="pref-item" align="top">
+      <hbox id="cookie-pref-item"
+            class="pref-item" align="top">
         <image class="pref-icon" type="cookie"/>
         <vbox>
           <label class="pref-title" value="&cookie.label;"/>
@@ -186,7 +182,8 @@
       </hbox>
 
       <!-- Pop-up Blocking -->
-      <hbox class="pref-item" align="top">
+      <hbox id="popup-pref-item"
+            class="pref-item" align="top">
         <image class="pref-icon" type="popup"/>
         <vbox>
           <label class="pref-title" value="&popup.label;"/>
@@ -205,7 +202,8 @@
       </hbox>
 
       <!-- IndexedDB Storage -->  
-      <hbox class="pref-item" align="top">
+      <hbox id="indexedDB-pref-item"
+            class="pref-item" align="top">
         <image class="pref-icon" type="indexedDB"/>
         <vbox>
           <label class="pref-title" value="&indexedDB.label;"/>
@@ -218,25 +216,6 @@
                 <menuitem id="indexedDB-0" value="0" label="&permission.alwaysAsk;"/>
                 <menuitem id="indexedDB-1" value="1" label="&permission.allow;"/>
                 <menuitem id="indexedDB-2" value="2" label="&permission.block;"/>
-              </menupopup>
-            </menulist>
-          </hbox>
-        </vbox>
-      </hbox>  
-
-      <!-- Add-on Install -->
-      <hbox class="pref-item" align="top">
-        <image class="pref-icon" type="install"/>
-        <vbox>
-          <label class="pref-title" value="&install.label;"/>
-          <hbox>
-            <menulist id="install-menulist"
-                      class="pref-menulist"
-                      type="install"
-                      oncommand="AboutPermissions.onPermissionCommand(event);">
-              <menupopup>
-                <menuitem id="install-1" value="1" label="&permission.allow;"/>
-                <menuitem id="install-2" value="2" label="&permission.block;"/>
               </menupopup>
             </menulist>
           </hbox>

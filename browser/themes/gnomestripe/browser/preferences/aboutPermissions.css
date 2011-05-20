@@ -8,12 +8,6 @@
   color: WindowText;
 }
 
-#permissions-header {
-  font-size: 150%;
-  margin-bottom: 5px;
-  font-weight: bold;
-}
-
 #permissions-content {
   background-color: -moz-Field;
   color: -moz-FieldText;

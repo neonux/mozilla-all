@@ -1,7 +1,5 @@
-/* ***** BEGIN LICENSE BLOCK *****
-  Any copyright is dedicated to the Public Domain.
-  http://creativecommons.org/publicdomain/zero/1.0/
- * ***** END LICENSE BLOCK ***** */
+/* Any copyright is dedicated to the Public Domain.
+   http://creativecommons.org/publicdomain/zero/1.0/ */
 
 Components.utils.import("resource://gre/modules/Services.jsm");
 Components.utils.import("resource://gre/modules/PlacesUtils.jsm");
@@ -24,12 +22,11 @@ const TEST_PERMS = {
   "cookie": PERM_ALLOW,
   "geo": PERM_UNKNOWN,
   "indexedDB": PERM_UNKNOWN,
-  "install": PERM_DENY,
   "popup": PERM_DENY
 };
 
 // number of managed permissions in the interface
-const TEST_PERMS_COUNT = 6;
+const TEST_PERMS_COUNT = 5;
 
 function test() {
   waitForExplicitFinish();
@@ -50,15 +47,9 @@ function test() {
     }
   }
 
-  // browser-permissions-initialized notification is sent after initializtion code
-  // is completed and after async places query is completed
-  let notificationCount = 0;
   function observer() {
-    notificationCount++;
-    if (notificationCount > 1) { 
-      Services.obs.removeObserver(observer, "browser-permissions-initialized", false);
-      runNextTest();
-    }
+    Services.obs.removeObserver(observer, "browser-permissions-initialized", false);
+    runNextTest();
   }
   Services.obs.addObserver(observer, "browser-permissions-initialized", false);
 
@@ -67,22 +58,19 @@ function test() {
 }
 
 function cleanUp() {
-  function finishCleanUp() {
-    for (let type in TEST_PERMS) {
-      if (type != "password") {
-        Services.perms.remove(TEST_URI_1.host, type);
-        Services.perms.remove(TEST_URI_2.host, type);
-      }
+  for (let type in TEST_PERMS) {
+    if (type != "password") {
+      Services.perms.remove(TEST_URI_1.host, type);
+      Services.perms.remove(TEST_URI_2.host, type);
     }
   }
 
-  waitForClearHistory(finishCleanUp);
   gBrowser.removeTab(gBrowser.selectedTab);
 }
 
 function runNextTest() {
   if (gTestIndex == tests.length) {
-    finish();
+    waitForClearHistory(finish);
     return;
   }
 

@@ -1,5 +1,5 @@
 /* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
  * The contents of this file are subject to the Mozilla Public License Version
  * 1.1 (the "License"); you may not use this file except in compliance with
@@ -13,26 +13,58 @@
  *
  * The Original Code is about:permissions code.
  *
- * The Initial Developer of the Original Code is the Mozilla Foundation.
+ * The Initial Developer of the Original Code is
+ * the Mozilla Foundation.
  * Portions created by the Initial Developer are Copyright (C) 2011
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
- *   Margaret Leibovic <margaret.leibovic@gmail.com>
+ *  Margaret Leibovic <margaret.leibovic@gmail.com>
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
  *
  * ***** END LICENSE BLOCK ***** */
 
-Components.utils.import("resource://gre/modules/Services.jsm");
-Components.utils.import("resource://gre/modules/PluralForm.jsm");
-Components.utils.import("resource://gre/modules/DownloadUtils.jsm");
-Components.utils.import("resource://gre/modules/NetUtil.jsm");
-
 let Ci = Components.interfaces;
 let Cc = Components.classes;
+let Cu = Components.utils;
+
+Cu.import("resource://gre/modules/Services.jsm");
+Cu.import("resource://gre/modules/PluralForm.jsm");
+Cu.import("resource://gre/modules/DownloadUtils.jsm");
+Cu.import("resource://gre/modules/NetUtil.jsm");
+
+let gFaviconService = Cc["@mozilla.org/browser/favicon-service;1"].
+                      getService(Ci.nsIFaviconService);
 
 let gPlacesDatabase = Cc["@mozilla.org/browser/nav-history-service;1"].
-                      getService(Ci.nsINavHistoryService).
-                      QueryInterface(Ci.nsPIPlacesDatabase).DBConnection;
+                      getService(Ci.nsPIPlacesDatabase).
+                      DBConnection.
+                      clone(true);
+
+let gSitesStmt = gPlacesDatabase.createAsyncStatement(
+                  "SELECT get_unreversed_host(rev_host) AS host " +
+                  "FROM moz_places " +
+                  "WHERE rev_host > '.' " +
+                  "AND visit_count > 0 " +
+                  "GROUP BY rev_host " +
+                  "ORDER BY MAX(frecency) DESC " +
+                  "LIMIT :limit");
+
+let gVisitStmt = gPlacesDatabase.createAsyncStatement(
+                  "SELECT SUM(visit_count) AS count " +
+                  "FROM moz_places " +
+                  "WHERE rev_host = :rev_host");
 
 /**
  * Permission types that should be tested with testExactPermission, as opposed
@@ -54,52 +86,59 @@ function Site(host) {
 }
 
 Site.prototype = {
-
+  /**
+   * Gets the favicon to use for the site. This will return the default favicon
+   * if there is no favicon stored for the site.
+   *
+   * @return A favicon image URL.
+   */
   get favicon() {
     if (!this._favicon) {
-      // TODO: Make this async when bug 655270 is fixed.
-      let fs = Cc["@mozilla.org/browser/favicon-service;1"].
-               getService(Ci.nsIFaviconService);
+      // TODO: Bug 657961: Make this async when bug 655270 is fixed.
       try {
         // First try to see if a favicon is stored for the http URI.
-        this._favicon = fs.getFaviconForPage(this.httpURI).spec;
+        this._favicon = gFaviconService.getFaviconForPage(this.httpURI).spec;
       } catch (e) {
         // getFaviconImageForPage returns the default favicon if no stored favicon is found.
-        this._favicon = fs.getFaviconImageForPage(this.httpsURI).spec;
+        this._favicon = gFaviconService.getFaviconImageForPage(this.httpsURI).spec;
       }
     }
     return this._favicon;
   },
 
   /**
+   * Gets the number of history visits for the site.
+   *
    * @param aCallback
    *        A function that takes the visit count (a number) as a parameter.
    */
   getVisitCount: function Site_getVisitCount(aCallback) {
-    let query = "SELECT SUM(visit_count) AS count " +
-                "FROM moz_places WHERE get_unreversed_host(rev_host) = :host";
-    let stmt = gPlacesDatabase.createAsyncStatement(query);
-    stmt.params.host = this.host;
-    stmt.executeAsync({
+    let rev_host = this.host.split("").reverse().join("") + ".";
+    gVisitStmt.params.rev_host = rev_host;
+    gVisitStmt.executeAsync({
       handleResult: function(aResults) {
         let row = aResults.getNextRow();
         let count = row.getResultByName("count") || 0;
-        aCallback(count);
+        try {
+          aCallback(count);
+        } catch (e) {
+          Cu.reportError("AboutPermissions: " + e);
+        }
       },
       handleError: function(aError) {
-        Components.utils.reportError("AboutPermissions: " + aError);
+        Cu.reportError("AboutPermissions: " + aError);
       },
       handleCompletion: function(aReason) {
       }
     });
-    stmt.finalize();
   },
 
   /**
    * Gets the permission value stored for a specified permission type.
+   *
    * @param aType
    *        The permission type string stored in permission manager.
-   *        e.g. "cookie", "geo", "indexedDB", "install", "popup", "image"
+   *        e.g. "cookie", "geo", "indexedDB", "popup", "image"
    * @param aResultObj
    *        An object that stores the permission value set for aType.
    *
@@ -117,17 +156,37 @@ Site.prototype = {
     return permissionValue != Ci.nsIPermissionManager.UNKNOWN_ACTION;
   },
 
+  /**
+   * Sets a permission for the site given a permission type and value.
+   *
+   * @param aType
+   *        The permission type string stored in permission manager.
+   *        e.g. "cookie", "geo", "indexedDB", "popup", "image"
+   * @param aPerm
+   *        The permission value to set for the permission type. This should
+   *        be one of the constants defined in nsIPermissionManager.
+   */
   setPermission: function Site_setPermission(aType, aPerm) {
     // Using httpURI is kind of bogus, but the permission manager stores the
     // permission for the host, so the right thing happens in the end.
     Services.perms.add(this.httpURI, aType, aPerm);
   },
 
+  /**
+   * Clears a user-set permission value for the site given a permission type.
+   *
+   * @param aType
+   *        The permission type string stored in permission manager.
+   *        e.g. "cookie", "geo", "indexedDB", "popup", "image"
+   */
   clearPermission: function Site_clearPermission(aType) {
     Services.perms.remove(this.host, aType);
   },
 
   /**
+   * Gets cookies stored for the site. This does not return cookies stored
+   * for the base domain, only the exact hostname stored for the site.
+   *
    * @return An array of the cookies set for the site.
    */
   get cookies() {
@@ -144,13 +203,18 @@ Site.prototype = {
     return cookies;
   },
 
-  clearCookies: function Site_clearCookies(aCookieArray) {
-    aCookieArray.forEach(function(aCookie) {
+  /**
+   * Removes a set of specific cookies from the browser.
+   */
+  clearCookies: function Site_clearCookies() {
+    this.cookies.forEach(function(aCookie) {
       Services.cookies.remove(aCookie.host, aCookie.name, aCookie.path, false);
     });
   },
 
   /**
+   * Gets logins stored for the site.
+   *
    * @return An array of the logins stored for the site.
    */
   get logins() {
@@ -172,6 +236,9 @@ Site.prototype = {
     Services.logins.setLoginSavingEnabled(this.httpsURI.prePath, isEnabled);
   },
 
+  /**
+   * Removes all data from the browser corresponding to the site.
+   */
   forgetSite: function Site_forgetSite() {
     let pb = Cc["@mozilla.org/privatebrowsing;1"].
              getService(Ci.nsIPrivateBrowsingService);
@@ -201,25 +268,30 @@ let PermissionDefaults = {
     let value = (aValue == this.ALLOW);
     Services.prefs.setBoolPref("signon.rememberSignons", value);
   },
-  
-  // network.cookie.cookieBehavior: 0-Accept, 1-Don't accept foreign, 2-Don't use
+
+  // For use with network.cookie.* prefs.
+  COOKIE_ACCEPT: 0,
+  COOKIE_DENY: 2,
+  COOKIE_NORMAL: 0,
+  COOKIE_SESSION: 2,
+
   get cookie() {
-    if (Services.prefs.getIntPref("network.cookie.cookieBehavior") == 2) {
+    if (Services.prefs.getIntPref("network.cookie.cookieBehavior") == this.COOKIE_DENY) {
       return this.DENY;
     }
 
-    if (Services.prefs.getIntPref("network.cookie.lifetimePolicy") == 2) {
+    if (Services.prefs.getIntPref("network.cookie.lifetimePolicy") == this.COOKIE_DENY) {
       return this.SESSION;
     }
     return this.ALLOW;
   },
   set cookie(aValue) {
-    let value = (aValue == this.DENY) ? 2 : 0;
+    let value = (aValue == this.DENY) ? this.COOKIE_DENY : this.COOKIE_ACCEPT;
     Services.prefs.setIntPref("network.cookie.cookieBehavior", value);
 
-    if (aValue == this.SESSION) {
-      Services.prefs.setIntPref("network.cookie.lifetimePolicy", 2);
-    }
+    let lifetimeValue = aValue == this.SESSION ? this.COOKIE_SESSION :
+                                                 this.COOKIE_NORMAL;
+    Services.prefs.setIntPref("network.cookie.lifetimePolicy", lifetimeValue);
   },
 
   get geo() {
@@ -257,23 +329,6 @@ let PermissionDefaults = {
   set popup(aValue) {
     let value = (aValue == this.DENY);
     Services.prefs.setBoolPref("dom.disable_open_during_load", value);
-  },
-
-  get install() {
-    // TODO: This is copied from pageinfo, but it doesn't really reflect reality.
-    // Looks like bug 643385.
-    try {
-      if (!Services.prefs.getBoolPref("xpinstall.whitelist.required")) {
-        return this.ALLOW;
-      }
-    }
-    catch (e) {
-    }
-    return this.DENY;
-  },
-  set install(aValue) {
-    let value = (aValue == this.DENY);
-    Services.prefs.setBoolPref("xpinstall.whitelist.required", value);
   }
 }
 
@@ -291,7 +346,7 @@ let AboutPermissions = {
    */
   _sites: {},
 
-  _sitesList: null,
+  sitesList: null,
   _selectedSite: null,
 
   /**
@@ -301,11 +356,14 @@ let AboutPermissions = {
    *
    * Potential future additions: "sts/use", "sts/subd"
    */
-  _supportedPermissions: ["password", "cookie", "geo", "indexedDB", "install",
-                          "popup"],
+  _supportedPermissions: ["password", "cookie", "geo", "indexedDB", "popup"],
 
-  _stringBundle: Cc["@mozilla.org/intl/stringbundle;1"].
-                 getService(Ci.nsIStringBundleService).
+  /**
+   * Permissions that don't have a global "Allow" option.
+   */
+  _noGlobalAllow: ["geo", "indexedDB"],
+
+  _stringBundle: Services.strings.
                  createBundle("chrome://browser/locale/preferences/aboutPermissions.properties"),
 
   /**
@@ -318,39 +376,67 @@ let AboutPermissions = {
     this.enumerateServices();
 
     // Attach observers in case data changes while the page is open.
-    Services.prefs.addObserver("", this, false);
+    Services.prefs.addObserver("signon.rememberSignons", this, false);
+    Services.prefs.addObserver("network.cookie.", this, false);
+    Services.prefs.addObserver("geo.enabled", this, false);
+    Services.prefs.addObserver("dom.indexedDB.enabled", this, false);
+    Services.prefs.addObserver("dom.disable_open_during_load", this, false);
+
     Services.obs.addObserver(this, "perm-changed", false);
     Services.obs.addObserver(this, "passwordmgr-storage-changed", false);
     Services.obs.addObserver(this, "cookie-changed", false);
     Services.obs.addObserver(this, "browser:purge-domain-data", false);
-
-    // Notify oberservers for testing purposes.
-    Services.obs.notifyObservers(null, "browser-permissions-initialized", null);
+    
+    this._observersInitialized = true;
   },
 
   /**
    * Called on page unload.
    */
   cleanUp: function() {
-    Services.prefs.removeObserver("", this, false);
-    Services.obs.removeObserver(this, "perm-changed", false);
-    Services.obs.removeObserver(this, "passwordmgr-storage-changed", false);
-    Services.obs.removeObserver(this, "cookie-changed", false);
-    Services.obs.removeObserver(this, "browser:purge-domain-data", false);
+    if (this._observersInitialized) {
+      Services.prefs.removeObserver("signon.rememberSignons", this, false);
+      Services.prefs.removeObserver("network.cookie.", this, false);
+      Services.prefs.removeObserver("geo.enabled", this, false);
+      Services.prefs.removeObserver("dom.indexedDB.enabled", this, false);
+      Services.prefs.removeObserver("dom.disable_open_during_load", this, false);
+
+      Services.obs.removeObserver(this, "perm-changed", false);
+      Services.obs.removeObserver(this, "passwordmgr-storage-changed", false);
+      Services.obs.removeObserver(this, "cookie-changed", false);
+      Services.obs.removeObserver(this, "browser:purge-domain-data", false);
+    }
+
+    gSitesStmt.finalize();
+    gVisitStmt.finalize();
   },
 
   observe: function (aSubject, aTopic, aData) {
     switch(aTopic) {
       case "perm-changed":
+        // Permissions changes only affect individual sites.
+        if (!this._selectedSite) {
+          break;
+        }
+        // aSubject is null when nsIPermisionManager::removeAll() is called.
+        if (!aSubject) {
+          this._supportedPermissions.forEach(function(aType){
+            this.updatePermission(aType);
+          }, this);
+          break;
+        }
         let permission = aSubject.QueryInterface(Ci.nsIPermission);
-        if (this._selectedSite && permission.type in PermissionDefaults) {
+        // We can't compare selectedSite.host and permission.host here because
+        // we need to handle the case where a parent domain was changed in a
+        // way that affects the subdomain.
+        if (this._supportedPermissions.indexOf(permission.type) != -1) {
           this.updatePermission(permission.type);
         }
         break;
       case "nsPref:changed":
         this._supportedPermissions.forEach(function(aType){
-          AboutPermissions.updatePermission(aType);
-        });
+          this.updatePermission(aType);
+        }, this);
         break;
       case "passwordmgr-storage-changed":
         this.updatePermission("password");
@@ -374,33 +460,23 @@ let AboutPermissions = {
    * them in _sites. The number of sites created is controlled by PLACES_SITES_LIMIT.
    */
   getSitesFromPlaces: function() {
-    let query = "SELECT get_unreversed_host(rev_host) AS host " +
-                "FROM moz_places WHERE rev_host <> '.' " +
-                "AND visit_count > 0 GROUP BY rev_host " +
-                "ORDER BY MAX(frecency) DESC LIMIT :limit";
-    let stmt = gPlacesDatabase.createAsyncStatement(query);
-    stmt.params.limit = this.PLACES_SITES_LIMIT;
-    stmt.executeAsync({
+    gSitesStmt.params.limit = this.PLACES_SITES_LIMIT;
+    gSitesStmt.executeAsync({
       handleResult: function(aResults) {
         let row;
         while (row = aResults.getNextRow()) {
           let host = row.getResultByName("host");
-          if (!(host in AboutPermissions._sites)) {
-            let site = new Site(host);
-            AboutPermissions._sites[host] = site;
-            AboutPermissions.addToSitesList(site);
-          }
+          AboutPermissions.addHost(host);
         }
       },
       handleError: function(aError) {
-        Components.utils.reportError("AboutPermissions: " + aError);
+        Cu.reportError("AboutPermissions: " + aError);
       },
       handleCompletion: function(aReason) {
         // Notify oberservers for testing purposes.
         Services.obs.notifyObservers(null, "browser-permissions-initialized", null);
       }
     });
-    stmt.finalize();
   },
 
   /**
@@ -413,46 +489,52 @@ let AboutPermissions = {
       try {
         // aLogin.hostname is a string in origin URL format (e.g. "http://foo.com")
         let uri = NetUtil.newURI(aLogin.hostname);
-        let host = uri.host;
-        if (!(host in AboutPermissions._sites)) {
-          let site = new Site(host)
-          AboutPermissions._sites[host] = site;
-          AboutPermissions.addToSitesList(site);
-        }
+        this.addHost(uri.host);
       } catch (e) {
         // newURI will throw for add-ons logins stored in chrome:// URIs 
       }
-    });
+    }, this);
 
     let disabledHosts = Services.logins.getAllDisabledHosts();
     disabledHosts.forEach(function(aHostname) {
-      // aHostname is a string in origin URL format (e.g. "http://foo.com")
-      let uri = NetUtil.newURI(aHostname);
-      let host = uri.host;
-      if (!(host in AboutPermissions._sites)) {
-        let site = new Site(host)
-        AboutPermissions._sites[host] = site;
-        AboutPermissions.addToSitesList(site);
+      try {
+        // aHostname is a string in origin URL format (e.g. "http://foo.com")
+        let uri = NetUtil.newURI(aHostname);
+        this.addHost(uri.host);
+      } catch (e) {
+        // newURI will throw for add-ons logins stored in chrome:// URIs 
       }
-    });
+    }, this);
 
     let (enumerator = Services.perms.enumerator) {
       while (enumerator.hasMoreElements()) {
         let permission = enumerator.getNext().QueryInterface(Ci.nsIPermission);
-        let host = permission.host;
         // Only include sites with exceptions set for supported permission types.
-        if (this._supportedPermissions.indexOf(permission.type) != -1 &&
-            !(host in AboutPermissions._sites)) {
-          let site = new Site(host)
-          AboutPermissions._sites[host] = site;
-          AboutPermissions.addToSitesList(site);
+        if (this._supportedPermissions.indexOf(permission.type) != -1) {
+          this.addHost(permission.host);
         }
       }
     }
   },
 
   /**
+   * Creates a new Site and adds it to _sites if it's not already there.
+   *
+   * @param aHost
+   *        A host string.
+   */
+  addHost: function(aHost) {
+    if (aHost in this._sites) {
+      return;
+    }
+    let site = new Site(aHost);
+    this._sites[aHost] = site;
+    this.addToSitesList(site);
+  },
+
+  /**
    * Populates sites-list richlistbox with data from Site object.
+   *
    * @param aSite
    *        A Site object.
    */
@@ -487,7 +569,7 @@ let AboutPermissions = {
   },
 
   /**
-   * Erases all evidence of the selected site. The "forget this site" observer
+   * Removes all evidence of the selected site. The "forget this site" observer
    * will call deleteFromSitesList to update the UI.
    */
   forgetSite: function() {
@@ -497,6 +579,9 @@ let AboutPermissions = {
   /**
    * Deletes sites for a host and all of its sub-domains. Removes these sites
    * from _sites and removes their corresponding elements from the DOM.
+   *
+   * @param aHost
+   *        The host string corresponding to the site to delete.
    */
   deleteFromSitesList: function(aHost) {
     for each (let site in this._sites) {
@@ -512,34 +597,6 @@ let AboutPermissions = {
         delete this._sites[site.host];
       }
     }    
-  },
-
-  /**
-   * @param aSite
-   *        An optional paramter to restore default permissions to a specific
-   *        site, as opposed to the selected site.
-   */
-  restoreDefaultPermissions: function(aSite) {
-    let site = aSite || this._selectedSite;
-
-    this._supportedPermissions.forEach(function(aType) {
-      // The login manager does not provide a way to clear a user-set pref for
-      // password saving, so we'll just restore the permission to the default value.
-      if (aType == "password") {
-        site.loginSavingEnabled =
-          (PermissionDefaults["password"] == PermissionDefaults.ALLOW);
-      } else {
-        site.clearPermission(aType);
-      }
-
-      AboutPermissions.updatePermission(aType);
-    });
-  },
-
-  restoreAllDefaultPermissions: function() {
-    for each (let site in this._sites) {
-      this.restoreDefaultPermissions(site);
-    }
   },
 
   /**
@@ -579,8 +636,8 @@ let AboutPermissions = {
    */
   updatePermissionsBox: function() {
     this._supportedPermissions.forEach(function(aType){
-      AboutPermissions.updatePermission(aType);
-    });
+      this.updatePermission(aType);
+    }, this);
 
     this.updatePasswordsCount();
     this.updateCookiesCount();
@@ -591,13 +648,25 @@ let AboutPermissions = {
   /**
    * Sets menulist for a given permission to the correct state, based on the
    * stored permission.
+   *
+   * @param aType
+   *        The permission type string stored in permission manager.
+   *        e.g. "cookie", "geo", "indexedDB", "popup", "image"
    */
   updatePermission: function(aType) {
-    let permissionMenulist = document.getElementById(aType + "-menulist");
-    permissionMenulist.disabled = false;
+    let allowItem = document.getElementById(aType + "-" + PermissionDefaults.ALLOW);
+    if (!this._selectedSite &&
+        this._noGlobalAllow.indexOf(aType) != -1) {
+      allowItem.hidden = true;
+      return;
+    }
 
+    allowItem.hidden = false;
+
+    let permissionMenulist = document.getElementById(aType + "-menulist");
     let permissionValue;    
     if (!this._selectedSite) {
+
       // If there is no selected site, we are updating the default permissions interface.
       permissionValue = PermissionDefaults[aType];
     } else if (aType == "password") {
@@ -646,7 +715,7 @@ let AboutPermissions = {
     }
 
     let passwordsCount = this._selectedSite.logins.length;
-    let passwordsForm = AboutPermissions._stringBundle.GetStringFromName("passwordsCount");
+    let passwordsForm = this._stringBundle.GetStringFromName("passwordsCount");
     let passwordsLabel = PluralForm.get(passwordsCount, passwordsForm)
                                    .replace("#1", passwordsCount);
 
@@ -656,6 +725,9 @@ let AboutPermissions = {
     document.getElementById("passwords-count").hidden = false;
   },
 
+  /**
+   * Opens password manager dialog.
+   */
   managePasswords: function() {
     let selectedHost = "";
     if (this._selectedSite) {
@@ -681,7 +753,7 @@ let AboutPermissions = {
     }
 
     let cookiesCount = this._selectedSite.cookies.length;
-    let cookiesForm = AboutPermissions._stringBundle.GetStringFromName("cookiesCount");
+    let cookiesForm = this._stringBundle.GetStringFromName("cookiesCount");
     let cookiesLabel = PluralForm.get(cookiesCount, cookiesForm)
                                  .replace("#1", cookiesCount);
 
@@ -693,12 +765,21 @@ let AboutPermissions = {
     document.getElementById("cookies-count").hidden = false;
   },
 
+  /**
+   * Clears cookies for the selected site.
+   */
   clearCookies: function() {
+    if (!this._selectedSite) {
+      return;
+    }
     let site = this._selectedSite;
     site.clearCookies(site.cookies);
     this.updateCookiesCount();
   },
 
+  /**
+   * Opens cookie manager dialog.
+   */
   manageCookies: function() {
     let selectedHost = "";
     if (this._selectedSite) {

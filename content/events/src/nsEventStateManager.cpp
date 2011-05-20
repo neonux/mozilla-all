@@ -391,6 +391,7 @@ public:
   static PRInt32 AccelerateWheelDelta(PRInt32 aScrollLines,
                    PRBool aIsHorizontal, PRBool aAllowScrollSpeedOverride,
                    nsIScrollableFrame::ScrollUnit *aScrollQuantity);
+  static PRBool IsAccelerationEnabled();
 
   enum {
     kScrollSeriesTimeout = 80
@@ -649,6 +650,12 @@ nsMouseWheelTransaction::GetIgnoreMoveDelayTime()
 {
   return (PRUint32)
     nsContentUtils::GetIntPref("mousewheel.transaction.ignoremovedelay", 100);
+}
+
+PRBool
+nsMouseWheelTransaction::IsAccelerationEnabled()
+{
+  return GetAccelerationStart() >= 0 && GetAccelerationFactor() > 0;
 }
 
 PRInt32
@@ -1859,7 +1866,7 @@ nsEventStateManager::FireContextClick()
       // stop selection tracking, we're in control now
       if (mCurrentTarget)
       {
-        nsCOMPtr<nsFrameSelection> frameSel =
+        nsRefPtr<nsFrameSelection> frameSel =
           mCurrentTarget->GetFrameSelection();
         
         if (frameSel && frameSel->GetMouseDownState()) {
@@ -1984,7 +1991,7 @@ nsEventStateManager::GenerateDragGesture(nsPresContext* aPresContext,
     // don't interfere!
     if (mCurrentTarget)
     {
-      nsCOMPtr<nsFrameSelection> frameSel = mCurrentTarget->GetFrameSelection();
+      nsRefPtr<nsFrameSelection> frameSel = mCurrentTarget->GetFrameSelection();
       if (frameSel && frameSel->GetMouseDownState()) {
         StopTrackingDragGesture();
         return;
@@ -2651,6 +2658,12 @@ nsEventStateManager::DoScrollText(nsIFrame* aTargetFrame,
 
   if (!passToParent && frameToScroll) {
     if (aQueryEvent) {
+      // If acceleration is enabled, pixel scroll shouldn't be used for
+      // high resolution scrolling.
+      if (nsMouseWheelTransaction::IsAccelerationEnabled()) {
+        return NS_OK;
+      }
+
       nscoord appUnitsPerDevPixel =
         aTargetFrame->PresContext()->AppUnitsPerDevPixel();
       aQueryEvent->mReply.mLineHeight =
@@ -3021,7 +3034,7 @@ nsEventStateManager::PostHandleEvent(nsPresContext* aPresContext,
 
       nsIPresShell *shell = presContext->GetPresShell();
       if (shell) {
-        nsCOMPtr<nsFrameSelection> frameSelection = shell->FrameSelection();
+        nsRefPtr<nsFrameSelection> frameSelection = shell->FrameSelection();
         frameSelection->SetMouseDownState(PR_FALSE);
       }
     }
