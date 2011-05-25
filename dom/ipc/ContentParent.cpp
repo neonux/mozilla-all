@@ -100,6 +100,7 @@
 
 #ifdef ANDROID
 #include "gfxAndroidPlatform.h"
+#include "AndroidBridge.h"
 #endif
 
 #include "nsIClipboard.h"
@@ -535,6 +536,22 @@ ContentParent::RecvClipboardHasText(PRBool* hasText)
     return true;
 }
 
+bool
+ContentParent::RecvGetSystemColors(const PRUint32& colorsCount, InfallibleTArray<PRUint32>* colors)
+{
+#ifdef ANDROID
+    if (!AndroidBridge::Bridge())
+        return false;
+
+    colors->AppendElements(colorsCount);
+
+    // The array elements correspond to the members of AndroidSystemColors structure,
+    // so just pass the pointer to the elements buffer
+    AndroidBridge::Bridge()->GetSystemColors((AndroidSystemColors*)colors->Elements());
+#endif
+    return true;
+}
+
 NS_IMPL_THREADSAFE_ISUPPORTS3(ContentParent,
                               nsIObserver,
                               nsIThreadObserver,
@@ -675,11 +692,13 @@ ContentParent::SetChildMemoryReporters(const InfallibleTArray<MemoryReport>& rep
 
         nsCString prefix = report[i].prefix();
         nsCString path   = report[i].path();
+        PRInt32   kind   = report[i].kind();
         nsCString desc   = report[i].desc();
         PRInt64 memoryUsed = report[i].memoryUsed();
         
         nsRefPtr<nsMemoryReporter> r = new nsMemoryReporter(prefix,
                                                             path,
+                                                            kind,
                                                             desc,
                                                             memoryUsed);
       mMemoryReporters.AppendObject(r);
@@ -848,6 +867,7 @@ ContentParent::RecvSetURITitle(const IPC::URI& uri,
 bool
 ContentParent::RecvShowFilePicker(const PRInt16& mode,
                                   const PRInt16& selectedType,
+                                  const PRBool& addToRecentDocs,
                                   const nsString& title,
                                   const nsString& defaultFile,
                                   const nsString& defaultExtension,
@@ -873,7 +893,9 @@ ContentParent::RecvShowFilePicker(const PRInt16& mode,
     *result = filePicker->Init(window, title, mode);
     if (NS_FAILED(*result))
         return true;
-    
+
+    filePicker->SetAddToRecentDocs(addToRecentDocs);
+
     PRUint32 count = filters.Length();
     for (PRUint32 i = 0; i < count; ++i) {
         filePicker->AppendFilter(filterNames[i], filters[i]);

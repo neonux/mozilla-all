@@ -54,11 +54,9 @@ EXPORTS_NAMESPACES = mozilla
 
 XPIDLSRCS = \
   nsIHTTPHeaderListener.idl \
-  nsIPlugin.idl \
   nsIPluginDocument.idl \
   nsIPluginHost.idl \
   nsIPluginInputStream.idl \
-  nsIPluginInstance.idl \
   nsIPluginInstanceOwner.idl \
   nsIPluginStreamInfo.idl \
   nsIPluginStreamListener.idl \
@@ -76,6 +74,11 @@ EXPORTS = \
   nsPluginError.h \
   nsPluginNativeWindow.h \
   nsPluginsCID.h \
+  nsNPAPIPluginInstance.h \
+  nsPluginsDir.h \
+  nsPluginTags.h \
+  nsPluginDirServiceProvider.h \
+  nsPluginHost.h \
   $(NULL)
 
 EXPORTS_mozilla = \
@@ -94,7 +97,7 @@ CPPSRCS		= \
 		PluginPRLibrary.cpp \
 		$(NULL)
 
-ifneq (,$(filter WINNT WINCE,$(OS_ARCH)))
+ifeq ($(OS_ARCH),WINNT)
 	CPPSRCS += nsPluginsDirWin.cpp
 	CPPSRCS += nsPluginNativeWindowWin.cpp
 	CPPSRCS += nsPluginDirServiceProvider.cpp
@@ -162,3 +165,7 @@ ifeq ($(MOZ_WIDGET_TOOLKIT),qt)
 EXTRA_DSO_LDOPTS += $(XEXT_LIBS) $(XCOMPOSITE_LIBS)
 endif
 
+$(DIST)/bin/plugins:
+	$(NSINSTALL) -D $@
+
+export:: $(DIST)/bin/plugins

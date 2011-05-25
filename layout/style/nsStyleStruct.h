@@ -351,17 +351,7 @@ struct nsStyleBackground {
   struct Position;
   friend struct Position;
   struct Position {
-    struct PositionCoord {
-      // A 'background-position' can be a linear combination of length
-      // and percent (thanks to calc(), which can combine them).
-      nscoord mLength;
-      float   mPercent;
-
-      bool operator==(const PositionCoord& aOther) const
-        { return mLength == aOther.mLength && mPercent == aOther.mPercent; }
-      bool operator!=(const PositionCoord& aOther) const
-        { return !(*this == aOther); }
-    };
+    typedef nsStyleCoord::Calc PositionCoord;
     PositionCoord mXPosition, mYPosition;
 
     // Initialize nothing
@@ -388,17 +378,7 @@ struct nsStyleBackground {
   struct Size;
   friend struct Size;
   struct Size {
-    struct Dimension {
-      // A 'background-size' can be a linear combination of length
-      // and percent (thanks to calc(), which can combine them).
-      nscoord mLength;
-      float   mPercent;
-
-      bool operator==(const Dimension& aOther) const
-        { return mLength == aOther.mLength && mPercent == aOther.mPercent; }
-      bool operator!=(const Dimension& aOther) const
-        { return !(*this == aOther); }
-    };
+    typedef nsStyleCoord::Calc Dimension;
     Dimension mWidth, mHeight;
 
     // Except for eLengthPercentage, Dimension types which might change
@@ -1242,6 +1222,7 @@ struct nsStyleText {
   PRUint8 mTextTransform;               // [inherited] see nsStyleConsts.h
   PRUint8 mWhiteSpace;                  // [inherited] see nsStyleConsts.h
   PRUint8 mWordWrap;                    // [inherited] see nsStyleConsts.h
+  PRUint8 mHyphens;                     // [inherited] see nsStyleConsts.h
   PRInt32 mTabSize;                     // [inherited] see nsStyleConsts.h
 
   nsStyleCoord  mLetterSpacing;         // [inherited] coord, normal
@@ -1496,7 +1477,7 @@ struct nsStyleDisplay {
 #endif
   static PRBool ForceCompare() { return PR_TRUE; }
 
-  // We guarantee that if mBinding is non-null, so are mBinding->mURI and
+  // We guarantee that if mBinding is non-null, so are mBinding->GetURI() and
   // mBinding->mOriginPrincipal.
   nsRefPtr<nsCSSValue::URL> mBinding;    // [reset]
   nsRect    mClip;              // [reset] offsets from upper-left border edge
@@ -1513,6 +1494,7 @@ struct nsStyleDisplay {
   PRUint8 mOverflowY;           // [reset] see nsStyleConsts.h
   PRUint8 mResize;              // [reset] see nsStyleConsts.h
   PRUint8   mClipFlags;         // [reset] see nsStyleConsts.h
+  PRUint8 mOrient;              // [reset] see nsStyleConsts.h
 
   // mSpecifiedTransform is the list of transform functions as
   // specified, or null to indicate there is no transform.  (inherit or

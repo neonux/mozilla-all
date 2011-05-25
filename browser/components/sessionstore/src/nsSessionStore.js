@@ -224,6 +224,9 @@ SessionStoreService.prototype = {
 
   // number of tabs to restore concurrently, pref controlled.
   _maxConcurrentTabRestores: null,
+  
+  // whether to restore hidden tabs or not, pref controlled.
+  _restoreHiddenTabs: null,
 
   // The state from the previous session (after restoring pinned tabs)
   _lastSessionState: null,
@@ -280,6 +283,10 @@ SessionStoreService.prototype = {
     this._maxConcurrentTabRestores =
       this._prefBranch.getIntPref("sessionstore.max_concurrent_tabs");
     this._prefBranch.addObserver("sessionstore.max_concurrent_tabs", this, true);
+
+    this._restoreHiddenTabs =
+      this._prefBranch.getBoolPref("sessionstore.restore_hidden_tabs");
+    this._prefBranch.addObserver("sessionstore.restore_hidden_tabs", this, true);
 
     // Make sure gRestoreTabsProgressListener has a reference to sessionstore
     // so that it can make calls back in
@@ -598,6 +605,10 @@ SessionStoreService.prototype = {
         this._maxConcurrentTabRestores =
           this._prefBranch.getIntPref("sessionstore.max_concurrent_tabs");
         break;
+      case "sessionstore.restore_hidden_tabs":
+        this._restoreHiddenTabs =
+          this._prefBranch.getBoolPref("sessionstore.restore_hidden_tabs");
+        break;
       }
       break;
     case "timer-callback": // timer call back for delayed saving
@@ -771,36 +782,41 @@ SessionStoreService.prototype = {
 
       if (closedWindowState) {
         let newWindowState;
-#ifdef XP_MACOSX
-        // We want to split the window up into pinned tabs and unpinned tabs.
-        // Pinned tabs should be restored. If there are any remaining tabs,
-        // they should be added back to _closedWindows.
-        // We'll cheat a little bit and reuse _prepDataForDeferredRestore
-        // even though it wasn't built exactly for this.
-        let [appTabsState, normalTabsState] =
-          this._prepDataForDeferredRestore(JSON.stringify({ windows: [closedWindowState] }));
+#ifndef XP_MACOSX
+        if (!this._doResumeSession()) {
+#endif
+          // We want to split the window up into pinned tabs and unpinned tabs.
+          // Pinned tabs should be restored. If there are any remaining tabs,
+          // they should be added back to _closedWindows.
+          // We'll cheat a little bit and reuse _prepDataForDeferredRestore
+          // even though it wasn't built exactly for this.
+          let [appTabsState, normalTabsState] =
+            this._prepDataForDeferredRestore(JSON.stringify({ windows: [closedWindowState] }));
 
-        // These are our pinned tabs, which we should restore
-        if (appTabsState.windows.length) {
-          newWindowState = appTabsState.windows[0];
-          delete newWindowState.__lastSessionWindowID;
-        }
+          // These are our pinned tabs, which we should restore
+          if (appTabsState.windows.length) {
+            newWindowState = appTabsState.windows[0];
+            delete newWindowState.__lastSessionWindowID;
+          }
 
-        // In case there were no unpinned tabs, remove the window from _closedWindows
-        if (!normalTabsState.windows.length) {
-          this._closedWindows.splice(closedWindowIndex, 1);
+          // In case there were no unpinned tabs, remove the window from _closedWindows
+          if (!normalTabsState.windows.length) {
+            this._closedWindows.splice(closedWindowIndex, 1);
+          }
+          // Or update _closedWindows with the modified state
+          else {
+            delete normalTabsState.windows[0].__lastSessionWindowID;
+            this._closedWindows[closedWindowIndex] = normalTabsState.windows[0];
+          }
+#ifndef XP_MACOSX
         }
-        // Or update _closedWindows with the modified state
         else {
-          delete normalTabsState.windows[0].__lastSessionWindowID;
-          this._closedWindows[closedWindowIndex] = normalTabsState.windows[0];
+          // If we're just restoring the window, make sure it gets removed from
+          // _closedWindows.
+          this._closedWindows.splice(closedWindowIndex, 1);
+          newWindowState = closedWindowState;
+          delete newWindowState.hidden;
         }
-#else
-        // If we're just restoring the window, make sure it gets removed from
-        // _closedWindows.
-        this._closedWindows.splice(closedWindowIndex, 1);
-        newWindowState = closedWindowState;
-        delete newWindowState.hidden;
 #endif
         if (newWindowState) {
           // Ensure that the window state isn't hidden
@@ -1073,6 +1089,10 @@ SessionStoreService.prototype = {
       this._tabsToRestore.hidden.splice(this._tabsToRestore.hidden.indexOf(aTab));
       // Just put it at the end of the list of visible tabs;
       this._tabsToRestore.visible.push(aTab);
+
+      // let's kick off tab restoration again to ensure this tab gets restored
+      // with "restore_hidden_tabs" == false (now that it has become visible)
+      this.restoreNextTab();
     }
 
     // Default delay of 2 seconds gives enough time to catch multiple TabShow
@@ -1324,8 +1344,6 @@ SessionStoreService.prototype = {
     if (aWindow.__SSi && this._windows[aWindow.__SSi].extData &&
         this._windows[aWindow.__SSi].extData[aKey])
       delete this._windows[aWindow.__SSi].extData[aKey];
-    else
-      throw (Components.returnCode = Cr.NS_ERROR_INVALID_ARG);
   },
 
   getTabValue: function sss_getTabValue(aTab, aKey) {
@@ -1372,8 +1390,6 @@ SessionStoreService.prototype = {
 
     if (deleteFrom && deleteFrom[aKey])
       delete deleteFrom[aKey];
-    else
-      throw (Components.returnCode = Cr.NS_ERROR_INVALID_ARG);
   },
 
   persistTabAttribute: function sss_persistTabAttribute(aName) {
@@ -1781,8 +1797,9 @@ SessionStoreService.prototype = {
       entry.docIdentifier = aEntry.docIdentifier;
     }
 
-    if (aEntry.stateData) {
-      entry.stateData = aEntry.stateData;
+    if (aEntry.stateData != null) {
+      entry.structuredCloneState = aEntry.stateData.getDataAsBase64();
+      entry.structuredCloneVersion = aEntry.stateData.formatVersion;
     }
 
     if (!(aEntry instanceof Ci.nsISHContainer)) {
@@ -2938,7 +2955,7 @@ SessionStoreService.prototype = {
     if (this._tabsToRestore.visible.length) {
       nextTabArray = this._tabsToRestore.visible;
     }
-    else if (this._tabsToRestore.hidden.length) {
+    else if (this._restoreHiddenTabs && this._tabsToRestore.hidden.length) {
       nextTabArray = this._tabsToRestore.hidden;
     }
 
@@ -2998,8 +3015,13 @@ SessionStoreService.prototype = {
     if (aEntry.docshellID)
       shEntry.docshellID = aEntry.docshellID;
 
-    if (aEntry.stateData) {
-      shEntry.stateData = aEntry.stateData;
+    if (aEntry.structuredCloneState && aEntry.structuredCloneVersion) {
+      shEntry.stateData =
+        Cc["@mozilla.org/docshell/structured-clone-container;1"].
+        createInstance(Ci.nsIStructuredCloneContainer);
+
+      shEntry.stateData.initFromBase64(aEntry.structuredCloneState,
+                                       aEntry.structuredCloneVersion);
     }
 
     if (aEntry.scroll) {
@@ -3963,7 +3985,8 @@ SessionStoreService.prototype = {
     this._removeTabsProgressListener(window);
 
     if (previousState == TAB_STATE_RESTORING) {
-      this._tabsRestoringCount--;
+      if (this._tabsRestoringCount)
+        this._tabsRestoringCount--;
     }
     else if (previousState == TAB_STATE_NEEDS_RESTORE) {
       // Make sure the session history listener is removed. This is normally

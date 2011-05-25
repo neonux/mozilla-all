@@ -42,7 +42,7 @@ Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 Cu.import("resource://gre/modules/NetUtil.jsm");
 Cu.import("resource://gre/modules/Services.jsm");
 
-const PERMS_FILE      = 0644;
+const PERMS_FILE      = 0600;
 const PERMS_DIRECTORY = 0755;
 
 const MODE_RDONLY   = 0x01;
@@ -262,7 +262,7 @@ function AutoCompleteCache() {
   AutoCompleteUtils.init();
 
   Services.obs.addObserver(this, "browser:cache-session-history-reload", true);
-  Services.obs.addObserver(this, "browser:purge-session-history", true);
+  Services.obs.addObserver(this, "places-expiration-finished", true);
   Services.obs.addObserver(this, "browser-search-engine-modified", true);
 }
 
@@ -344,7 +344,7 @@ AutoCompleteCache.prototype = {
         else
           AutoCompleteUtils.fetch(AutoCompleteUtils.query);
         break;
-      case "browser:purge-session-history":
+      case "places-expiration-finished":
         AutoCompleteUtils.fetch(AutoCompleteUtils.query);
         break;
       case "browser-search-engine-modified":

@@ -79,8 +79,8 @@ var gCSSProperties = {
 		domProp: "MozAnimation",
 		inherited: false,
 		type: CSS_TYPE_TRUE_SHORTHAND,
-		subproperties: [ "-moz-animation-name", "-moz-animation-duration", "-moz-animation-timing-function", "-moz-animation-delay", "-moz-animation-direction", "-moz-animation-fill-mode", "-moz-animation-iteration-count", "-moz-animation-play-state" ],
-		initial_values: [ "none none 0s 0s ease normal running 1.0", "none", "0s", "ease", "normal", "running", "1.0" ],
+		subproperties: [ "-moz-animation-name", "-moz-animation-duration", "-moz-animation-timing-function", "-moz-animation-delay", "-moz-animation-direction", "-moz-animation-fill-mode", "-moz-animation-iteration-count" ],
+		initial_values: [ "none none 0s 0s ease normal 1.0", "none", "0s", "ease", "normal", "1.0" ],
 		other_values: [ "bounce 1s linear 2s", "bounce 1s 2s linear", "bounce linear 1s 2s", "linear bounce 1s 2s", "linear 1s bounce 2s", "linear 1s 2s bounce", "1s bounce linear 2s", "1s bounce 2s linear", "1s 2s bounce linear", "1s linear bounce 2s", "1s linear 2s bounce", "1s 2s linear bounce", "bounce linear 1s", "bounce 1s linear", "linear bounce 1s", "linear 1s bounce", "1s bounce linear", "1s linear bounce", "1s 2s bounce", "1s bounce 2s", "bounce 1s 2s", "1s 2s linear", "1s linear 2s", "linear 1s 2s", "bounce 1s", "1s bounce", "linear 1s", "1s linear", "1s 2s", "2s 1s", "bounce", "linear", "1s", "height", "2s", "ease-in-out", "2s ease-in", "opacity linear", "ease-out 2s", "2s color, 1s bounce, 500ms height linear, 1s opacity 4s cubic-bezier(0.0, 0.1, 1.0, 1.0)", "1s \\32bounce linear 2s", "1s -bounce linear 2s", "1s -\\32bounce linear 2s", "1s \\32 0bounce linear 2s", "1s -\\32 0bounce linear 2s", "1s \\2bounce linear 2s", "1s -\\2bounce linear 2s", "2s, 1s bounce", "1s bounce, 2s", "2s all, 1s bounce", "1s bounce, 2s all", "1s bounce, 2s none", "2s none, 1s bounce", "2s bounce, 1s all", "2s all, 1s bounce" ],
 		invalid_values: [  "2s inherit", "inherit 2s", "2s bounce, 1s inherit", "2s inherit, 1s bounce", "2s initial" ]
 	},
@@ -1356,8 +1356,7 @@ var gCSSProperties = {
 		domProp: "backgroundPosition",
 		inherited: false,
 		type: CSS_TYPE_LONGHAND,
-		/* is "0px 0px" an initial value or not? */
-		initial_values: [ "top left", "left top", "0% 0%", "0% top", "left 0%", "0px 0px" ],
+		initial_values: [ "top left", "left top", "0% 0%", "0% top", "left 0%" ],
 		other_values: [ "top", "left", "right", "bottom", "center", "center bottom", "bottom center", "center right", "right center", "center top", "top center", "center left", "left center", "right bottom", "bottom right", "50%", "top left, top left", "top left, top right", "top right, top left", "left top, 0% 0%", "10% 20%, 30%, 40%", "top left, bottom right", "right bottom, left top", "0%", "0px", "30px", "0%, 10%, 20%, 30%", "top, top, top, top, top",
 			"-moz-calc(20px)",
 			"-moz-calc(20px) 10px",
@@ -1368,7 +1367,8 @@ var gCSSProperties = {
 			"-moz-calc(20px + 1em) -moz-calc(20px / 2)",
 			"-moz-calc(20px + 50%) -moz-calc(50% - 10px)",
 			"-moz-calc(-20px) -moz-calc(-50%)",
-			"-moz-calc(-20%) -moz-calc(-50%)"
+			"-moz-calc(-20%) -moz-calc(-50%)",
+			"0px 0px"
 		],
 		invalid_values: [ "50% left", "top 50%" ]
 	},
@@ -2161,6 +2161,14 @@ var gCSSProperties = {
 		other_values: [ "0", "0.4", "0.0000", "-3" ],
 		invalid_values: [ "0px", "1px" ]
 	},
+	"-moz-orient": {
+		domProp: "MozOrient",
+		inherited: false,
+		type: CSS_TYPE_LONGHAND,
+		initial_values: [ "horizontal" ],
+		other_values: [ "vertical" ],
+		invalid_values: [ "auto", "none" ]
+	},
 	"orphans": {
 		domProp: "orphans",
 		inherited: true,
@@ -2715,6 +2723,14 @@ var gCSSProperties = {
 		type: CSS_TYPE_LONGHAND,
 		initial_values: [ "normal" ],
 		other_values: [ "break-word" ],
+		invalid_values: []
+	},
+	"-moz-hyphens": {
+		domProp: "MozHyphens",
+		inherited: true,
+		type: CSS_TYPE_LONGHAND,
+		initial_values: [ "manual" ],
+		other_values: [ "none", "auto" ],
 		invalid_values: []
 	},
 	"z-index": {

@@ -41,7 +41,12 @@
 #ifndef Stack_inl_h__
 #define Stack_inl_h__
 
+#include "jscntxt.h"
+#include "jscompartment.h"
+
 #include "Stack.h"
+
+#include "ArgumentsObject-inl.h"
 
 namespace js {
 
@@ -431,7 +436,7 @@ StackFrame::initEvalFrame(JSContext *cx, JSScript *script, StackFrame *prev, uin
 }
 
 inline void
-StackFrame::initGlobalFrame(JSScript *script, JSObject &chain, uint32 flagsArg)
+StackFrame::initGlobalFrame(JSScript *script, JSObject &chain, StackFrame *prev, uint32 flagsArg)
 {
     JS_ASSERT((flagsArg & ~(EVAL | DEBUGGER)) == 0);
 
@@ -445,7 +450,7 @@ StackFrame::initGlobalFrame(JSScript *script, JSObject &chain, uint32 flagsArg)
     exec.script = script;
     args.script = (JSScript *)0xbad;
     scopeChain_ = &chain;
-    prev_ = NULL;
+    prev_ = prev;
     JS_ASSERT(!hasImacropc());
     JS_ASSERT(!hasHookData());
     JS_ASSERT(annotation() == NULL);
@@ -494,12 +499,11 @@ StackFrame::stealFrameAndSlots(Value *vp, StackFrame *otherfp,
         }
     }
     if (hasArgsObj()) {
-        JSObject &args = argsObj();
-        JS_ASSERT(args.isArguments());
-        if (args.isNormalArguments())
-            args.setPrivate(this);
+        ArgumentsObject &argsobj = argsObj();
+        if (argsobj.isNormalArguments())
+            argsobj.setPrivate(this);
         else
-            JS_ASSERT(!args.getPrivate());
+            JS_ASSERT(!argsobj.getPrivate());
         otherfp->flags_ &= ~HAS_ARGS_OBJ;
     }
 }
@@ -515,29 +519,35 @@ StackFrame::canonicalActualArg(uintN i) const
 
 template <class Op>
 inline bool
-StackFrame::forEachCanonicalActualArg(Op op)
+StackFrame::forEachCanonicalActualArg(Op op, uintN start /* = 0 */, uintN count /* = uintN(-1) */)
 {
     uintN nformal = fun()->nargs;
+    JS_ASSERT(start <= nformal);
+
     Value *formals = formalArgsEnd() - nformal;
     uintN nactual = numActualArgs();
-    if (nactual <= nformal) {
-        uintN i = 0;
-        Value *actualsEnd = formals + nactual;
-        for (Value *p = formals; p != actualsEnd; ++p, ++i) {
-            if (!op(i, p))
+    if (count == uintN(-1))
+        count = nactual - start;
+
+    uintN end = start + count;
+    JS_ASSERT(end >= start);
+    JS_ASSERT(end <= nactual);
+
+    if (end <= nformal) {
+        Value *p = formals + start;
+        for (; start < end; ++p, ++start) {
+            if (!op(start, p))
                 return false;
         }
     } else {
-        uintN i = 0;
-        Value *formalsEnd = formalArgsEnd();
-        for (Value *p = formals; p != formalsEnd; ++p, ++i) {
-            if (!op(i, p))
+        for (Value *p = formals + start; start < nformal; ++p, ++start) {
+            if (!op(start, p))
                 return false;
         }
-        Value *actuals = formalsEnd - (nactual + 2);
-        Value *actualsEnd = formals - 2;
-        for (Value *p = actuals; p != actualsEnd; ++p, ++i) {
-            if (!op(i, p))
+        JS_ASSERT(start >= nformal);
+        Value *actuals = formals - (nactual + 2) + start;
+        for (Value *p = actuals; start < end; ++p, ++start) {
+            if (!op(start, p))
                 return false;
         }
     }
@@ -580,7 +590,7 @@ StackFrame::numActualArgs() const
 {
     JS_ASSERT(hasArgs());
     if (JS_UNLIKELY(flags_ & (OVERFLOW_ARGS | UNDERFLOW_ARGS)))
-        return hasArgsObj() ? argsObj().getArgsInitialLength() : args.nactual;
+        return hasArgsObj() ? argsObj().initialLength() : args.nactual;
     return numFormalArgs();
 }
 
@@ -590,7 +600,7 @@ StackFrame::actualArgs() const
     JS_ASSERT(hasArgs());
     Value *argv = formalArgs();
     if (JS_UNLIKELY(flags_ & OVERFLOW_ARGS)) {
-        uintN nactual = hasArgsObj() ? argsObj().getArgsInitialLength() : args.nactual;
+        uintN nactual = hasArgsObj() ? argsObj().initialLength() : args.nactual;
         return argv - (2 + nactual);
     }
     return argv;
@@ -606,10 +616,10 @@ StackFrame::actualArgsEnd() const
 }
 
 inline void
-StackFrame::setArgsObj(JSObject &obj)
+StackFrame::setArgsObj(ArgumentsObject &obj)
 {
     JS_ASSERT_IF(hasArgsObj(), &obj == args.obj);
-    JS_ASSERT_IF(!hasArgsObj(), numActualArgs() == obj.getArgsInitialLength());
+    JS_ASSERT_IF(!hasArgsObj(), numActualArgs() == obj.initialLength());
     args.obj = &obj;
     flags_ |= HAS_ARGS_OBJ;
 }
@@ -674,7 +684,7 @@ StackFrame::markActivationObjectsAsPut()
 {
     if (flags_ & (HAS_ARGS_OBJ | HAS_CALL_OBJ)) {
         if (hasArgsObj() && !argsObj().getPrivate()) {
-            args.nactual = args.obj->getArgsInitialLength();
+            args.nactual = args.obj->initialLength();
             flags_ &= ~HAS_ARGS_OBJ;
         }
         if (hasCallObj() && !callObj().getPrivate()) {
@@ -731,6 +741,7 @@ StackSpace::activeFirstUnused() const
     return max;
 }
 
+#ifdef JS_TRACER
 JS_ALWAYS_INLINE bool
 StackSpace::ensureEnoughSpaceToEnterTrace()
 {
@@ -742,6 +753,7 @@ StackSpace::ensureEnoughSpaceToEnterTrace()
     return end_ - firstUnused() > needed;
 #endif
 }
+#endif
 
 STATIC_POSTCONDITION(!return || ubound(from) >= nvals)
 JS_ALWAYS_INLINE bool
@@ -1077,6 +1089,89 @@ FrameRegsIter::operator++()
     pc_ = oldfp->prevpc();
     sp_ = oldfp->formalArgsEnd();
     return *this;
+}
+
+namespace detail {
+
+struct STATIC_SKIP_INFERENCE CopyNonHoleArgsTo
+{
+    CopyNonHoleArgsTo(ArgumentsObject *argsobj, Value *dst) : argsobj(*argsobj), dst(dst) {}
+    ArgumentsObject &argsobj;
+    Value *dst;
+    bool operator()(uint32 argi, Value *src) {
+        if (argsobj.element(argi).isMagic(JS_ARGS_HOLE))
+            return false;
+        *dst++ = *src;
+        return true;
+    }
+};
+
+} /* namespace detail */
+
+inline bool
+ArgumentsObject::getElement(uint32 i, Value *vp)
+{
+    if (i >= initialLength())
+        return false;
+
+    *vp = element(i);
+
+    /*
+     * If the argument was overwritten, it could be in any object slot, so we
+     * can't optimize.
+     */
+    if (vp->isMagic(JS_ARGS_HOLE))
+        return false;
+
+    /*
+     * If this arguments object was created on trace the actual argument value
+     * could be in a register or something, so we can't optimize.
+     */
+    StackFrame *fp = reinterpret_cast<StackFrame *>(getPrivate());
+    if (fp == JS_ARGUMENTS_OBJECT_ON_TRACE)
+        return false;
+
+    /*
+     * If this arguments object has an associated stack frame, that contains
+     * the canonical argument value.  Note that strict arguments objects do not
+     * alias named arguments and never have a stack frame.
+     */
+    JS_ASSERT_IF(isStrictArguments(), !fp);
+    if (fp)
+        *vp = fp->canonicalActualArg(i);
+    return true;
+}
+
+inline bool
+ArgumentsObject::getElements(uint32 start, uint32 count, Value *vp)
+{
+    JS_ASSERT(start + count >= start);
+
+    uint32 length = initialLength();
+    if (start > length || start + count > length)
+        return false;
+
+    StackFrame *fp = reinterpret_cast<StackFrame *>(getPrivate());
+
+    /* If there's no stack frame for this, argument values are in elements(). */
+    if (!fp) {
+        Value *srcbeg = elements() + start;
+        Value *srcend = srcbeg + count;
+        for (Value *dst = vp, *src = srcbeg; src < srcend; ++dst, ++src) {
+            if (src->isMagic(JS_ARGS_HOLE))
+                return false;
+            *dst = *src;
+        }
+        return true;
+    }
+
+    /* If we're on trace, there's no canonical location for elements: fail. */
+    if (fp == JS_ARGUMENTS_OBJECT_ON_TRACE)
+        return false;
+
+    /* Otherwise, element values are on the stack. */
+    JS_ASSERT(fp->numActualArgs() <= JS_ARGS_LENGTH_MAX);
+    return fp->forEachCanonicalActualArg(detail::CopyNonHoleArgsTo(this, vp), start, count);
 }
 
 } /* namespace js */

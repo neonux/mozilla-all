@@ -52,7 +52,6 @@
 #include "nsIDocumentViewer.h"
 #include "mozilla/FunctionTimer.h"
 #include "nsIDocumentViewerPrint.h"
-#include "nsIDOMDocumentEvent.h"
 #include "nsIPrivateDOMEvent.h"
 #include "nsIDOMBeforeUnloadEvent.h"
 #include "nsIDocument.h"
@@ -227,10 +226,6 @@ class DocumentViewerImpl;
 
 // a small delegate class used to avoid circular references
 
-#ifdef XP_MAC
-#pragma mark ** nsDocViewerSelectionListener **
-#endif
-
 class nsDocViewerSelectionListener : public nsISelectionListener
 {
 public:
@@ -288,11 +283,6 @@ private:
     DocumentViewerImpl*  mDocViewer;
 };
 
-
-
-#ifdef XP_MAC
-#pragma mark ** DocumentViewerImpl **
-#endif
 
 //-------------------------------------------------------------
 class DocumentViewerImpl : public nsIDocumentViewer,
@@ -357,6 +347,18 @@ public:
 
   // nsIDocumentViewerPrint Printing Methods
   NS_DECL_NSIDOCUMENTVIEWERPRINT
+
+
+  static void DispatchBeforePrint(nsIDocument* aTop)
+  {
+    DispatchEventToWindowTree(aTop, NS_LITERAL_STRING("beforeprint"));
+  }
+  static void DispatchAfterPrint(nsIDocument* aTop)
+  {
+    DispatchEventToWindowTree(aTop, NS_LITERAL_STRING("afterprint"));
+  }
+  static void DispatchEventToWindowTree(nsIDocument* aTop,
+                                        const nsAString& aEvent);
 
 protected:
   virtual ~DocumentViewerImpl();
@@ -510,6 +512,22 @@ protected:
   PRPackedBool mInitializedForPrintPreview;
   PRPackedBool mHidden;
 };
+
+class nsPrintEventDispatcher
+{
+public:
+  nsPrintEventDispatcher(nsIDocument* aTop) : mTop(aTop)
+  {
+    DocumentViewerImpl::DispatchBeforePrint(mTop);
+  }
+  ~nsPrintEventDispatcher()
+  {
+    DocumentViewerImpl::DispatchAfterPrint(mTop);
+  }
+
+  nsCOMPtr<nsIDocument> mTop;
+};
+
 
 //------------------------------------------------------------------
 // DocumentViewerImpl
@@ -1123,10 +1141,10 @@ DocumentViewerImpl::PermitUnload(PRBool aCallerClosesWindow, PRBool *aPermitUnlo
 
   // Now, fire an BeforeUnload event to the document and see if it's ok
   // to unload...
-  nsCOMPtr<nsIDOMDocumentEvent> docEvent = do_QueryInterface(mDocument);
+  nsCOMPtr<nsIDOMDocument> domDoc = do_QueryInterface(mDocument);
   nsCOMPtr<nsIDOMEvent> event;
-  docEvent->CreateEvent(NS_LITERAL_STRING("beforeunloadevent"),
-                        getter_AddRefs(event));
+  domDoc->CreateEvent(NS_LITERAL_STRING("beforeunloadevent"),
+                      getter_AddRefs(event));
   nsCOMPtr<nsIDOMBeforeUnloadEvent> beforeUnload = do_QueryInterface(event);
   nsCOMPtr<nsIPrivateDOMEvent> pEvent = do_QueryInterface(beforeUnload);
   NS_ENSURE_STATE(pEvent);
@@ -2593,9 +2611,6 @@ NS_IMETHODIMP DocumentViewerImpl::GetCanGetContents(PRBool *aCanGetContents)
   return NS_OK;
 }
 
-#ifdef XP_MAC
-#pragma mark -
-#endif
 
 /* ========================================================================================
  * nsIContentViewerFile
@@ -3201,27 +3216,6 @@ NS_IMETHODIMP DocumentViewerImpl::GetBidiSupport(PRUint8* aSupport)
   return NS_OK;
 }
 
-NS_IMETHODIMP DocumentViewerImpl::SetBidiCharacterSet(PRUint8 aCharacterSet)
-{
-  PRUint32 bidiOptions;
-
-  GetBidiOptions(&bidiOptions);
-  SET_BIDI_OPTION_CHARACTERSET(bidiOptions, aCharacterSet);
-  SetBidiOptions(bidiOptions);
-  return NS_OK;
-}
-
-NS_IMETHODIMP DocumentViewerImpl::GetBidiCharacterSet(PRUint8* aCharacterSet)
-{
-  PRUint32 bidiOptions;
-
-  if (aCharacterSet) {
-    GetBidiOptions(&bidiOptions);
-    *aCharacterSet = GET_BIDI_OPTION_CHARACTERSET(bidiOptions);
-  }
-  return NS_OK;
-}
-
 NS_IMETHODIMP DocumentViewerImpl::SetBidiOptions(PRUint32 aBidiOptions)
 {
   if (mPresContext) {
@@ -3634,7 +3628,7 @@ DocumentViewerImpl::Print(nsIPrintSettings*       aPrintSettings,
   }
 
   nsCOMPtr<nsIDocShell> docShell(do_QueryReferent(mContainer));
-  NS_ASSERTION(docShell, "This has to be a docshell");
+  NS_ENSURE_STATE(docShell);
 
   // Check to see if this document is still busy
   // If it is busy and we aren't already "queued" up to print then
@@ -3672,6 +3666,7 @@ DocumentViewerImpl::Print(nsIPrintSettings*       aPrintSettings,
     return rv;
   }
 
+  nsPrintEventDispatcher beforeAndAfterPrint(mDocument);
   // If we are hosting a full-page plugin, tell it to print
   // first. It shows its own native print UI.
   nsCOMPtr<nsIPluginDocument> pDoc(do_QueryInterface(mDocument));
@@ -3682,7 +3677,7 @@ DocumentViewerImpl::Print(nsIPrintSettings*       aPrintSettings,
     mPrintEngine = new nsPrintEngine();
     NS_ENSURE_TRUE(mPrintEngine, NS_ERROR_OUT_OF_MEMORY);
 
-    rv = mPrintEngine->Initialize(this, docShell, mDocument, 
+    rv = mPrintEngine->Initialize(this, mContainer, mDocument, 
                                   float(mDeviceContext->AppUnitsPerCSSInch()) /
                                   float(mDeviceContext->AppUnitsPerDevPixel()) /
                                   mPageZoom,
@@ -3734,22 +3729,22 @@ DocumentViewerImpl::PrintPreview(nsIPrintSettings* aPrintSettings,
 #endif
 
   nsCOMPtr<nsIDocShell> docShell(do_QueryReferent(mContainer));
-  NS_ASSERTION(docShell, "This has to be a docshell");
   if (!docShell || !mDeviceContext) {
     PR_PL(("Can't Print Preview without device context and docshell"));
     return NS_ERROR_FAILURE;
   }
 
-  if (!mPrintEngine) {
-    nsCOMPtr<nsIDOMDocument> domDoc;
-    aChildDOMWin->GetDocument(getter_AddRefs(domDoc));
-    nsCOMPtr<nsIDocument> doc = do_QueryInterface(domDoc);
-    NS_ENSURE_STATE(doc);
+  nsCOMPtr<nsIDOMDocument> domDoc;
+  aChildDOMWin->GetDocument(getter_AddRefs(domDoc));
+  nsCOMPtr<nsIDocument> doc = do_QueryInterface(domDoc);
+  NS_ENSURE_STATE(doc);
 
+  nsPrintEventDispatcher beforeAndAfterPrint(doc);
+  if (!mPrintEngine) {
     mPrintEngine = new nsPrintEngine();
     NS_ENSURE_TRUE(mPrintEngine, NS_ERROR_OUT_OF_MEMORY);
 
-    rv = mPrintEngine->Initialize(this, docShell, doc,
+    rv = mPrintEngine->Initialize(this, mContainer, doc,
                                   float(mDeviceContext->AppUnitsPerCSSInch()) /
                                   float(mDeviceContext->AppUnitsPerDevPixel()) /
                                   mPageZoom,
@@ -4131,6 +4126,28 @@ DocumentViewerImpl::ShouldAttachToTopLevel()
 #endif
 
   return PR_FALSE;
+}
+
+PRBool CollectDocuments(nsIDocument* aDocument, void* aData)
+{
+  if (aDocument) {
+    static_cast<nsCOMArray<nsIDocument>*>(aData)->AppendObject(aDocument);
+    aDocument->EnumerateSubDocuments(CollectDocuments, aData);
+  }
+  return PR_TRUE;
+}
+
+void
+DocumentViewerImpl::DispatchEventToWindowTree(nsIDocument* aDoc,
+                                              const nsAString& aEvent)
+{
+  nsCOMArray<nsIDocument> targets;
+  CollectDocuments(aDoc, &targets);
+  for (PRInt32 i = 0; i < targets.Count(); ++i) {
+    nsIDocument* d = targets[i];
+    nsContentUtils::DispatchTrustedEvent(d, d->GetWindow(),
+                                         aEvent, PR_FALSE, PR_FALSE, nsnull);
+  }
 }
 
 //------------------------------------------------------------

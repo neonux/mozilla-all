@@ -341,9 +341,7 @@ void nsAccessibleWrap::SetMaiHyperlink(MaiHyperlink* aMaiHyperlink)
         if (!maiHyperlink && !aMaiHyperlink) {
             return; // Never set and we're shutting down
         }
-        if (maiHyperlink) {
-            delete maiHyperlink;
-        }
+        delete maiHyperlink;
         g_object_set_qdata(G_OBJECT(mAtkObject), quark_mai_hyperlink,
                            aMaiHyperlink);
     }
@@ -718,20 +716,18 @@ const gchar *
 getDescriptionCB(AtkObject *aAtkObj)
 {
     nsAccessibleWrap *accWrap = GetAccessibleWrap(aAtkObj);
-    if (!accWrap) {
+    if (!accWrap || accWrap->IsDefunct())
         return nsnull;
-    }
 
     /* nsIAccessible is responsible for the non-NULL description */
     nsAutoString uniDesc;
-    nsresult rv = accWrap->GetDescription(uniDesc);
-    NS_ENSURE_SUCCESS(rv, nsnull);
+    accWrap->Description(uniDesc);
 
     NS_ConvertUTF8toUTF16 objDesc(aAtkObj->description);
-    if (!uniDesc.Equals(objDesc)) {
+    if (!uniDesc.Equals(objDesc))
         atk_object_set_description(aAtkObj,
                                    NS_ConvertUTF16toUTF8(uniDesc).get());
-    }
+
     return aAtkObj->description;
 }
 

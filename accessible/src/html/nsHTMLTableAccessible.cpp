@@ -49,7 +49,6 @@
 
 #include "nsIDOMElement.h"
 #include "nsIDOMDocument.h"
-#include "nsIDOMDocumentRange.h"
 #include "nsIDOMRange.h"
 #include "nsISelection2.h"
 #include "nsISelectionPrivate.h"
@@ -1260,14 +1259,14 @@ nsHTMLTableAccessible::GetCellAt(PRInt32        aRowIndex,
   return rv;
 }
 
-NS_IMETHODIMP nsHTMLTableAccessible::GetDescription(nsAString& aDescription)
+void
+nsHTMLTableAccessible::Description(nsString& aDescription)
 {
   // Helpful for debugging layout vs. data tables
   aDescription.Truncate();
-  nsAccessible::GetDescription(aDescription);
-  if (!aDescription.IsEmpty()) {
-    return NS_OK;
-  }
+  nsAccessible::Description(aDescription);
+  if (!aDescription.IsEmpty())
+    return;
 
   nsCOMPtr<nsIAccessible> captionAccessible;
   GetCaption(getter_AddRefs(captionAccessible));
@@ -1276,10 +1275,9 @@ NS_IMETHODIMP nsHTMLTableAccessible::GetDescription(nsAString& aDescription)
     nsCOMPtr<nsIDOMNode> captionNode;
     captionAccessNode->GetDOMNode(getter_AddRefs(captionNode));
     nsCOMPtr<nsIContent> captionContent = do_QueryInterface(captionNode);
-    if (captionContent) {
-      nsTextEquivUtils::
-        AppendTextEquivFromContent(this, captionContent, &aDescription);
-    }
+    if (captionContent)
+      nsTextEquivUtils::AppendTextEquivFromContent(this, captionContent,
+                                                   &aDescription);
   }
 #ifdef SHOW_LAYOUT_HEURISTIC
   if (aDescription.IsEmpty()) {
@@ -1291,8 +1289,6 @@ NS_IMETHODIMP nsHTMLTableAccessible::GetDescription(nsAString& aDescription)
   printf("\nTABLE: %s\n", NS_ConvertUTF16toUTF8(mLayoutHeuristic).get());
 #endif
 #endif
-
-  return NS_OK;
 }
 
 PRBool

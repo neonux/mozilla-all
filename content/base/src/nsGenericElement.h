@@ -66,6 +66,7 @@
 #include "nsIDOMNodeSelector.h"
 #include "nsIDOMXPathNSResolver.h"
 #include "nsPresContext.h"
+#include "nsIDOMDOMStringMap.h"
 
 #ifdef MOZ_SMIL
 #include "nsISMILAttr.h"
@@ -350,8 +351,6 @@ public:
   }
   virtual nsresult SetTextContent(const nsAString& aTextContent)
   {
-    // Batch possible DOMSubtreeModified events.
-    mozAutoSubtreeModified subtree(GetOwnerDoc(), nsnull);
     return nsContentUtils::SetNodeTextContent(this, aTextContent, PR_FALSE);
   }
 
@@ -769,6 +768,11 @@ public:
   {
   }
 
+  /**
+   * Fire a DOMNodeRemoved mutation event for all children of this node
+   */
+  void FireNodeRemovedForChildren();
+
 protected:
   /**
    * Set attribute and (if needed) notify documentobservers and fire off
@@ -931,8 +935,15 @@ public:
     /**
      * The .style attribute (an interface that forwards to the actual
      * style rules)
-     * @see nsGenericHTMLElement::GetStyle */
+     * @see nsGenericHTMLElement::GetStyle
+     */
     nsCOMPtr<nsICSSDeclaration> mStyle;
+
+    /**
+     * The .dataset attribute.
+     * @see nsGenericHTMLElement::GetDataset
+     */
+    nsIDOMDOMStringMap* mDataset; // [Weak]
 
     /**
      * SMIL Overridde style rules (for SMIL animation of CSS properties)

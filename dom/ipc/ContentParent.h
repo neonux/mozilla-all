@@ -165,6 +165,8 @@ private:
     virtual bool RecvEmptyClipboard();
     virtual bool RecvClipboardHasText(PRBool* hasText);
 
+    virtual bool RecvGetSystemColors(const PRUint32& colorsCount, InfallibleTArray<PRUint32>* colors);
+
     virtual bool RecvStartVisitedQuery(const IPC::URI& uri);
 
     virtual bool RecvVisitURI(const IPC::URI& uri,
@@ -176,6 +178,7 @@ private:
     
     virtual bool RecvShowFilePicker(const PRInt16& mode,
                                     const PRInt16& selectedType,
+                                    const PRBool& addToRecentDocs,
                                     const nsString& title,
                                     const nsString& defaultFile,
                                     const nsString& defaultExtension,

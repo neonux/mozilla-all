@@ -125,7 +125,7 @@ public:
 
   virtual void DidSetStyleContext(nsStyleContext* aOldStyleContext);
 
-  NS_IMETHOD GetPluginInstance(nsIPluginInstance*& aPluginInstance);
+  NS_METHOD GetPluginInstance(nsNPAPIPluginInstance** aPluginInstance);
   virtual nsresult Instantiate(nsIChannel* aChannel, nsIStreamListener** aStreamListener);
   virtual nsresult Instantiate(const char* aMimeType, nsIURI* aURI);
   virtual void TryNotifyContentObjectWrapper();
@@ -275,10 +275,6 @@ protected:
                              const nsPoint& aPluginOrigin,
                              nsTArray<nsIWidget::Configuration>* aConfigurations);
 
-  nsresult SetAbsoluteScreenPosition(nsIDOMElement* element,
-                                     nsIDOMClientRect* position,
-                                     nsIDOMClientRect* clip);
-
   void NotifyPluginReflowObservers();
 
   friend class nsPluginInstanceOwner;
@@ -339,8 +335,7 @@ public:
                      nsRenderingContext* aCtx);
   virtual PRBool ComputeVisibility(nsDisplayListBuilder* aBuilder,
                                    nsRegion* aVisibleRegion,
-                                   const nsRect& aAllowVisibleRegionExpansion,
-                                   PRBool& aContainsRootContentDocBG);
+                                   const nsRect& aAllowVisibleRegionExpansion);
 
   NS_DISPLAY_DECL_NAME("Plugin", TYPE_PLUGIN)
 

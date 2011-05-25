@@ -569,6 +569,13 @@ nsXPConnect::Unroot(void *p)
     return NS_OK;
 }
 
+JSBool
+xpc_GCThingIsGrayCCThing(void *thing)
+{
+    uint32 kind = js_GetGCThingTraceKind(thing);
+    return ADD_TO_CC(kind) && xpc_IsGrayGCThing(thing);
+}
+
 static void
 UnmarkGrayChildren(JSTracer *trc, void *thing, uint32 kind)
 {
@@ -728,8 +735,7 @@ nsXPConnect::Traverse(void *p, nsCycleCollectionTraversalCallback &cb)
 #endif
     {
         // Normal codepath (matches non-DEBUG_CC codepath).
-        NS_ASSERTION(xpc_IsGrayGCThing(p), "Tried to traverse a non-gray object.");
-        type = markJSObject ? GCMarked : GCUnmarked;
+        type = !markJSObject && xpc_IsGrayGCThing(p) ? GCUnmarked : GCMarked;
     }
 
     if (cb.WantDebugInfo()) {
@@ -1033,17 +1039,12 @@ xpc_CreateGlobalObject(JSContext *cx, JSClass *clasp,
     NS_ABORT_IF_FALSE(NS_IsMainThread(), "using a principal off the main thread?");
     NS_ABORT_IF_FALSE(principal, "bad key");
 
-    nsCOMPtr<nsIURI> uri;
-    nsresult rv = principal->GetURI(getter_AddRefs(uri));
-    if(NS_FAILED(rv))
-        return UnexpectedFailure(rv);
-
     XPCCompartmentMap& map = nsXPConnect::GetRuntimeInstance()->GetCompartmentMap();
-    xpc::PtrAndPrincipalHashKey key(ptr, uri);
+    xpc::PtrAndPrincipalHashKey key(ptr, principal);
     if(!map.Get(&key, compartment))
     {
         xpc::PtrAndPrincipalHashKey *priv_key =
-            new xpc::PtrAndPrincipalHashKey(ptr, uri);
+            new xpc::PtrAndPrincipalHashKey(ptr, principal);
         xpc::CompartmentPrivate *priv =
             new xpc::CompartmentPrivate(priv_key, wantXrays, NS_IsMainThread());
         if(!CreateNewCompartment(cx, clasp, principal, priv,

@@ -57,7 +57,6 @@
 #include "nsIDOMElement.h"
 #include "nsIDOMDocument.h"
 #include "nsIDOMDocumentXBL.h"
-#include "nsIDOMDocumentTraversal.h"
 #include "nsIDOMHTMLDocument.h"
 #include "nsIDOMHTMLFormElement.h"
 #include "nsIDOMNodeFilter.h"
@@ -197,10 +196,10 @@ nsAccessible::nsAccessible(nsIContent *aContent, nsIWeakReference *aShell) :
             (void*)shell.get());
     nsCOMPtr<nsIContent> content = do_QueryInterface(aNode);
     if (content) {
+      printf(" Con: %s@%p",
+             NS_ConvertUTF16toUTF8(content->NodeInfo()->QualifiedName()).get(),
+             (void *)content.get());
       nsAutoString buf;
-      if (content->NodeInfo())
-        content->NodeInfo()->GetQualifiedName(buf);
-      printf(" Con: %s@%p", NS_ConvertUTF16toUTF8(buf).get(), (void *)content.get());
       if (NS_SUCCEEDED(GetName(buf))) {
         printf(" Name:[%s]", NS_ConvertUTF16toUTF8(buf).get());
        }
@@ -272,54 +271,60 @@ nsAccessible::GetName(nsAString& aName)
   return NS_OK;
 }
 
-NS_IMETHODIMP nsAccessible::GetDescription(nsAString& aDescription)
+NS_IMETHODIMP
+nsAccessible::GetDescription(nsAString& aDescription)
 {
   if (IsDefunct())
     return NS_ERROR_FAILURE;
 
+  nsAutoString desc;
+  Description(desc);
+  aDescription.Assign(desc);
+
+  return NS_OK;
+}
+
+void
+nsAccessible::Description(nsString& aDescription)
+{
   // There are 4 conditions that make an accessible have no accDescription:
   // 1. it's a text node; or
   // 2. It has no DHTML describedby property
   // 3. it doesn't have an accName; or
   // 4. its title attribute already equals to its accName nsAutoString name; 
 
-  if (!mContent->IsNodeOfType(nsINode::eTEXT)) {
-    nsAutoString description;
-    nsresult rv = nsTextEquivUtils::
-      GetTextEquivFromIDRefs(this, nsAccessibilityAtoms::aria_describedby,
-                             description);
-    NS_ENSURE_SUCCESS(rv, rv);
+  if (mContent->IsNodeOfType(nsINode::eTEXT))
+    return;
 
-    if (description.IsEmpty()) {
-      PRBool isXUL = mContent->IsXUL();
-      if (isXUL) {
-        // Try XUL <description control="[id]">description text</description>
-        XULDescriptionIterator iter(GetDocAccessible(), mContent);
-        nsAccessible* descr = nsnull;
-        while ((descr = iter.Next())) {
-          nsTextEquivUtils::
-            AppendTextEquivFromContent(this, descr->GetContent(), &description);
-        }
+  nsTextEquivUtils::
+    GetTextEquivFromIDRefs(this, nsAccessibilityAtoms::aria_describedby,
+                           aDescription);
+
+  if (aDescription.IsEmpty()) {
+    PRBool isXUL = mContent->IsXUL();
+    if (isXUL) {
+      // Try XUL <description control="[id]">description text</description>
+      XULDescriptionIterator iter(GetDocAccessible(), mContent);
+      nsAccessible* descr = nsnull;
+      while ((descr = iter.Next()))
+        nsTextEquivUtils::AppendTextEquivFromContent(this, descr->GetContent(),
+                                                     &aDescription);
       }
-      if (description.IsEmpty()) {
+
+      if (aDescription.IsEmpty()) {
         nsIAtom *descAtom = isXUL ? nsAccessibilityAtoms::tooltiptext :
                                     nsAccessibilityAtoms::title;
-        if (mContent->GetAttr(kNameSpaceID_None, descAtom, description)) {
+        if (mContent->GetAttr(kNameSpaceID_None, descAtom, aDescription)) {
           nsAutoString name;
           GetName(name);
-          if (name.IsEmpty() || description == name) {
+          if (name.IsEmpty() || aDescription == name)
             // Don't use tooltip for a description if this object
             // has no name or the tooltip is the same as the name
-            description.Truncate();
-          }
+            aDescription.Truncate();
         }
       }
     }
-    description.CompressWhitespace();
-    aDescription = description;
-  }
-
-  return NS_OK;
+    aDescription.CompressWhitespace();
 }
 
 // mask values for ui.key.chromeAccess and ui.key.contentAccess
@@ -1528,15 +1533,20 @@ nsAccessible::State()
     return states::DEFUNCT;
 
   PRUint64 state = NativeState();
-  // Apply ARIA states to be sure accessible states will be overriden.
+  // Apply ARIA states to be sure accessible states will be overridden.
   ApplyARIAState(&state);
 
-  if (mRoleMapEntry && mRoleMapEntry->role == nsIAccessibleRole::ROLE_PAGETAB) {
+  if (mRoleMapEntry && mRoleMapEntry->role == nsIAccessibleRole::ROLE_PAGETAB &&
+      !(state & states::SELECTED) &&
+      !mContent->AttrValueIs(kNameSpaceID_None,
+                             nsAccessibilityAtoms::aria_selected,
+                             nsAccessibilityAtoms::_false, eCaseMatters)) {
+    // Special case: for tabs, focused implies selected, unless explicitly
+    // false, i.e. aria-selected="false".
     if (state & states::FOCUSED) {
       state |= states::SELECTED;
     } else {
-      // Expose 'selected' state on ARIA tab if the focus is on internal element
-      // of related tabpanel.
+      // If focus is in a child of the tab panel surely the tab is selected!
       nsCOMPtr<nsIAccessible> tabPanel = nsRelUtils::
         GetRelatedAccessible(this, nsIAccessibleRelation::RELATION_LABEL_FOR);
 
@@ -3214,16 +3224,15 @@ nsAccessible::GetFirstAvailableAccessible(nsINode *aStartNode) const
   if (accessible)
     return accessible;
 
-  nsCOMPtr<nsIDOMDocumentTraversal> trav =
-    do_QueryInterface(aStartNode->GetOwnerDoc());
-  NS_ENSURE_TRUE(trav, nsnull);
+  nsCOMPtr<nsIDOMDocument> domDoc = do_QueryInterface(aStartNode->GetOwnerDoc());
+  NS_ENSURE_TRUE(domDoc, nsnull);
 
   nsCOMPtr<nsIDOMNode> currentNode = do_QueryInterface(aStartNode);
-  nsCOMPtr<nsIDOMNode> rootNode(do_QueryInterface(GetNode()));
+  nsCOMPtr<nsIDOMNode> rootNode = do_QueryInterface(GetNode());
   nsCOMPtr<nsIDOMTreeWalker> walker;
-  trav->CreateTreeWalker(rootNode,
-                         nsIDOMNodeFilter::SHOW_ELEMENT | nsIDOMNodeFilter::SHOW_TEXT,
-                         nsnull, PR_FALSE, getter_AddRefs(walker));
+  domDoc->CreateTreeWalker(rootNode,
+                           nsIDOMNodeFilter::SHOW_ELEMENT | nsIDOMNodeFilter::SHOW_TEXT,
+                           nsnull, PR_FALSE, getter_AddRefs(walker));
   NS_ENSURE_TRUE(walker, nsnull);
 
   walker->SetCurrentNode(currentNode);

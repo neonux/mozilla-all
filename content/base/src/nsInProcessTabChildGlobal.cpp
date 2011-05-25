@@ -299,6 +299,7 @@ nsInProcessTabChildGlobal::InitTabChildGlobal()
 
   JS_SetOptions(cx, JS_GetOptions(cx) | JSOPTION_JIT | JSOPTION_ANONFUNFIX | JSOPTION_PRIVATE_IS_NSISUPPORTS);
   JS_SetVersion(cx, JSVERSION_LATEST);
+  JS_SetErrorReporter(cx, ContentScriptErrorReporter);
 
   xpc_LocalizeContext(cx);
 
@@ -328,9 +329,28 @@ nsInProcessTabChildGlobal::InitTabChildGlobal()
   return NS_OK;
 }
 
+class nsAsyncScriptLoad : public nsRunnable
+{
+public:
+  nsAsyncScriptLoad(nsInProcessTabChildGlobal* aTabChild, const nsAString& aURL)
+  : mTabChild(aTabChild), mURL(aURL) {}
+
+  NS_IMETHOD Run()
+  {
+    mTabChild->LoadFrameScript(mURL);
+    return NS_OK;
+  }
+  nsRefPtr<nsInProcessTabChildGlobal> mTabChild;
+  nsString mURL;
+};
+
 void
 nsInProcessTabChildGlobal::LoadFrameScript(const nsAString& aURL)
 {
+  if (!nsContentUtils::IsSafeToRunScript()) {
+    nsContentUtils::AddScriptRunner(new nsAsyncScriptLoad(this, aURL));
+    return;
+  }
   if (!mInitialized) {
     mInitialized = PR_TRUE;
     Init();

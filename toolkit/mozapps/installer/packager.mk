@@ -84,6 +84,7 @@ SDK           = $(SDK_PATH)$(PKG_BASENAME).sdk$(SDK_SUFFIX)
 
 MAKE_PACKAGE	= $(error What is a $(MOZ_PKG_FORMAT) package format?);
 _ABS_DIST = $(call core_abspath,$(DIST))
+JARLOG_DIR = $(call core_abspath,$(DEPTH)/jarlog/)
 
 CREATE_FINAL_TAR = $(TAR) -c --owner=0 --group=0 --numeric-owner \
   --mode="go-w" -f
@@ -233,6 +234,7 @@ DIST_FILES = \
   components \
   defaults \
   modules \
+  hyphenation \
   res \
   lib \
   lib.id \
@@ -378,7 +380,7 @@ OMNIJAR_FILES	= \
 
 NON_OMNIJAR_FILES += \
   chrome/icons/\* \
-  defaults/pref/channel-prefs.js \
+  $(PREF_DIR)/channel-prefs.js \
   res/cursors/\* \
   res/MainMenu.nib/\* \
   $(NULL)
@@ -388,14 +390,13 @@ PACK_OMNIJAR	= \
   grep -h '^binary-component' components/*.manifest > binary.manifest ; \
   sed -e 's/^binary-component/\#binary-component/' components/components.manifest > components.manifest && \
   mv components.manifest components && \
-  find . | xargs touch -t 201001010000 && \
-  zip -r9mX omni.jar $(OMNIJAR_FILES) -x $(NON_OMNIJAR_FILES) && \
+  zip -r9m omni.jar $(OMNIJAR_FILES) -x $(NON_OMNIJAR_FILES) && \
   $(GENERATE_CACHE) && \
-  $(OPTIMIZE_JARS_CMD) --optimize $(_ABS_DIST)/jarlog/ ./ ./ && \
+  $(OPTIMIZE_JARS_CMD) --optimize $(JARLOG_DIR) ./ ./ && \
   mv binary.manifest components && \
   printf "manifest components/binary.manifest\n" > chrome.manifest
 UNPACK_OMNIJAR	= \
-  $(OPTIMIZE_JARS_CMD) --deoptimize $(_ABS_DIST)/jarlog/ ./ ./ && \
+  $(OPTIMIZE_JARS_CMD) --deoptimize $(JARLOG_DIR) ./ ./ && \
   unzip -o omni.jar && \
   rm -f components/binary.manifest && \
   sed -e 's/^\#binary-component/binary-component/' components/components.manifest > components.manifest && \
@@ -618,7 +619,7 @@ else
 endif # DMG
 endif # MOZ_PKG_MANIFEST
 endif # UNIVERSAL_BINARY
-	$(OPTIMIZE_JARS_CMD) --optimize $(DIST)/jarlog/ $(DIST)/bin/chrome $(DIST)/$(STAGEPATH)$(MOZ_PKG_DIR)/chrome
+	$(OPTIMIZE_JARS_CMD) --optimize $(JARLOG_DIR) $(DIST)/bin/chrome $(DIST)/$(STAGEPATH)$(MOZ_PKG_DIR)/chrome
 ifndef PKG_SKIP_STRIP
   ifeq ($(OS_ARCH),OS2)
 		@echo "Stripping package directory..."

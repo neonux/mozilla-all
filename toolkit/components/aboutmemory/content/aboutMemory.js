@@ -40,10 +40,19 @@
 
 const Cc = Components.classes;
 const Ci = Components.interfaces;
+const Cu = Components.utils;
 
 // Must use .href here instead of .search because "about:memory" is a
 // non-standard URL.
 var gVerbose = (location.href.split(/[\?,]/).indexOf("verbose") !== -1);
+
+var gAddedObserver = false;
+
+const MR_MAPPED = Ci.nsIMemoryReporter.MR_MAPPED;
+const MR_HEAP   = Ci.nsIMemoryReporter.MR_HEAP;
+const MR_OTHER  = Ci.nsIMemoryReporter.MR_OTHER;
+
+const kUnknown = -1;    // used for _memoryUsed if a memory reporter failed
 
 function onLoad()
 {
@@ -52,15 +61,21 @@ function onLoad()
   os.notifyObservers(null, "child-memory-reporter-request", null);
 
   os.addObserver(ChildMemoryListener, "child-memory-reporter-update", false);
+  gAddedObserver = true;
 
   update();
 }
 
 function onUnload()
 {
-  var os = Cc["@mozilla.org/observer-service;1"].
-      getService(Ci.nsIObserverService);
-  os.removeObserver(ChildMemoryListener, "child-memory-reporter-update");
+  // We need to check if the observer has been added before removing; in some
+  // circumstances (eg. reloading the page quickly) it might not have because
+  // onLoad might not fire.
+  if (gAddedObserver) {
+    var os = Cc["@mozilla.org/observer-service;1"].
+        getService(Ci.nsIObserverService);
+    os.removeObserver(ChildMemoryListener, "child-memory-reporter-update");
+  }
 }
 
 function ChildMemoryListener(aSubject, aTopic, aData)
@@ -71,6 +86,49 @@ function ChildMemoryListener(aSubject, aTopic, aData)
 function $(n)
 {
   return document.getElementById(n);
+}
+
+function doGlobalGC()
+{
+  Cu.forceGC();
+  update();
+}
+
+function doGlobalGCandCC()
+{
+  window.QueryInterface(Ci.nsIInterfaceRequestor)
+        .getInterface(Ci.nsIDOMWindowUtils)
+        .garbageCollect();
+  update();
+}
+
+// For maximum effect, this returns to the event loop between each
+// notification.  See bug 610166 comment 12 for an explanation.
+// Ideally a single notification would be enough.
+function sendHeapMinNotifications()
+{
+  function runSoon(f)
+  {
+    var tm = Cc["@mozilla.org/thread-manager;1"]
+              .getService(Ci.nsIThreadManager);
+
+    tm.mainThread.dispatch({ run: f }, Ci.nsIThread.DISPATCH_NORMAL);
+  }
+
+  function sendHeapMinNotificationsInner()
+  {
+    var os = Cc["@mozilla.org/observer-service;1"]
+             .getService(Ci.nsIObserverService);
+    os.notifyObservers(null, "memory-pressure", "heap-minimize");
+
+    if (++j < 3)
+      runSoon(sendHeapMinNotificationsInner);
+    else
+      runSoon(update);
+  }
+
+  var j = 0;
+  sendHeapMinNotificationsInner();
 }
 
 /**
@@ -93,8 +151,9 @@ function update()
   //
   //     interface Tmr {
   //       _tpath: string;
+  //       _kind:        number;
   //       _description: string;
-  //       _memoryUsed: number;
+  //       _memoryUsed:  number;
   //     }
   //
   // - The .path property is renamed ._tpath ("truncated path") in the copy
@@ -118,6 +177,7 @@ function update()
       process = mr.path.slice(0, i);
       tmr._tpath = mr.path.slice(i + 1);
     }
+    tmr._kind        = mr.kind;
     tmr._description = mr.description;
     tmr._memoryUsed  = mr.memoryUsed;
 
@@ -143,15 +203,46 @@ function update()
     }
   }
 
+  // Memory-related actions.
+  const GCDesc = "Do a global garbage collection.";
+  // XXX: once bug 625302 is fixed, should change this button to just do a CC.
+  const CCDesc = "Do a global garbage collection followed by a cycle " +
+                 "collection. (It currently is not possible to do a cycle " +
+                 "collection on its own, see bug 625302.)";
+  const MPDesc = "Send three \"heap-minimize\" notifications in a " +
+                 "row.  Each notification triggers a global garbage " +
+                 "collection followed by a cycle collection, and causes the " +
+                 "process to reduce memory usage in other ways, e.g. by " +
+                 "flushing various caches.";
+
+  text += "<div>" +
+    "<button title='" + GCDesc + "' onclick='doGlobalGC()'>GC</button>" +
+    "<button title='" + CCDesc + "' onclick='doGlobalGCandCC()'>GC + CC</button>" +
+    "<button title='" + MPDesc + "' onclick='sendHeapMinNotifications()'>" + "Minimize memory usage</button>" +
+    "</div>";
+
   // Generate verbosity option link at the bottom.
+  text += "<div>";
   text += gVerbose
         ? "<span class='option'><a href='about:memory'>Less verbose</a></span>"
         : "<span class='option'><a href='about:memory?verbose'>More verbose</a></span>";
+  text += "</div>";
+
+  text += "<div>" +
+          "<span class='legend'>Hover the pointer over the name of a memory " +
+          "reporter to see a detailed description of what it measures.</span>"
+          "</div>";
+
 
   var div = document.createElement("div");
   div.innerHTML = text;
   content.appendChild(div);
 }
+
+function cmpTmrs(a, b)
+{
+  return b._memoryUsed - a._memoryUsed
+};
 
 /**
  * Generates the text for a single process.
@@ -168,28 +259,22 @@ function genProcessText(aProcess, aTmrs)
    * From a list of memory reporters, builds a tree that mirrors the tree
    * structure that will be shown as output.
    *
-   * @param aTreeName
-   *        The name of the tree;  either "mapped" or "heap-used"
-   * @param aTreeRootTpath
-   *        The tpath of the top node in the tree
-   * @param aTreeRootDesc
-   *        The description of the top node in the tree
-   * @param aOtherDescTail
-   *        Extra description for the end of the "aTreeName/other" entry
-   * @param aOmitThresholdPerc
-   *        The threshold percentage;  entries that account for less than
-   *        this fraction are aggregated
    * @return The built tree.  The tree nodes have this structure:
    *         interface Node {
    *           _name: string;
+   *           _kind:        number;
    *           _description: string;
-   *           _memoryUsed: number;
-   *           _kids: [Node];
+   *           _memoryUsed:  number;    (non-negative or 'kUnknown')
+   *           _kids:        [Node];
+   *           _hasReporter: boolean;   (only defined if 'true')
+   *           _hasProblem:  boolean;   (only defined if 'true')
    *         }
    */
-  function buildTree(aTreeName, aTreeRootTpath, aTreeRootDesc, aOtherDescTail,
-                     aOmitThresholdPerc)
+  function buildTree()
   {
+    const treeName = "explicit";
+    const omitThresholdPerc = 0.5; /* percent */
+
     function findKid(aName, aKids)
     {
       for (var i = 0; i < aKids.length; i++) {
@@ -200,13 +285,18 @@ function genProcessText(aProcess, aTmrs)
       return undefined;
     }
 
-    // We want to process all reporters that begin with 'aTreeName'.
-    // First we build the tree but only filling in '_name' and '_kids'.
-    var t = { _name:aTreeName, _kids:[] };
-    for (var _tpath in aTmrs) {
-      var tmr = aTmrs[_tpath];
-      if (tmr._tpath.slice(0, aTreeName.length + 1) === aTreeName + "/") {
-        var names = tmr._tpath.slice(aTreeName.length + 1).split('/');
+    // We want to process all reporters that begin with 'treeName'.
+    // First we build the tree but only filling in '_name', '_kind', '_kids'
+    // and maybe '._hasReporter'.  This is done top-down from the reporters.
+    var t = {
+      _name: "falseRoot",
+      _kind: MR_OTHER,
+      _kids: []
+    };
+    for (var tpath in aTmrs) {
+      var tmr = aTmrs[tpath];
+      if (tmr._tpath.slice(0, treeName.length) === treeName) {
+        var names = tmr._tpath.split('/');
         var u = t;
         for (var i = 0; i < names.length; i++) {
           var name = names[i];
@@ -214,60 +304,126 @@ function genProcessText(aProcess, aTmrs)
           if (uMatch) {
             u = uMatch;
           } else {
-            var v = { _name:name, _kids:[] };
+            var v = {
+              _name: name,
+              _kind: MR_OTHER,
+              _kids: []
+            };
             u._kids.push(v);
             u = v;
           }
         }
+        u._kind = tmr._kind;
+        u._hasReporter = true;
       }
     }
+    // Using falseRoot makes the above code simpler.  Now discard it, leaving
+    // treeName at the root.
+    t = t._kids[0];
 
-    // Next, fill in '_description' and '_memoryUsed' for each node.  For
-    // interior nodes, '_memoryUsed' is computed by summing child nodes.
+    // Next, fill in '_description' and '_memoryUsed', and maybe '_hasProblem'
+    // for each node.  This is done bottom-up because for most non-leaf nodes
+    // '_memoryUsed' and '_description' are determined from the child nodes.
     function fillInTree(aT, aPretpath)
     {
       var tpath = aPretpath ? aPretpath + '/' + aT._name : aT._name;
       if (aT._kids.length === 0) {
-        aT._memoryUsed = getBytes(aTmrs, tpath);
+        // Leaf node.  Must have a reporter.
         aT._description = getDescription(aTmrs, tpath);
-      } else {
-        var bytes = 0;
-        for (var i = 0; i < aT._kids.length; i++) {
-          // Allow for -1 (ie. "unknown"), treat it like 0.
-          var b = fillInTree(aT._kids[i], tpath);
-          bytes += (b === -1 ? 0 : b);
+        var memoryUsed = getBytes(aTmrs, tpath);
+        if (memoryUsed !== kUnknown) {
+          aT._memoryUsed = memoryUsed;
+        } else {
+          aT._memoryUsed = 0;
+          aT._hasProblem = true;
         }
-        aT._memoryUsed = bytes;
-        aT._description = "The sum of all entries below " + tpath + ".";
+      } else {
+        // Non-leaf node.  Get the size of the children.
+        var childrenBytes = 0;
+        for (var i = 0; i < aT._kids.length; i++) {
+          // Allow for kUnknown, treat it like 0.
+          var b = fillInTree(aT._kids[i], tpath);
+          childrenBytes += (b === kUnknown ? 0 : b);
+        }
+        if (aT._hasReporter === true) {
+          aT._description = getDescription(aTmrs, tpath);
+          var memoryUsed = getBytes(aTmrs, tpath);
+          if (memoryUsed !== kUnknown) {
+            // Non-leaf node with its own reporter.  Use the reporter and add
+            // an "other" child node.
+            aT._memoryUsed = memoryUsed;
+            var other = {
+              _name: "other",
+              _kind: MR_OTHER,
+              _description: "All unclassified " + aT._name + " memory.",
+              _memoryUsed: aT._memoryUsed - childrenBytes,
+              _kids: []
+            };
+            aT._kids.push(other);
+          } else {
+            // Non-leaf node with a reporter that returns kUnknown.
+            // Use the sum of the children and mark it as problematic.
+            aT._memoryUsed = childrenBytes;
+            aT._hasProblem = true;
+          }
+        } else {
+          // Non-leaf node without its own reporter.  Derive its size and
+          // description entirely from its children.
+          aT._memoryUsed = childrenBytes;
+          aT._description = "The sum of all entries below '" + aT._name + "'.";
+        }
       }
       return aT._memoryUsed;
     }
     fillInTree(t, "");
 
-    // Add the "aTreeName/other" node, which is derived from existing
-    // nodes, then update the root node accordingly.  (But don't do this
-    // if the root node byte count is -1, ie. unknown).
-    var nonOtherBytes = t._memoryUsed;
-    var treeBytes = getBytes(aTmrs, aTreeRootTpath);
-    if (treeBytes !== -1) {
-      var otherBytes = treeBytes - nonOtherBytes;
-      var other = {
-        _name:"other",
-        _description:"All unclassified " + aTreeName + " memory." +
-                     aOtherDescTail,
-        _memoryUsed:otherBytes,
-        _kids:[]
-      };
-      t._kids.push(other);
+    // Determine how many bytes are reported by heap reporters.  Be careful
+    // with non-leaf reporters;  if we count a non-leaf reporter we don't want
+    // to count any of its child reporters.
+    var s = "";
+    function getKnownHeapUsedBytes(aT)
+    {
+      if (aT._kind === MR_HEAP) {
+        return aT._memoryUsed;
+      } else {
+        var n = 0;
+        for (var i = 0; i < aT._kids.length; i++) {
+          n += getKnownHeapUsedBytes(aT._kids[i]);
+        }
+        return n;
+      }
     }
-    t._memoryUsed = treeBytes;
-    t._description = aTreeRootDesc;
+
+    // A special case:  compute the derived "heap-unclassified" value.  Don't
+    // mark "heap-used" when we get its size because we want it to appear in
+    // the "Other Measurements" list.
+    var heapUsedBytes = getBytes(aTmrs, "heap-used", true);
+    var unknownHeapUsedBytes = 0;
+    var hasProblem = true;
+    if (heapUsedBytes !== kUnknown) {
+      unknownHeapUsedBytes = heapUsedBytes - getKnownHeapUsedBytes(t);
+      hasProblem = false;
+    }
+    var heapUnclassified = {
+      _name: "heap-unclassified",
+      _kind: MR_HEAP,
+      _description:
+        "Memory not classified by a more specific reporter. This includes " +
+        "memory allocated by the heap allocator in excess of that requested " +
+        "by the application; this can happen when the heap allocator rounds " +
+        "up request sizes.",
+      _memoryUsed: unknownHeapUsedBytes,
+      _hasProblem: hasProblem,
+      _kids: []
+    }
+    t._kids.push(heapUnclassified);
+    t._memoryUsed += unknownHeapUsedBytes;
 
     function shouldOmit(aBytes)
     {
       return !gVerbose &&
-             treeBytes !== -1 &&
-             (100 * aBytes / treeBytes) < aOmitThresholdPerc;
+             t._memoryUsed !== kUnknown &&
+             (100 * aBytes / t._memoryUsed) < omitThresholdPerc;
     }
 
     /**
@@ -279,7 +435,6 @@ function genProcessText(aProcess, aTmrs)
      */
     function filterTree(aT)
     {
-      var cmpTmrs = function(a, b) { return b._memoryUsed - a._memoryUsed };
       aT._kids.sort(cmpTmrs);
 
       for (var i = 0; i < aT._kids.length; i++) {
@@ -298,9 +453,10 @@ function genProcessText(aProcess, aTmrs)
           var n = i - i0;
           var tmrSub = {
             _name: "(" + n + " omitted)",
+            _kind: MR_OTHER,
             _description: "Omitted sub-trees: " + aggNames.join(", ") + ".",
             _memoryUsed: aggBytes,
-            _kids:[]
+            _kids: []
           };
           aT._kids[i0] = tmrSub;
           break;
@@ -313,25 +469,10 @@ function genProcessText(aProcess, aTmrs)
     return t;
   }
 
-  var mappedOtherDescTail =
-      " This includes code and data segments, and thread stacks."
-  var mappedRootDesc = getDescription(aTmrs, "mapped");
-  // The threshold used here is much lower than the one for the heap-used
-  // tree, because the "mapped" total size is so much bigger relative to
-  // the interesting entries in the "mapped" tree.
-  var mappedTree = buildTree("mapped", "mapped", mappedRootDesc,
-                             mappedOtherDescTail, 0.01);
-
-  var heapUsedOtherDescTail = "";
-  var heapUsedRootDesc = "See mapped/heap/used above.";
-  var heapUsedTree = buildTree("heap-used", "mapped/heap/used",
-                               heapUsedRootDesc, heapUsedOtherDescTail, 0.1);
-
   // Nb: the newlines give nice spacing if we cut+paste into a text buffer.
   var text = "";
   text += "<h1>" + aProcess + " Process</h1>\n\n";
-  text += genTreeText(mappedTree, "Mapped Memory");
-  text += genTreeText(heapUsedTree, "Used Heap Memory");
+  text += genTreeText(buildTree());
   text += genOtherText(aTmrs);
   text += "<hr></hr>";
   return text;
@@ -347,10 +488,6 @@ function genProcessText(aProcess, aTmrs)
 function formatBytes(aBytes)
 {
   var unit = gVerbose ? "B" : "MB";
-
-  if (aBytes === -1) {
-    return "??? " + unit;
-  }
 
   function formatInt(aN)
   {
@@ -412,26 +549,30 @@ function pad(aS, aN, aC)
 }
 
 /**
- * Gets the byte count for a particular memory reporter.
+ * Gets the byte count for a particular memory reporter and sets its _done
+ * property.
  *
  * @param aTmrs
  *        Table of Tmrs for this process
  * @param aTpath
  *        The tpath of the memory reporter
+ * @param aDoNotMark
+ *        If set, the _done property is not set.
  * @return The byte count
  */
-function getBytes(aTmrs, aTpath)
+function getBytes(aTmrs, aTpath, aDoNotMark)
 {
   var tmr = aTmrs[aTpath];
   if (tmr) {
     var bytes = tmr._memoryUsed;
-    tmr.done = true;
+    if (!aDoNotMark) {
+      tmr._done = true;
+    }
     return bytes;
   }
-  // Nb: this should never occur;  "mapped" and "mapped/heap/used" should
-  // always be registered, and all other tpaths have been extracted from
-  // aTmrs and so the lookup will succeed.  Return an obviously wrong
-  // number that will likely be noticed.
+  // Nb: this should never occur; all tpaths have been extracted from aTmrs and
+  // so the lookup will succeed.  Return an obviously wrong number that will
+  // likely be noticed.
   return -2 * 1024 * 1024;
 }
 
@@ -455,22 +596,44 @@ function genMrValueText(aValue)
   return "<span class='mrValue'>" + aValue + "</span>";
 }
 
-function genMrNameText(aDesc, aName)
+function kindToString(aKind)
 {
-  return "-- <span class='mrName' title=\"" + aDesc + "\">" +
-         aName + "</span>\n";
+  switch (aKind) {
+   case MR_MAPPED: return "(Mapped) ";
+   case MR_HEAP:   return "(Heap) ";
+   case MR_OTHER:  return "";
+   default:        return "(???) ";
+  }
+}
+
+function escapeQuotes(aStr)
+{
+  return aStr.replace(/'/g, '&#39;');
+}
+
+function genMrNameText(aKind, aDesc, aName, aHasProblem)
+{
+  const problemDesc =
+    "Warning: this memory reporter was unable to compute a useful value. " +
+    "The reported value is the sum of all entries below '" + aName + "', " +
+    "which is probably less than the true value.";
+  var text = "-- <span class='mrName hasDesc' title='" +
+             kindToString(aKind) + escapeQuotes(aDesc) +
+             "'>" + aName + "</span>";
+  text += aHasProblem
+        ? " <span class='mrStar' title=\"" + problemDesc + "\">[*]</span>\n"
+        : "\n";
+  return text;
 }
 
 /**
- * Generates the text for a particular tree, including its heading.
+ * Generates the text for the tree, including its heading.
  *
  * @param aT
  *        The tree
- * @param aTreeName
- *        The tree's name
  * @return The generated text
  */
-function genTreeText(aT, aTreeName)
+function genTreeText(aT)
 {
   var treeBytes = aT._memoryUsed;
   var treeBytesLength = formatBytes(treeBytes).length;
@@ -534,22 +697,21 @@ function genTreeText(aT, aTreeName)
 
     // Generate the percentage.
     var perc = "";
-    if (treeBytes !== -1) {
-      if (aT._memoryUsed === treeBytes) {
-        perc = "100.0";
-      } else {
-        perc = (100 * aT._memoryUsed / treeBytes).toFixed(2);
-        perc = pad(perc, 5, '0');
-      }
-      perc = "<span class='mrPerc'>(" + perc + "%)</span> ";
+    if (aT._memoryUsed === treeBytes) {
+      perc = "100.0";
+    } else {
+      perc = (100 * aT._memoryUsed / treeBytes).toFixed(2);
+      perc = pad(perc, 5, '0');
     }
+    perc = "<span class='mrPerc'>(" + perc + "%)</span> ";
 
     var text = indent + genMrValueText(tMemoryUsedStr) + " " + perc +
-               genMrNameText(aT._description, aT._name);
+               genMrNameText(aT._kind, aT._description, aT._name,
+                             aT._hasProblem);
 
     for (var i = 0; i < aT._kids.length; i++) {
       // 3 is the standard depth, the callee adjusts it if necessary.
-      aIndentGuide.push({ _isLastKid:(i === aT._kids.length - 1), _depth:3 });
+      aIndentGuide.push({ _isLastKid: (i === aT._kids.length - 1), _depth: 3 });
       text += genTreeText2(aT._kids[i], aIndentGuide, tBytesLength);
       aIndentGuide.pop();
     }
@@ -558,7 +720,21 @@ function genTreeText(aT, aTreeName)
 
   var text = genTreeText2(aT, [], treeBytesLength);
   // Nb: the newlines give nice spacing if we cut+paste into a text buffer.
-  return "<h2>" + aTreeName + "</h2>\n<pre>" + text + "</pre>\n";
+  const desc =
+    "This tree covers explicit memory allocations by the application, " +
+    "both at the operating system level (via calls to functions such as " +
+    "VirtualAlloc, vm_allocate, and mmap), and at the heap allocation level " +
+    "(via functions such as malloc, calloc, realloc, memalign, operator " +
+    "new, and operator new[]).  It excludes memory that is mapped implicitly " +
+    "such as code and data segments, and thread stacks.  It also excludes " +
+    "heap memory that has been freed by the application but is still being " +
+    "held onto by the heap allocator.  It is not guaranteed to cover every " +
+    "explicit allocation, but it does cover most (including the entire " +
+    "heap), and therefore it is the single best number to focus on when " +
+    "trying to reduce memory usage.";
+               
+  return "<h2 class='hasDesc' title='" + escapeQuotes(desc) +
+         "'>Explicit Allocations</h2>\n" + "<pre>" + text + "</pre>\n";
 }
 
 /**
@@ -570,30 +746,48 @@ function genTreeText(aT, aTreeName)
  */
 function genOtherText(aTmrs)
 {
-  // Get the biggest not-yet-printed value, to determine the field width
-  // for all these entries.  These should all be "other" values, assuming
-  // all paths are well-formed.
-  var maxBytes = 0;
+  // Generate an array of tmr-like elements, stripping out all the tmrs that
+  // have already been handled.  Also find the width of the widest element, so
+  // we can format things nicely.
+  var maxBytesLength = 0;
+  var tmrArray = [];
   for (var tpath in aTmrs) {
     var tmr = aTmrs[tpath];
-    if (!tmr.done && tmr._memoryUsed > maxBytes) {
-      maxBytes = tmr._memoryUsed;
+    if (!tmr._done) {
+      var hasProblem = false;
+      if (tmr._memoryUsed === kUnknown) {
+        hasProblem = true;
+      }
+      var elem = {
+        _tpath:       tmr._tpath,
+        _kind:        tmr._kind,
+        _description: tmr._description,
+        _memoryUsed:  hasProblem ? 0 : tmr._memoryUsed,
+        _hasProblem:  hasProblem
+      };
+      tmrArray.push(elem);
+      var thisBytesLength = formatBytes(elem._memoryUsed).length;
+      if (thisBytesLength > maxBytesLength) {
+        maxBytesLength = thisBytesLength;
+      }
     }
   }
+  tmrArray.sort(cmpTmrs);
 
-  // Generate text for the not-yet-yet-printed values.
-  var maxBytesLength = formatBytes(maxBytes).length;
+  // Generate text for the not-yet-printed values.
   var text = "";
-  for (var tpath in aTmrs) {
-    var tmr = aTmrs[tpath];
-    if (!tmr.done) {
-      text += genMrValueText(
-                pad(formatBytes(tmr._memoryUsed), maxBytesLength, ' ')) + " ";
-      text += genMrNameText(tmr._description, tmr._tpath);
-    }
+  for (var i = 0; i < tmrArray.length; i++) {
+    var elem = tmrArray[i];
+    text += genMrValueText(
+              pad(formatBytes(elem._memoryUsed), maxBytesLength, ' ')) + " ";
+    text += genMrNameText(elem._kind, elem._description, elem._tpath,
+                          elem._hasProblem);
   }
 
   // Nb: the newlines give nice spacing if we cut+paste into a text buffer.
-  return "<h2>Other Measurements</h2>\n<pre>" + text + "</pre>\n";
+  const desc = "This list contains other memory measurements that cross-cut " +
+               "the requested memory measurements above."
+  return "<h2 class='hasDesc' title='" + desc + "'>Other Measurements</h2>\n" +
+         "<pre>" + text + "</pre>\n";
 }
 

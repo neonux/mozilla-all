@@ -49,6 +49,7 @@
 
 #include "jscntxt.h"
 
+#include "nsPluginHost.h"
 #include "nsNPAPIPlugin.h"
 #include "nsNPAPIPluginInstance.h"
 #include "nsNPAPIPluginStreamListener.h"
@@ -233,7 +234,7 @@ static void CheckClassInitialized()
   NPN_PLUGIN_LOG(PLUGIN_LOG_NORMAL,("NPN callbacks initialized\n"));
 }
 
-NS_IMPL_ISUPPORTS1(nsNPAPIPlugin, nsIPlugin)
+NS_IMPL_ISUPPORTS0(nsNPAPIPlugin)
 
 nsNPAPIPlugin::nsNPAPIPlugin()
 {
@@ -534,8 +535,8 @@ nsNPAPIPlugin::PluginFuncs()
   return &mPluginFuncs;
 }
 
-NS_IMETHODIMP
-nsNPAPIPlugin::CreatePluginInstance(nsIPluginInstance **aResult)
+nsresult
+nsNPAPIPlugin::CreatePluginInstance(nsNPAPIPluginInstance **aResult)
 {
   if (!aResult)
     return NS_ERROR_NULL_POINTER;
@@ -547,7 +548,7 @@ nsNPAPIPlugin::CreatePluginInstance(nsIPluginInstance **aResult)
     return NS_ERROR_OUT_OF_MEMORY;
 
   NS_ADDREF(inst);
-  *aResult = static_cast<nsIPluginInstance*>(inst);
+  *aResult = inst;
   return NS_OK;
 }
 
@@ -581,9 +582,11 @@ MakeNewNPAPIStreamInternal(NPP npp, const char *relativeURL, const char *target,
   if (!inst || !inst->IsRunning())
     return NPERR_INVALID_INSTANCE_ERROR;
 
-  nsCOMPtr<nsIPluginHost> pluginHost = do_GetService(MOZ_PLUGIN_HOST_CONTRACTID);
-  NS_ASSERTION(pluginHost, "failed to get plugin host");
-  if (!pluginHost) return NPERR_GENERIC_ERROR;
+  nsCOMPtr<nsIPluginHost> pluginHostCOM = do_GetService(MOZ_PLUGIN_HOST_CONTRACTID);
+  nsPluginHost *pluginHost = static_cast<nsPluginHost*>(pluginHostCOM.get());
+  if (!pluginHost) {
+    return NPERR_GENERIC_ERROR;
+  }
 
   nsCOMPtr<nsIPluginStreamListener> listener;
   // Set aCallNotify here to false.  If pluginHost->GetURL or PostURL fail,
@@ -625,7 +628,7 @@ MakeNewNPAPIStreamInternal(NPP npp, const char *relativeURL, const char *target,
   return NPERR_NO_ERROR;
 }
 
-#if defined(MOZ_MEMORY_WINDOWS) && !defined(MOZ_MEMORY_WINCE)
+#if defined(MOZ_MEMORY_WINDOWS)
 extern "C" size_t malloc_usable_size(const void *ptr);
 #endif
 
@@ -735,10 +738,10 @@ doGetIdentifier(JSContext *cx, const NPUTF8* name)
   if (!str)
     return NULL;
 
-  return StringToNPIdentifier(str);
+  return StringToNPIdentifier(cx, str);
 }
 
-#if defined(MOZ_MEMORY_WINDOWS) && !defined(MOZ_MEMORY_WINCE)
+#if defined(MOZ_MEMORY_WINDOWS)
 BOOL
 InHeap(HANDLE hHeap, LPVOID lpMem)
 {
@@ -1048,7 +1051,7 @@ _newstream(NPP npp, NPMIMEType type, const char* target, NPStream* *result)
 
   NPError err = NPERR_INVALID_INSTANCE_ERROR;
   if (npp && npp->ndata) {
-    nsIPluginInstance *inst = (nsIPluginInstance *) npp->ndata;
+    nsNPAPIPluginInstance *inst = (nsNPAPIPluginInstance*)npp->ndata;
 
     PluginDestructionGuard guard(inst);
 
@@ -1168,7 +1171,7 @@ _status(NPP npp, const char *message)
     return;
   }
 
-  nsIPluginInstance *inst = (nsIPluginInstance *) npp->ndata;
+  nsNPAPIPluginInstance *inst = (nsNPAPIPluginInstance*)npp->ndata;
 
   PluginDestructionGuard guard(inst);
 
@@ -1233,7 +1236,7 @@ _invalidaterect(NPP npp, NPRect *invalidRect)
     return;
   }
 
-  nsIPluginInstance *inst = (nsIPluginInstance *) npp->ndata;
+  nsNPAPIPluginInstance *inst = (nsNPAPIPluginInstance*)npp->ndata;
 
   PluginDestructionGuard guard(inst);
 
@@ -1256,7 +1259,7 @@ _invalidateregion(NPP npp, NPRegion invalidRegion)
     return;
   }
 
-  nsIPluginInstance *inst = (nsIPluginInstance *)npp->ndata;
+  nsNPAPIPluginInstance *inst = (nsNPAPIPluginInstance*)npp->ndata;
 
   PluginDestructionGuard guard(inst);
 
@@ -1277,7 +1280,7 @@ _forceredraw(NPP npp)
     return;
   }
 
-  nsIPluginInstance *inst = (nsIPluginInstance *) npp->ndata;
+  nsNPAPIPluginInstance *inst = (nsNPAPIPluginInstance*)npp->ndata;
 
   PluginDestructionGuard guard(inst);
 
@@ -1919,7 +1922,7 @@ _releasevariantvalue(NPVariant* variant)
       const NPString *s = &NPVARIANT_TO_STRING(*variant);
 
       if (s->UTF8Characters) {
-#if defined(MOZ_MEMORY_WINDOWS) && !defined(MOZ_MEMORY_WINCE)
+#if defined(MOZ_MEMORY_WINDOWS)
         if (malloc_usable_size((void *)s->UTF8Characters) != 0) {
           PR_Free((void *)s->UTF8Characters);
         } else {
@@ -2225,44 +2228,11 @@ _getvalue(NPP npp, NPNVariable variable, void *result)
   }
 #endif
 
-  // we no longer hand out any XPCOM objects, except on WINCE,
-  // where it's needed for the ActiveX shunt that makes Flash
-  // work until we get an NPAPI plugin there.
-#ifdef WINCE
-  case NPNVDOMWindow: {
-    nsNPAPIPluginInstance *inst = (nsNPAPIPluginInstance *)npp->ndata;
-    NS_ENSURE_TRUE(inst, NPERR_GENERIC_ERROR);
-
-    nsIDOMWindow *domWindow = inst->GetDOMWindow().get();
-
-    if (domWindow) {
-      // Pass over ownership of domWindow to the caller.
-      (*(nsIDOMWindow**)result) = domWindow;
-      return NPERR_NO_ERROR;
-    }
-
-    return NPERR_GENERIC_ERROR;
-  }
-
-  case NPNVDOMElement: {
-    nsNPAPIPluginInstance *inst = (nsNPAPIPluginInstance *) npp->ndata;
-    NS_ENSURE_TRUE(inst, NPERR_GENERIC_ERROR);
-
-    nsCOMPtr<nsIDOMElement> e;
-    inst->GetDOMElement(getter_AddRefs(e));
-    if (e) {
-      NS_ADDREF(*(nsIDOMElement**)result = e.get());
-      return NPERR_NO_ERROR;
-    }
-
-    return NPERR_GENERIC_ERROR;
-  }
-#else
+  // we no longer hand out any XPCOM objects
   case NPNVDOMElement:
     // fall through
   case NPNVDOMWindow:
     // fall through
-#endif /* WINCE */
   case NPNVserviceManager:
     // old XPCOM objects, no longer supported, but null out the out
     // param to avoid crashing plugins that still try to use this.
@@ -2443,9 +2413,11 @@ _useragent(NPP npp)
   }
   NPN_PLUGIN_LOG(PLUGIN_LOG_NORMAL, ("NPN_UserAgent: npp=%p\n", (void*)npp));
 
-  nsCOMPtr<nsIPluginHost> pluginHost(do_GetService(MOZ_PLUGIN_HOST_CONTRACTID));
-  if (!pluginHost)
+  nsCOMPtr<nsIPluginHost> pluginHostCOM(do_GetService(MOZ_PLUGIN_HOST_CONTRACTID));
+  nsPluginHost *pluginHost = static_cast<nsPluginHost*>(pluginHostCOM.get());
+  if (!pluginHost) {
     return nsnull;
+  }
 
   const char *retstr;
   nsresult rv = pluginHost->UserAgent(&retstr);
@@ -2534,8 +2506,8 @@ _getvalueforurl(NPP instance, NPNURLVariable variable, const char *url,
   switch (variable) {
   case NPNURLVProxy:
     {
-      nsCOMPtr<nsIPluginHost> pluginHost(do_GetService(MOZ_PLUGIN_HOST_CONTRACTID));
-
+      nsCOMPtr<nsIPluginHost> pluginHostCOM(do_GetService(MOZ_PLUGIN_HOST_CONTRACTID));
+      nsPluginHost *pluginHost = static_cast<nsPluginHost*>(pluginHostCOM.get());
       if (pluginHost && NS_SUCCEEDED(pluginHost->FindProxyForURL(url, value))) {
         *len = *value ? PL_strlen(*value) : 0;
         return NPERR_NO_ERROR;

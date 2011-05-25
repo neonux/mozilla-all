@@ -224,7 +224,7 @@ class SetPropCompiler : public PICStubCompiler
             CodeLocationInstruction istr = labels.getDslotsLoad(pic.fastPathRejoin, pic.u.vr);
             repatcher.repatchLoadPtrToLEA(istr);
 
-            // 
+            //
             // We've patched | mov dslots, [obj + DSLOTS_OFFSET]
             // To:           | lea fslots, [obj + DSLOTS_OFFSET]
             //
@@ -624,7 +624,7 @@ class SetPropCompiler : public PICStubCompiler
             shape->hasDefaultSetter() &&
             !obj->isDenseArray()) {
             return patchInline(shape, !obj->hasSlotsArray());
-        } 
+        }
 
         return generateStub(obj->shape(), shape, false, !obj->hasSlotsArray());
     }
@@ -634,8 +634,13 @@ static bool
 IsCacheableProtoChain(JSObject *obj, JSObject *holder)
 {
     while (obj != holder) {
+        /*
+         * We cannot assume that we find the holder object on the prototype
+         * chain and must check for null proto. The prototype chain can be
+         * altered during the lookupProperty call.
+         */
         JSObject *proto = obj->getProto();
-        if (!proto->isNative())
+        if (!proto || !proto->isNative())
             return false;
         obj = proto;
     }
@@ -655,7 +660,7 @@ struct GetPropertyHelper {
     JSObject    *aobj;
     JSObject    *holder;
     JSProperty  *prop;
- 
+
     // This field is set by |bind| and |lookup| only if they returned
     // Lookup_Cacheable, otherwise it is NULL.
     const Shape *shape;
@@ -770,13 +775,13 @@ class GetPropCompiler : public PICStubCompiler
         Jump notArgs = masm.testObjClass(Assembler::NotEqual, pic.objReg, obj->getClass());
 
         masm.loadPtr(Address(pic.objReg, offsetof(JSObject, slots)), pic.objReg);
-        masm.load32(Address(pic.objReg, JSObject::JSSLOT_ARGS_LENGTH * sizeof(Value)),
+        masm.load32(Address(pic.objReg, ArgumentsObject::INITIAL_LENGTH_SLOT * sizeof(Value)),
                     pic.objReg);
         masm.move(pic.objReg, pic.shapeReg);
         Jump overridden = masm.branchTest32(Assembler::NonZero, pic.shapeReg,
-                                            Imm32(JSObject::ARGS_LENGTH_OVERRIDDEN_BIT));
-        masm.rshift32(Imm32(JSObject::ARGS_PACKED_BITS_COUNT), pic.objReg);
-        
+                                            Imm32(ArgumentsObject::LENGTH_OVERRIDDEN_BIT));
+        masm.rshift32(Imm32(ArgumentsObject::PACKED_BITS_COUNT), pic.objReg);
+
         masm.move(ImmType(JSVAL_TYPE_INT32), pic.shapeReg);
         Jump done = masm.jump();
 
@@ -1004,7 +1009,7 @@ class GetPropCompiler : public PICStubCompiler
             CodeLocationInstruction istr = labels.getDslotsLoad(pic.fastPathRejoin);
             repatcher.repatchLoadPtrToLEA(istr);
 
-            // 
+            //
             // We've patched | mov dslots, [obj + DSLOTS_OFFSET]
             // To:           | lea fslots, [obj + DSLOTS_OFFSET]
             //
@@ -1042,7 +1047,7 @@ class GetPropCompiler : public PICStubCompiler
             start = masm.label();
             shapeGuardJump = masm.testObjClass(Assembler::NotEqual, pic.objReg, obj->getClass());
 
-            /* 
+            /*
              * No need to assert validity of GETPROP_STUB_SHAPE_JUMP in this case:
              * the IC is disabled after a dense array hit, so no patching can occur.
              */
@@ -1148,7 +1153,7 @@ class GetPropCompiler : public PICStubCompiler
 
         if (obj == getprop.holder && !pic.inlinePathPatched)
             return patchInline(getprop.holder, getprop.shape);
-        
+
         return generateStub(getprop.holder, getprop.shape);
     }
 };
@@ -1169,7 +1174,7 @@ class ScopeNameCompiler : public PICStubCompiler
         Repatcher               repatcher(pic.lastCodeBlock(f.jit()));
         CodeLocationLabel       start = pic.lastPathStart();
         JSC::CodeLocationJump   jump;
-        
+
         // Patch either the inline fast path or a generated stub.
         if (pic.stubsGenerated)
             jump = labels.getStubJump(start);
@@ -1198,7 +1203,7 @@ class ScopeNameCompiler : public PICStubCompiler
                 if (!fails.append(j))
                     return error();
             }
-            
+
             /* Guard on intervening shapes. */
             masm.loadShape(pic.objReg, pic.shapeReg);
             Jump j = masm.branch32(Assembler::NotEqual, pic.shapeReg, Imm32(tobj->shape()));
@@ -1483,7 +1488,7 @@ class ScopeNameCompiler : public PICStubCompiler
         return true;
     }
 };
- 
+
 class BindNameCompiler : public PICStubCompiler
 {
     JSObject *scopeChain;
@@ -1514,7 +1519,7 @@ class BindNameCompiler : public PICStubCompiler
         BindNameLabels &labels = pic.bindNameLabels();
         Repatcher repatcher(pic.lastCodeBlock(f.jit()));
         JSC::CodeLocationJump jump;
-        
+
         /* Patch either the inline fast path or a generated stub. */
         if (pic.stubsGenerated)
             jump = labels.getStubJump(pic.lastPathStart());
@@ -1648,7 +1653,8 @@ ic::GetProp(VMFrame &f, ic::PICInfo *pic)
             return;
         } else if (!f.regs.sp[-1].isPrimitive()) {
             JSObject *obj = &f.regs.sp[-1].toObject();
-            if (obj->isArray() || (obj->isArguments() && !obj->isArgsLengthOverridden()) ||
+            if (obj->isArray() ||
+                (obj->isArguments() && !obj->asArguments()->hasOverriddenLength()) ||
                 obj->isString()) {
                 GetPropCompiler cc(f, script, obj, *pic, NULL, DisabledLengthIC);
                 if (obj->isArray()) {
@@ -1660,7 +1666,7 @@ ic::GetProp(VMFrame &f, ic::PICInfo *pic)
                     LookupStatus status = cc.generateArgsLengthStub();
                     if (status == Lookup_Error)
                         THROW();
-                    f.regs.sp[-1].setInt32(int32_t(obj->getArgsInitialLength()));
+                    f.regs.sp[-1].setInt32(int32_t(obj->asArguments()->initialLength()));
                 } else if (obj->isString()) {
                     LookupStatus status = cc.generateStringObjLengthStub();
                     if (status == Lookup_Error)
@@ -1737,7 +1743,7 @@ ic::SetProp(VMFrame &f, ic::PICInfo *pic)
         if (status == Lookup_Error)
             THROW();
     }
-    
+
     stub(f, pic);
 }
 

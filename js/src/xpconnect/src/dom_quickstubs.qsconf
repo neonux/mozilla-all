@@ -110,6 +110,8 @@ members = [
     'nsIDOMDocument.documentURI',
     'nsIDOMDocument.adoptNode',
     'nsIDOMDocument.defaultView',
+    'nsIDOMDocument.createNodeIterator',
+    'nsIDOMDocument.createEvent',
     'nsIDOMElement.removeAttributeNS',
     'nsIDOMElement.removeAttribute',
     'nsIDOMElement.getAttribute',
@@ -181,7 +183,6 @@ members = [
     'nsIDOMEventTarget.dispatchEvent',
     'nsIDOMEventTarget.removeEventListener',
     'nsIDOMNSEventTarget.addEventListener',
-    'nsIDOMDocumentEvent.*',
 
     'nsIDOMEvent.*',
     'nsIDOMMouseEvent.*',
@@ -286,6 +287,7 @@ members = [
     'nsIDOMHTMLOptionElement.disabled',
     'nsIDOMHTMLOptionsCollection.item',
     'nsIDOMHTMLOptionsCollection.length',
+    'nsIDOMHTMLProgressElement.*',
     'nsIDOMHTMLSelectElement.name',
     'nsIDOMHTMLSelectElement.form',
     'nsIDOMHTMLSelectElement.add',
@@ -388,7 +390,6 @@ members = [
     # dom/interfaces/threads - None.
 
     # dom/interfaces/traversal
-    'nsIDOMDocumentTraversal.createNodeIterator',
     'nsIDOMNodeIterator.nextNode',
 
     # dom/interfaces/xbl - None.
@@ -503,6 +504,7 @@ irregularFilenames = {
     'nsIWebGLRenderbuffer': 'nsIDOMWebGLRenderingContext',
     'nsIWebGLActiveInfo': 'nsIDOMWebGLRenderingContext',
     'nsIWebGLUniformLocation': 'nsIDOMWebGLRenderingContext',
+    'nsIWebGLExtension': 'nsIDOMWebGLRenderingContext',
 
     'nsIIndexedDatabaseUsageCallback': 'nsIIndexedDatabaseManager',
 

@@ -608,20 +608,61 @@ PRInt32 nsTextFrame::GetContentEnd() const {
   return next ? next->GetContentOffset() : mContent->GetText()->GetLength();
 }
 
-PRInt32 nsTextFrame::GetInFlowContentLength() {
-#ifdef IBMBIDI
-  nsTextFrame* nextBidi = nsnull;
-  PRInt32      start = -1, end;
+struct FlowLengthProperty {
+  PRInt32 mStartOffset;
+  // The offset of the next fixed continuation after mStartOffset, or
+  // of the end of the text if there is none
+  PRInt32 mEndFlowOffset;
 
-  if (mState & NS_FRAME_IS_BIDI) {
-    nextBidi = static_cast<nsTextFrame*>(GetLastInFlow()->GetNextContinuation());
-    if (nextBidi) {
-      nextBidi->GetOffsets(start, end);
-      return start - mContentOffset;
+  static void Destroy(void* aObject, nsIAtom* aPropertyName,
+                      void* aPropertyValue, void* aData)
+  {
+    delete static_cast<FlowLengthProperty*>(aPropertyValue);
+  }
+};
+
+PRInt32 nsTextFrame::GetInFlowContentLength() {
+  if (!(mState & NS_FRAME_IS_BIDI)) {
+    return mContent->TextLength() - mContentOffset;
+  }
+
+  nsTextFrame* nextBidi = nsnull;
+  PRInt32      start = -1, end, endFlow;
+  FlowLengthProperty* flowLength =
+    static_cast<FlowLengthProperty*>(mContent->GetProperty(nsGkAtoms::flowlength));
+
+  if (flowLength && flowLength->mStartOffset <= mContentOffset &&
+      flowLength->mEndFlowOffset > mContentOffset) {
+#ifdef DEBUG
+    GetOffsets(start, end);
+    NS_ASSERTION(flowLength->mEndFlowOffset >= end,
+                 "frame crosses fixed continuation boundary");
+#endif
+    return flowLength->mEndFlowOffset - mContentOffset;
+  }
+
+  nextBidi = static_cast<nsTextFrame*>(GetLastInFlow()->GetNextContinuation());
+  if (nextBidi) {
+    nextBidi->GetOffsets(start, end);
+    endFlow = start;
+  } else {
+    endFlow = mContent->TextLength();
+  }
+
+  if (!flowLength) {
+    flowLength = new FlowLengthProperty;
+    if (NS_FAILED(mContent->SetProperty(nsGkAtoms::flowlength, flowLength,
+                                        FlowLengthProperty::Destroy))) {
+      delete flowLength;
+      flowLength = nsnull;
     }
   }
-#endif //IBMBIDI
-  return mContent->TextLength() - mContentOffset;
+  if (flowLength) {
+    flowLength->mStartOffset = mContentOffset;
+    flowLength->mEndFlowOffset = endFlow;
+  }
+
+  return endFlow - mContentOffset;
 }
 
 // Smarter versions of XP_IS_SPACE.
@@ -865,7 +906,7 @@ public:
                 mChangedBreaks(PR_FALSE), mExistingTextRun(aExistingTextRun) {}
 
     virtual void SetBreaks(PRUint32 aOffset, PRUint32 aLength,
-                           PRPackedBool* aBreakBefore) {
+                           PRUint8* aBreakBefore) {
       if (mTextRun->SetPotentialLineBreaks(aOffset + mOffsetIntoTextRun, aLength,
                                            aBreakBefore, mContext)) {
         mChangedBreaks = PR_TRUE;
@@ -2037,6 +2078,9 @@ BuildTextRunsScanner::SetupBreakSinksForTextRun(gfxTextRun* aTextRun,
     if (textStyle->mTextTransform == NS_STYLE_TEXT_TRANSFORM_CAPITALIZE) {
       flags |= nsLineBreaker::BREAK_NEED_CAPITALIZATION;
     }
+    if (textStyle->mHyphens == NS_STYLE_HYPHENS_AUTO) {
+      flags |= nsLineBreaker::BREAK_USE_AUTO_HYPHENATION;
+    }
 
     if (HasCompressedLeadingWhitespace(startFrame, textStyle,
                                        mappedFlow->GetContentEnd(), iter)) {
@@ -2456,6 +2500,9 @@ public:
   virtual gfxFloat GetHyphenWidth();
   virtual void GetHyphenationBreaks(PRUint32 aStart, PRUint32 aLength,
                                     PRPackedBool* aBreakBefore);
+  virtual PRInt8 GetHyphensOption() {
+    return mTextStyle->mHyphens;
+  }
 
   void GetSpacingInternal(PRUint32 aStart, PRUint32 aLength, Spacing* aSpacing,
                           PRBool aIgnoreTabs);
@@ -2825,7 +2872,9 @@ PropertyProvider::GetHyphenationBreaks(PRUint32 aStart, PRUint32 aLength,
   NS_PRECONDITION(IsInBounds(mStart, mLength, aStart, aLength), "Range out of bounds");
   NS_PRECONDITION(mLength != PR_INT32_MAX, "Can't call this with undefined length");
 
-  if (!mTextStyle->WhiteSpaceCanWrap()) {
+  if (!mTextStyle->WhiteSpaceCanWrap() ||
+      mTextStyle->mHyphens == NS_STYLE_HYPHENS_NONE)
+  {
     memset(aBreakBefore, PR_FALSE, aLength);
     return;
   }
@@ -2853,12 +2902,20 @@ PropertyProvider::GetHyphenationBreaks(PRUint32 aStart, PRUint32 aLength,
         mFrag->CharAt(run.GetOriginalOffset() + run.GetRunLength() - 1) == CH_SHY;
     } else {
       PRInt32 runOffsetInSubstring = run.GetSkippedOffset() - aStart;
-      memset(aBreakBefore + runOffsetInSubstring, 0, run.GetRunLength());
+      memset(aBreakBefore + runOffsetInSubstring, PR_FALSE, run.GetRunLength());
       // Don't allow hyphen breaks at the start of the line
       aBreakBefore[runOffsetInSubstring] = allowHyphenBreakBeforeNextChar &&
           (!(mFrame->GetStateBits() & TEXT_START_OF_LINE) ||
            run.GetSkippedOffset() > mStart.GetSkippedOffset());
       allowHyphenBreakBeforeNextChar = PR_FALSE;
+    }
+  }
+
+  if (mTextStyle->mHyphens == NS_STYLE_HYPHENS_AUTO) {
+    for (PRUint32 i = 0; i < aLength; ++i) {
+      if (mTextRun->CanHyphenateBefore(aStart + i)) {
+        aBreakBefore[i] = PR_TRUE;
+      }
     }
   }
 }
@@ -3633,9 +3690,12 @@ nsTextFrame::Init(nsIContent*      aContent,
   NS_PRECONDITION(aContent->IsNodeOfType(nsINode::eTEXT),
                   "Bogus content!");
 
-  // Remove any NewlineOffsetProperty since it might be invalid
-  // if the content was modified while there was no frame
+  // Remove any NewlineOffsetProperty or InFlowContentLengthProperty since they
+  // might be invalid if the content was modified while there was no frame
   aContent->DeleteProperty(nsGkAtoms::newline);
+  if (PresContext()->BidiEnabled()) {
+    aContent->DeleteProperty(nsGkAtoms::flowlength);
+  }
 
   // Since our content has a frame now, this flag is no longer needed.
   aContent->UnsetFlags(NS_CREATE_FRAME_IF_NON_WHITESPACE);
@@ -4027,6 +4087,9 @@ NS_IMETHODIMP
 nsTextFrame::CharacterDataChanged(CharacterDataChangeInfo* aInfo)
 {
   mContent->DeleteProperty(nsGkAtoms::newline);
+  if (PresContext()->BidiEnabled()) {
+    mContent->DeleteProperty(nsGkAtoms::flowlength);
+  }
 
   // Find the first frame whose text has changed. Frames that are entirely
   // before the text change are completely unaffected.
@@ -6053,7 +6116,9 @@ nsTextFrame::AddInlineMinWidthForFlow(nsRenderingContext *aRenderingContext,
   // otherwise we can just pass PR_INT32_MAX to mean "all the text"
   PRInt32 len = PR_INT32_MAX;
   PRBool hyphenating = frag->GetLength() > 0 &&
-    (mTextRun->GetFlags() & gfxTextRunFactory::TEXT_ENABLE_HYPHEN_BREAKS) != 0;
+    (textStyle->mHyphens == NS_STYLE_HYPHENS_AUTO ||
+     (textStyle->mHyphens == NS_STYLE_HYPHENS_MANUAL &&
+      (mTextRun->GetFlags() & gfxTextRunFactory::TEXT_ENABLE_HYPHEN_BREAKS) != 0));
   if (hyphenating) {
     gfxSkipCharsIterator tmp(iter);
     len = PR_MIN(GetContentOffset() + GetInFlowContentLength(),
@@ -6134,9 +6199,11 @@ nsTextFrame::AddInlineMinWidthForFlow(nsRenderingContext *aRenderingContext,
          (mTextRun->GetFlags() & nsTextFrameUtils::TEXT_HAS_TRAILING_BREAK))) {
       if (preformattedNewline) {
         aData->ForceBreak(aRenderingContext);
-      } else if (hyphBreakBefore && hyphBreakBefore[i - start]) {
+      } else if (i < flowEndInTextRun && hyphBreakBefore &&
+                 hyphBreakBefore[i - start])
+      {
         aData->OptionallyBreak(aRenderingContext, provider.GetHyphenWidth());
-      } else {
+      } {
         aData->OptionallyBreak(aRenderingContext);
       }
       wordStart = i;
@@ -6360,6 +6427,10 @@ static PRBool
 HasSoftHyphenBefore(const nsTextFragment* aFrag, gfxTextRun* aTextRun,
                     PRInt32 aStartOffset, const gfxSkipCharsIterator& aIter)
 {
+  if (aIter.GetSkippedOffset() < aTextRun->GetLength() &&
+      aTextRun->CanHyphenateBefore(aIter.GetSkippedOffset())) {
+    return PR_TRUE;
+  }
   if (!(aTextRun->GetFlags() & nsTextFrameUtils::TEXT_HAS_SHY))
     return PR_FALSE;
   gfxSkipCharsIterator iter = aIter;
@@ -6934,6 +7005,7 @@ nsTextFrame::ReflowText(nsLineLayout& aLineLayout, nscoord aAvailableWidth,
     AddStateBits(TEXT_HAS_NONCOLLAPSED_CHARACTERS);
   }
   if (charsFit > 0 && charsFit == length &&
+      textStyle->mHyphens != NS_STYLE_HYPHENS_NONE &&
       HasSoftHyphenBefore(frag, mTextRun, offset, end)) {
     // Record a potential break after final soft hyphen
     aLineLayout.NotifyOptionalBreakPosition(mContent, offset + length,
@@ -6966,7 +7038,7 @@ nsTextFrame::ReflowText(nsLineLayout& aLineLayout, nscoord aAvailableWidth,
   aStatus = contentLength == maxContentLength
     ? NS_FRAME_COMPLETE : NS_FRAME_NOT_COMPLETE;
 
-  if (charsFit == 0 && length > 0) {
+  if (charsFit == 0 && length > 0 && !usedHyphenation) {
     // Couldn't place any text
     aStatus = NS_INLINE_LINE_BREAK_BEFORE();
   } else if (contentLength > 0 && mContentOffset + contentLength - 1 == newLineOffset) {
@@ -7443,6 +7515,7 @@ void
 nsTextFrame::AdjustOffsetsForBidi(PRInt32 aStart, PRInt32 aEnd)
 {
   AddStateBits(NS_FRAME_IS_BIDI);
+  mContent->DeleteProperty(nsGkAtoms::flowlength);
 
   /*
    * After Bidi resolution we may need to reassign text runs.

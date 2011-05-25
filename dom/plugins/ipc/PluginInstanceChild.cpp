@@ -169,20 +169,6 @@ PluginInstanceChild::PluginInstanceChild(const NPPluginFuncs* aPluginIface)
 #if defined(OS_WIN)
     InitPopupMenuHook();
 #endif // OS_WIN
-#ifdef MOZ_X11
-    // Maemo flash can render plugin with any provided rectangle and not require this quirk.
-#ifndef MOZ_PLATFORM_MAEMO
-    const char *description = NULL;
-    mPluginIface->getvalue(GetNPP(), NPPVpluginDescriptionString,
-                           &description);
-    if (description) {
-        NS_NAMED_LITERAL_CSTRING(flash10Head, "Shockwave Flash 10.");
-        if (StringBeginsWith(nsDependentCString(description), flash10Head)) {
-          PluginModuleChild::current()->AddQuirk(PluginModuleChild::QUIRK_FLASH_EXPOSE_COORD_TRANSLATION);
-        }
-    }
-#endif
-#endif
 }
 
 PluginInstanceChild::~PluginInstanceChild()
@@ -1567,53 +1553,11 @@ PluginInstanceChild::DestroyWinlessPopupSurrogate()
     mWinlessPopupSurrogateHWND = NULL;
 }
 
-/* windowless handle event helpers */
-
-static bool
-NeedsNestedEventCoverage(UINT msg)
-{
-    // Events we assume some sort of modal ui *might* be generated.
-    switch (msg) {
-        case WM_LBUTTONUP:
-        case WM_RBUTTONUP:
-        case WM_MBUTTONUP:
-        case WM_LBUTTONDOWN:
-        case WM_RBUTTONDOWN:
-        case WM_MBUTTONDOWN:
-        case WM_CONTEXTMENU:
-            return true;
-    }
-    return false;
-}
-
-static bool
-IsMouseInputEvent(UINT msg)
-{
-    switch (msg) {
-        case WM_MOUSEMOVE:
-        case WM_LBUTTONUP:
-        case WM_RBUTTONUP:
-        case WM_MBUTTONUP:
-        case WM_LBUTTONDOWN:
-        case WM_RBUTTONDOWN:
-        case WM_MBUTTONDOWN:
-        case WM_LBUTTONDBLCLK:
-        case WM_MBUTTONDBLCLK:
-        case WM_RBUTTONDBLCLK:
-            return true;
-    }
-    return false;
-}
-
 int16_t
 PluginInstanceChild::WinlessHandleEvent(NPEvent& event)
 {
     if (!mPluginIface->event)
         return false;
-
-    if (!NeedsNestedEventCoverage(event.event)) {
-        return mPluginIface->event(&mData, reinterpret_cast<void*>(&event));
-    }
 
     // Events that might generate nested event dispatch loops need
     // special handling during delivery.
@@ -1996,8 +1940,12 @@ PluginInstanceChild::AnswerSetPluginFocus()
     PR_LOG(gPluginLog, PR_LOG_DEBUG, ("%s", FULLFUNCTION));
 
 #if defined(OS_WIN)
-    // Parent is letting us know something set focus to the plugin.
-    if (::GetFocus() == mPluginWindowHWND)
+    // Parent is letting us know the dom set focus to the plugin. Note,
+    // focus can change during transit in certain edge cases, for example
+    // when a button click brings up a full screen window. Since we send
+    // this in response to a WM_SETFOCUS event on our parent, the parent
+    // should have focus when we receive this. If not, ignore the call.
+    if (::GetFocus() == mPluginWindowHWND || ::GetFocus() != mPluginParentHWND)
         return true;
     ::SetFocus(mPluginWindowHWND);
     return true;

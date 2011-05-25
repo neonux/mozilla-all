@@ -43,6 +43,8 @@
 
 #include "jsfun.h"
 
+struct JSContext;
+
 namespace js {
 
 class StackFrame;
@@ -57,6 +59,8 @@ class FrameGuard;
 class ExecuteFrameGuard;
 class DummyFrameGuard;
 class GeneratorFrameGuard;
+
+class ArgumentsObject;
 
 namespace mjit { struct JITScript; }
 namespace detail { struct OOMCheck; }
@@ -259,8 +263,8 @@ class StackFrame
         JSFunction      *fun;           /*   function frame, pre GetScopeChain */
     } exec;
     union {                             /* describes the arguments of a function */
-        uintN           nactual;        /*   pre GetArgumentsObject */
-        JSObject        *obj;           /*   post GetArgumentsObject */
+        uintN           nactual;        /*   before js_GetArgsObject */
+        ArgumentsObject *obj;           /*   after js_GetArgsObject */
         JSScript        *script;        /* eval has no args, but needs a script */
     } args;
     mutable JSObject    *scopeChain_;   /* current scope chain */
@@ -306,7 +310,8 @@ class StackFrame
     /* Used for eval. */
     inline void initEvalFrame(JSContext *cx, JSScript *script, StackFrame *prev,
                               uint32 flags);
-    inline void initGlobalFrame(JSScript *script, JSObject &chain, uint32 flags);
+    inline void initGlobalFrame(JSScript *script, JSObject &chain, StackFrame *prev,
+                                uint32 flags);
 
     /* Used when activating generators. */
     inline void stealFrameAndSlots(js::Value *vp, StackFrame *otherfp,
@@ -537,7 +542,8 @@ class StackFrame
     inline js::Value *actualArgsEnd() const;
 
     inline js::Value &canonicalActualArg(uintN i) const;
-    template <class Op> inline bool forEachCanonicalActualArg(Op op);
+    template <class Op>
+    inline bool forEachCanonicalActualArg(Op op, uintN start = 0, uintN count = uintN(-1));
     template <class Op> inline bool forEachFormalArg(Op op);
 
     inline void clearMissingArgs();
@@ -546,17 +552,17 @@ class StackFrame
         return !!(flags_ & HAS_ARGS_OBJ);
     }
 
-    JSObject &argsObj() const {
+    ArgumentsObject &argsObj() const {
         JS_ASSERT(hasArgsObj());
         JS_ASSERT(!isEvalFrame());
         return *args.obj;
     }
 
-    JSObject *maybeArgsObj() const {
+    ArgumentsObject *maybeArgsObj() const {
         return hasArgsObj() ? &argsObj() : NULL;
     }
 
-    inline void setArgsObj(JSObject &obj);
+    inline void setArgsObj(ArgumentsObject &obj);
 
     /*
      * This value
@@ -850,8 +856,8 @@ class StackFrame
         return !!(flags_ & DEBUGGER);
     }
 
-    bool isEvalOrDebuggerFrame() const {
-        return !!(flags_ & (EVAL | DEBUGGER));
+    bool isDirectEvalOrDebuggerFrame() const {
+        return (flags_ & (EVAL | DEBUGGER)) && !(flags_ & GLOBAL);
     }
 
     bool hasOverriddenArgs() const {
@@ -1078,6 +1084,7 @@ class StackSpace
      */
     JSObject &varObjForFrame(const StackFrame *fp);
 
+#ifdef JS_TRACER
     /*
      * LeaveTree requires stack allocation to rebuild the stack. There is no
      * good way to handle an OOM for these allocations, so this function checks
@@ -1085,6 +1092,7 @@ class StackSpace
      * conservative upper bound.
      */
     inline bool ensureEnoughSpaceToEnterTrace();
+#endif
 
     /*
      * If we let infinite recursion go until it hit the end of the contiguous

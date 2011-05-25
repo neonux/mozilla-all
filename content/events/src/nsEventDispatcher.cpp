@@ -733,6 +733,7 @@ nsEventDispatcher::CreateEvent(nsPresContext* aPresContext,
     case NS_GUI_EVENT:
     case NS_COMPOSITION_EVENT:
     case NS_SCROLLPORT_EVENT:
+    case NS_UI_EVENT:
       return NS_NewDOMUIEvent(aDOMEvent, aPresContext,
                               static_cast<nsGUIEvent*>(aEvent));
     case NS_SCROLLAREA_EVENT:
@@ -878,6 +879,8 @@ nsEventDispatcher::CreateEvent(nsPresContext* aPresContext,
     return NS_NewDOMTouchEvent(aDOMEvent, aPresContext, nsnull);
   if (aEventType.LowerCaseEqualsLiteral("hashchangeevent"))
     return NS_NewDOMHashChangeEvent(aDOMEvent, aPresContext, nsnull);
+  if (aEventType.LowerCaseEqualsLiteral("customevent"))
+    return NS_NewDOMCustomEvent(aDOMEvent, aPresContext, nsnull);
 
   return NS_ERROR_DOM_NOT_SUPPORTED_ERR;
 }

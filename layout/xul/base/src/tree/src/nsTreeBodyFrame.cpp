@@ -70,7 +70,6 @@
 #include "nsIDOMNodeList.h"
 #include "nsIDOMDocument.h"
 #include "nsIDOMNSDocument.h"
-#include "nsIDOMDocumentEvent.h"
 #include "nsIDOMXULElement.h"
 #include "nsIDocument.h"
 #include "nsIContent.h"
@@ -3527,7 +3526,6 @@ nsTreeBodyFrame::PaintText(PRInt32              aRowIndex,
   NS_PRECONDITION(aColumn && aColumn->GetFrame(), "invalid column passed");
 
   PRBool isRTL = GetStyleVisibility()->mDirection == NS_STYLE_DIRECTION_RTL;
-  nscoord rightEdge = aTextRect.XMost();
 
   // Now obtain the text for our cell.
   nsAutoString text;
@@ -4460,14 +4458,13 @@ nsTreeBodyFrame::FireRowCountChangedEvent(PRInt32 aIndex, PRInt32 aCount)
   if (!content)
     return;
 
-  nsCOMPtr<nsIDOMDocumentEvent> domEventDoc =
-    do_QueryInterface(content->GetOwnerDoc());
-  if (!domEventDoc)
+  nsCOMPtr<nsIDOMDocument> domDoc = do_QueryInterface(content->GetOwnerDoc());
+  if (!domDoc)
     return;
 
   nsCOMPtr<nsIDOMEvent> event;
-  domEventDoc->CreateEvent(NS_LITERAL_STRING("datacontainerevents"),
-                           getter_AddRefs(event));
+  domDoc->CreateEvent(NS_LITERAL_STRING("datacontainerevents"),
+                      getter_AddRefs(event));
 
   nsCOMPtr<nsIDOMDataContainerEvent> treeEvent(do_QueryInterface(event));
   if (!treeEvent)
@@ -4516,14 +4513,13 @@ nsTreeBodyFrame::FireInvalidateEvent(PRInt32 aStartRowIdx, PRInt32 aEndRowIdx,
   if (!content)
     return;
 
-  nsCOMPtr<nsIDOMDocumentEvent> domEventDoc =
-    do_QueryInterface(content->GetOwnerDoc());
-  if (!domEventDoc)
+  nsCOMPtr<nsIDOMDocument> domDoc = do_QueryInterface(content->GetOwnerDoc());
+  if (!domDoc)
     return;
 
   nsCOMPtr<nsIDOMEvent> event;
-  domEventDoc->CreateEvent(NS_LITERAL_STRING("datacontainerevents"),
-                           getter_AddRefs(event));
+  domDoc->CreateEvent(NS_LITERAL_STRING("datacontainerevents"),
+                      getter_AddRefs(event));
 
   nsCOMPtr<nsIDOMDataContainerEvent> treeEvent(do_QueryInterface(event));
   if (!treeEvent)

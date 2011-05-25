@@ -81,28 +81,21 @@ ConservativeGCStats::dump(FILE *fp)
 
 #ifdef JS_GCMETER
 void
-UpdateCompartmentStats(JSCompartment *comp, unsigned thingKind, uint32 nlivearenas,
-                       uint32 nkilledArenas, uint32 nthings)
+UpdateCompartmentGCStats(JSCompartment *comp, unsigned thingKind)
 {
-    size_t narenas = 0;
-    JSGCArenaStats *compSt = &comp->compartmentStats[thingKind];
+    JSGCArenaStats *compSt = &comp->arenas[thingKind].stats;
     JSGCArenaStats *globSt = &comp->rt->globalArenaStats[thingKind];
-    narenas = nlivearenas + nkilledArenas;
-    JS_ASSERT(narenas >= compSt->livearenas);
+    JS_ASSERT(compSt->narenas >= compSt->livearenas);
+    compSt->newarenas     = compSt->narenas - compSt->livearenas;
+    if (compSt->maxarenas < compSt->narenas)
+        compSt->maxarenas = compSt->narenas;
+    compSt->totalarenas  += compSt->narenas;
 
-    compSt->newarenas     = narenas - compSt->livearenas;
-    compSt->narenas       = narenas;
-    compSt->livearenas    = nlivearenas;
-    if (compSt->maxarenas < narenas)
-        compSt->maxarenas = narenas;
-    compSt->totalarenas  += narenas;
-
-    compSt->nthings       = nthings;
-    if (compSt->maxthings < nthings)
-        compSt->maxthings = nthings;
-    compSt->totalthings  += nthings;
+    if (compSt->maxthings < compSt->nthings)
+        compSt->maxthings = compSt->nthings;
+    compSt->totalthings  += compSt->nthings;
     globSt->newarenas    += compSt->newarenas;
-    globSt->narenas      += narenas;
+    globSt->narenas      += compSt->narenas;
     globSt->livearenas   += compSt->livearenas;
     globSt->totalarenas  += compSt->totalarenas;
     globSt->nthings      += compSt->nthings;
@@ -111,6 +104,23 @@ UpdateCompartmentStats(JSCompartment *comp, unsigned thingKind, uint32 nlivearen
         globSt->maxarenas = compSt->maxarenas;
     if (globSt->maxthings < compSt->maxthings)
         globSt->maxthings = compSt->maxthings;
+}
+
+void
+UpdateAllCompartmentGCStats(JSCompartment *comp)
+{
+    /*
+     * The stats for the list arenas scheduled for the background finalization
+     * are updated after that finishes.
+     */
+    JS_ASSERT(comp->rt->gcRunning);
+    for (unsigned i = 0; i != JS_ARRAY_LENGTH(comp->arenas); ++i) {
+#ifdef JS_THREADSAFE
+        if (comp->arenas[i].willBeFinalizedLater())
+            continue;
+#endif
+        UpdateCompartmentGCStats(comp, i);
+    }
 }
 
 static const char *const GC_ARENA_NAMES[] = {
@@ -262,13 +272,59 @@ DumpCompartmentStats(JSCompartment *comp, FILE *fp)
     else
         fprintf(fp, "\n**** Compartment Allocation Statistics: %p ****\n\n", (void *) comp);
 
-    DumpArenaStats(&comp->compartmentStats[0], fp);
+    for (unsigned i = 0; i != FINALIZE_LIMIT; ++i)
+        DumpArenaStats(&comp->arenas[i].stats, fp);
 }
 
 #endif
 
 } //gc
 } //js
+
+#ifdef JSGC_TESTPILOT
+typedef JSRuntime::GCData GCData;
+
+JS_PUBLIC_API(bool)
+JS_GetGCInfoEnabled(JSRuntime *rt)
+{
+    return rt->gcData.infoEnabled;
+}
+
+JS_PUBLIC_API(void)
+JS_SetGCInfoEnabled(JSRuntime *rt, bool enabled)
+{
+    rt->gcData.infoEnabled = enabled;
+}
+
+JS_PUBLIC_API(JSGCInfo *)
+JS_GCInfoFront(JSRuntime *rt)
+{
+    GCData &data = rt->gcData;
+    JS_ASSERT(data.infoEnabled);
+    if (!data.count)
+        return NULL;
+
+    return &data.info[data.start];
+}
+
+JS_PUBLIC_API(bool)
+JS_GCInfoPopFront(JSRuntime *rt)
+{
+    GCData &data = rt->gcData;
+    JS_ASSERT(data.infoEnabled);
+    JS_ASSERT(data.count);
+
+    if (data.count >= GCData::INFO_LIMIT) {
+        data.count = data.start = 0;
+        return true;
+    }
+
+    data.start = (data.start + 1) % GCData::INFO_LIMIT;
+    data.count -= 1;
+    return false;
+}
+#endif
+
 
 #ifdef JS_GCMETER
 
@@ -288,7 +344,6 @@ js_DumpGCStats(JSRuntime *rt, FILE *fp)
 #ifdef DEBUG
         fprintf(fp, "      max trace later count: %lu\n", ULSTAT(maxunmarked));
 #endif
-        fprintf(fp, "potentially useful GC calls: %lu\n", ULSTAT(poke));
         fprintf(fp, "  thing arenas freed so far: %lu\n\n", ULSTAT(afree));
     }
 
@@ -370,30 +425,76 @@ GCMarker::dumpConservativeRoots()
 }
 #endif /* JS_DUMP_CONSERVATIVE_GC_ROOTS */
 
-#ifdef MOZ_GCTIMER
+#if defined(MOZ_GCTIMER) || defined(JSGC_TESTPILOT)
 
 jsrefcount newChunkCount = 0;
 jsrefcount destroyChunkCount = 0;
 
-GCTimer::GCTimer() {
+GCTimer::GCTimer(JSRuntime *rt, JSCompartment *comp)
+  : rt(rt), isCompartmental(comp),
+    enabled(rt->gcData.isTimerEnabled())
+{
+    clearTimestamps();
     getFirstEnter();
-    memset(this, 0, sizeof(GCTimer));
     enter = PRMJ_Now();
 }
 
 uint64
-GCTimer::getFirstEnter() {
-    static uint64 firstEnter = PRMJ_Now();
-    return firstEnter;
+GCTimer::getFirstEnter()
+{
+    JSRuntime::GCData &data = rt->gcData;
+    if (enabled && !data.firstEnterValid)
+        data.setFirstEnter(PRMJ_Now());
+
+    return data.firstEnter;
 }
 
 #define TIMEDIFF(start, end) ((double)(end - start) / PRMJ_USEC_PER_MSEC)
 
 void
-GCTimer::finish(bool lastGC) {
+GCTimer::finish(bool lastGC)
+{
+#if defined(JSGC_TESTPILOT)
+    if (!enabled) {
+        newChunkCount = 0;
+        destroyChunkCount = 0;
+        return;
+    }
+#endif
     end = PRMJ_Now();
 
     if (startMark > 0) {
+        double appTime = TIMEDIFF(getFirstEnter(), enter);
+        double gcTime = TIMEDIFF(enter, end);
+        double waitTime = TIMEDIFF(enter, startMark);
+        double markTime = TIMEDIFF(startMark, startSweep);
+        double sweepTime = TIMEDIFF(startSweep, sweepDestroyEnd);
+        double sweepObjTime = TIMEDIFF(startSweep, sweepObjectEnd);
+        double sweepStringTime = TIMEDIFF(sweepObjectEnd, sweepStringEnd);
+        double sweepShapeTime = TIMEDIFF(sweepStringEnd, sweepShapeEnd);
+        double destroyTime = TIMEDIFF(sweepShapeEnd, sweepDestroyEnd);
+        double endTime = TIMEDIFF(sweepDestroyEnd, end);
+
+#if defined(JSGC_TESTPILOT)
+        GCData &data = rt->gcData;
+        size_t oldLimit = (data.start + data.count) % GCData::INFO_LIMIT;
+        data.count += 1;
+
+        JSGCInfo &info = data.info[oldLimit];
+        info.appTime = appTime;
+        info.gcTime = gcTime;
+        info.waitTime = waitTime;
+        info.markTime = markTime;
+        info.sweepTime = sweepTime;
+        info.sweepObjTime = sweepObjTime;
+        info.sweepStringTime = sweepStringTime;
+        info.sweepShapeTime = sweepShapeTime;
+        info.destroyTime = destroyTime;
+        info.endTime = endTime;
+        info.isCompartmental = isCompartmental;
+#endif
+
+#if defined(MOZ_GCTIMER)
         if (JS_WANT_GC_SUITE_PRINT) {
             fprintf(stderr, "%f %f %f\n",
                     TIMEDIFF(enter, end),
@@ -405,21 +506,15 @@ GCTimer::finish(bool lastGC) {
             if (!gcFile) {
                 gcFile = fopen("gcTimer.dat", "a");
 
-                fprintf(gcFile, "     AppTime,  Total,   Mark,  Sweep, FinObj,");
-                fprintf(gcFile, " FinStr, SwShapes, Destroy, +Chunks, -Chunks\n");
+                fprintf(gcFile, "     AppTime,  Total,   Wait,   Mark,  Sweep, FinObj,"
+                                " FinStr, SwShapes, Destroy,    End, +Chu, -Chu\n");
             }
             JS_ASSERT(gcFile);
-            /*               App   , Tot  , Mar  , Swe  , FiO  , FiS  , SwS  , Des */
-            fprintf(gcFile, "%12.0f, %6.1f, %6.1f, %6.1f, %6.1f, %6.1f, %8.1f,  %6.1f, ",
-                    TIMEDIFF(getFirstEnter(), enter),
-                    TIMEDIFF(enter, end),
-                    TIMEDIFF(startMark, startSweep),
-                    TIMEDIFF(startSweep, sweepDestroyEnd),
-                    TIMEDIFF(startSweep, sweepObjectEnd),
-                    TIMEDIFF(sweepObjectEnd, sweepStringEnd),
-                    TIMEDIFF(sweepStringEnd, sweepShapeEnd),
-                    TIMEDIFF(sweepShapeEnd, sweepDestroyEnd));
-            fprintf(gcFile, "%7d, %7d\n", newChunkCount, destroyChunkCount);
+            /*               App   , Tot  , Wai  , Mar  , Swe  , FiO  , FiS  , SwS  , Des   , End */
+            fprintf(gcFile, "%12.0f, %6.1f, %6.1f, %6.1f, %6.1f, %6.1f, %6.1f, %8.1f,  %6.1f, %6.1f, ",
+                    appTime, gcTime, waitTime, markTime, sweepTime, sweepObjTime, sweepStringTime,
+                    sweepShapeTime, destroyTime, endTime);
+            fprintf(gcFile, "%4d, %4d\n", newChunkCount, destroyChunkCount);
             fflush(gcFile);
 
             if (lastGC) {
@@ -427,6 +522,7 @@ GCTimer::finish(bool lastGC) {
                 gcFile = NULL;
             }
         }
+#endif
     }
     newChunkCount = 0;
     destroyChunkCount = 0;

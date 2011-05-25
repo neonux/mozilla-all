@@ -87,6 +87,7 @@ _TEST_FILES = \
 		bug529119-window.html \
 		test_bug540462.html \
 		file_bug540462.html \
+		test_bug551225.html \
 		test_bug580069.html \
 		file_bug580069_1.html \
 		file_bug580069_2.sjs \
@@ -100,6 +101,8 @@ _TEST_FILES = \
 		test_bug640387_1.html \
 		test_bug640387_2.html \
 		file_bug640387.html \
+		test_bug653741.html \
+		file_bug653741.html \
 		test_framedhistoryframes.html \
 		test_windowedhistoryframes.html \
 		historyframes.html \

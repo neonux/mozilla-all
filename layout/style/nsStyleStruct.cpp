@@ -1822,10 +1822,13 @@ PRBool nsStyleBackground::IsTransparent() const
 void
 nsStyleBackground::Position::SetInitialValues()
 {
+  // Initial value is "0% 0%"
   mXPosition.mPercent = 0.0f;
   mXPosition.mLength = 0;
+  mXPosition.mHasPercent = PR_TRUE;
   mYPosition.mPercent = 0.0f;
   mYPosition.mLength = 0;
+  mYPosition.mHasPercent = PR_TRUE;
 }
 
 void
@@ -2029,6 +2032,7 @@ nsStyleDisplay::nsStyleDisplay()
   mSpecifiedTransform = nsnull;
   mTransformOrigin[0].SetPercentValue(0.5f); // Transform is centered on origin
   mTransformOrigin[1].SetPercentValue(0.5f); 
+  mOrient = NS_STYLE_ORIENT_HORIZONTAL;
 
   mTransitions.AppendElement();
   NS_ABORT_IF_FALSE(mTransitions.Length() == 1,
@@ -2089,6 +2093,7 @@ nsStyleDisplay::nsStyleDisplay(const nsStyleDisplay& aSource)
   mClipFlags = aSource.mClipFlags;
   mClip = aSource.mClip;
   mOpacity = aSource.mOpacity;
+  mOrient = aSource.mOrient;
 
   /* Copy over the transformation information. */
   mSpecifiedTransform = aSource.mSpecifiedTransform;
@@ -2127,6 +2132,7 @@ nsChangeHint nsStyleDisplay::CalcDifference(const nsStyleDisplay& aOther) const
       || mBreakBefore != aOther.mBreakBefore
       || mBreakAfter != aOther.mBreakAfter
       || mAppearance != aOther.mAppearance
+      || mOrient != aOther.mOrient
       || mClipFlags != aOther.mClipFlags || !mClip.IsEqualInterior(aOther.mClip))
     NS_UpdateHint(hint, NS_CombineHint(nsChangeHint_ReflowFrame, nsChangeHint_RepaintFrame));
 
@@ -2700,6 +2706,7 @@ nsStyleText::nsStyleText(void)
   mTextTransform = NS_STYLE_TEXT_TRANSFORM_NONE;
   mWhiteSpace = NS_STYLE_WHITESPACE_NORMAL;
   mWordWrap = NS_STYLE_WORDWRAP_NORMAL;
+  mHyphens = NS_STYLE_HYPHENS_MANUAL;
 
   mLetterSpacing.SetNormalValue();
   mLineHeight.SetNormalValue();
@@ -2715,6 +2722,7 @@ nsStyleText::nsStyleText(const nsStyleText& aSource)
     mTextTransform(aSource.mTextTransform),
     mWhiteSpace(aSource.mWhiteSpace),
     mWordWrap(aSource.mWordWrap),
+    mHyphens(aSource.mHyphens),
     mTabSize(aSource.mTabSize),
     mLetterSpacing(aSource.mLetterSpacing),
     mLineHeight(aSource.mLineHeight),
@@ -2741,6 +2749,7 @@ nsChangeHint nsStyleText::CalcDifference(const nsStyleText& aOther) const
       (mTextTransform != aOther.mTextTransform) ||
       (mWhiteSpace != aOther.mWhiteSpace) ||
       (mWordWrap != aOther.mWordWrap) ||
+      (mHyphens != aOther.mHyphens) ||
       (mLetterSpacing != aOther.mLetterSpacing) ||
       (mLineHeight != aOther.mLineHeight) ||
       (mTextIndent != aOther.mTextIndent) ||

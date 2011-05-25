@@ -75,7 +75,7 @@ static const char* const sEventNames[] = {
   "DOMAttrModified", "DOMCharacterDataModified",
   "DOMActivate", "DOMFocusIn", "DOMFocusOut",
   "pageshow", "pagehide", "DOMMouseScroll", "MozMousePixelScroll",
-  "offline", "online", "copy", "cut", "paste",
+  "offline", "online", "copy", "cut", "paste", "open", "message",
 #ifdef MOZ_SVG
   "SVGLoad", "SVGUnload", "SVGAbort", "SVGError", "SVGResize", "SVGScroll",
   "SVGZoom",
@@ -1261,6 +1261,10 @@ const char* nsDOMEvent::GetEventName(PRUint32 aEventType)
     return sEventNames[eDOMEvents_cut];
   case NS_PASTE:
     return sEventNames[eDOMEvents_paste];
+  case NS_OPEN:
+    return sEventNames[eDOMEvents_open];
+  case NS_MESSAGE:
+    return sEventNames[eDOMEvents_message];
 #ifdef MOZ_SVG
   case NS_SVG_LOAD:
     return sEventNames[eDOMEvents_SVGLoad];
@@ -1388,6 +1392,12 @@ nsDOMEvent::GetPreventDefault(PRBool* aReturn)
   NS_ENSURE_ARG_POINTER(aReturn);
   *aReturn = mEvent && (mEvent->flags & NS_EVENT_FLAG_NO_DEFAULT);
   return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDOMEvent::GetDefaultPrevented(PRBool* aReturn)
+{
+  return GetPreventDefault(aReturn);
 }
 
 void

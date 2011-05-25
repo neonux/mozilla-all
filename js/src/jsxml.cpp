@@ -2872,7 +2872,7 @@ ToXMLName(JSContext *cx, jsval v, jsid *funidp)
             return NULL;
     }
 
-    atomizedName = js_AtomizeString(cx, name, 0);
+    atomizedName = js_AtomizeString(cx, name);
     if (!atomizedName)
         return NULL;
 
@@ -3495,26 +3495,6 @@ Insert(JSContext *cx, JSXML *xml, uint32 i, jsval v)
     } else {
         vxml->parent = xml;
         XMLARRAY_SET_MEMBER(&xml->xml_kids, i, vxml);
-    }
-    return JS_TRUE;
-}
-
-static JSBool
-IndexToId(JSContext *cx, uint32 index, jsid *idp)
-{
-    JSAtom *atom;
-    JSString *str;
-
-    if (index <= JSID_INT_MAX) {
-        *idp = INT_TO_JSID(index);
-    } else {
-        str = js_NumberToString(cx, (jsdouble) index);
-        if (!str)
-            return JS_FALSE;
-        atom = js_AtomizeString(cx, str, 0);
-        if (!atom)
-            return JS_FALSE;
-        *idp = ATOM_TO_JSID(atom);
     }
     return JS_TRUE;
 }
@@ -5364,7 +5344,7 @@ ValueToId(JSContext *cx, jsval v, AutoIdRooter *idr)
         else if (!js_ValueToStringId(cx, Valueify(v), idr->addr()))
             return JS_FALSE;
     } else if (JSVAL_IS_STRING(v)) {
-        JSAtom *atom = js_AtomizeString(cx, JSVAL_TO_STRING(v), 0);
+        JSAtom *atom = js_AtomizeString(cx, JSVAL_TO_STRING(v));
         if (!atom)
             return JS_FALSE;
         *idr->addr() = ATOM_TO_JSID(atom);

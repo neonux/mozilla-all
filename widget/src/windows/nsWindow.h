@@ -184,7 +184,7 @@ public:
 #ifdef MOZ_XUL
   virtual void            SetTransparencyMode(nsTransparencyMode aMode);
   virtual nsTransparencyMode GetTransparencyMode();
-  virtual void            UpdateTransparentRegion(const nsIntRegion& aTransparentRegion);
+  virtual void            UpdateOpaqueRegion(const nsIntRegion& aOpaqueRegion);
 #endif // MOZ_XUL
 #ifdef NS_ENABLE_TSF
   NS_IMETHOD              OnIMEFocusChange(PRBool aFocus);
@@ -411,8 +411,8 @@ protected:
   BOOL                    OnInputLangChange(HKL aHKL);
   PRBool                  OnPaint(HDC aDC, PRUint32 aNestingLevel);
   void                    OnWindowPosChanged(WINDOWPOS *wp, PRBool& aResult);
-  PRBool                  OnMouseWheel(UINT msg, WPARAM wParam, LPARAM lParam, 
-                                       PRBool& result, PRBool& getWheelInfo,
+  PRBool                  OnMouseWheel(UINT aMessage, WPARAM aWParam,
+                                       LPARAM aLParam, PRBool& aHandled,
                                        LRESULT *aRetValue);
   void                    OnWindowPosChanging(LPWINDOWPOS& info);
 
@@ -616,6 +616,21 @@ protected:
   // was reirected to SendInput() API by OnKeyDown().
   static MSG            sRedirectedKeyDown;
 
+  static PRBool sEnablePixelScrolling;
+  static PRBool sNeedsToInitMouseWheelSettings;
+  static ULONG sMouseWheelScrollLines;
+  static ULONG sMouseWheelScrollChars;
+  static void InitMouseWheelScrollData();
+
+  static HWND sLastMouseWheelWnd;
+  static PRInt32 sRemainingDeltaForScroll;
+  static PRInt32 sRemainingDeltaForPixel;
+  static PRBool sLastMouseWheelDeltaIsPositive;
+  static PRBool sLastMouseWheelOrientationIsVertical;
+  static PRBool sLastMouseWheelUnitIsPage;
+  static PRUint32 sLastMouseWheelTime; // in milliseconds
+  static void ResetRemainingWheelDelta();
+
   // If a window receives WM_KEYDOWN message or WM_SYSKEYDOWM message which is
   // redirected message, OnKeyDowm() prevents to dispatch NS_KEY_DOWN event
   // because it has been dispatched before the message was redirected.
@@ -649,7 +664,6 @@ protected:
     nsRefPtr<nsWindow> mWindow;
     const MSG &mMsg;
   };
-
 };
 
 /**

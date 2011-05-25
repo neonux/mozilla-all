@@ -172,7 +172,8 @@ pref("signon.expireMasterPassword", false);
 pref("signon.SignonFileName", "signons.txt");
 
 /* form helper */
-pref("formhelper.enabled", true);
+// 0 = disabled, 1 = enabled, 2 = dynamic depending on screen size
+pref("formhelper.mode", 2);
 pref("formhelper.autozoom", true);
 pref("formhelper.autozoom.caret", true);
 pref("formhelper.restore", false);
@@ -577,8 +578,8 @@ pref("media.preload.auto", 2);    // preload metadata if preload=auto
 //  0: don't show fullscreen keyboard
 //  1: always show fullscreen keyboard
 // -1: show fullscreen keyboard based on threshold pref
-pref("widget.ime.android.landscape_fullscreen", 0);
-pref("widget.ime.android.fullscreen_threshold", 300); // in hundreths of inches
+pref("widget.ime.android.landscape_fullscreen", -1);
+pref("widget.ime.android.fullscreen_threshold", 250); // in hundreths of inches
 
 // optimize images memory usage
 pref("image.mem.decodeondraw", true);
@@ -641,3 +642,6 @@ pref("urlclassifier.updatecachemax", 4194304);
 pref("browser.safebrowsing.malware.reportURL", "http://safebrowsing.clients.google.com/safebrowsing/diagnostic?client=%NAME%&hl=%LOCALE%&site=");
 #endif
 
+// prevent focus to show/hide the virtual keyboard if the action is not
+// initiated by a user
+pref("content.ime.strict_policy", true);

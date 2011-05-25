@@ -41,6 +41,9 @@ fails-if(Android) == conditions-01.svg pass.svg # bug 652050
 == currentColor-01.svg pass.svg
 == currentColor-02.svg pass.svg
 == currentColor-03.svg pass.svg
+== data-uri-with-filter-01.xhtml data-uri-with-filter-01-ref.svg
+== data-uri-with-gradient-01.xhtml data-uri-with-gradient-01-ref.svg
+== data-uri-with-pattern-01.xhtml pass.svg
 == dynamic-attr-removal-1.svg pass.svg
 == dynamic-attr-removal-2.svg pass.svg
 == dynamic-attr-change-1.svg pass.svg
@@ -152,6 +155,7 @@ random-if(gtk2Widget) == objectBoundingBox-and-fePointLight-01.svg objectBoundin
 == path-02.svg pass.svg
 == path-03.svg pass.svg
 == path-04.svg pass.svg
+== path-05.svg pass.svg
 == pathLength-01.svg pass.svg
 == pathLength-02.svg pass.svg
 == pattern-invalid-01.svg pattern-invalid-01-ref.svg
@@ -183,7 +187,7 @@ random-if(gtk2Widget) == objectBoundingBox-and-fePointLight-01.svg objectBoundin
 == svg-in-foreignObject-02.xhtml svg-in-foreignObject-01-ref.xhtml # reuse -01-ref.xhtml
 random-if(gtk2Widget) == text-font-weight-01.svg text-font-weight-01-ref.svg # bug 386713
 fails-if(Android) == switch-01.svg pass.svg # bug 652050
-asserts(3) == symbol-01.svg symbol-01-ref.svg # see bug 563481
+== symbol-01.svg symbol-01-ref.svg
 == text-gradient-01.svg text-gradient-01-ref.svg
 random-if(winWidget) == text-gradient-02.svg text-gradient-02-ref.svg # see bug 590101
 == text-gradient-03.svg pass.svg
@@ -196,6 +200,7 @@ fails-if(Android) random-if(gtk2Widget) != text-language-01.xhtml text-language-
 == text-layout-01.svg text-layout-01-ref.svg
 == text-layout-02.svg text-layout-02-ref.svg
 == text-layout-03.svg text-layout-03-ref.svg
+== text-layout-04.svg text-layout-04-ref.svg
 == text-scale-01.svg text-scale-01-ref.svg
 == text-stroke-scaling-01.svg text-stroke-scaling-01-ref.svg
 == stroke-linecap-square-w-zero-length-segs-01.svg pass.svg

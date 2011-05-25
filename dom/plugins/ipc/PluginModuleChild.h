@@ -55,6 +55,10 @@
 #include "nsTHashtable.h"
 #include "nsHashKeys.h"
 
+#ifdef OS_MACOSX
+#include "PluginInterposeOSX.h"
+#endif
+
 #include "mozilla/plugins/PPluginModuleChild.h"
 #include "mozilla/plugins/PluginInstanceChild.h"
 #include "mozilla/plugins/PluginIdentifierChild.h"
@@ -157,6 +161,9 @@ protected:
 
     NS_NORETURN void QuickExit();
 
+    NS_OVERRIDE virtual bool
+    RecvProcessNativeEventsInRPCCall();
+
 public:
     PluginModuleChild();
     virtual ~PluginModuleChild();
@@ -221,6 +228,28 @@ public:
     void PluginHideWindow(uint32_t window_id) {
         SendPluginHideWindow(window_id);
     }
+
+    void SetCursor(NSCursorInfo& cursorInfo) {
+        SendSetCursor(cursorInfo);
+    }
+
+    void ShowCursor(bool show) {
+        SendShowCursor(show);
+    }
+
+    void PushCursor(NSCursorInfo& cursorInfo) {
+        SendPushCursor(cursorInfo);
+    }
+
+    void PopCursor() {
+        SendPopCursor();
+    }
+
+    bool GetNativeCursorsSupported() {
+        bool supported = false;
+        SendGetNativeCursorsSupported(&supported);
+        return supported;
+    }
 #endif
 
     // Quirks mode support for various plugin mime types
@@ -256,13 +285,13 @@ public:
     };
 
     int GetQuirks() { return mQuirks; }
+
+private:
     void AddQuirk(PluginQuirks quirk) {
       if (mQuirks == QUIRKS_NOT_INITIALIZED)
         mQuirks = 0;
       mQuirks |= quirk;
     }
-
-private:
     void InitQuirksModes(const nsCString& aMimeType);
     bool InitGraphics();
     void DeinitGraphics();

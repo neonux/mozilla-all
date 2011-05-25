@@ -333,16 +333,22 @@ JSID_IS_ZERO(jsid id)
 }
 
 JS_PUBLIC_API(JSBool)
-JS_StringHasBeenInterned(JSString *str);
+JS_StringHasBeenInterned(JSContext *cx, JSString *str);
 
-/* A jsid may only hold an interned JSString. */
+/*
+ * Only JSStrings that have been interned via the JSAPI can be turned into
+ * jsids by API clients.
+ *
+ * N.B. if a jsid is backed by a string which has not been interned, that
+ * string must be appropriately rooted to avoid being collected by the GC.
+ */
 static JS_ALWAYS_INLINE jsid
-INTERNED_STRING_TO_JSID(JSString *str)
+INTERNED_STRING_TO_JSID(JSContext *cx, JSString *str)
 {
     jsid id;
     JS_ASSERT(str);
-    JS_ASSERT(JS_StringHasBeenInterned(str));
     JS_ASSERT(((size_t)str & JSID_TYPE_MASK) == 0);
+    JS_ASSERT(JS_StringHasBeenInterned(cx, str));
     JSID_BITS(id) = (size_t)str;
     return id;
 }
@@ -1786,30 +1792,20 @@ typedef enum JSGCParamKey {
     /* Hoard stackPools for this long, in ms, default is 30 seconds. */
     JSGC_STACKPOOL_LIFESPAN = 2,
 
-    /*
-     * The factor that defines when the GC is invoked. The factor is a
-     * percent of the memory allocated by the GC after the last run of
-     * the GC. When the current memory allocated by the GC is more than
-     * this percent then the GC is invoked. The factor cannot be less
-     * than 100 since the current memory allocated by the GC cannot be less
-     * than the memory allocated after the last run of the GC.
-     */
-    JSGC_TRIGGER_FACTOR = 3,
-
     /* Amount of bytes allocated by the GC. */
-    JSGC_BYTES = 4,
+    JSGC_BYTES = 3,
 
     /* Number of times when GC was invoked. */
-    JSGC_NUMBER = 5,
+    JSGC_NUMBER = 4,
 
     /* Max size of the code cache in bytes. */
-    JSGC_MAX_CODE_CACHE_BYTES = 6,
+    JSGC_MAX_CODE_CACHE_BYTES = 5,
 
     /* Select GC mode. */
-    JSGC_MODE = 7,
+    JSGC_MODE = 6,
 
     /* Number of GC chunks waiting to expire. */
-    JSGC_UNUSED_CHUNKS = 8
+    JSGC_UNUSED_CHUNKS = 7
 } JSGCParamKey;
 
 typedef enum JSGCMode {
@@ -3692,6 +3688,15 @@ JS_NewUCRegExpObjectNoStatics(JSContext *cx, jschar *chars, size_t length, uintN
 extern JS_PUBLIC_API(JSBool)
 JS_ExecuteRegExpNoStatics(JSContext *cx, JSObject *reobj, jschar *chars, size_t length,
                           size_t *indexp, JSBool test, jsval *rval);
+
+extern JS_PUBLIC_API(JSBool)
+JS_ObjectIsRegExp(JSContext *cx, JSObject *obj);
+
+extern JS_PUBLIC_API(uintN)
+JS_GetRegExpFlags(JSContext *cx, JSObject *obj);
+
+extern JS_PUBLIC_API(JSString *)
+JS_GetRegExpSource(JSContext *cx, JSObject *obj);
 
 /************************************************************************/
 

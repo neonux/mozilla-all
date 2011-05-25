@@ -109,6 +109,8 @@ nsDocAccessible::
   mDocument(aDocument), mScrollPositionChangedTicks(0), mIsLoaded(PR_FALSE),
   mCacheRoot(nsnull), mIsPostCacheProcessing(PR_FALSE)
 {
+  mFlags |= eDocAccessible;
+
   mDependentIDsHash.Init();
   // XXX aaronl should we use an algorithm for the initial cache size?
   mAccessibleCache.Init(kDefaultCacheSize);
@@ -273,21 +275,16 @@ nsDocAccessible::SetRoleMapEntry(nsRoleMapEntry* aRoleMapEntry)
   }
 }
 
-NS_IMETHODIMP 
-nsDocAccessible::GetDescription(nsAString& aDescription)
+void
+nsDocAccessible::Description(nsString& aDescription)
 {
   if (mParent)
-    mParent->GetDescription(aDescription);
+    mParent->Description(aDescription);
 
-  if (aDescription.IsEmpty()) {
-    nsAutoString description;
+  if (aDescription.IsEmpty())
     nsTextEquivUtils::
       GetTextEquivFromIDRefs(this, nsAccessibilityAtoms::aria_describedby,
-                             description);
-    aDescription = description;
-  }
-
-  return NS_OK;
+                             aDescription);
 }
 
 // nsAccessible public method
@@ -1040,6 +1037,14 @@ nsDocAccessible::AttributeChangedImpl(nsIContent* aContent, PRInt32 aNameSpaceID
     return;
   }
 
+  if (aAttribute == nsAccessibilityAtoms::aria_busy) {
+    PRBool isOn = !aContent->AttrValueIs(aNameSpaceID, aAttribute,
+                                         nsAccessibilityAtoms::_true, eCaseMatters);
+    nsRefPtr<AccEvent> event = new AccStateChangeEvent(aContent, states::BUSY, isOn);
+    FireDelayedAccessibleEvent(event);
+    return;
+  }
+
   if (aAttribute == nsAccessibilityAtoms::selected ||
       aAttribute == nsAccessibilityAtoms::aria_selected) {
     // ARIA or XUL selection
@@ -1119,7 +1124,8 @@ nsDocAccessible::ARIAAttributeChanged(nsIContent* aContent, nsIAtom* aAttribute)
   // at least until native API comes up with a more meaningful event.
   if (aAttribute == nsAccessibilityAtoms::aria_grabbed ||
       aAttribute == nsAccessibilityAtoms::aria_dropeffect ||
-      aAttribute == nsAccessibilityAtoms::aria_hidden) {
+      aAttribute == nsAccessibilityAtoms::aria_hidden ||
+      aAttribute == nsAccessibilityAtoms::aria_sort) {
     FireDelayedAccessibleEvent(nsIAccessibleEvent::EVENT_OBJECT_ATTRIBUTE_CHANGED,
                                aContent);
   }

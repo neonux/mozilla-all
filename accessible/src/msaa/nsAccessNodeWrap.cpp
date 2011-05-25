@@ -67,7 +67,6 @@ LPFNLRESULTFROMOBJECT nsAccessNodeWrap::gmLresultFromObject = NULL;
 LPFNNOTIFYWINEVENT nsAccessNodeWrap::gmNotifyWinEvent = nsnull;
 LPFNGETGUITHREADINFO nsAccessNodeWrap::gmGetGUIThreadInfo = nsnull;
 
-PRBool nsAccessNodeWrap::gIsEnumVariantSupportDisabled = 0;
 // Used to determine whether an IAccessible2 compatible screen reader is loaded.
 PRBool nsAccessNodeWrap::gIsIA2Disabled = PR_FALSE;
 
@@ -276,7 +275,7 @@ STDMETHODIMP nsAccessNodeWrap::get_attributes(
 __try{
   *aNumAttribs = 0;
 
-  if (IsDefunct() || IsDocument())
+  if (IsDefunct() || IsDocumentNode())
     return E_FAIL;
 
   PRUint32 numAttribs = mContent->GetAttrCount();
@@ -349,7 +348,7 @@ STDMETHODIMP nsAccessNodeWrap::get_computedStyle(
 __try{
   *aNumStyleProperties = 0;
 
-  if (IsDefunct() || IsDocument())
+  if (IsDefunct() || IsDocumentNode())
     return E_FAIL;
 
   nsCOMPtr<nsIDOMCSSStyleDeclaration> cssDecl =
@@ -384,7 +383,7 @@ STDMETHODIMP nsAccessNodeWrap::get_computedStyleForProperties(
     /* [length_is][size_is][out] */ BSTR __RPC_FAR *aStyleValues)
 {
 __try {
-  if (IsDefunct() || IsDocument())
+  if (IsDefunct() || IsDocumentNode())
     return E_FAIL;
  
   nsCOMPtr<nsIDOMCSSStyleDeclaration> cssDecl =
@@ -597,11 +596,6 @@ __try {
  
 void nsAccessNodeWrap::InitAccessibility()
 {
-  nsCOMPtr<nsIPrefBranch> prefBranch(do_GetService(NS_PREFSERVICE_CONTRACTID));
-  if (prefBranch) {
-    prefBranch->GetBoolPref("accessibility.disableenumvariant", &gIsEnumVariantSupportDisabled);
-  }
-
   if (!gmUserLib) {
     gmUserLib =::LoadLibraryW(L"USER32.DLL");
   }

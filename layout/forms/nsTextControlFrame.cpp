@@ -201,6 +201,12 @@ nsTextControlFrame::DestroyFrom(nsIFrame* aDestructRoot)
 {
   mScrollEvent.Revoke();
 
+  EditorInitializer* initializer = (EditorInitializer*) Properties().Get(TextControlInitializer());
+  if (initializer) {
+    initializer->Revoke();
+    Properties().Delete(TextControlInitializer());
+  }
+
   // Unbind the text editor state object from the frame.  The editor will live
   // on, but things like controllers will be released.
   nsCOMPtr<nsITextControlElement> txtCtrl = do_QueryInterface(GetContent());
@@ -387,11 +393,14 @@ nsTextControlFrame::EnsureEditorInitialized()
   // editor.
   mUseEditor = PR_TRUE;
 
+  // Set the selection to the beginning of the text field.
+  SetSelectionEndPoints(0, 0);
+
   return NS_OK;
 }
 
 nsresult
-nsTextControlFrame::CreateAnonymousContent(nsTArray<nsIContent*>& aElements)
+nsTextControlFrame::CreateAnonymousContent(nsTArray<ContentInfo>& aElements)
 {
   NS_ASSERTION(mContent, "We should have a content!");
 
@@ -442,10 +451,17 @@ nsTextControlFrame::CreateAnonymousContent(nsTArray<nsIContent*>& aElements)
   if (initEagerly) {
     NS_ASSERTION(!nsContentUtils::IsSafeToRunScript(),
                  "Someone forgot a script blocker?");
-
-    if (!nsContentUtils::AddScriptRunner(new EditorInitializer(this))) {
+    EditorInitializer* initializer = (EditorInitializer*) Properties().Get(TextControlInitializer());
+    if (initializer) {
+      initializer->Revoke();
+    }
+    initializer = new EditorInitializer(this);
+    if (!nsContentUtils::AddScriptRunner(initializer)) {
+      initializer->Revoke(); // paranoia
+      delete initializer;
       return NS_ERROR_OUT_OF_MEMORY;
     }
+    Properties().Set(TextControlInitializer(),initializer);
   }
 
   return NS_OK;

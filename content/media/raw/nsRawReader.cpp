@@ -72,7 +72,7 @@ nsresult nsRawReader::ReadMetadata(nsVideoInfo* aInfo)
 {
   NS_ASSERTION(mDecoder->OnStateMachineThread(),
                "Should be on state machine thread.");
-  mozilla::MonitorAutoEnter autoEnter(mMonitor);
+  mozilla::ReentrantMonitorAutoEnter autoEnter(mReentrantMonitor);
 
   nsMediaStream* stream = mDecoder->GetCurrentStream();
   NS_ASSERTION(stream, "Decoder has no media stream");
@@ -104,7 +104,6 @@ nsresult nsRawReader::ReadMetadata(nsVideoInfo* aInfo)
     return NS_ERROR_FAILURE; // Invalid data
   mInfo.mPixelAspectRatio = static_cast<float>(mMetadata.aspectNumerator) / 
                             mMetadata.aspectDenominator;
-  mInfo.mDataOffset = sizeof(nsRawVideoHeader) + 1;
   mInfo.mHasAudio = PR_FALSE;
 
   mFrameRate = static_cast<float>(mMetadata.framerateNumerator) /
@@ -127,8 +126,8 @@ nsresult nsRawReader::ReadMetadata(nsVideoInfo* aInfo)
 
   PRInt64 length = stream->GetLength();
   if (length != -1) {
-    mozilla::MonitorAutoExit autoExitMonitor(mMonitor);
-    mozilla::MonitorAutoEnter autoMonitor(mDecoder->GetMonitor());
+    mozilla::ReentrantMonitorAutoExit autoExitMonitor(mReentrantMonitor);
+    mozilla::ReentrantMonitorAutoEnter autoMonitor(mDecoder->GetReentrantMonitor());
     mDecoder->GetStateMachine()->SetDuration(USECS_PER_S *
                                            (length - sizeof(nsRawVideoHeader)) /
                                            (mFrameSize * mFrameRate));
@@ -172,7 +171,7 @@ PRBool nsRawReader::ReadFromStream(nsMediaStream *aStream, PRUint8* aBuf,
 PRBool nsRawReader::DecodeVideoFrame(PRBool &aKeyframeSkip,
                                      PRInt64 aTimeThreshold)
 {
-  mozilla::MonitorAutoEnter autoEnter(mMonitor);
+  mozilla::ReentrantMonitorAutoEnter autoEnter(mReentrantMonitor);
   NS_ASSERTION(mDecoder->OnStateMachineThread() || mDecoder->OnDecodeThread(),
                "Should be on state machine thread or decode thread.");
 
@@ -254,7 +253,7 @@ PRBool nsRawReader::DecodeVideoFrame(PRBool &aKeyframeSkip,
 
 nsresult nsRawReader::Seek(PRInt64 aTime, PRInt64 aStartTime, PRInt64 aEndTime, PRInt64 aCurrentTime)
 {
-  mozilla::MonitorAutoEnter autoEnter(mMonitor);
+  mozilla::ReentrantMonitorAutoEnter autoEnter(mReentrantMonitor);
   NS_ASSERTION(mDecoder->OnStateMachineThread(),
                "Should be on state machine thread.");
 
@@ -285,8 +284,8 @@ nsresult nsRawReader::Seek(PRInt64 aTime, PRInt64 aStartTime, PRInt64 aEndTime, 
     }
 
     {
-      mozilla::MonitorAutoExit autoMonitorExit(mMonitor);
-      mozilla::MonitorAutoEnter autoMonitor(mDecoder->GetMonitor());
+      mozilla::ReentrantMonitorAutoExit autoMonitorExit(mReentrantMonitor);
+      mozilla::ReentrantMonitorAutoEnter autoMonitor(mDecoder->GetReentrantMonitor());
       if (mDecoder->GetDecodeState() ==
           nsBuiltinDecoderStateMachine::DECODER_STATE_SHUTDOWN) {
         mCurrentFrame = frame;
@@ -304,11 +303,6 @@ nsresult nsRawReader::Seek(PRInt64 aTime, PRInt64 aStartTime, PRInt64 aEndTime, 
   }
 
   return NS_OK;
-}
-
-PRInt64 nsRawReader::FindEndTime(PRInt64 aEndTime)
-{
-  return -1;
 }
 
 nsresult nsRawReader::GetBuffered(nsTimeRanges* aBuffered, PRInt64 aStartTime)
