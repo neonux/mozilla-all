@@ -1,0 +1,54 @@
+html {
+  font-family: sans-serif;
+  background: -moz-Field;
+  color: -moz-FieldText;
+}
+
+body {
+  padding: 15px;
+}
+
+#top-sites-header {
+  margin: 0 0 10px;
+}
+
+#sites-list {
+  padding: 0;
+  margin: 0;
+}
+
+.site-item {
+  list-style: none;
+  padding: 5px;
+  border-radius: 1px;
+  -moz-transition: opacity 200ms ease-out;
+  opacity: 1;
+}
+
+.site-item[removing] {
+  opacity: 0;
+}
+
+.image-item {
+  -moz-margin-end: 5px;
+}
+
+.url-item {
+  color: -moz-nativehyperlinktext;
+  font-size: 0.8em;
+  text-decoration: none;
+}
+
+.url-item:hover {
+  text-decoration: underline;
+}
+
+.remove-button {
+  border: none;
+  background-color: #fff;
+  background-image: url("chrome://global/skin/icons/close.png");
+  background-repeat: no-repeat;
+  height: 22px;
+  width: 16px;
+  -moz-margin-start: 4px;
+}
