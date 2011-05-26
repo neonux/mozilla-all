@@ -211,8 +211,11 @@ static NS_DEFINE_CID(kXTFServiceCID, NS_XTFSERVICE_CID);
 #endif
 #include "nsDOMTouchEvent.h"
 
+#include "mozilla/Preferences.h"
+
 using namespace mozilla::dom;
 using namespace mozilla::layers;
+using namespace mozilla;
 
 const char kLoadAsData[] = "loadAsData";
 
@@ -252,7 +255,6 @@ PRUint32 nsContentUtils::sJSGCThingRootCount;
 nsIBidiKeyboard *nsContentUtils::sBidiKeyboard = nsnull;
 #endif
 PRUint32 nsContentUtils::sScriptBlockerCount = 0;
-PRUint32 nsContentUtils::sRemovableScriptBlockerCount = 0;
 #ifdef DEBUG
 PRUint32 nsContentUtils::sDOMNodeRemovedSuppressCount = 0;
 #endif
@@ -2609,34 +2611,6 @@ nsContentUtils::GetCharPref(const char *aPref)
 }
 
 // static
-PRPackedBool
-nsContentUtils::GetBoolPref(const char *aPref, PRBool aDefault)
-{
-  PRBool result;
-
-  if (!sPrefBranch ||
-      NS_FAILED(sPrefBranch->GetBoolPref(aPref, &result))) {
-    result = aDefault;
-  }
-
-  return (PRPackedBool)result;
-}
-
-// static
-PRInt32
-nsContentUtils::GetIntPref(const char *aPref, PRInt32 aDefault)
-{
-  PRInt32 result;
-
-  if (!sPrefBranch ||
-      NS_FAILED(sPrefBranch->GetIntPref(aPref, &result))) {
-    result = aDefault;
-  }
-
-  return result;
-}
-
-// static
 nsAdoptingString
 nsContentUtils::GetLocalizedStringPref(const char *aPref)
 {
@@ -2734,8 +2708,8 @@ BoolVarChanged(const char *aPref, void *aClosure)
 {
   PrefCacheData* cache = static_cast<PrefCacheData*>(aClosure);
   *((PRBool*)cache->cacheLocation) =
-    nsContentUtils::GetBoolPref(aPref, cache->defaultValueBool);
-  
+    Preferences::GetBool(aPref, cache->defaultValueBool);
+
   return 0;
 }
 
@@ -2744,7 +2718,7 @@ nsContentUtils::AddBoolPrefVarCache(const char *aPref,
                                     PRBool* aCache,
                                     PRBool aDefault)
 {
-  *aCache = GetBoolPref(aPref, aDefault);
+  *aCache = Preferences::GetBool(aPref, aDefault);
   PrefCacheData* data = new PrefCacheData;
   data->cacheLocation = aCache;
   data->defaultValueBool = aDefault;
@@ -2757,7 +2731,7 @@ IntVarChanged(const char *aPref, void *aClosure)
 {
   PrefCacheData* cache = static_cast<PrefCacheData*>(aClosure);
   *((PRInt32*)cache->cacheLocation) =
-    nsContentUtils::GetIntPref(aPref, cache->defaultValueInt);
+    Preferences::GetInt(aPref, cache->defaultValueInt);
   
   return 0;
 }
@@ -2767,7 +2741,7 @@ nsContentUtils::AddIntPrefVarCache(const char *aPref,
                                    PRInt32* aCache,
                                    PRInt32 aDefault)
 {
-  *aCache = GetIntPref(aPref, aDefault);
+  *aCache = Preferences::GetInt(aPref, aDefault);
   PrefCacheData* data = new PrefCacheData;
   data->cacheLocation = aCache;
   data->defaultValueInt = aDefault;
@@ -6192,35 +6166,6 @@ nsContentUtils::CheckCCWrapperTraversal(nsISupports* aScriptObjectHolder,
                "This will probably crash.");
 }
 #endif
-
-mozAutoRemovableBlockerRemover::mozAutoRemovableBlockerRemover(nsIDocument* aDocument MOZILLA_GUARD_OBJECT_NOTIFIER_PARAM_IN_IMPL)
-{
-  MOZILLA_GUARD_OBJECT_NOTIFIER_INIT;
-  mNestingLevel = nsContentUtils::GetRemovableScriptBlockerLevel();
-  mDocument = aDocument;
-  nsISupports* sink = aDocument ? aDocument->GetCurrentContentSink() : nsnull;
-  mObserver = do_QueryInterface(sink);
-  for (PRUint32 i = 0; i < mNestingLevel; ++i) {
-    if (mObserver) {
-      mObserver->EndUpdate(mDocument, UPDATE_CONTENT_MODEL);
-    }
-    nsContentUtils::RemoveRemovableScriptBlocker();
-  }
-
-  NS_ASSERTION(nsContentUtils::IsSafeToRunScript(), "killing mutation events");
-}
-
-mozAutoRemovableBlockerRemover::~mozAutoRemovableBlockerRemover()
-{
-  NS_ASSERTION(nsContentUtils::GetRemovableScriptBlockerLevel() == 0,
-               "Should have had none");
-  for (PRUint32 i = 0; i < mNestingLevel; ++i) {
-    nsContentUtils::AddRemovableScriptBlocker();
-    if (mObserver) {
-      mObserver->BeginUpdate(mDocument, UPDATE_CONTENT_MODEL);
-    }
-  }
-}
 
 // static
 PRBool
