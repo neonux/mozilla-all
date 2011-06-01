@@ -75,6 +75,7 @@
 #include "nsIForm.h"
 #include "nsIFormControl.h"
 
+#include "nsLayoutUtils.h"
 #include "nsIPresShell.h"
 #include "nsPresContext.h"
 #include "nsIFrame.h"
@@ -682,15 +683,7 @@ nsAccessible::IsVisible(PRBool* aIsOffscreen)
   }
 
   // The frame intersects the viewport, but we need to check the parent view chain :(
-  nsIDocument* doc = mContent->GetOwnerDoc();
-  if (!doc)  {
-    return PR_FALSE;
-  }
-
-  nsIFrame* frameWithView =
-    frame->HasView() ? frame : frame->GetAncestorWithViewExternal();
-  nsIView* view = frameWithView->GetViewExternal();
-  PRBool isVisible = CheckVisibilityInParentChain(doc, view);
+  bool isVisible = nsCoreUtils::CheckVisibilityInParentChain(frame);
   if (isVisible && rectVisibility == nsRectVisibility_kVisible) {
     *aIsOffscreen = PR_FALSE;
   }
@@ -701,20 +694,23 @@ PRUint64
 nsAccessible::NativeState()
 {
   PRUint64 state = 0;
-  nsEventStates intrinsicState = mContent->IntrinsicState();
+  PRBool disabled = PR_FALSE;
+  if (mContent->IsElement()) {
+    nsEventStates elementState = mContent->AsElement()->State();
 
-  if (intrinsicState.HasState(NS_EVENT_STATE_INVALID))
-    state |= states::INVALID;
+    if (elementState.HasState(NS_EVENT_STATE_INVALID))
+      state |= states::INVALID;
 
-  if (intrinsicState.HasState(NS_EVENT_STATE_REQUIRED))
-    state |= states::REQUIRED;
+    if (elementState.HasState(NS_EVENT_STATE_REQUIRED))
+      state |= states::REQUIRED;
 
-  PRBool disabled = mContent->IsHTML() ? 
-    (intrinsicState.HasState(NS_EVENT_STATE_DISABLED)) :
-    (mContent->AttrValueIs(kNameSpaceID_None,
-                           nsAccessibilityAtoms::disabled,
-                           nsAccessibilityAtoms::_true,
-                           eCaseMatters));
+    disabled = mContent->IsHTML() ? 
+      (elementState.HasState(NS_EVENT_STATE_DISABLED)) :
+      (mContent->AttrValueIs(kNameSpaceID_None,
+                             nsAccessibilityAtoms::disabled,
+                             nsAccessibilityAtoms::_true,
+                             eCaseMatters));
+  }
 
   // Set unavailable state based on disabled state, otherwise set focus states
   if (disabled) {
@@ -3249,44 +3245,6 @@ nsAccessible::GetFirstAvailableAccessible(nsINode *aStartNode) const
   }
 
   return nsnull;
-}
-
-PRBool nsAccessible::CheckVisibilityInParentChain(nsIDocument* aDocument, nsIView* aView)
-{
-  nsIDocument* document = aDocument;
-  nsIView* view = aView;
-  // both view chain and widget chain are broken between chrome and content
-  while (document != nsnull) {
-    while (view != nsnull) {
-      if (view->GetVisibility() == nsViewVisibility_kHide) {
-        return PR_FALSE;
-      }
-      view = view->GetParent();
-    }
-
-    nsIDocument* parentDoc = document->GetParentDocument();
-    if (parentDoc != nsnull) {
-      nsIContent* content = parentDoc->FindContentForSubDocument(document);
-      if (content != nsnull) {
-        nsIPresShell* shell = parentDoc->GetShell();
-        if (!shell) {
-          return PR_FALSE;
-        }
-        nsIFrame* frame = content->GetPrimaryFrame();
-        while (frame != nsnull && !frame->HasView()) {
-          frame = frame->GetParent();
-        }
-
-        if (frame != nsnull) {
-          view = frame->GetViewExternal();
-        }
-      }
-    }
-
-    document = parentDoc;
-  }
-
-  return PR_TRUE;
 }
 
 nsresult

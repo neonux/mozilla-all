@@ -78,8 +78,6 @@
 #include "nsIDOMHTMLBodyElement.h"
 #include "nsIDOMXULControlElement.h"
 #include "nsIDOMXULTextboxElement.h"
-#include "nsImageMapUtils.h"
-#include "nsIHTMLDocument.h"
 #include "nsINameSpaceManager.h"
 #include "nsIBaseWindow.h"
 #include "nsIView.h"
@@ -96,7 +94,6 @@
 #include "nsIDocShellTreeNode.h"
 #include "nsIWebNavigation.h"
 #include "nsIContentViewer.h"
-#include "nsIPrefBranch2.h"
 #ifdef MOZ_XUL
 #include "nsXULPopupManager.h"
 #endif
@@ -830,6 +827,31 @@ nsEventStateManager::UpdateUserActivityTimer(void)
   return NS_OK;
 }
 
+static const char* kObservedPrefs[] = {
+  "accessibility.accesskeycausesactivation",
+  "nglayout.events.dispatchLeftClickOnly",
+  "ui.key.generalAccessKey",
+  "ui.key.chromeAccess",
+  "ui.key.contentAccess",
+  "ui.click_hold_context_menus",
+#if 0
+  "mousewheel.withaltkey.action",
+  "mousewheel.withaltkey.numlines",
+  "mousewheel.withaltkey.sysnumlines",
+  "mousewheel.withcontrolkey.action",
+  "mousewheel.withcontrolkey.numlines",
+  "mousewheel.withcontrolkey.sysnumlines",
+  "mousewheel.withnokey.action",
+  "mousewheel.withnokey.numlines",
+  "mousewheel.withnokey.sysnumlines",
+  "mousewheel.withshiftkey.action",
+  "mousewheel.withshiftkey.numlines",
+  "mousewheel.withshiftkey.sysnumlines",
+#endif
+  "dom.popup_allowed_events",
+  nsnull
+};
+
 nsresult
 nsEventStateManager::Init()
 {
@@ -840,41 +862,16 @@ nsEventStateManager::Init()
 
   observerService->AddObserver(this, NS_XPCOM_SHUTDOWN_OBSERVER_ID, PR_TRUE);
 
-  nsIPrefBranch2* prefBranch = nsContentUtils::GetPrefBranch();
-
-  if (prefBranch) {
-    if (sESMInstanceCount == 1) {
-      sLeftClickOnly =
-        Preferences::GetBool("nglayout.events.dispatchLeftClickOnly",
-                             sLeftClickOnly);
-      sChromeAccessModifier =
-        GetAccessModifierMaskFromPref(nsIDocShellTreeItem::typeChrome);
-      sContentAccessModifier =
-        GetAccessModifierMaskFromPref(nsIDocShellTreeItem::typeContent);
-    }
-    prefBranch->AddObserver("accessibility.accesskeycausesactivation", this, PR_TRUE);
-    prefBranch->AddObserver("nglayout.events.dispatchLeftClickOnly", this, PR_TRUE);
-    prefBranch->AddObserver("ui.key.generalAccessKey", this, PR_TRUE);
-    prefBranch->AddObserver("ui.key.chromeAccess", this, PR_TRUE);
-    prefBranch->AddObserver("ui.key.contentAccess", this, PR_TRUE);
-    prefBranch->AddObserver("ui.click_hold_context_menus", this, PR_TRUE);
-#if 0
-    prefBranch->AddObserver("mousewheel.withaltkey.action", this, PR_TRUE);
-    prefBranch->AddObserver("mousewheel.withaltkey.numlines", this, PR_TRUE);
-    prefBranch->AddObserver("mousewheel.withaltkey.sysnumlines", this, PR_TRUE);
-    prefBranch->AddObserver("mousewheel.withcontrolkey.action", this, PR_TRUE);
-    prefBranch->AddObserver("mousewheel.withcontrolkey.numlines", this, PR_TRUE);
-    prefBranch->AddObserver("mousewheel.withcontrolkey.sysnumlines", this, PR_TRUE);
-    prefBranch->AddObserver("mousewheel.withnokey.action", this, PR_TRUE);
-    prefBranch->AddObserver("mousewheel.withnokey.numlines", this, PR_TRUE);
-    prefBranch->AddObserver("mousewheel.withnokey.sysnumlines", this, PR_TRUE);
-    prefBranch->AddObserver("mousewheel.withshiftkey.action", this, PR_TRUE);
-    prefBranch->AddObserver("mousewheel.withshiftkey.numlines", this, PR_TRUE);
-    prefBranch->AddObserver("mousewheel.withshiftkey.sysnumlines", this, PR_TRUE);
-#endif
-
-    prefBranch->AddObserver("dom.popup_allowed_events", this, PR_TRUE);
+  if (sESMInstanceCount == 1) {
+    sLeftClickOnly =
+      Preferences::GetBool("nglayout.events.dispatchLeftClickOnly",
+                           sLeftClickOnly);
+    sChromeAccessModifier =
+      GetAccessModifierMaskFromPref(nsIDocShellTreeItem::typeChrome);
+    sContentAccessModifier =
+      GetAccessModifierMaskFromPref(nsIDocShellTreeItem::typeContent);
   }
+  Preferences::AddWeakObservers(this, kObservedPrefs);
 
   mClickHoldContextMenu =
     Preferences::GetBool("ui.click_hold_context_menus", PR_FALSE);
@@ -925,33 +922,7 @@ nsEventStateManager::~nsEventStateManager()
 nsresult
 nsEventStateManager::Shutdown()
 {
-  nsIPrefBranch2* prefBranch = nsContentUtils::GetPrefBranch();
-
-  if (prefBranch) {
-    prefBranch->RemoveObserver("accessibility.accesskeycausesactivation", this);
-    prefBranch->RemoveObserver("nglayout.events.dispatchLeftClickOnly", this);
-    prefBranch->RemoveObserver("ui.key.generalAccessKey", this);
-    prefBranch->RemoveObserver("ui.key.chromeAccess", this);
-    prefBranch->RemoveObserver("ui.key.contentAccess", this);
-    prefBranch->RemoveObserver("ui.click_hold_context_menus", this);
-#if 0
-    prefBranch->RemoveObserver("mousewheel.withshiftkey.action", this);
-    prefBranch->RemoveObserver("mousewheel.withshiftkey.numlines", this);
-    prefBranch->RemoveObserver("mousewheel.withshiftkey.sysnumlines", this);
-    prefBranch->RemoveObserver("mousewheel.withcontrolkey.action", this);
-    prefBranch->RemoveObserver("mousewheel.withcontrolkey.numlines", this);
-    prefBranch->RemoveObserver("mousewheel.withcontrolkey.sysnumlines", this);
-    prefBranch->RemoveObserver("mousewheel.withaltkey.action", this);
-    prefBranch->RemoveObserver("mousewheel.withaltkey.numlines", this);
-    prefBranch->RemoveObserver("mousewheel.withaltkey.sysnumlines", this);
-    prefBranch->RemoveObserver("mousewheel.withnokey.action", this);
-    prefBranch->RemoveObserver("mousewheel.withnokey.numlines", this);
-    prefBranch->RemoveObserver("mousewheel.withnokey.sysnumlines", this);
-#endif
-
-    prefBranch->RemoveObserver("dom.popup_allowed_events", this);
-  }
-
+  Preferences::RemoveObservers(this, kObservedPrefs);
   m_haveShutdown = PR_TRUE;
   return NS_OK;
 }
@@ -4240,62 +4211,6 @@ GetLabelTarget(nsIContent* aPossibleLabel)
   return label->GetLabeledElement();
 }
 
-static bool
-IsAncestorOf(nsIContent* aPossibleAncestor, nsIContent* aPossibleDescendant)
-{
-  for (; aPossibleDescendant; aPossibleDescendant = aPossibleDescendant->GetParent()) {
-    if (aPossibleAncestor == aPossibleDescendant)
-      return true;
-
-    Element* labelTarget = GetLabelTarget(aPossibleDescendant);
-    if (labelTarget == aPossibleAncestor)
-      return true;
-  }
-  return false;
-}
-
-static bool
-ShouldShowFocusRing(nsIContent* aContent)
-{
-  nsIDocument* doc = aContent->GetOwnerDoc();
-  if (doc) {
-    nsPIDOMWindow* window = doc->GetWindow();
-    return window && window->ShouldShowFocusRing();
-  }
-
-  return false;
-}
-
-nsEventStates
-nsEventStateManager::GetContentState(nsIContent *aContent)
-{
-  nsEventStates state = aContent->IntrinsicState();
-
-  if (IsAncestorOf(aContent, mActiveContent)) {
-    state |= NS_EVENT_STATE_ACTIVE;
-  }
-  if (IsAncestorOf(aContent, mHoverContent)) {
-    state |= NS_EVENT_STATE_HOVER;
-  }
-
-  nsFocusManager* fm = nsFocusManager::GetFocusManager();
-  nsIContent* focusedContent = fm ? fm->GetFocusedContent() : nsnull;
-  if (aContent == focusedContent) {
-    state |= NS_EVENT_STATE_FOCUS;
-
-    if (ShouldShowFocusRing(aContent)) {
-      state |= NS_EVENT_STATE_FOCUSRING;
-    }
-  }
-  if (aContent == mDragOverContent) {
-    state |= NS_EVENT_STATE_DRAGOVER;
-  }
-  if (aContent == mURLTargetContent) {
-    state |= NS_EVENT_STATE_URLTARGET;
-  }
-  return state;
-}
-
 static nsIContent* FindCommonAncestor(nsIContent *aNode1, nsIContent *aNode2)
 {
   // Find closest common ancestor
@@ -4340,17 +4255,49 @@ static nsIContent* FindCommonAncestor(nsIContent *aNode1, nsIContent *aNode2)
   return nsnull;
 }
 
-static void
-NotifyAncestors(nsIDocument* aDocument, nsIContent* aStartNode,
-                nsIContent* aStopBefore, nsEventStates aState)
+/* static */
+inline void
+nsEventStateManager::DoStateChange(Element* aElement, nsEventStates aState,
+                                   PRBool aAddState)
 {
-  while (aStartNode && aStartNode != aStopBefore) {
-    aDocument->ContentStateChanged(aStartNode, aState);
-    Element* labelTarget = GetLabelTarget(aStartNode);
-    if (labelTarget) {
-      aDocument->ContentStateChanged(labelTarget, aState);
+  if (aAddState) {
+    aElement->AddStates(aState);
+  } else {
+    aElement->RemoveStates(aState);
+  }
+}
+
+/* static */
+inline void
+nsEventStateManager::DoStateChange(nsIContent* aContent, nsEventStates aState,
+                                   PRBool aStateAdded)
+{
+  if (aContent->IsElement()) {
+    DoStateChange(aContent->AsElement(), aState, aStateAdded);
+  }
+}
+
+/* static */
+void
+nsEventStateManager::UpdateAncestorState(nsIContent* aStartNode,
+                                         nsIContent* aStopBefore,
+                                         nsEventStates aState,
+                                         PRBool aAddState)
+{
+  for (; aStartNode && aStartNode != aStopBefore;
+       aStartNode = aStartNode->GetParent()) {
+    // We might be starting with a non-element (e.g. a text node) and
+    // if someone is doing something weird might be ending with a
+    // non-element too (e.g. a document fragment)
+    if (!aStartNode->IsElement()) {
+      continue;
     }
-    aStartNode = aStartNode->GetParent();
+    Element* element = aStartNode->AsElement();
+    DoStateChange(element, aState, aAddState);
+    Element* labelTarget = GetLabelTarget(element);
+    if (labelTarget) {
+      DoStateChange(labelTarget, aState, aAddState);
+    }
   }
 }
 
@@ -4367,11 +4314,11 @@ nsEventStateManager::SetContentState(nsIContent *aContent, nsEventStates aState)
 
   nsCOMPtr<nsIContent> notifyContent1;
   nsCOMPtr<nsIContent> notifyContent2;
-  PRBool notifyAncestors;
+  PRBool updateAncestors;
 
   if (aState == NS_EVENT_STATE_HOVER || aState == NS_EVENT_STATE_ACTIVE) {
     // Hover and active are hierarchical
-    notifyAncestors = PR_TRUE;
+    updateAncestors = PR_TRUE;
 
     // check to see that this state is allowed by style. Check dragover too?
     // XXX Is this even what we want?
@@ -4416,7 +4363,7 @@ nsEventStateManager::SetContentState(nsIContent *aContent, nsEventStates aState)
       }
     }
   } else {
-    notifyAncestors = PR_FALSE;
+    updateAncestors = PR_FALSE;
     if (aState == NS_EVENT_STATE_DRAGOVER) {
       if (aContent != mDragOverContent) {
         notifyContent1 = aContent;
@@ -4432,30 +4379,43 @@ nsEventStateManager::SetContentState(nsIContent *aContent, nsEventStates aState)
     }
   }
 
+  // We need to keep track of which of notifyContent1 and notifyContent2 is
+  // getting the state set and which is getting it unset.  If both are
+  // non-null, then notifyContent1 is having the state set and notifyContent2
+  // is having it unset.  But if one of them is null, we need to keep track of
+  // the right thing for notifyContent1 explicitly.
+  PRBool content1StateSet = PR_TRUE;
   if (!notifyContent1) {
     // This is ok because FindCommonAncestor wouldn't find anything
     // anyway if notifyContent1 is null.
     notifyContent1 = notifyContent2;
     notifyContent2 = nsnull;
+    content1StateSet = PR_FALSE;
   }
 
   if (notifyContent1 && mPresContext) {
     EnsureDocument(mPresContext);
     if (mDocument) {
-      MOZ_AUTO_DOC_UPDATE(mDocument, UPDATE_CONTENT_STATE, PR_TRUE);
+      nsAutoScriptBlocker scriptBlocker;
 
-      if (notifyAncestors) {
+      if (updateAncestors) {
         nsCOMPtr<nsIContent> commonAncestor =
           FindCommonAncestor(notifyContent1, notifyContent2);
-        NotifyAncestors(mDocument, notifyContent1, commonAncestor, aState);
         if (notifyContent2) {
-          NotifyAncestors(mDocument, notifyContent2, commonAncestor, aState);
+          // It's very important to first notify the state removal and
+          // then the state addition, because due to labels it's
+          // possible that we're removing state from some element but
+          // then adding it again (say because mHoverContent changed
+          // from a control to its label).
+          UpdateAncestorState(notifyContent2, commonAncestor, aState, PR_FALSE);
         }
+        UpdateAncestorState(notifyContent1, commonAncestor, aState,
+                            content1StateSet);
       } else {
-        mDocument->ContentStateChanged(notifyContent1, aState);
         if (notifyContent2) {
-          mDocument->ContentStateChanged(notifyContent2, aState);
+          DoStateChange(notifyContent2, aState, PR_FALSE);
         }
+        DoStateChange(notifyContent1, aState, content1StateSet);
       }
     }
   }

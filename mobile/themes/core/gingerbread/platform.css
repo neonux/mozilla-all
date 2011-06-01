@@ -48,8 +48,8 @@
 }
 
 ::-moz-selection {
-  background-color: #8db8d8;
-  color: black;
+  background-color: @color_background_highlight@;
+  color: @color_text_highlight@;
 }
 
 menu,
@@ -66,10 +66,9 @@ label {
 }
 
 /* Override any OS inverse themes */
-richlistbox,
 textbox {
-  color: black;
-  background-color: white;
+  color: @color_text_inverse@;
+  background-color: @color_background_inverse@;
 }
 
 /* textboxes --------------------------------------------------------------- */
@@ -83,7 +82,7 @@ textbox:not([type="number"]) {
 }
 
 textbox[isempty="true"] {
-  color: @color_text_gray@;
+  color: @color_text_placeholder@;
 }
 
 textbox.search-bar {
@@ -147,7 +146,7 @@ button {
   -moz-appearance: none;
   min-width: @touch_button_minwidth@ !important;
   min-height: @touch_button_small@ !important; /* button size */
-  color: #000;
+  color: @color_text_button@;
   margin: @margin_normal@;
   padding: @padding_xnormal@;
   background-image: url("chrome://browser/skin/images/button-bg.png");
@@ -156,7 +155,7 @@ button {
 }
 
 button[disabled="true"] {
-  color: #aaa !important;
+  color: @color_text_disabled@ !important;
   border: @border_width_tiny@ solid @color_button_border@ !important;
 }
 
@@ -208,7 +207,7 @@ spinbuttons {
   -moz-appearance: none !important;
   min-width: @touch_button_small@ !important; /* button size */
   min-height: @touch_button_small@ !important; /* button size */
-  color: #000;
+  color: @color_text_button@;
   margin: @margin_normal@;
   padding: @padding_xnormal@;
   background-image: url("chrome://browser/skin/images/button-bg.png");
@@ -262,7 +261,7 @@ toolbarbutton[open="true"] {
   background: none !important;
   border: none !important;
   -moz-border-image: none !important;
-  color: white;
+  color: @color_text_default@;
   -moz-box-align: center;
   font-size: @font_small@;
   -moz-box-align: center;
@@ -274,11 +273,11 @@ toolbarbutton[open="true"] {
 
 .button-checkbox > .button-image-icon {
   -moz-margin-end: @margin_normal@;
-  list-style-image: url("chrome://browser/skin/images/check-unselected-46.png");
+  list-style-image: url("chrome://browser/skin/images/check-unselected-hdpi.png");
 }
 
 .button-checkbox[checked="true"] > .button-image-icon {
-  list-style-image: url("chrome://browser/skin/images/check-selected-46.png");
+  list-style-image: url("chrome://browser/skin/images/check-selected-hdpi.png");
 }
 
 .button-checkbox:hover:active > .button-box,
@@ -303,7 +302,7 @@ radio {
   -moz-appearance: none;
   min-width: @touch_button_small@ !important; /* button size */
   min-height: @touch_button_small@ !important; /* button size */
-  color: #000;
+  color: @color_text_button@;
   padding: @padding_xnormal@;
   margin: 0;
   background-image: url("chrome://browser/skin/images/button-bg.png");
@@ -344,34 +343,40 @@ radio[focused="true"] > .radio-label-box {
   border: @border_width_tiny@ solid transparent;
 }
 
-/* checkbox radios --------------------------------------------------------- */
+/* checkbox  --------------------------------------------------------------- */
 checkbox {
   margin: @margin_tiny@ @margin_small@ @margin_tiny@ @margin_small@; /* match platform style for buttons */
+  -moz-binding: url("chrome://global/content/bindings/checkbox.xml#checkbox-with-spacing") !important;
 }
 
-radio.checkbox-radio-on:not([selected]) {
-  border-right: @border_width_tiny@ solid @color_button_border@;
+/* stop the focus from moving/showing the border around the label, which we don't use */
+checkbox:focus > .checkbox-label-center-box > .checkbox-label-box {
+  border: 1px solid transparent;
 }
 
-radio.checkbox-radio-on:not([selected]):-moz-locale-dir(rtl) {
-  border-left: none;
-  border-left: @border_width_tiny@ solid @color_button_border@;
+.checkbox-check {
+  border: 2px transparent;
+  -moz-border-top-colors: -moz-initial;
+  -moz-border-right-colors: -moz-initial;
+  -moz-border-bottom-colors: -moz-initial;
+  -moz-border-left-colors: -moz-initial;
+  min-width: 46px;
+  min-height: 46px;
+  background: url("chrome://browser/skin/images/check-unselected-hdpi.png") no-repeat 50% 50%;
 }
 
-radio.checkbox-radio-off[selected],
-radio.checkbox-radio-off:hover:active {
-  background-image: url("chrome://browser/skin/images/toggle-off.png");
-  color: black;
-  background-repeat: repeat-x;
+checkbox[checked="true"] > .checkbox-spacer-box > .checkbox-check {
+  background-image: url("chrome://browser/skin/images/check-selected-hdpi.png");
 }
 
-radio.checkbox-radio-on:not([selected]) .radio-label-box,
-radio.checkbox-radio-off:not([selected]) .radio-label-box {
-  visibility: hidden;
+checkbox[checked="true"][disabled="true"] > .checkbox-spacer-box > .checkbox-check {
+  background-image: url("chrome://browser/skin/images/check-selected-hdpi.png");
 }
 
 /* richlistbox ------------------------------------------------------------- */
 richlistbox {
+  color: @color_text_default@;
+  background-color: @color_background_default@;
   -moz-user-focus: ignore;
   margin: 0;
 }
@@ -380,7 +385,7 @@ richlistitem {
   -moz-user-focus: ignore;
   min-height: @touch_row@; /* row size */
   padding: @padding_small@;
-  border-bottom: @border_width_tiny@ solid rgb(207,207,207);
+  border-bottom: @border_width_tiny@ solid @color_divider_border@;
 }
 
 richlistitem label.title,
@@ -390,7 +395,7 @@ richlistitem description.title {
 
 richlistitem label.normal,
 richlistitem description.normal {
-  color: gray;
+  color: @color_subtext_default@;
   font-size: @font_small@ !important;
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -412,19 +417,22 @@ richlistitem description.normal-bold {
 }
 
 richlistitem[selected="true"] {
-  color: black;
-  background-color: white;
+  color: @color_text_default@;
+  background-color: @color_background_default@;
 }
 
-richlistitem:hover:active:not([selected="true"]):not([nohighlight="true"]) {
-  background-color: #8db8d8;
+richlistitem:hover:active:not([selected="true"]):not([nohighlight="true"]),
+richlistitem:hover:active:not([selected="true"]):not([nohighlight="true"]) label.normal,
+richlistitem:hover:active:not([selected="true"]):not([nohighlight="true"]) description.normal {
+  background-color: @color_background_highlight@;
+  color: @color_text_highlight@;
 }
 
 richlistitem.section-header,
 richlistitem[selected="true"].section-header {
   font-weight: bold;
-  color: #000;
-  background-color: lightgray;
+  color: @color_text_header@;
+  background-color: @color_background_header@;
 }
 
 richlistitem .show-on-select {
@@ -480,7 +488,7 @@ menulist {
   -moz-user-focus: ignore;
   min-width: @touch_button_minwidth@ !important;
   min-height: @touch_button_small@ !important; /* button size */
-  color: #000 !important;
+  color: @color_text_button@ !important;
   margin: @margin_normal@;
   padding: @padding_small@ @padding_xnormal@;
   background-image: url("chrome://browser/skin/images/button-bg.png");
@@ -489,7 +497,7 @@ menulist {
 }
 
 menulist[disabled="true"] {
-  color: #aaa !important;
+  color: @color_text_disabled@ !important;
   border: @border_width_tiny@ solid @color_button_border@ !important;
 }
 
@@ -527,7 +535,7 @@ progressmeter {
 }
 
 .progress-bar {
-  background-color: #8db8d8;
+  background-color: @color_background_highlight@;
 }
 
 /* panels / arrowboxes------------------------------------------------------ */
@@ -682,7 +690,7 @@ dialog {
 }
 
 .panel-row-button[disabled="true"] .toolbarbutton-text {
-  color: #aaa;
+  color: @color_text_disabled@;
 }
 
 .panel-row-button[checked="true"] {

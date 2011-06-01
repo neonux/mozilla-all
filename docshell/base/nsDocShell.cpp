@@ -52,7 +52,6 @@
 #include "mozilla/dom/Element.h"
 #include "nsIDocument.h"
 #include "nsIDOMDocument.h"
-#include "nsIDOMNSDocument.h"
 #include "nsIDOMElement.h"
 #include "nsIDOMStorageObsolete.h"
 #include "nsIDOMStorage.h"
@@ -6938,9 +6937,9 @@ nsDocShell::RestoreFromHistory()
         mSavingOldViewer = CanSavePresentation(mLoadType, request, doc);
     }
 
-    nsCOMPtr<nsIMarkupDocumentViewer_MOZILLA_2_0_BRANCH> oldMUDV(
+    nsCOMPtr<nsIMarkupDocumentViewer> oldMUDV(
         do_QueryInterface(mContentViewer));
-    nsCOMPtr<nsIMarkupDocumentViewer_MOZILLA_2_0_BRANCH> newMUDV(
+    nsCOMPtr<nsIMarkupDocumentViewer> newMUDV(
         do_QueryInterface(viewer));
     PRInt32 minFontSize = 0;
     float textZoom = 1.0f;
@@ -7590,10 +7589,10 @@ nsDocShell::SetupNewViewer(nsIContentViewer * aNewViewer)
     float pageZoom;
     PRBool styleDisabled;
     // |newMUDV| also serves as a flag to set the data from the above vars
-    nsCOMPtr<nsIMarkupDocumentViewer_MOZILLA_2_0_BRANCH> newMUDV;
+    nsCOMPtr<nsIMarkupDocumentViewer> newMUDV;
 
     if (mContentViewer || parent) {
-        nsCOMPtr<nsIMarkupDocumentViewer_MOZILLA_2_0_BRANCH> oldMUDV;
+        nsCOMPtr<nsIMarkupDocumentViewer> oldMUDV;
         if (mContentViewer) {
             // Get any interesting state from old content viewer
             // XXX: it would be far better to just reuse the document viewer ,
@@ -10190,7 +10189,6 @@ struct NS_STACK_CLASS CloneAndReplaceData
 nsDocShell::CloneAndReplaceChild(nsISHEntry *aEntry, nsDocShell *aShell,
                                  PRInt32 aEntryIndex, void *aData)
 {
-    nsresult result = NS_OK;
     nsCOMPtr<nsISHEntry> dest;
 
     CloneAndReplaceData *data = static_cast<CloneAndReplaceData*>(aData);
@@ -10200,55 +10198,44 @@ nsDocShell::CloneAndReplaceChild(nsISHEntry *aEntry, nsDocShell *aShell,
     nsCOMPtr<nsISHContainer> container =
       do_QueryInterface(data->destTreeParent);
     if (!aEntry) {
-      if (container) {
-        container->AddChild(nsnull, aEntryIndex);
-      }
-      return NS_OK;
+        if (container) {
+            container->AddChild(nsnull, aEntryIndex);
+        }
+        return NS_OK;
     }
     
     PRUint32 srcID;
     aEntry->GetID(&srcID);
 
+    nsresult rv = NS_OK;
     if (srcID == cloneID) {
         // Replace the entry
         dest = replaceEntry;
-        dest->SetIsSubFrame(PR_TRUE);
-
-        if (data->cloneChildren) {
-            // Walk the children
-            CloneAndReplaceData childData(cloneID, replaceEntry,
-                                          data->cloneChildren, dest);
-            result = WalkHistoryEntries(aEntry, aShell,
-                                        CloneAndReplaceChild, &childData);
-            if (NS_FAILED(result))
-                return result;
-        }
     } else {
         // Clone the SHEntry...
-        result = aEntry->Clone(getter_AddRefs(dest));
-        if (NS_FAILED(result))
-            return result;
+        rv = aEntry->Clone(getter_AddRefs(dest));
+        NS_ENSURE_SUCCESS(rv, rv);
+    }
+    dest->SetIsSubFrame(PR_TRUE);
 
-        // This entry is for a subframe navigation
-        dest->SetIsSubFrame(PR_TRUE);
-
+    if (srcID != cloneID || data->cloneChildren) {
         // Walk the children
         CloneAndReplaceData childData(cloneID, replaceEntry,
                                       data->cloneChildren, dest);
-        result = WalkHistoryEntries(aEntry, aShell,
-                                    CloneAndReplaceChild, &childData);
-        if (NS_FAILED(result))
-            return result;
+        rv = WalkHistoryEntries(aEntry, aShell,
+                                CloneAndReplaceChild, &childData);
+        NS_ENSURE_SUCCESS(rv, rv);
+    }
 
-        if (aShell)
-            aShell->SwapHistoryEntries(aEntry, dest);
+    if (srcID != cloneID && aShell) {
+        aShell->SwapHistoryEntries(aEntry, dest);
     }
 
     if (container)
         container->AddChild(dest, aEntryIndex);
 
     data->resultEntry = dest;
-    return result;
+    return rv;
 }
 
 /* static */ nsresult

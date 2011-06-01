@@ -8,10 +8,21 @@
 %define color_dialog_border #5a5a5a
 %define color_background_dlgbuttons #9a9a9a
 %define color_background_panel #d6d6d6
-
+%define color_background_header #292929
+%define color_text_header #999999
+%define color_background_scroller #9a9a9a
 %define color_background_inverse #fff
 %define color_text_inverse #000
-%define color_text_gray #808080
+%define color_text_button #000
+%define color_text_disabled #808080
+%define color_text_placeholder #808080
+
+%define color_background_highlight #febc2b
+%define color_background_highlight_overlay rgba(254, 188, 43, 0.8)
+%define color_text_highlight #000
+
+%define color_subtext_default lightgray
+%define color_subtext_inverse #414141
 
 %ifdef ANDROID
 %define font_xlarge 5.08mozmm
