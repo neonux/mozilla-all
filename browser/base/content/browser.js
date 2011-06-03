@@ -3820,6 +3820,18 @@ var FullScreen = {
       fullScrToggler.addEventListener("mouseover", this._expandCallback, false);
       fullScrToggler.addEventListener("dragenter", this._expandCallback, false);
 
+#ifdef XP_MACOSX
+      // Fullscreen mode prototype
+      let navBar = document.getElementById("nav-bar");
+      if (navBar)
+        this._savedSet = navBar.currentSet,
+        navBar.insertItem("downloads-button"),
+        navBar.insertItem("fullscreen-button");
+      this._autohide = gPrefService.getBoolPref("browser.fullscreen.autohide");
+      gPrefService.setBoolPref("browser.fullscreen.autohide", false);
+      return;
+#endif
+
       if (gPrefService.getBoolPref("browser.fullscreen.autohide"))
         gBrowser.mPanelContainer.addEventListener("mousemove",
                                                   this._collapseCallback, false);
@@ -3845,6 +3857,18 @@ var FullScreen = {
       this._isPopupOpen = false;
 
       this.cleanup();
+
+#ifdef XP_MACOSX
+      // Fullscreen mode prototype
+      let navBar = document.getElementById("nav-bar");
+      if (navBar && '_savedSet' in this)
+        navBar.currentSet = this._savedSet;
+      delete this._savedSet;
+      gPrefService.setBoolPref("browser.fullscreen.autohide", this._autohide);
+      delete this._autohide;
+      gBrowser.tabContainer._positionPinnedTabs();
+      gBrowser.tabContainer._unlockTabSizing();
+#endif
     }
   },
 
