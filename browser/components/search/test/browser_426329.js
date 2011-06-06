@@ -3,8 +3,8 @@ function test() {
 
   var searchBar = BrowserSearch.searchBar;
   var searchButton = document.getAnonymousElementByAttribute(searchBar,
-                     "anonid", "search-go-button");
-  ok(searchButton, "got search-go-button");
+                     "anonid", "search-go-label");
+  ok(searchButton, "got search-go-label");
 
   searchBar.value = "test";
 
