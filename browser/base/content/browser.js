@@ -2258,7 +2258,11 @@ function loadURI(uri, referrer, postData, allowThirdPartyFixup)
   }
 }
 
-function getShortcutOrURI(aURL, aPostDataRef) {
+function getShortcutOrURI(aURL, aPostDataRef, aMayInheritPrincipal) {
+  // Initialize outparam to false
+  if (aMayInheritPrincipal)
+    aMayInheritPrincipal.value = false;
+
   var shortcutURL = null;
   var keyword = aURL;
   var param = "";
@@ -2329,6 +2333,11 @@ function getShortcutOrURI(aURL, aPostDataRef) {
 
     return aURL;
   }
+
+  // This URL came from a bookmark, so it's safe to let it inherit the current
+  // document's principal.
+  if (aMayInheritPrincipal)
+    aMayInheritPrincipal.value = true;
 
   return shortcutURL;
 }
@@ -2874,7 +2883,7 @@ var PrintPreviewListener = {
     this._printPreviewTab = null;
   },
   _toggleAffectedChrome: function () {
-    gNavToolbox.hidden = gInPrintPreviewMode;
+    gNavToolbox.collapsed = gInPrintPreviewMode;
 
     if (gInPrintPreviewMode)
       this._hideChrome();
