@@ -115,7 +115,8 @@ toolbarpaletteitem[place="palette"] > toolbaritem > hbox[type="places"] {
   display: none;
 }
 
-#main-window[disablechrome] #navigator-toolbox[tabsontop="true"] > toolbar:not(#toolbar-menubar):not(#TabsToolbar) {
+#main-window[disablechrome] #navigator-toolbox[tabsontop="true"] > toolbar:not(#toolbar-menubar):not(#TabsToolbar):not(#nav-bar),
+#main-window[disablechrome]:not([shownavbar]) #navigator-toolbox[tabsontop="true"] > #nav-bar {
   visibility: collapse;
 }
 

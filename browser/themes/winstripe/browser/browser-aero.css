@@ -176,11 +176,13 @@
     border-top-right-radius: 3.5px;
     background-clip: padding-box;
   }
-  #main-window[sizemode=normal]:not([disablechrome]) #TabsToolbar[tabsontop=true]:not(:-moz-lwtheme) {
+  #main-window[sizemode=normal]:not([disablechrome]) #TabsToolbar[tabsontop=true]:not(:-moz-lwtheme),
+  #main-window[sizemode=normal][disablechrome][shownavbar] #TabsToolbar[tabsontop=true]:not(:-moz-lwtheme) {
     margin-bottom: -1px;
     background-image: none !important;
   }
-  #main-window[sizemode=normal]:not([disablechrome]) #tabbrowser-tabs[tabsontop=true] > .tabbrowser-arrowscrollbox > .arrowscrollbox-scrollbox > .scrollbox-innerbox:not(:-moz-lwtheme) {
+  #main-window[sizemode=normal]:not([disablechrome]) #tabbrowser-tabs[tabsontop=true] > .tabbrowser-arrowscrollbox > .arrowscrollbox-scrollbox > .scrollbox-innerbox:not(:-moz-lwtheme),
+  #main-window[sizemode=normal][disablechrome][shownavbar] #tabbrowser-tabs[tabsontop=true] > .tabbrowser-arrowscrollbox > .arrowscrollbox-scrollbox > .scrollbox-innerbox:not(:-moz-lwtheme) {
     position: relative;
   }
 

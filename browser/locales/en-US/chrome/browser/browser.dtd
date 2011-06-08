@@ -28,6 +28,8 @@ can reach it easily. -->
 <!ENTITY  pinAppTab.accesskey                "P">
 <!ENTITY  unpinAppTab.label                  "Unpin Tab">
 <!ENTITY  unpinAppTab.accesskey              "b">
+<!ENTITY  appTabShowToolbars.label           "Show toolbars for this site">
+<!ENTITY  appTabShowToolbars.accesskey       "S">
 <!ENTITY  moveToGroup.label                  "Move to Group">
 <!ENTITY  moveToGroup.accesskey              "M">
 <!ENTITY  moveToNewGroup.label               "New Group">

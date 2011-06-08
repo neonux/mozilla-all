@@ -124,6 +124,10 @@
       <menuitem id="context_unpinTab" label="&unpinAppTab.label;" hidden="true"
                 accesskey="&unpinAppTab.accesskey;"
                 oncommand="gBrowser.unpinTab(TabContextMenu.contextTab);"/>
+      <menuitem id="context_alwaysShowToolbars" label="&appTabShowToolbars.label;" hidden="true"
+                accesskey="&appTabShowToolbars.accesskey;"
+                type="checkbox"
+                oncommand="ChromelessAppTabs.togglePrefForTab(this, TabContextMenu.contextTab);" />
       <menu id="context_tabViewMenu" label="&moveToGroup.label;"
             accesskey="&moveToGroup.accesskey;">
         <menupopup id="context_tabViewMenuPopup"
