@@ -58,7 +58,6 @@ EXTRA_JS_MODULES = \
 	content/NetworkPrioritizer.jsm \
 	content/domplate.jsm \
 	content/stylePanel.jsm \
-	content/NewTabUtils.jsm \
 	$(NULL)
 
 include $(topsrcdir)/config/rules.mk
