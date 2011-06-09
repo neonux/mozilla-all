@@ -377,6 +377,7 @@ pref("browser.tabs.loadBookmarksInBackground", false);
 pref("browser.tabs.tabClipWidth", 140);
 pref("browser.tabs.animate", true);
 pref("browser.tabs.drawInTitlebar", true);
+pref("browser.tabs.chromelessAppTabs", true);
 
 // Where to show tab close buttons:
 // 0  on active tab only
