@@ -64,6 +64,7 @@
 //   bounds - a <Rect>; otherwise based on the locations of the provided elements
 //   container - a DOM element to use as the container for this groupItem; otherwise will create
 //   title - the title for the groupItem; otherwise blank
+//   focusTitle - focus the title's input field after creation
 //   dontPush - true if this groupItem shouldn't push away or snap on creation; default is false
 //   immediately - true if we want all placement immediately, not with animation
 function GroupItem(listOfEls, options) {
@@ -84,10 +85,6 @@ function GroupItem(listOfEls, options) {
 
   this.keepProportional = false;
   this._frozenItemSizeData = {};
-
-  // Double click tracker
-  this._lastClick = 0;
-  this._lastClickPositions = null;
 
   // Variable: _activeTab
   // The <TabItem> for the groupItem's active tab.
@@ -218,11 +215,12 @@ function GroupItem(listOfEls, options) {
       if (!same)
         return;
 
-      if (!self.isDragging) {
-        self.$titleShield.hide();
-        (self.$title)[0].focus();
-      }
+      if (!self.isDragging)
+        self.focusTitle();
     });
+
+  if (options.focusTitle)
+    this.focusTitle();
 
   // ___ Stack Expander
   this.$expander = iQ("<div/>")
@@ -402,6 +400,14 @@ GroupItem.prototype = Utils.extend(new Item(), new Subscribable(), {
     var css = {width: w};
     this.$title.css(css);
     this.$titleShield.css(css);
+  },
+
+  // ----------
+  // Function: focusTitle
+  // Hide the title's shield and focus the underlying input field.
+  focusTitle: function GroupItem_focusTitle() {
+    this.$titleShield.hide();
+    this.$title[0].focus();
   },
 
   // ----------
@@ -776,7 +782,7 @@ GroupItem.prototype = Utils.extend(new Item(), new Subscribable(), {
         return (groupItem != self && !groupItem.getChildren().length);
       });
       let group = (emptyGroups.length ? emptyGroups[0] : GroupItems.newGroup());
-      group.newTab();
+      group.newTab(null, { closedLastTab: true });
     }
 
     this.destroy();
@@ -1641,28 +1647,6 @@ GroupItem.prototype = Utils.extend(new Item(), new Subscribable(), {
   _addHandlers: function GroupItem__addHandlers(container) {
     let self = this;
 
-    // Create new tab and zoom in on it after a double click
-    container.mousedown(function(e) {
-      if (!Utils.isLeftClick(e) || self.$titlebar[0] == e.target || 
-          self.$titlebar.contains(e.target)) {
-        self._lastClick = 0;
-        self._lastClickPositions = null;
-        return;
-      }
-      if (Date.now() - self._lastClick <= UI.DBLCLICK_INTERVAL &&
-          (self._lastClickPositions.x - UI.DBLCLICK_OFFSET) <= e.clientX &&
-          (self._lastClickPositions.x + UI.DBLCLICK_OFFSET) >= e.clientX &&
-          (self._lastClickPositions.y - UI.DBLCLICK_OFFSET) <= e.clientY &&
-          (self._lastClickPositions.y + UI.DBLCLICK_OFFSET) >= e.clientY) {
-        self.newTab();
-        self._lastClick = 0;
-        self._lastClickPositions = null;
-      } else {
-        self._lastClick = Date.now();
-        self._lastClickPositions = new Point(e.clientX, e.clientY);
-      }
-    });
-
     var dropIndex = false;
     var dropSpaceTimer = null;
 
@@ -1781,14 +1765,16 @@ GroupItem.prototype = Utils.extend(new Item(), new Subscribable(), {
   // ----------
   // Function: newTab
   // Creates a new tab within this groupItem.
-  newTab: function GroupItem_newTab(url) {
-    UI.setActive(this, { dontSetActiveTabInGroup: true });
-    let newTab = gBrowser.loadOneTab(url || "about:blank", {inBackground: true});
+  // Parameters:
+  //  url - the new tab should open this url as well
+  //  options - the options object
+  //    closedLastTab - boolean indicates the last tab has just been closed
+  newTab: function GroupItem_newTab(url, options) {
+    if (options && options.closedLastTab)
+      UI.closedLastTabInTabView = true;
 
-    // TabItems will have handled the new tab and added the tabItem property.
-    // We don't have to check if it's an app tab (and therefore wouldn't have a
-    // TabItem), since we've just created it.
-    newTab._tabViewTabItem.zoomIn(!url);
+    UI.setActive(this, { dontSetActiveTabInGroup: true });
+    gBrowser.loadOneTab(url || "about:blank", { inBackground: false });
   },
 
   // ----------
