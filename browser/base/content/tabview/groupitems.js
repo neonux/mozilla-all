@@ -1622,9 +1622,35 @@ GroupItem.prototype = Utils.extend(new Item(), new Subscribable(), {
   // Helper routine for the constructor; adds various event handlers to the container.
   _addHandlers: function GroupItem__addHandlers(container) {
     let self = this;
+    let lastMouseDownTarget;
 
-    var dropIndex = false;
-    var dropSpaceTimer = null;
+    container.mousedown(function(e) {
+      let target = e.target;
+      // only set the last mouse down target if it is a left click, not on the
+      // close button, not on the new tab button, not on the title bar and its
+      // element
+      if (Utils.isLeftClick(e) && self.$closeButton[0] != target &&
+          self.$ntb[0] != target && self.$titlebar[0] != target &&
+          !self.$titlebar.contains(target))
+        lastMouseDownTarget = target;
+      else
+        lastMouseDownTarget = null;
+    });
+    container.mouseup(function(e) {
+      let same = (e.target == lastMouseDownTarget);
+      lastMouseDownTarget = null;
+
+      if (same && !self.isDragging) {
+        let tabItem = self.getTopChild();
+        if (tabItem)
+          tabItem.zoomIn();
+        else
+          self.newTab();
+       }
+    });
+
+    let dropIndex = false;
+    let dropSpaceTimer = null;
 
     // When the _dropSpaceActive flag is turned on on a group, and a tab is
     // dragged on top, a space will open up.
