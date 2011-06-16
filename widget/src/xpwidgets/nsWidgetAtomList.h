@@ -94,6 +94,7 @@ WIDGET_ATOM(menuitem, "menuitem") // Represents an XP menu item
 WIDGET_ATOM(menupopup, "menupopup") // The XP menu's children.
 WIDGET_ATOM(menuseparator, "menuseparator")  // Divider between menu items
 WIDGET_ATOM(menuFrame, "MenuFrame")
+WIDGET_ATOM(menuPopupFrame, "MenuPopupFrame")
 WIDGET_ATOM(minpos, "minpos")
 WIDGET_ATOM(mode, "mode")
 WIDGET_ATOM(modifiers, "modifiers") // The modifiers attribute

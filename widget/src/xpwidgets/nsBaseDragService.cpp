@@ -55,6 +55,7 @@
 #include "nsIViewManager.h"
 #include "nsIDOMNode.h"
 #include "nsIDOMDragEvent.h"
+#include "nsIPopupBoxObject.h"
 #include "nsISelection.h"
 #include "nsISelectionPrivate.h"
 #include "nsPresContext.h"
@@ -273,6 +274,7 @@ nsBaseDragService::InvokeDragSessionWithImage(nsIDOMNode* aDOMNode,
   mDataTransfer = aDataTransfer;
   mSelection = nsnull;
   mHasImage = PR_TRUE;
+  mDragPopup = nsnull;
   mImage = aImage;
   mImageX = aImageX;
   mImageY = aImageY;
@@ -300,6 +302,7 @@ nsBaseDragService::InvokeDragSessionWithSelection(nsISelection* aSelection,
   mDataTransfer = aDataTransfer;
   mSelection = aSelection;
   mHasImage = PR_TRUE;
+  mDragPopup = nsnull;
   mImage = nsnull;
   mImageX = 0;
   mImageY = 0;
@@ -348,6 +351,21 @@ nsBaseDragService::StartDragSession()
   mDoingDrag = PR_TRUE;
   // By default dispatch drop also to content.
   mOnlyChromeDrop = PR_FALSE;
+
+  if (mDragPopup) {
+    nsCOMPtr<nsIDOMElement> popup = do_QueryInterface(mDragPopup);
+
+    nsIDocument* doc = mDragPopup->GetCurrentDoc();
+    if (doc) {
+      nsCOMPtr<nsIBoxObject> boxObject;
+      doc->GetBoxObjectFor(popup, getter_AddRefs(boxObject));
+      nsCOMPtr<nsIPopupBoxObject> popupBoxObject = do_QueryInterface(boxObject);
+      if (popupBoxObject) {
+        popupBoxObject->OpenPopupAtScreen(mScreenX - mImageX, mScreenY - mImageY, PR_FALSE, nsnull);
+      }
+    }
+  }
+
   return NS_OK;
 }
 
@@ -362,6 +380,20 @@ nsBaseDragService::EndDragSession(PRBool aDoneDrag)
   if (aDoneDrag && !mSuppressLevel)
     FireDragEventAtSource(NS_DRAGDROP_END);
 
+  if (mDragPopup) {
+    nsCOMPtr<nsIDOMElement> popup = do_QueryInterface(mDragPopup);
+
+    nsIDocument* doc = mDragPopup->GetCurrentDoc();
+    if (doc) {
+      nsCOMPtr<nsIBoxObject> boxObject;
+      doc->GetBoxObjectFor(popup, getter_AddRefs(boxObject));
+      nsCOMPtr<nsIPopupBoxObject> popupBoxObject = do_QueryInterface(boxObject);
+      if (popupBoxObject) {
+        popupBoxObject->HidePopup();
+      }
+    }
+  }
+
   mDoingDrag = PR_FALSE;
 
   // release the source we've been holding on to.
@@ -371,6 +403,7 @@ nsBaseDragService::EndDragSession(PRBool aDoneDrag)
   mDataTransfer = nsnull;
   mHasImage = PR_FALSE;
   mUserCancelled = PR_FALSE;
+  mDragPopup = nsnull;
   mImage = nsnull;
   mImageX = 0;
   mImageY = 0;
@@ -400,6 +433,26 @@ nsBaseDragService::FireDragEventAtSource(PRUint32 aMsg)
 
         nsCOMPtr<nsIContent> content = do_QueryInterface(mSourceNode);
         return presShell->HandleDOMEventWithTarget(content, &event, &status);
+      }
+    }
+  }
+
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsBaseDragService::DragMoved(PRInt32 aX, PRInt32 aY)
+{
+  if (mDragPopup) {
+    nsCOMPtr<nsIDOMElement> popup = do_QueryInterface(mDragPopup);
+
+    nsIDocument* doc = mDragPopup->GetCurrentDoc();
+    if (doc) {
+      nsCOMPtr<nsIBoxObject> boxObject;
+      doc->GetBoxObjectFor(popup, getter_AddRefs(boxObject));
+      nsCOMPtr<nsIPopupBoxObject> popupBoxObject = do_QueryInterface(boxObject);
+      if (popupBoxObject) {
+        popupBoxObject->MoveTo(aX - mImageX, aY - mImageY);
       }
     }
   }
@@ -438,8 +491,8 @@ nsBaseDragService::DrawDrag(nsIDOMNode* aDOMNode,
   // use a default size, in case of an error.
   aScreenDragRect->x = aScreenX - mImageX;
   aScreenDragRect->y = aScreenY - mImageY;
-  aScreenDragRect->width = 20;
-  aScreenDragRect->height = 20;
+  aScreenDragRect->width = 1;
+  aScreenDragRect->height = 1;
 
   // if a drag image was specified, use that, otherwise, use the source node
   nsCOMPtr<nsIDOMNode> dragNode = mImage ? mImage.get() : aDOMNode;
@@ -499,9 +552,9 @@ nsBaseDragService::DrawDrag(nsIDOMNode* aDOMNode,
     return NS_OK;
   }
 
-  // if an custom image was specified, check if it is an image node and draw
+  // if a custom image was specified, check if it is an image node and draw
   // using the source rather than the displayed image. But if mImage isn't
-  // an image, fall through to RenderNode below.
+  // an image or canvas, fall through to RenderNode below.
   if (mImage) {
     nsCOMPtr<nsICanvasElementExternal> canvas = do_QueryInterface(dragNode);
     if (canvas) {
@@ -515,22 +568,35 @@ nsBaseDragService::DrawDrag(nsIDOMNode* aDOMNode,
       return DrawDragForImage(*aPresContext, imageLoader, nsnull, aScreenX,
                               aScreenY, aScreenDragRect, aSurface);
     }
-  }
 
-  // otherwise, just draw the node
-  nsIntRegion clipRegion;
-  if (aRegion) {
-    nsCOMPtr<nsIRegion> clipIRegion;
-    aRegion->GetRegion(getter_AddRefs(clipIRegion));
-    if (clipIRegion) {
-      clipRegion = clipIRegion->GetUnderlyingRegion();
+    // If the image is a popup, use that as the image. This allows custom drag
+    // images that can change during the drag, but means that any platform
+    // default image handling won't occur.
+    // XXXndeakin this should be chrome-only
+
+    nsCOMPtr<nsIContent> content = do_QueryInterface(dragNode);
+    nsIFrame* frame = content->GetPrimaryFrame();
+    if (frame && frame->GetType() == nsGkAtoms::menuPopupFrame) {
+      mDragPopup = content;
     }
   }
 
-  nsIntPoint pnt(aScreenDragRect->x, aScreenDragRect->y);
-  nsRefPtr<gfxASurface> surface =
-    presShell->RenderNode(dragNode, aRegion ? &clipRegion : nsnull,
-                          pnt, aScreenDragRect);
+  nsRefPtr<gfxASurface> surface;
+  if (!mDragPopup) {
+    // otherwise, just draw the node
+    nsIntRegion clipRegion;
+    if (aRegion) {
+      nsCOMPtr<nsIRegion> clipIRegion;
+      aRegion->GetRegion(getter_AddRefs(clipIRegion));
+      if (clipIRegion) {
+        clipRegion = clipIRegion->GetUnderlyingRegion();
+      }
+    }
+
+    nsIntPoint pnt(aScreenDragRect->x, aScreenDragRect->y);
+    surface = presShell->RenderNode(dragNode, aRegion ? &clipRegion : nsnull,
+                                    pnt, aScreenDragRect);
+  }
 
   // if an image was specified, reposition the drag rectangle to
   // the supplied offset in mImageX and mImageY.

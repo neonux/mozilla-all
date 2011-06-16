@@ -69,6 +69,7 @@
 #include "nsPresContext.h"
 #include "nsIDocument.h"
 #include "nsISelection.h"
+#include "nsIFrame.h"
 
 // This sets how opaque the drag image is
 #define DRAG_IMAGE_ALPHA_LEVEL 0.5
@@ -334,7 +335,7 @@ nsDragService::InvokeDragSession(nsIDOMNode *aDOMNode,
     if (!context) {
         rv = NS_ERROR_FAILURE;
     } else {
-        PRBool needsFallbackIcon = PR_FALSE;
+        PRBool needsFallbackIcon = PR_TRUE;
         nsIntRect dragRect;
         nsPresContext* pc;
         nsRefPtr<gfxASurface> surface;
@@ -343,24 +344,39 @@ nsDragService::InvokeDragSession(nsIDOMNode *aDOMNode,
                    &dragRect, getter_AddRefs(surface), &pc);
         }
 
-        if (surface) {
-          PRInt32 sx = mScreenX, sy = mScreenY;
-          ConvertToUnscaledDevPixels(pc, &sx, &sy);
+        PRInt32 sx = mScreenX, sy = mScreenY;
+        ConvertToUnscaledDevPixels(pc, &sx, &sy);
 
-          PRInt32 offsetX = sx - dragRect.x;
-          PRInt32 offsetY = sy - dragRect.y;
+        PRInt32 offsetX = sx - dragRect.x;
+        PRInt32 offsetY = sy - dragRect.y;
+
+        // If a popup is set as the drag image, use its widget. Otherwise, use
+        // the surface that DrawDrag created.
+        if (mDragPopup) {
+          GtkWidget* gtkWidget = nsnull;
+          nsIFrame* frame = mDragPopup->GetPrimaryFrame();
+          if (frame) {
+            // DrawDrag ensured that this is a popup frame.
+            nsCOMPtr<nsIWidget> widget = frame->GetNearestWidget();
+            if (widget) {
+              gtkWidget = (GtkWidget *)widget->GetNativeData(NS_NATIVE_SHELLWIDGET);
+              if (gtkWidget) {
+                gtk_drag_set_icon_widget(context, gtkWidget, offsetX, offsetY);
+                needsFallbackIcon = PR_FALSE;
+              }
+            }
+          }
+        }
+        else if (surface) {
           if (!SetAlphaPixmap(surface, context, offsetX, offsetY, dragRect)) {
             GdkPixbuf* dragPixbuf =
               nsImageToPixbuf::SurfaceToPixbuf(surface, dragRect.width, dragRect.height);
             if (dragPixbuf) {
               gtk_drag_set_icon_pixbuf(context, dragPixbuf, offsetX, offsetY);
               g_object_unref(dragPixbuf);
-            } else {
-              needsFallbackIcon = PR_TRUE;
+              needsFallbackIcon = PR_FALSE;
             }
           }
-        } else {
-          needsFallbackIcon = PR_TRUE;
         }
 
         if (needsFallbackIcon)

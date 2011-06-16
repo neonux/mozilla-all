@@ -86,6 +86,7 @@
 #include "nsIScreenManager.h"
 #include "nsIServiceManager.h"
 #include "nsThemeConstants.h"
+#include "nsDisplayList.h"
 #include "mozilla/Preferences.h"
 
 using namespace mozilla;
@@ -275,6 +276,11 @@ nsMenuPopupFrame::CreateWidgetForView(nsIView* aView)
   widgetData.clipSiblings = PR_TRUE;
   widgetData.mPopupHint = mPopupType;
   widgetData.mNoAutoHide = IsNoAutoHide();
+
+  if (mContent->AttrValueIs(kNameSpaceID_None, nsGkAtoms::allowevents,
+                            nsGkAtoms::_false, eCaseMatters)) {
+    widgetData.mIgnoreMouse = PR_TRUE;
+  }
 
   nsAutoString title;
   if (mContent && widgetData.mNoAutoHide) {
@@ -1753,6 +1759,23 @@ void
 nsMenuPopupFrame::AttachedDismissalListener()
 {
   mConsumeRollupEvent = nsIPopupBoxObject::ROLLUP_DEFAULT;
+}
+
+nsresult
+nsMenuPopupFrame::BuildDisplayList(nsDisplayListBuilder*   aBuilder,
+                                   const nsRect&           aDirtyRect,
+                                   const nsDisplayListSet& aLists)
+{
+  // if allowevents="false", don't pass events to the popup
+  if (aBuilder->IsForEventDelivery() && mPopupType == ePopupTypePanel) {
+    if (mContent &&
+        mContent->AttrValueIs(kNameSpaceID_None, nsGkAtoms::allowevents,
+                              nsGkAtoms::_false, eCaseMatters)) {
+      return NS_OK;
+    }
+  }
+
+  return nsBoxFrame::BuildDisplayList(aBuilder, aDirtyRect, aLists);
 }
 
 // helpers /////////////////////////////////////////////////////////////
