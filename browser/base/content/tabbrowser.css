@@ -38,6 +38,16 @@ tabpanels {
   background-color: transparent;
 }
 
+.tabbrowser-tabs:not([drag=detach]) > hbox > .tab-drag-image {
+  opacity: 0;
+}
+
+/* when there is only one tab, show a semi-transparent tab drag image to make it
+   more obvious that it can be merged into another window */
+.tabbrowser-tabs[drag=hint] > hbox > .tab-drag-image {
+  opacity: .5;
+}
+
 .tab-drop-indicator {
   position: relative;
   z-index: 2;
