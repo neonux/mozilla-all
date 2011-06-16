@@ -3598,6 +3598,13 @@
         dragImage.appendChild(tabPreviews.get(tab));
         dragImage.hidden = false;
         dt.setDragImage(dragImage, -1, -1);
+#ifdef XP_UNIX
+#ifndef XP_MACOSX
+        // XXX on Linux, using a panel as the drag image is buggy (bug 533460)
+        let blank = document.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
+        dt.setDragImage(blank, 0, 0);
+#endif
+#endif
 
         this.setAttribute("drag", "move");
         tab._dragStartX = event.clientX;
