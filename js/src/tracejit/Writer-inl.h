@@ -1,5 +1,7 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
+ * vim: set ts=4 sw=4 et tw=99 ft=cpp:
+ *
+ * ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
  * The contents of this file are subject to the Mozilla Public License Version
@@ -12,14 +14,13 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is mozilla.org code.
+ * The Original Code is SpiderMonkey code.
  *
  * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
- * the Initial Developer. All Rights Reserved.
+ * the Mozilla Foundation.
  *
  * Contributor(s):
+ *   Jeff Walden <jwalden+code@mit.edu>
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either of the GNU General Public License Version 2 or later (the "GPL"),
@@ -34,33 +35,50 @@
  * the terms of any one of the MPL, the GPL or the LGPL.
  *
  * ***** END LICENSE BLOCK ***** */
-#ifndef nsPosixLocale_h__
-#define nsPosixLocale_h__
 
+#ifndef tracejit_Writer_inl_h___
+#define tracejit_Writer_inl_h___
 
-#include "nsISupports.h"
-#include "nscore.h"
-#include "nsString.h"
-#include "nsIPosixLocale.h"
+#include "Writer.h"
 
+namespace js {
+namespace tjit {
 
+namespace nj = nanojit;
 
-class nsPosixLocale : public nsIPosixLocale {
+nj::LIns *
+Writer::getArgsLength(nj::LIns *args) const
+{
+    uint32 slot = ArgumentsObject::INITIAL_LENGTH_SLOT;
+    nj::LIns *vaddr_ins = ldpObjSlots(args);
+    return name(lir->insLoad(nj::LIR_ldi, vaddr_ins, slot * sizeof(Value) + sPayloadOffset,
+                             ACCSET_SLOTS),
+                "argsLength");
+}
 
-  NS_DECL_ISUPPORTS
+inline nj::LIns *
+Writer::ldpIterCursor(nj::LIns *iter) const
+{
+    return name(lir->insLoad(nj::LIR_ldp, iter, offsetof(NativeIterator, props_cursor),
+                             ACCSET_ITER),
+                "cursor");
+}
 
-public:
-  
-  nsPosixLocale();
-  virtual ~nsPosixLocale();
+inline nj::LIns *
+Writer::ldpIterEnd(nj::LIns *iter) const
+{
+    return name(lir->insLoad(nj::LIR_ldp, iter, offsetof(NativeIterator, props_end), ACCSET_ITER),
+                "end");
+}
 
-  NS_IMETHOD GetPlatformLocale(const nsAString& locale, nsACString& posixLocale);
-  NS_IMETHOD GetXPLocale(const char* posixLocale, nsAString& locale);
+inline nj::LIns *
+Writer::stpIterCursor(nj::LIns *cursor, nj::LIns *iter) const
+{
+    return lir->insStore(nj::LIR_stp, cursor, iter, offsetof(NativeIterator, props_cursor),
+                         ACCSET_ITER);
+}
 
-protected:
-  inline PRBool ParseLocaleString(const char* locale_string, char* language, char* country, char* extra, char separator);
+} /* namespace tjit */
+} /* namespace js */
 
-};
-
-
-#endif
+#endif /* tracejit_Writer_inl_h___ */

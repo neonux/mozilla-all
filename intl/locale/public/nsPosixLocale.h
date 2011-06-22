@@ -1,4 +1,4 @@
-/* -*- Mode: IDL; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
+/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
@@ -15,11 +15,12 @@
  * The Original Code is mozilla.org code.
  *
  * The Initial Developer of the Original Code is
- * Marco Pesenti Gritti <marco@gnome.org>
- * Portions created by the Initial Developer are Copyright (C) 2004
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
+ *   Henry Sobotka <sobotka@axess.com>
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either of the GNU General Public License Version 2 or later (the "GPL"),
@@ -34,30 +35,23 @@
  * the terms of any one of the MPL, the GPL or the LGPL.
  *
  * ***** END LICENSE BLOCK ***** */
+#ifndef nsIPosixLocale_h__
+#define nsIPosixLocale_h__
 
-#include "nsIDOMWindow.idl"
 
-interface nsIDOMOfflineResourceList;
-interface nsIDOMBlob;
+#include "nscore.h"
+#include "nsString.h"
 
-[scriptable, uuid(e2796e00-14de-4ce0-acfe-0374bc0e715d)]
-interface nsIDOMWindow2 : nsIDOMWindow
-{
-  /**
-   * Get the window root for this window. This is useful for hooking
-   * up event listeners to this window and every other window nested
-   * in the window root.
-   */
-  [noscript] readonly attribute nsIDOMEventTarget windowRoot;
+#define MAX_LANGUAGE_CODE_LEN 3
+#define MAX_COUNTRY_CODE_LEN  3
+#define MAX_LOCALE_LEN        128
+#define MAX_EXTRA_LEN         65
 
-  /**
-   * Get the application cache object for this window.
-   */
-  readonly attribute nsIDOMOfflineResourceList applicationCache;
+class nsPosixLocale {
 
-  /**
-   * Deprecated, but can't remove yet since we don't want to change interfaces.
-   */
-  [noscript] DOMString createBlobURL(in nsIDOMBlob blob);
-  [noscript] void revokeBlobURL(in DOMString URL);
+public:
+  static nsresult GetPlatformLocale(const nsAString& locale, nsACString& posixLocale);
+  static nsresult GetXPLocale(const char* posixLocale, nsAString& locale);
 };
+
+#endif

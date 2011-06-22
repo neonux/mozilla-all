@@ -1,4 +1,4 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
+/* -*-  Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2; -*- */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
@@ -15,11 +15,12 @@
  * The Original Code is mozilla.org code.
  *
  * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
+ * The Mozilla Foundation <http://www.mozilla.org/>.
+ * Portions created by the Initial Developer are Copyright (C) 2011
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
+ *  Taras Glek <tglek@mozilla.com>
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -35,43 +36,29 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-#ifndef nsLoadListenerProxy_h
-#define nsLoadListenerProxy_h
+#ifndef Telemetry_h__
+#define Telemetry_h__
 
-#include "nsIDOMLoadListener.h"
-#include "nsWeakReference.h"
+namespace mozilla {
+namespace Telemetry {
 
-/////////////////////////////////////////////
-//
-// This class exists to prevent a circular reference between
-// the loaded document and the actual loader instance request. The
-// request owns the document. While the document is loading, 
-// the request is a load listener, held onto by the document.
-// The proxy class breaks the circularity by filling in as the
-// load listener and holding a weak reference to the request
-// object.
-//
-/////////////////////////////////////////////
+enum ID {
+#define HISTOGRAM(name, a, b, c, d, e) name,
 
-class nsLoadListenerProxy : public nsIDOMLoadListener {
-public:
-  nsLoadListenerProxy(nsWeakPtr aParent);
-  virtual ~nsLoadListenerProxy();
+#include "TelemetryHistograms.h"
 
-  NS_DECL_ISUPPORTS
-
-  // nsIDOMEventListener
-  NS_IMETHOD HandleEvent(nsIDOMEvent* aEvent);
-
-  // nsIDOMLoadListener
-  NS_IMETHOD Load(nsIDOMEvent* aEvent);
-  NS_IMETHOD BeforeUnload(nsIDOMEvent* aEvent);
-  NS_IMETHOD Unload(nsIDOMEvent* aEvent);
-  NS_IMETHOD Abort(nsIDOMEvent* aEvent);
-  NS_IMETHOD Error(nsIDOMEvent* aEvent);
-
-protected:
-  nsWeakPtr  mParent;
+#undef HISTOGRAM
+HistogramCount
 };
 
-#endif
+/**
+ * Adds sample to a histogram defined in TelemetryHistograms.h
+ *
+ * @param id - histogram id
+ * @param sample - value to record.
+ */
+void Accumulate(ID id, PRUint32 sample);
+
+} // namespace Telemetry
+} // namespace mozilla
+#endif // Telemetry_h__
