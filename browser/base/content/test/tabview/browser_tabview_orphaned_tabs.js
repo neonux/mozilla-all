@@ -9,27 +9,23 @@ function test() {
 
   newWindowWithTabView(onTabViewWindowLoaded, function(win) {
     newWin = win;
+    registerCleanupFunction(function () newWin.close());
     tabOne = newWin.gBrowser.addTab();
   });
 }
 
 function onTabViewWindowLoaded() {
-  newWin.removeEventListener("tabviewshown", onTabViewWindowLoaded, false);
-
   ok(newWin.TabView.isVisible(), "Tab View is visible");
 
-  let contentWindow = newWin.document.getElementById("tab-view").contentWindow;
+  let contentWindow = newWin.TabView.getContentWindow();
 
   // 1) the tab should belong to a group, and no orphan tabs
   ok(tabOne._tabViewTabItem.parent, "Tab one belongs to a group");
   is(contentWindow.GroupItems.getOrphanedTabs().length, 0, "No orphaned tabs");
 
-  // 2) create a group, add a blank tab 
-  let groupItem = createEmptyGroupItem(contentWindow, 300, 300, 200);
-
-  let onTabViewHidden = function() {
-    newWin.removeEventListener("tabviewhidden", onTabViewHidden, false);
-
+  // 2) create a group, add a blank tab
+  let groupItem = createGroupItemWithBlankTabs(newWin, 300, 300, 200, 1);
+  hideTabView(function() {
     // 3) the new group item should have one child and no orphan tab
     is(groupItem.getChildren().length, 1, "The group item has an item");
     is(contentWindow.GroupItems.getOrphanedTabs().length, 0, "No orphaned tabs");
@@ -58,14 +54,7 @@ function onTabViewWindowLoaded() {
         checkAndFinish();
       });
     }
-  };
-  newWin.addEventListener("tabviewhidden", onTabViewHidden, false);
-
-  // click on the + button
-  let newTabButton = groupItem.container.getElementsByClassName("newTabButton");
-  ok(newTabButton[0], "New tab button exists");
-
-  EventUtils.sendMouseEvent({ type: "click" }, newTabButton[0], contentWindow);
+  }, newWin);
 }
 
 function whenWindowObservesOnce(win, topic, callback) {
