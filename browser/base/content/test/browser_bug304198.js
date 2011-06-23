@@ -46,6 +46,8 @@ function test() {
   partialURLTab = gBrowser.addTab();
   testURL = "http://example.org/browser/browser/base/content/test/dummy_page.html";
 
+  testPartialURL = testURL.substr(0, (testURL.length - charsToDelete));
+
   function cleanUp() {
     gBrowser.removeTab(fullURLTab);
     gBrowser.removeTab(partialURLTab);
@@ -133,9 +135,6 @@ function test() {
   }
 
   function runTests() {
-    testURL = gURLBar.trimValue(testURL);
-    testPartialURL = testURL.substr(0, (testURL.length - charsToDelete));
-
     // prepare the three tabs required by this test
     prepareFullURLTab(function () {
       preparePartialURLTab(function () {

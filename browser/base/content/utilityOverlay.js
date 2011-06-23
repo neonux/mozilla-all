@@ -617,8 +617,3 @@ function openPrefsHelp() {
   var helpTopic = document.getElementsByTagName("prefwindow")[0].currentPane.helpTopic;
   openHelpLink(helpTopic, !instantApply);
 }
-
-function trimURL(aURL) {
-  return aURL.replace(/^((?:http|https|ftp):\/\/[^/]+)\/$/, "$1")
-             .replace(/^http:\/\/((?!ftp\.)[^\/@]+(?:\/|$))/, "$1");
-}
