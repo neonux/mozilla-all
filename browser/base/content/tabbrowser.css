@@ -22,6 +22,10 @@
   -moz-user-focus: normal;
 }
 
+.tabbrowser-tab[label=""] > .tab-stack > .tab-content > .tab-icon-image {
+  visibility: collapse;
+}
+
 .tab-label[pinned] {
   width: 0;
   margin-left: 0 !important;
