@@ -117,7 +117,14 @@ protected:
 
     virtual PPluginIdentifierChild*
     AllocPPluginIdentifier(const nsCString& aString,
-                           const int32_t& aInt);
+                           const int32_t& aInt,
+                           const bool& aTemporary);
+
+    virtual bool
+    RecvPPluginIdentifierConstructor(PPluginIdentifierChild* actor,
+                                     const nsCString& aString,
+                                     const int32_t& aInt,
+                                     const bool& aTemporary);
 
     virtual bool
     DeallocPPluginIdentifier(PPluginIdentifierChild* aActor);
@@ -155,6 +162,11 @@ protected:
 
     virtual bool
     AnswerNPP_GetSitesWithData(InfallibleTArray<nsCString>* aResult);
+
+    virtual bool
+    RecvSetAudioSessionData(const nsID& aId,
+                            const nsString& aDisplayName,
+                            const nsString& aIconPath);
 
     virtual void
     ActorDestroy(ActorDestroyReason why);
@@ -390,8 +402,11 @@ private:
      */
     nsTHashtable<NPObjectData> mObjectMap;
 
-    nsDataHashtable<nsCStringHashKey, PluginIdentifierChild*> mStringIdentifiers;
-    nsDataHashtable<nsUint32HashKey, PluginIdentifierChild*> mIntIdentifiers;
+    friend class PluginIdentifierChild;
+    friend class PluginIdentifierChildString;
+    friend class PluginIdentifierChildInt;
+    nsDataHashtable<nsCStringHashKey, PluginIdentifierChildString*> mStringIdentifiers;
+    nsDataHashtable<nsUint32HashKey, PluginIdentifierChildInt*> mIntIdentifiers;
 
 public: // called by PluginInstanceChild
     /**

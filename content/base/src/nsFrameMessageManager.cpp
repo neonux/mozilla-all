@@ -382,8 +382,9 @@ nsFrameMessageManager::ReceiveMessage(nsISupports* aTarget,
           }
         }
 
-        jsval objectsv;
-        if (!JS_WrapValue(ctx, &objectsv))
+        js::AutoValueRooter objectsv(ctx);
+        objectsv.set(OBJECT_TO_JSVAL(aObjectsArray));
+        if (!JS_WrapValue(ctx, objectsv.jsval_addr()))
             return NS_ERROR_UNEXPECTED;
 
         jsval json = JSVAL_NULL;
@@ -404,7 +405,7 @@ nsFrameMessageManager::ReceiveMessage(nsISupports* aTarget,
         JS_DefineProperty(ctx, param, "sync",
                           BOOLEAN_TO_JSVAL(aSync), NULL, NULL, JSPROP_ENUMERATE);
         JS_DefineProperty(ctx, param, "json", json, NULL, NULL, JSPROP_ENUMERATE);
-        JS_DefineProperty(ctx, param, "objects", objectsv, NULL, NULL, JSPROP_ENUMERATE);
+        JS_DefineProperty(ctx, param, "objects", objectsv.jsval_value(), NULL, NULL, JSPROP_ENUMERATE);
 
         jsval thisValue = JSVAL_VOID;
 
