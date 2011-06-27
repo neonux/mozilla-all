@@ -80,8 +80,8 @@ function searchTest(contentWindow) {
       }
   });
 
-  ok(tabNames[0] && tabNames[0].length > 2, 
-     "The title of tab item is longer than 2 chars")
+  ok(tabNames[0] && tabNames[0].length == 0,
+     "The title of tab item is blank")
 
   // empty string
   searchBox.setAttribute("value", "");
@@ -101,7 +101,7 @@ function searchTest(contentWindow) {
     "Match something when the whole title exists");
 
   // part of titled
-  searchBox.setAttribute("value", tabNames[0].substr(1));
+  searchBox.setAttribute("value", tabNames[2].substr(1));
   contentWindow.performSearch();
   matchResults = getMatchResults(contentWindow, searchBox.getAttribute("value"));
   is(matchResults.length, 1,
