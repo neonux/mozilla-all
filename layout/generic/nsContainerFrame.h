@@ -50,7 +50,9 @@
  * Child list name indices
  * @see #GetAdditionalChildListName()
  */
-#define NS_CONTAINER_LIST_COUNT_INCL_OC 4
+#define NS_CONTAINER_LIST_COUNT_SANS_OC 1
+  // for frames that don't use overflow containers
+#define NS_CONTAINER_LIST_COUNT_INCL_OC 3
   // for frames that support overflow containers
 
 // Option flags for ReflowChild() and FinishReflowChild()
@@ -402,8 +404,8 @@ protected:
   /**
    * Set the overflow list.  aOverflowFrames must not be an empty list.
    */
-  nsresult SetOverflowFrames(nsPresContext*  aPresContext,
-                             const nsFrameList& aOverflowFrames);
+  void SetOverflowFrames(nsPresContext*  aPresContext,
+                         const nsFrameList& aOverflowFrames);
 
   /**
    * Destroy the overflow list and any frames that are on it.

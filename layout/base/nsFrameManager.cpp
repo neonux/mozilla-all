@@ -93,7 +93,6 @@
 #include "imgIRequest.h"
 #include "nsTransitionManager.h"
 #include "RestyleTracker.h"
-#include "nsAbsoluteContainingBlock.h"
 
 #include "nsFrameManager.h"
 #include "nsRuleProcessorData.h"
@@ -380,14 +379,12 @@ nsFrameManager::SetUndisplayedContent(nsIContent* aContent,
   if (! mUndisplayedMap) {
     mUndisplayedMap = new UndisplayedMap;
   }
-  if (mUndisplayedMap) {
-    nsIContent* parent = aContent->GetParent();
-    NS_ASSERTION(parent || (mPresShell && mPresShell->GetDocument() &&
-                 mPresShell->GetDocument()->GetRootElement() == aContent),
-                 "undisplayed content must have a parent, unless it's the root "
-                 "element");
-    mUndisplayedMap->AddNodeFor(parent, aContent, aStyleContext);
-  }
+  nsIContent* parent = aContent->GetParent();
+  NS_ASSERTION(parent || (mPresShell && mPresShell->GetDocument() &&
+               mPresShell->GetDocument()->GetRootElement() == aContent),
+               "undisplayed content must have a parent, unless it's the root "
+               "element");
+  mUndisplayedMap->AddNodeFor(parent, aContent, aStyleContext);
 }
 
 void
@@ -474,19 +471,6 @@ nsFrameManager::ClearAllUndisplayedContentIn(nsIContent* aParentContent)
 }
 
 //----------------------------------------------------------------------
-nsresult
-nsFrameManager::AppendFrames(nsIFrame*       aParentFrame,
-                             nsIAtom*        aListName,
-                             nsFrameList&    aFrameList)
-{
-  if (aParentFrame->IsAbsoluteContainer() &&
-      aListName == aParentFrame->GetAbsoluteListName()) {
-    return aParentFrame->GetAbsoluteContainingBlock()->
-           AppendFrames(aParentFrame, aListName, aFrameList);
-  } else {
-    return aParentFrame->AppendFrames(aListName, aFrameList);
-  }
-}
 
 nsresult
 nsFrameManager::InsertFrames(nsIFrame*       aParentFrame,
@@ -499,13 +483,7 @@ nsFrameManager::InsertFrames(nsIFrame*       aParentFrame,
                   && !IS_TRUE_OVERFLOW_CONTAINER(aPrevFrame),
                   "aPrevFrame must be the last continuation in its chain!");
 
-  if (aParentFrame->IsAbsoluteContainer() &&
-      aListName == aParentFrame->GetAbsoluteListName()) {
-    return aParentFrame->GetAbsoluteContainingBlock()->
-           InsertFrames(aParentFrame, aListName, aPrevFrame, aFrameList);
-  } else {
-    return aParentFrame->InsertFrames(aListName, aPrevFrame, aFrameList);
-  }
+  return aParentFrame->InsertFrames(aListName, aPrevFrame, aFrameList);
 }
 
 nsresult
@@ -530,15 +508,7 @@ nsFrameManager::RemoveFrame(nsIAtom*        aListName,
   NS_ASSERTION(!(aOldFrame->GetStateBits() & NS_FRAME_OUT_OF_FLOW &&
                  GetPlaceholderFrameFor(aOldFrame)),
                "Must call RemoveFrame on placeholder for out-of-flows.");
-  nsresult rv = NS_OK;
-  nsIFrame* parentFrame = aOldFrame->GetParent();
-  if (parentFrame->IsAbsoluteContainer() &&
-      aListName == parentFrame->GetAbsoluteListName()) {
-    parentFrame->GetAbsoluteContainingBlock()->
-      RemoveFrame(parentFrame, aListName, aOldFrame);
-  } else {
-    rv = parentFrame->RemoveFrame(aListName, aOldFrame);
-  }
+  nsresult rv = aOldFrame->GetParent()->RemoveFrame(aListName, aOldFrame);
 
   mIsDestroyingFrames = wasDestroyingFrames;
 
@@ -1900,9 +1870,6 @@ nsFrameManagerBase::UndisplayedMap::AddNodeFor(nsIContent* aParentContent,
                                                nsStyleContext* aStyle)
 {
   UndisplayedNode*  node = new UndisplayedNode(aChild, aStyle);
-  if (! node) {
-    return NS_ERROR_OUT_OF_MEMORY;
-  }
 
   AppendNodeFor(node, aParentContent);
   return NS_OK;

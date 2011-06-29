@@ -319,12 +319,12 @@ nsContainerFrame::GetChildList(nsIAtom* aListName) const
     return list ? *list : nsFrameList::EmptyList();
   }
 
-  return nsSplittableFrame::GetChildList(aListName);
+  return nsFrameList::EmptyList();
 }
 
-#define NS_CONTAINER_FRAME_OVERFLOW_LIST_INDEX                   1
-#define NS_CONTAINER_FRAME_OVERFLOW_CONTAINERS_LIST_INDEX        2
-#define NS_CONTAINER_FRAME_EXCESS_OVERFLOW_CONTAINERS_LIST_INDEX 3
+#define NS_CONTAINER_FRAME_OVERFLOW_LIST_INDEX                   0
+#define NS_CONTAINER_FRAME_OVERFLOW_CONTAINERS_LIST_INDEX        1
+#define NS_CONTAINER_FRAME_EXCESS_OVERFLOW_CONTAINERS_LIST_INDEX 2
 // If adding/removing lists, don't forget to update count in .h file
 
 
@@ -339,7 +339,7 @@ nsContainerFrame::GetAdditionalChildListName(PRInt32 aIndex) const
     else if (NS_CONTAINER_FRAME_EXCESS_OVERFLOW_CONTAINERS_LIST_INDEX == aIndex)
       return nsGkAtoms::excessOverflowContainersList;
   }
-  return nsSplittableFrame::GetAdditionalChildListName(aIndex);
+  return nsnull;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1375,21 +1375,14 @@ nsContainerFrame::DeleteNextInFlowChild(nsPresContext* aPresContext,
 /**
  * Set the frames on the overflow list
  */
-nsresult
+void
 nsContainerFrame::SetOverflowFrames(nsPresContext* aPresContext,
                                     const nsFrameList& aOverflowFrames)
 {
   NS_PRECONDITION(aOverflowFrames.NotEmpty(), "Shouldn't be called");
   nsFrameList* newList = new nsFrameList(aOverflowFrames);
-  if (!newList) {
-    // XXXbz should really destroy the frames here, but callers are holding
-    // pointers to them.... We should switch all callers to framelists, then
-    // audit and do that.
-    return NS_ERROR_OUT_OF_MEMORY;
-  }
 
   aPresContext->PropertyTable()->Set(this, OverflowProperty(), newList);
-  return NS_OK;
 }
 
 nsFrameList*

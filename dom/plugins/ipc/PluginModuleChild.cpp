@@ -74,7 +74,7 @@
 #include "mozilla/widget/AudioSession.h"
 #endif
 
-#ifdef OS_MACOSX
+#ifdef MOZ_WIDGET_COCOA
 #include "PluginInterposeOSX.h"
 #include "PluginUtilsOSX.h"
 #endif
@@ -254,6 +254,15 @@ PluginModuleChild::Init(const std::string& aPluginFilename,
 #  error Please copy the initialization code from nsNPAPIPlugin.cpp
 
 #endif
+
+#ifdef XP_MACOSX
+    nsPluginInfo info = nsPluginInfo();
+    rv = pluginFile.GetPluginInfo(info, &mLibrary);
+    if (rv == NS_OK) {
+        mozilla::plugins::PluginUtilsOSX::SetProcessName(info.fName);
+    }
+#endif
+
     return true;
 }
 
@@ -1665,7 +1674,7 @@ _popupcontextmenu(NPP instance, NPMenu* menu)
     PLUGIN_LOG_DEBUG_FUNCTION;
     AssertPluginThread();
 
-#ifdef OS_MACOSX
+#ifdef MOZ_WIDGET_COCOA
     double pluginX, pluginY; 
     double screenX, screenY;
 
@@ -2329,7 +2338,7 @@ PluginModuleChild::RecvProcessNativeEventsInRPCCall()
 #endif
 }
 
-#ifdef OS_MACOSX
+#ifdef MOZ_WIDGET_COCOA
 void
 PluginModuleChild::ProcessNativeEvents() {
     CallProcessSomeEvents();    

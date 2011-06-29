@@ -1,3 +1,4 @@
+/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
@@ -11,18 +12,18 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is mozilla.org code.
+ * The Original Code is JavaScript Engine testing utilities.
  *
  * The Initial Developer of the Original Code is
- * Alexander J. Vincent <ajvincent@gmail.com>.
- * Portions created by the Initial Developer are Copyright (C) 2006
+ * Mozilla Foundation.
+ * Portions created by the Initial Developer are Copyright (C) 2007
  * the Initial Developer. All Rights Reserved.
  *
- * Contributor(s):
+ * Contributor(s): Dave Herman
  *
  * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
  * in which case the provisions of the GPL or the LGPL are applicable instead
  * of those above. If you wish to allow use of your version of this file only
  * under the terms of either the GPL or the LGPL, and not to allow others to
@@ -34,11 +35,31 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-#include "domstubs.idl"
 
-[scriptable, uuid(dc3ac0ee-9afb-4d1e-a49c-f5042e5bcf65)]
-interface nsIDOM3Attr : nsISupports
-{
-    // Introduced in DOM Level 3:
-    readonly attribute boolean                isId;
-};
+//-----------------------------------------------------------------------------
+var BUGNUMBER = 665286;
+var summary = 'yield in arguments list';
+var actual = '';
+var expect = '';
+
+function reported() {
+    function f() {
+        x
+    }
+    f(yield #2=[])
+}
+
+function simplified1() {
+    print(yield)
+}
+
+function simplified2() {
+    print(1, yield)
+}
+
+reportCompare(reported.isGenerator(), true, "reported case: is generator");
+reportCompare(typeof reported(), "object", "reported case: calling doesn't crash");
+reportCompare(simplified1.isGenerator(), true, "simplified case 1: is generator");
+reportCompare(typeof simplified1(), "object", "simplified case 1: calling doesn't crash");
+reportCompare(simplified2.isGenerator(), true, "simplified case 2: is generator");
+reportCompare(typeof simplified2(), "object", "simplified case 2: calling doesn't crash");
