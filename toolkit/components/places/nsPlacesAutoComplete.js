@@ -422,11 +422,6 @@ nsPlacesAutoComplete.prototype = {
   startSearch: function PAC_startSearch(aSearchString, aSearchParam,
                                         aPreviousResult, aListener)
   {
-    // If a previous query is running and the controller has not taken care
-    // of stopping it, kill it.
-    if ("_pendingQuery" in this)
-      this.stopSearch();
-
     // Note: We don't use aPreviousResult to make sure ordering of results are
     //       consistent.  See bug 412730 for more details.
 
@@ -439,6 +434,9 @@ nsPlacesAutoComplete.prototype = {
 
     var searchParamParts = aSearchParam.split(" ");
     this._enableActions = searchParamParts.indexOf("enable-actions") != -1;
+
+    if (searchParamParts.indexOf("newtab-maxresults") != -1)
+      this._maxRichResults = 100;
 
     this._listener = aListener;
     let result = Cc["@mozilla.org/autocomplete/simple-result;1"].
