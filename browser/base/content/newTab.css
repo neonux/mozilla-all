@@ -1,0 +1,89 @@
+html {
+  font-family: sans-serif;
+  background: -moz-Field;
+  color: -moz-FieldText;
+}
+
+#sites-container {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 600px;
+}
+
+.site-item {
+  padding: 15px;
+  text-align: center;
+  border: 1px solid transparent;
+  -moz-transition: opacity 200ms ease-out;
+  opacity: 1;
+  position: relative;
+  float: left;
+  width: 150px;
+  height: 100px;
+}
+
+.site-item[removing] {
+  opacity: 0;
+}
+
+.image-container {
+  border-radius: 2px;
+  border: 1px solid transparent;
+  height: 16px;
+  width: 16px;
+  padding: 8px;
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: 10px;
+  cursor:pointer;
+}
+
+.url-item {
+  color: -moz-FieldText;
+  font-size: 0.8em;
+  text-decoration: none;
+  -moz-transition: color 400ms ease-out;
+}
+
+.url-item:hover {
+  text-decoration: underline;
+}
+
+.remove-button {
+  cursor: pointer;
+  border: none;
+  background-color: transparent;
+  background-image: url("chrome://global/skin/icons/close.png");
+  background-repeat: no-repeat;
+  height: 16px;
+  width: 16px;
+  position: relative;
+  left: 24px;
+  top: 16px;
+  -moz-transition: opacity 200ms ease-out;
+  opacity: 1;
+}
+
+.site-item:not(:hover) > .remove-button:not(:focus) {
+  opacity: 0;
+}
+
+.pin-button {
+  cursor: pointer;
+  border: none;
+  background-color: transparent;
+  background-image: url("chrome://browser/skin/places/starPage.png");
+  height: 16px;
+  width: 16px;
+  position: relative;
+  right: 24px;
+  top: 16px;
+}
+
+.pin-button[pinned] {
+  background-image: url("chrome://browser/skin/places/pageStarred.png");
+}
+
+.site-item:not(:hover) > .pin-button:not([pinned]):not(:focus) {
+  opacity: 0;
+}
