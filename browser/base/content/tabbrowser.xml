@@ -536,7 +536,9 @@
                 if (aWebProgress.DOMWindow == this.mBrowser.contentWindow)
                   this.mBrowser.userTypedClear += 2;
 
-                if (!this.mBlank) {
+                // TODO: This is a hack. We need a way to not show progress indicators
+                // when loading a local page.
+                if (!this.mBlank && this.mTab.getAttribute("label") != "") {
                   if (!(aStateFlags & nsIWebProgressListener.STATE_RESTORING)) {
                     this.mTab.setAttribute("busy", "true");
                     this.mTabBrowser.setTabTitleLoading(this.mTab);
@@ -1049,7 +1051,7 @@
                 }
               }
 
-              if (title && title != "about:blank") {
+              if (title && title != "about:blank" && title != "about:newtab") {
                 // At this point, we now have a URI.
                 // Let's try to unescape it using a character set
                 // in case the URI is not ASCII.
@@ -1215,7 +1217,7 @@
 
             var blank = !aURI || (aURI == "about:blank");
 
-            if (blank)
+            if (blank || aURI == "about:newtab")
               t.setAttribute("label", "");
             else
               t.setAttribute("label", aURI);
@@ -1556,7 +1558,7 @@
             aTab.closing = true;
             this._removingTabs.push(aTab);
             if (newTab)
-              this.addTab("about:blank", {skipAnimation: true});
+              this.addTab("about:newtab", {skipAnimation: true});
             else
               this.tabContainer.updateVisibility();
 
