@@ -175,6 +175,7 @@ XPCOMUtils.defineLazyGetter(this, "PopupNotifications", function () {
 
 let gInitialPages = [
   "about:blank",
+  "about:newtab",
   "about:privatebrowsing",
   "about:sessionrestore"
 ];
@@ -2171,7 +2172,7 @@ function BrowserOpenTab()
                       "chrome,all,dialog=no", "about:blank");
     return;
   }
-  gBrowser.loadOneTab("about:blank", {inBackground: false});
+  gBrowser.loadOneTab("about:newtab", {inBackground: false});
   focusAndSelectUrlBar();
 }
 
