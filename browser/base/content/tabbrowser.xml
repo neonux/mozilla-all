@@ -1208,13 +1208,8 @@
 
             var blank = !aURI || (aURI == "about:blank");
 
-<<<<<<< local
             if (blank)
               t.setAttribute("label", this.mStringBundle.getString("tabs.emptyTabTitle"));
-=======
-            if (blank || aURI == "about:newtab")
-              t.setAttribute("label", "");
->>>>>>> other
             else
               t.setAttribute("label", aURI);
 
