@@ -3821,18 +3821,6 @@ var FullScreen = {
 
       // Autohide prefs
       gPrefService.addObserver("browser.fullscreen", this, false);
-#ifdef XP_MACOSX
-      // Fullscreen mode prototype
-      let navBar = document.getElementById("nav-bar");
-      if (navBar) {
-        navBar.savedSet = navBar.currentSet;
-        navBar.insertItem("downloads-button");
-        navBar.insertItem("fullscreen-button");
-        if (gPrefService.getBoolPref("browser.fullscreen.autohide"))
-          navBar.autohide = true;
-        gPrefService.setBoolPref("browser.fullscreen.autohide", false);
-      }
-#endif
     }
     else {
       // The user may quit fullscreen during an animation
@@ -3846,19 +3834,6 @@ var FullScreen = {
       this._isPopupOpen = false;
 
       this.cleanup();
-#ifdef XP_MACOSX
-      // Fullscreen mode prototype
-      let navBar = document.getElementById("nav-bar");
-      if (navBar) {
-        navBar.currentSet = navBar.savedSet;
-        delete navBar.savedSet;
-        if (navBar.autohide)
-          gPrefService.setBoolPref("browser.fullscreen.autohide", true);
-        delete navBar.autohide;
-      }
-      gBrowser.tabContainer._positionPinnedTabs();
-      gBrowser.tabContainer._unlockTabSizing();
-#endif
     }
   },
 
