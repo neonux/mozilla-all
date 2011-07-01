@@ -1371,14 +1371,8 @@ nsXULPopupManager::GetVisiblePopups()
 
   item = mNoHidePanels;
   while (item) {
-    if (item->Frame()->PopupState() == ePopupOpenAndVisible) {
-      // skip panels which have allowevents="false" as these do not react to
-      // mouse events
-      if (!item->Content()->AttrValueIs(kNameSpaceID_None, nsGkAtoms::allowevents,
-                                        nsGkAtoms::_false, eCaseMatters)) {
-        popups.AppendElement(static_cast<nsIFrame*>(item->Frame()));
-      }
-    }
+    if (item->Frame()->PopupState() == ePopupOpenAndVisible)
+      popups.AppendElement(static_cast<nsIFrame*>(item->Frame()));
     item = item->GetParent();
   }
 

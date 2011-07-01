@@ -269,12 +269,8 @@ nsresult nsCocoaWindow::Create(nsIWidget *aParent,
                                    mBorderStyle, PR_FALSE);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  if (mWindowType == eWindowType_popup) {
-    if (aInitData->mIgnoreMouse) {
-      [mWindow setIgnoresMouseEvents:YES];
-    }
+  if (mWindowType == eWindowType_popup)
     return CreatePopupContentView(newBounds, aHandleEventFunction, aContext, aAppShell, aToolkit);
-  }
 
   return NS_OK;
 

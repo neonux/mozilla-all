@@ -44,7 +44,6 @@
 #include "nsISupportsArray.h"
 #include "nsIDOMDocument.h"
 #include "nsIDOMDataTransfer.h"
-#include "nsIContent.h"
 #include "nsCOMPtr.h"
 #include "nsPoint.h"
 
@@ -153,10 +152,6 @@ protected:
 
   // set if a selection is being dragged
   nsCOMPtr<nsISelection> mSelection;
-
-  // set if the image in mImage is a popup. If this case, the popup will be opened
-  // and moved instead of using a drag image.
-  nsCOMPtr<nsIContent> mDragPopup;
 
   // the screen position where drag gesture occurred, used for positioning the
   // drag image when no image is specified. If a value is -1, no event was

@@ -345,9 +345,6 @@ public:
   // Return the screen coordinates of the popup, or (-1, -1) if anchored.
   nsIntPoint ScreenPosition() const { return nsIntPoint(mScreenXPos, mScreenYPos); }
 
-  NS_IMETHOD BuildDisplayList(nsDisplayListBuilder*   aBuilder,
-                              const nsRect&           aDirtyRect,
-                              const nsDisplayListSet& aLists);
 protected:
 
   // returns the popup's level.
