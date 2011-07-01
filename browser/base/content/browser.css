@@ -34,10 +34,6 @@ tabbrowser {
                    opacity 50ms ease-out 20ms /* hide the tab for the first 20ms of the max-width transition */;
 }
 
-.tabbrowser-tabs[locked] > .tabbrowser-tab:not([pinned])[fadein] {
-  max-width: 100px;
-}
-
 .tabbrowser-tab:not([pinned]):not([fadein]) {
   max-width: 0.1px;
   min-width: 0.1px;

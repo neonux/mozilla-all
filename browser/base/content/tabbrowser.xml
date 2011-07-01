@@ -1663,11 +1663,9 @@
               // update tab close buttons state
               this.tabContainer.adjustTabstrip();
 
-              if (this.tabContainer._scrolledToEnd && !this._removingTabs.length) {
-                setTimeout(function(tabs) {
-                    tabs._scrolledToEnd = false;
-                }, 0, this.tabContainer);
-              }
+              setTimeout(function(tabs) {
+                tabs._lastTabClosedByMouse = false;
+              }, 0, this.tabContainer);
             }
 
             // update first-tab/last-tab/beforeselected/afterselected attributes
@@ -2640,14 +2638,8 @@
         var tabs = document.getBindingParent(this);
         tabs.removeAttribute("overflow");
 
-        if (tabs.hasAttribute("locked") || tabs._scrolledToEnd) {
-          if (tabs.hasAttribute("locked"))
-            this._scrollButtonUp.style.visibility = "hidden";
-          if (tabs._scrolledToEnd)
-            this._scrollButtonDown.style.visibility = "hidden";
-          tabs.tabbrowser.addEventListener("mousemove", tabs, false);
-          window.addEventListener("mouseout", tabs, false);
-        }
+        if (tabs._lastTabClosedByMouse)
+          tabs._expandSpacerBy(this._scrollButtonDown.clientWidth);
 
         tabs.tabbrowser._removingTabs.forEach(tabs.tabbrowser.removeTab,
                                               tabs.tabbrowser);
@@ -2868,8 +2860,9 @@
       </field>
 
       <field name="_tabDefaultMaxWidth">NaN</field>
+      <field name="_lastTabClosedByMouse">false</field>
       <field name="_hasTabTempMaxWidth">false</field>
-      <field name="_scrolledToEnd">false</field>
+      <field name="_usingClosingTabsSpacer">false</field>
 
       <!-- Try to keep the active tab's close button under the mouse cursor -->
       <method name="_lockTabSizing">
@@ -2885,23 +2878,21 @@
           if (!this._tabDefaultMaxWidth)
             this._tabDefaultMaxWidth =
               parseFloat(window.getComputedStyle(aTab).maxWidth);
+          this._lastTabClosedByMouse = true;
 
           if (this.getAttribute("overflow") == "true") {
-            if (this.mTabstrip._scrollButtonUp.disabled)
-              this.setAttribute("locked", "true");
-            else {
-              this.removeAttribute("locked");
+            // Don't need to do anything if we're in overflow mode and aren't scrolled
+            // all the way to the right, or if we're closing the last tab.
+            if (isEndTab || !this.mTabstrip._scrollButtonDown.disabled)
+              return;
 
-              // Cache this value, since the scroll button state is unreliable
-              // while multiple tabs are transitioning.
-              if (this.tabbrowser._removingTabs.length < 2)
-                this._scrolledToEnd = this.mTabstrip._scrollButtonDown.disabled;
-              if (isEndTab || !this._scrolledToEnd)
-                return;
+            // If the tab has an owner that will become the active tab, the owner will
+            // be to the left of it, so we actually want the left tab to slide over.
+            // This can't be done as easily in non-overflow mode, so we don't bother.
+            if (aTab.owner)
+              return;
 
-              let spacer = this._closingTabsSpacer;
-              spacer.style.width = parseFloat(spacer.style.width) + tabWidth + "px";
-            }
+            this._expandSpacerBy(tabWidth);
           } else { // non-overflow mode
             // Locking is neither in effect nor needed, so let tabs expand normally.
             if (isEndTab && !this._hasTabTempMaxWidth)
@@ -2912,8 +2903,8 @@
             // which case we need to let them expand just enough so that the overall
             // tabbar width is the same.
             if (isEndTab) {
-              let numNormal = tabs.length - numPinned;
-              tabWidth = tabWidth * (numNormal + 1) / numNormal;
+              let numNormalTabs = tabs.length - numPinned;
+              tabWidth = tabWidth * (numNormalTabs + 1) / numNormalTabs;
               if (tabWidth > this._tabDefaultMaxWidth)
                 tabWidth = this._tabDefaultMaxWidth;
             }
@@ -2928,7 +2919,18 @@
               }
             }
             this._hasTabTempMaxWidth = true;
+            this.tabbrowser.addEventListener("mousemove", this, false);
+            window.addEventListener("mouseout", this, false);
           }
+        ]]></body>
+      </method>
+
+      <method name="_expandSpacerBy">
+        <parameter name="pixels"/>
+        <body><![CDATA[
+          let spacer = this._closingTabsSpacer;
+          spacer.style.width = parseFloat(spacer.style.width) + pixels + "px";
+          this._usingClosingTabsSpacer = true;
           this.tabbrowser.addEventListener("mousemove", this, false);
           window.addEventListener("mouseout", this, false);
         ]]></body>
@@ -2938,15 +2940,15 @@
         <body><![CDATA[
           this.tabbrowser.removeEventListener("mousemove", this, false);
           window.removeEventListener("mouseout", this, false);
-          this.removeAttribute("locked");
-          this.mTabstrip._scrollButtonUp.style.visibility = "";
-          this.mTabstrip._scrollButtonDown.style.visibility = "";
-          this._closingTabsSpacer.style.width = 0;
           if (this._hasTabTempMaxWidth) {
             this._hasTabTempMaxWidth = false;
             let tabs = this.tabbrowser.visibleTabs;
             for (let i = 0; i < tabs.length; i++)
               tabs[i].style.maxWidth = "";
+          }
+          if (this._usingClosingTabsSpacer) {
+            this._usingClosingTabsSpacer = false;
+            this._closingTabsSpacer.style.width = 0;
           }
         ]]></body>
       </method>
@@ -2999,7 +3001,6 @@
                 this.adjustTabstrip();
                 this._fillTrailingGap();
                 this._handleTabSelect();
-                this.mTabstrip._updateScrollButtonsDisabledState();
                 this.mTabstripWidth = width;
               }
               this.tabbrowser.updateWindowResizers();
