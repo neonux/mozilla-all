@@ -36,3 +36,5 @@ git checkout -f git-mapfile
 git add git-mapfile
 git commit -m "Update map file"
 echo "updated map file!"
+
+git push --all git-bare-mirror
