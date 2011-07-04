@@ -11,21 +11,21 @@ UX_REPO="http://hg.mozilla.org/projects/ux"
 REPOS="$CENTRAL_REPO $INBOUND_REPO $FXTEAM_REPO $DEVTOOLS_REPO $GFX_REPO $E10S_REPO $JM_REPO $UX_REPO"
 for REPO in $REPOS
 do
+  NAME=`basename $REPO`
+  TIP_REV=`hg id $REPO`
   hg pull $REPO
+  GIT_REV=`grep $TIP_REV .hg/git-mapfile | cut -d " " -f 1`
+  if [ $? -eq 0 ]; then
+    if [ $GIT_REV ]; then
+      echo $GIT_REV > .hg/git/refs/heads/$NAME
+      echo "* updated git ref $NAME to $GIT_REV"
+    fi
+  fi
 done
 
 echo "exporting to git..."
 hg gexport
 echo "exported!"
-
-echo "updating refs..."
-for REPO in $REPOS
-do
-  NAME=`basename $REPO`
-  TIP_REV=`hg bookmarks | grep $NAME | cut -d : -f 2`
-  grep $TIP_REV hg-git/git-mapfile | cut -d " " -f 1 > .hg/git/refs/heads/$NAME
-  echo "updated ${NAME} ref!"
-done
 
 echo "updating map file..."
 GIT_DIR=.hg/git
