@@ -32,6 +32,8 @@ GIT_DIR=.hg/git
 export GIT_DIR
 GIT_WORK_TREE=hg-git
 export GIT_WORK_TREE
+
+ln -f .hg/git-mapfile hg-git/git-mapfile
 git checkout -f git-mapfile
 git add git-mapfile
 git commit -m "Update map file"
