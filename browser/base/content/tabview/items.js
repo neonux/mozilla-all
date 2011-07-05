@@ -164,13 +164,9 @@ Item.prototype = {
       },
       stop: function() {
         drag.info.stop();
-
-        if (!this.isAGroupItem && !this.parent) {
-          new GroupItem([drag.info.$el], {focusTitle: true});
-          gTabView.firstUseExperienced = true;
-        }
-
         drag.info = null;
+        if (!this.isAGroupItem && !this.parent)
+          gTabView.firstUseExperienced = true;
       },
       // The minimum the mouse must move after mouseDown in order to move an 
       // item
@@ -545,7 +541,9 @@ Item.prototype = {
     var defaultRadius = Trenches.defaultRadius;
     Trenches.defaultRadius = 2 * defaultRadius; // bump up from 10 to 20!
 
-    var FauxDragInfo = new Drag(this, {});
+    var event = {startPosition:{}}; // faux event
+    var FauxDragInfo = new Drag(this, event, true);
+    // true == isFauxDrag
     FauxDragInfo.snap('none', false);
     FauxDragInfo.stop(immediately);
 

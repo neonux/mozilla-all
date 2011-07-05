@@ -33,26 +33,21 @@ function test() {
 
     EventUtils.synthesizeMouseAtCenter(container, {type: "mouseup"}, cw);
     ok(aspectRange.contains(getTabItemAspect(tabItem)), "tabItem's aspect is correct");
+
+    tabItem.close();
   }
 
   let testDragOutOfStackedGroup = function () {
     dragTabItem();
-
-    let secondGroup = cw.GroupItems.groupItems[1];
-    closeGroupItem(secondGroup, testDragOutOfExpandedStackedGroup);
+    testDragOutOfExpandedStackedGroup();
   }
 
   let testDragOutOfExpandedStackedGroup = function () {
     groupItem.addSubscriber(groupItem, "expanded", function () {
       groupItem.removeSubscriber(groupItem, "expanded");
+
       dragTabItem();
-    });
-
-    groupItem.addSubscriber(groupItem, "collapsed", function () {
-      groupItem.removeSubscriber(groupItem, "collapsed");
-
-      let secondGroup = cw.GroupItems.groupItems[1];
-      closeGroupItem(secondGroup, function () hideTabView(finishTest));
+      closeGroupItem(groupItem, function () hideTabView(finishTest));
     });
 
     groupItem.expand();
@@ -69,17 +64,14 @@ function test() {
   waitForExplicitFinish();
 
   newWindowWithTabView(function (win) {
-    registerCleanupFunction(function () win.close());
+    registerCleanupFunction(function () {
+      if (!win.closed)
+        win.close();
+    });
 
     cw = win.TabView.getContentWindow();
+    groupItem = createGroupItemWithBlankTabs(win, 200, 200, 10, 10);
 
-    groupItem = cw.GroupItems.groupItems[0];
-    groupItem.setSize(200, 200, true);
-
-    for (let i = 0; i < 9; i++)
-      win.gBrowser.addTab();
-
-    ok(groupItem.isStacked(), "groupItem is stacked");
     testDragOutOfStackedGroup();
   });
 }

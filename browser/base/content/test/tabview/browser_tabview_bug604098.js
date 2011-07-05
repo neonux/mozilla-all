@@ -1,6 +1,8 @@
 /* Any copyright is dedicated to the Public Domain.
    http://creativecommons.org/publicdomain/zero/1.0/ */
 
+let originalTab;
+let orphanedTab;
 let contentWindow;
 let contentElement;
 
@@ -16,17 +18,23 @@ function test() {
   showTabView(function() {
     contentWindow = TabView.getContentWindow();
     contentElement = contentWindow.document.getElementById("content");
+    originalTab = gBrowser.visibleTabs[0];
     test1();
   });
 }
 
 function test1() {
-  let groupItems = contentWindow.GroupItems.groupItems;
-  is(groupItems.length, 1, "there is one groupItem");
+  is(contentWindow.GroupItems.getOrphanedTabs().length, 0, "No orphaned tabs");
 
   whenTabViewIsHidden(function() {
-    is(groupItems.length, 2, "there are two groupItems");
-    closeGroupItem(groupItems[1], finish);
+    showTabView(function() {
+      is(contentWindow.GroupItems.getOrphanedTabs().length, 1,
+         "An orphaned tab is created");
+      hideTabView(function() {
+        gBrowser.selectedTab = originalTab;
+        finish();
+      });
+    });
   });
 
   // first click
