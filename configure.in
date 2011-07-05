@@ -4772,7 +4772,7 @@ MOZ_FEEDS=1
 MOZ_INSTALLER=1
 MOZ_JSDEBUGGER=1
 MOZ_MORK=
-MOZ_MORKREADER=1
+MOZ_MORKREADER=
 MOZ_AUTH_EXTENSION=1
 MOZ_OGG=1
 MOZ_RAW=
@@ -6926,7 +6926,7 @@ dnl ========================================================
 
 dnl Defaults
 case "${target}" in
-arm-android-eabi)
+arm-android*|arm-linuxandroid*)
     MOZ_THUMB=yes
     MOZ_ARCH=armv7-a
     MOZ_FPU=vfp
@@ -8451,7 +8451,10 @@ if test -z "${GLIB_CFLAGS}" -o -z "${GLIB_LIBS}" ; then
 fi
 fi
 
-if test -z "${GLIB_GMODULE_LIBS}" -a -n "${GLIB_CONFIG}"; then
+if test -z "${GLIB_GMODULE_LIBS}" \
+   -a -n "${GLIB_CONFIG}"\
+    -a "${GLIB_CONFIG}" != no\
+; then
     GLIB_GMODULE_LIBS=`$GLIB_CONFIG gmodule --libs`
 fi
 

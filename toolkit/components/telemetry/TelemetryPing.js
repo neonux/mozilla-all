@@ -54,9 +54,12 @@ const TELEMETRY_INTERVAL = 60;
 const TELEMETRY_DELAY = 60000;
 // about:memory values to turn into histograms
 const MEM_HISTOGRAMS = {
-  "explicit/js/gc-heap": "MEMORY_JS_GC_HEAP",
+  "js-gc-heap": "MEMORY_JS_GC_HEAP",
   "resident": "MEMORY_RESIDENT",
   "explicit/layout/all": "MEMORY_LAYOUT_ALL",
+  "explicit/images/content/used/uncompressed":
+    "MEMORY_IMAGES_CONTENT_USED_UNCOMPRESSED",
+  "heap-used": "MEMORY_HEAP_USED",
   "hard-page-faults": "HARD_PAGE_FAULTS"
 };
 
@@ -77,6 +80,9 @@ function getHistograms() {
 
   for (let key in hls) {
     let hgram = hls[key];
+    if (!hgram.static)
+      continue;
+
     let r = hgram.ranges;
     let c = hgram.counts;
     let retgram = {
@@ -185,7 +191,17 @@ function TelemetryPing() {}
 
 TelemetryPing.prototype = {
   _histograms: {},
+  _initialized: false,
   _prevValues: {},
+
+  addValue: function addValue(name, id, val) {
+    let h = this._histograms[name];
+    if (!h) {
+      h = Telemetry.getHistogramById(id);
+      this._histograms[name] = h;
+    }
+    h.add(val);
+  },
 
   /**
    * Pull values from about:memory into corresponding histograms
@@ -201,12 +217,10 @@ TelemetryPing.prototype = {
     }
 
     let e = mgr.enumerateReporters();
-    let memReporters = {};
     while (e.hasMoreElements()) {
       let mr = e.getNext().QueryInterface(Ci.nsIMemoryReporter);
-      //  memReporters[mr.path] = mr.amount;
       let id = MEM_HISTOGRAMS[mr.path];
-      if (!id) {
+      if (!id || mr.amount == -1) {
         continue;
       }
 
@@ -220,30 +234,26 @@ TelemetryPing.prototype = {
 
         // Read mr.amount just once so our arithmetic is consistent.
         let curVal = mr.amount;
-        let prevVal = this._prevValues[mr.path];
-        if (!prevVal) {
+        if (!(mr.path in this._prevValues)) {
           // If this is the first time we're reading this reporter, store its
           // current value but don't report it in the telemetry ping, so we
           // ignore the effect startup had on the reporter.
           this._prevValues[mr.path] = curVal;
           continue;
         }
-        val = curVal - prevVal;
+
+        val = curVal - this._prevValues[mr.path];
         this._prevValues[mr.path] = curVal;
       }
       else {
         NS_ASSERT(false, "Can't handle memory reporter with units " + mr.units);
         continue;
       }
-
-      let h = this._histograms[mr.name];
-      if (!h) {
-        h = Telemetry.getHistogramById(id);
-        this._histograms[mr.name] = h;
-      }
-      h.add(val);
+      this.addValue(mr.path, id, val);
     }
-    return memReporters;
+    // XXX: bug 660731 will enable this
+    // "explicit" is found differently.
+    //this.addValue("explicit", "MEMORY_EXPLICIT", Math.floor(mgr.explicit / 1024));
   },
   
   /**

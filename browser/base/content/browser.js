@@ -520,13 +520,6 @@ var gPopupBlockerObserver = {
     else
       blockedPopupAllowSite.removeAttribute("disabled");
 
-    var item = aEvent.target.lastChild;
-    while (item && item.getAttribute("observes") != "blockedPopupsSeparator") {
-      var next = item.previousSibling;
-      item.parentNode.removeChild(item);
-      item = next;
-    }
-
     var foundUsablePopupURI = false;
     var pageReport = gBrowser.pageReport;
     if (pageReport) {
@@ -589,6 +582,13 @@ var gPopupBlockerObserver = {
   onPopupHiding: function (aEvent) {
     if (aEvent.target.anchorNode.id == "page-report-button")
       aEvent.target.anchorNode.removeAttribute("open");
+
+    let item = aEvent.target.lastChild;
+    while (item && item.getAttribute("observes") != "blockedPopupsSeparator") {
+      let next = item.previousSibling;
+      item.parentNode.removeChild(item);
+      item = next;
+    }
   },
 
   showBlockedPopup: function (aEvent)
@@ -2996,9 +2996,8 @@ function FillInHTMLTooltip(tipElement)
         XLinkTitleText = tipElement.getAttributeNS(XLinkNS, "title");
       }
       if (lookingForSVGTitle &&
-          !(tipElement instanceof SVGElement &&
-            tipElement.parentNode instanceof SVGElement &&
-            !(tipElement.parentNode instanceof SVGForeignObjectElement))) {
+          (!(tipElement instanceof SVGElement) ||
+           tipElement.parentNode.nodeType == Node.DOCUMENT_NODE)) {
         lookingForSVGTitle = false;
       }
       if (lookingForSVGTitle) {
@@ -5638,7 +5637,7 @@ function hrefAndLinkNodeForClickEvent(event)
   // If there is no linkNode, try simple XLink.
   let href, baseURI;
   node = event.target;
-  while (node) {
+  while (node && !href) {
     if (node.nodeType == Node.ELEMENT_NODE) {
       href = node.getAttributeNS("http://www.w3.org/1999/xlink", "href");
       if (href)
