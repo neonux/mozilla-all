@@ -1049,7 +1049,7 @@
                 }
               }
 
-              if (title && title != "about:blank" && title != "about:newtab") {
+              if (title && title != "about:blank") {
                 // At this point, we now have a URI.
                 // Let's try to unescape it using a character set
                 // in case the URI is not ASCII.
@@ -1556,7 +1556,7 @@
             aTab.closing = true;
             this._removingTabs.push(aTab);
             if (newTab)
-              this.addTab("about:newtab", {skipAnimation: true});
+              this.addTab("about:blank", {skipAnimation: true});
             else
               this.tabContainer.updateVisibility();
 
