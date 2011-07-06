@@ -1702,8 +1702,7 @@ richlistitem[type~="action"][actiontype="switchtab"] > .ac-url-box > .ac-action-
 .tab-icon-image {
   width: 16px;
   height: 16px;
-  list-style-image: url("chrome://global/skin/icons/folder-item.png");
-  -moz-image-region: rect(0px, 16px, 16px, 0px);
+  list-style-image: url("chrome://mozapps/skin/places/defaultFavicon.png");
   -moz-margin-start: 2px;
   -moz-margin-end: 3px;
 }
@@ -1879,8 +1878,7 @@ richlistitem[type~="action"][actiontype="switchtab"] > .ac-url-box > .ac-action-
 
 /* All tabs menupopup */
 .alltabs-item > .menu-iconic-left > .menu-iconic-icon {
-  list-style-image: url("chrome://global/skin/icons/folder-item.png");
-  -moz-image-region: rect(0px, 16px, 16px, 0px);
+  list-style-image: url("chrome://mozapps/skin/places/defaultFavicon.png");
 }
 
 .alltabs-item[selected="true"] {
