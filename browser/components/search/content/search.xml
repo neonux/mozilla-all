@@ -75,12 +75,13 @@
                    completeselectedindex="true"
                    showcommentcolumn="true"
                    tabscrolling="true"
+                   oninput="updateEmptyInput();"
                    xbl:inherits="disabled,disableautocomplete,searchengine,src,newlines">
         <xul:box>
           <xul:button class="searchbar-engine-button"
                       type="menu"
                       anonid="searchbar-engine-button">
-            <xul:image class="searchbar-engine-image" xbl:inherits="src"/>
+            <xul:image class="searchbar-engine-image"/>
             <xul:image class="searchbar-dropmarker-image"/>
             <xul:menupopup class="searchbar-popup"
                            anonid="searchbar-popup">
@@ -92,9 +93,10 @@
             </xul:menupopup>
           </xul:button>
         </xul:box>
-        <xul:hbox class="search-go-container">
-          <xul:image class="search-go-button"
-                     anonid="search-go-button"
+        <xul:hbox class="search-go-container"
+                  anonid="search-go-container">
+          <xul:label class="search-go-label"
+                     anonid="search-go-label"
                      onclick="handleSearchCommand(event);"
                      tooltiptext="&searchEndCap.label;" />
         </xul:hbox>
@@ -143,6 +145,10 @@
           "anonid", "searchbar-stringbundle");</field>
       <field name="_textbox">document.getAnonymousElementByAttribute(this,
           "anonid", "searchbar-textbox");</field>
+      <field name="_goContainer">document.getAnonymousElementByAttribute(this,
+          "anonid", "search-go-container");</field>
+      <field name="_goLabel">document.getAnonymousElementByAttribute(this,
+          "anonid", "search-go-label");</field>
       <field name="_popup">document.getAnonymousElementByAttribute(this,
           "anonid", "searchbar-popup");</field>
       <field name="_ss">null</field>
@@ -312,9 +318,24 @@
 
           var name = this.currentEngine.name;
           var text = this._stringBundle.getFormattedString("searchtip", [name]);
-          this._textbox.placeholder = name;
           this._textbox.label = text;
           this._textbox.tooltipText = text;
+
+          if (name.length > 10) {
+            let ellipsis = Services.prefs.getComplexValue(
+                             "intl.ellipsis", Ci.nsIPrefLocalizedString).data;
+            name = name.substr(0,10).trim() + ellipsis;   
+          }
+          this._goLabel.value = name;
+        ]]></body>
+      </method>
+      
+      <method name="updateEmptyInput">
+        <body><![CDATA[
+          if (this._textbox.value)
+            this._goContainer.setAttribute("button", "true");
+          else
+            this._goContainer.removeAttribute("button");
         ]]></body>
       </method>
 
@@ -461,9 +482,13 @@
           var textValue = textBox.value;
 
           var where = "current";
-          if (aEvent && aEvent.originalTarget.getAttribute("anonid") == "search-go-button") {
+          if (aEvent && aEvent.originalTarget.getAttribute("anonid") == "search-go-label") {
             if (aEvent.button == 2)
               return;
+            if (!textValue) {
+              textBox.focus();
+              return;
+            }
             where = whereToOpenLink(aEvent, false, true);
           }
           else {

@@ -9,15 +9,16 @@
 
 .textbox-input-box {
   margin: 0;
+  height: 18px;
 }
 
 /* ::::: searchbar-engine-button ::::: */
 
 .searchbar-engine-image {
-  height: 16px;
-  width: 16px;
-  list-style-image: url("chrome://global/skin/icons/folder-item.png");
-  -moz-image-region: rect(0px, 16px, 16px, 0px);
+  list-style-image: url("chrome://global/skin/icons/Search-glass.png");
+%ifndef WINSTRIPE_AERO
+  -moz-image-region: rect(0px 16px 16px 0px);
+%endif
   -moz-margin-start: 2px;
 }
 
@@ -47,34 +48,50 @@
   -moz-image-region: rect(0, 26px, 11px, 13px);
 }
 
-
 /* ::::: search-go-button ::::: */
 
 .search-go-container {
+  color: graytext;
+  font-style: italic;
   -moz-box-align: center;
+  margin: -2px;
+  -moz-margin-start: 3px;
+  background-origin: border-box;
+  border: none;
 }
 
-.search-go-button {
-  padding: 1px;
-  list-style-image: url("chrome://global/skin/icons/Search-glass.png");
-  -moz-image-region: rect(0px 16px 16px 0px);
+.search-go-container:-moz-locale-dir(ltr) {
+  border-top-right-radius: 2px;
+  border-bottom-right-radius: 2px;
 }
 
-.search-go-button:-moz-system-metric(touch-enabled) {
-  -moz-padding-start: 5px;
-  -moz-padding-end: 3px;
+.search-go-container:-moz-locale-dir(rtl) {
+  border-top-left-radius: 2px;
+  border-bottom-left-radius: 2px;
 }
 
-.search-go-button:-moz-locale-dir(rtl) {
-  -moz-transform: scaleX(-1);
+.search-go-container[button] {
+  color: #000;
+  font-style: normal;
+  -moz-border-start: 1px solid rgba(0,0,0,.25);
+  background-image: -moz-linear-gradient(rgb(115,213,115), rgb(96,190,96) 49%, rgb(82,174,82) 51%, rgb(79,155,79));
+  box-shadow: 0 1px 0 rgba(0,0,0,.1) inset,
+              -1px -1px 1px rgba(255,255,255,.25) inset;
 }
 
-.search-go-button:hover {
-  -moz-image-region: rect(0px 32px 16px 16px);
+.search-go-container[button]:hover {
+  background-image: -moz-linear-gradient(rgb(96,221,96), rgb(71,191,71) 49%, rgb(54,171,54) 51%, rgb(50,147,50));
 }
 
-.search-go-button:hover:active {
-  -moz-image-region: rect(0px, 48px, 16px, 32px);
+.search-go-container[button]:hover:active {
+ -moz-padding-start: 1px;
+ -moz-border-start: none;
+  box-shadow: 0 0 6.5px rgba(0,0,0,.4) inset,
+              0 0 2px rgba(0,0,0,.4) inset;
+}
+
+.searchbar-textbox:not([focused="true"]) > .search-go-container[button]:not(:hover) {
+  background-image: none;
 }
 
 .searchbar-engine-menuitem[selected="true"] > .menu-iconic-text {
