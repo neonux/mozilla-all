@@ -37,7 +37,7 @@ browser.jar:
   skin/classic/browser/Privacy-48.png
   skin/classic/browser/reload-stop-go.png
   skin/classic/browser/searchbar-dropmarker.png
-* skin/classic/browser/searchbar.css
+  skin/classic/browser/searchbar.css
   skin/classic/browser/Search.png
   skin/classic/browser/section_collapsed.png
   skin/classic/browser/section_collapsed-rtl.png
