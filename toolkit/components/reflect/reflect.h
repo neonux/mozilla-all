@@ -1,4 +1,4 @@
-/* vim:set ts=2 sw=2 sts=2 et: */
+/* -*-  Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2; -*- */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
@@ -12,17 +12,15 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is DevTools test code.
+ * The Original Code is js-reflect.
  *
- * The Initial Developer of the Original Code is Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
+ * The Initial Developer of the Original Code is
+ * The Mozilla Foundation <http://www.mozilla.org/>.
+ * Portions created by the Initial Developer are Copyright (C) 2011
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
- *  David Dahl <ddahl@mozilla.com>
- *  Patrick Walton <pcwalton@mozilla.com>
- *  Julian Viereck <jviereck@mozilla.com>
- *  Mihai Sucan <mihai.sucan@gmail.com>
+ *  Dave Herman <dherman@mozilla.com>
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -38,23 +36,27 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-// Tests the HUDService.getHeadsUpDisplay() method.
+#ifndef COMPONENTS_REFLECT_H
+#define COMPONENTS_REFLECT_H
 
-const TEST_URI = "http://example.com/browser/toolkit/components/console/hudservice/tests/browser/test-console.html";
+#include "nsIXPCScriptable.h"
 
-function test() {
-  addTab(TEST_URI);
-  browser.addEventListener("DOMContentLoaded", testGetHeadsUpDisplay,
-                           false);
+namespace mozilla {
+namespace reflect {
+
+class Module : public nsIXPCScriptable
+{
+public:
+  NS_DECL_ISUPPORTS
+  NS_DECL_NSIXPCSCRIPTABLE
+
+  Module();
+
+private:
+  ~Module();
+};
+
+}
 }
 
-function testGetHeadsUpDisplay() {
-  browser.removeEventListener("DOMContentLoaded", testGetHeadsUpDisplay,
-                              false);
-  openConsole();
-  hudId = HUDService.displaysIndex()[0];
-  hud = HUDService.getHeadsUpDisplay(hudId);
-  ok(hud.getAttribute("id") == hudId, "found HUD node by Id.");
-  finishTest();
-}
-
+#endif

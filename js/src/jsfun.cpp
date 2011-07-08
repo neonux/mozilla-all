@@ -186,7 +186,7 @@ js_GetArgsProperty(JSContext *cx, StackFrame *fp, jsid id, Value *vp)
 js::ArgumentsObject *
 ArgumentsObject::create(JSContext *cx, uint32 argc, JSObject &callee)
 {
-    JS_ASSERT(argc <= JS_ARGS_LENGTH_MAX);
+    JS_ASSERT(argc <= StackSpace::ARGS_LENGTH_MAX);
 
     JSObject *proto;
     if (!js_GetClassPrototype(cx, callee.getGlobal(), JSProto_Object, &proto))
@@ -242,15 +242,15 @@ JSObject *
 js_GetArgsObject(JSContext *cx, StackFrame *fp)
 {
     /*
-     * We must be in a function activation; the function must be lightweight
-     * or else fp must have a variable object.
+     * Arguments and Call objects are owned by the enclosing non-eval function
+     * frame, thus any eval frames must be skipped before testing hasArgsObj.
      */
-    JS_ASSERT_IF(fp->fun()->isHeavyweight(), fp->hasCallObj());
-
+    JS_ASSERT(fp->isFunctionFrame());
     while (fp->isEvalInFunction())
         fp = fp->prev();
 
     /* Create an arguments object for fp only if it lacks one. */
+    JS_ASSERT_IF(fp->fun()->isHeavyweight(), fp->hasCallObj());
     if (fp->hasArgsObj())
         return &fp->argsObj();
 
@@ -1427,7 +1427,7 @@ bool
 StackFrame::getValidCalleeObject(JSContext *cx, Value *vp)
 {
     if (!isFunctionFrame()) {
-        vp->setUndefined();
+        vp->setNull();
         return true;
     }
 
@@ -1560,6 +1560,9 @@ fun_getProperty(JSContext *cx, JSObject *obj, jsid id, Value *vp)
 
     /* Find fun's top-most activation record. */
     StackFrame *fp = js_GetTopStackFrame(cx);
+    if (!fp)
+        return true;
+
     while (!fp->isFunctionFrame() || fp->fun() != fun) {
         fp = fp->prev();
         if (!fp)
@@ -1572,9 +1575,11 @@ fun_getProperty(JSContext *cx, JSObject *obj, jsid id, Value *vp)
                                           NULL, JSMSG_DEPRECATED_USAGE, js_arguments_str)) {
             return false;
         }
-        if (!js_GetArgsValue(cx, fp, vp))
-                return false;
-    } else if (JSID_IS_ATOM(id, cx->runtime->atomState.callerAtom)) {
+
+        return js_GetArgsValue(cx, fp, vp);
+    }
+
+    if (JSID_IS_ATOM(id, cx->runtime->atomState.callerAtom)) {
         if (!fp->prev())
             return true;
 
@@ -1582,26 +1587,29 @@ fun_getProperty(JSContext *cx, JSObject *obj, jsid id, Value *vp)
         if (frame && !frame->getValidCalleeObject(cx, vp))
             return false;
 
-        if (vp->isObject()) {
-            JSObject &caller = vp->toObject();
+        if (!vp->isObject()) {
+            JS_ASSERT(vp->isNull());
+            return true;
+        }
 
-            /* Censor the caller if it is from another compartment. */
-            if (caller.compartment() != cx->compartment) {
-                vp->setNull();
-            } else if (caller.isFunction()) {
-                JSFunction *callerFun = caller.getFunctionPrivate();
-                if (callerFun->isInterpreted() && callerFun->inStrictMode()) {
-                    JS_ReportErrorFlagsAndNumber(cx, JSREPORT_ERROR, js_GetErrorMessage, NULL,
-                                                 JSMSG_CALLER_IS_STRICT);
-                    return false;
-                }
+        /* Censor the caller if it is from another compartment. */
+        JSObject &caller = vp->toObject();
+        if (caller.compartment() != cx->compartment) {
+            vp->setNull();
+        } else if (caller.isFunction()) {
+            JSFunction *callerFun = caller.getFunctionPrivate();
+            if (callerFun->isInterpreted() && callerFun->inStrictMode()) {
+                JS_ReportErrorFlagsAndNumber(cx, JSREPORT_ERROR, js_GetErrorMessage, NULL,
+                                             JSMSG_CALLER_IS_STRICT);
+                return false;
             }
         }
-    } else {
-        JS_NOT_REACHED("fun_getProperty");
+
+        return true;
     }
 
-    return true;
+    JS_NOT_REACHED("fun_getProperty");
+    return false;
 }
 
 
@@ -2111,7 +2119,7 @@ js_fun_apply(JSContext *cx, uintN argc, Value *vp)
     LeaveTrace(cx);
 
     /* Step 6. */
-    uintN n = uintN(JS_MIN(length, JS_ARGS_LENGTH_MAX));
+    uintN n = uintN(JS_MIN(length, StackSpace::ARGS_LENGTH_MAX));
 
     InvokeArgsGuard args;
     if (!cx->stack.pushInvokeArgs(cx, n, &args))
@@ -2215,7 +2223,7 @@ CallOrConstructBoundFunction(JSContext *cx, uintN argc, Value *vp)
     uintN argslen;
     const Value *boundArgs = obj->getBoundFunctionArguments(argslen);
 
-    if (argc + argslen > JS_ARGS_LENGTH_MAX) {
+    if (argc + argslen > StackSpace::ARGS_LENGTH_MAX) {
         js_ReportAllocationOverflow(cx);
         return false;
     }

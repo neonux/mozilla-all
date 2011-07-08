@@ -1,4 +1,4 @@
-/* vim:set ts=2 sw=2 sts=2 et: */
+/* -*-  Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2; -*- */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
@@ -12,17 +12,15 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is DevTools test code.
+ * The Original Code is js-reflect.
  *
- * The Initial Developer of the Original Code is Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
+ * The Initial Developer of the Original Code is
+ * The Mozilla Foundation <http://www.mozilla.org/>.
+ * Portions created by the Initial Developer are Copyright (C) 2011
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
- *  David Dahl <ddahl@mozilla.com>
- *  Patrick Walton <pcwalton@mozilla.com>
- *  Julian Viereck <jviereck@mozilla.com>
- *  Mihai Sucan <mihai.sucan@gmail.com>
+ *  Dave Herman <dherman@mozilla.com>
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -38,30 +36,22 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-// Tests that HUDService.displays() and HUDService.displaysIndex() work.
+let EXPORTED_SYMBOLS = [ "Reflect" ];
 
-const TEST_URI = "http://example.com/browser/toolkit/components/console/hudservice/tests/browser/test-console.html";
+/*
+ * This is the js module for Reflect. Import it like so:
+ *   Components.utils.import("resource://gre/modules/reflect.jsm");
+ *
+ * This will create a 'Reflect' object, which provides an interface to the
+ * SpiderMonkey parser API.
+ *
+ * For documentation on the API, see:
+ * https://developer.mozilla.org/en/SpiderMonkey/Parser_API
+ *
+ */
 
-function test() {
-  addTab(TEST_URI);
-  browser.addEventListener("DOMContentLoaded", testDisplayAccessors, false);
-}
 
-function testDisplayAccessors() {
-  browser.removeEventListener("DOMContentLoaded", testDisplayAccessors,
-                              false);
+// Initialize the ctypes object. You do not need to do this yourself.
+const init = Components.classes["@mozilla.org/jsreflect;1"].createInstance();
+init();
 
-  openConsole();
-
-  var idx = HUDService.displaysIndex();
-
-  let hudId = idx[0];
-
-  ok(typeof idx == "object", "displays is an object");
-  ok(typeof idx.push == "function", "displaysIndex is an array");
-
-  var len = idx.length;
-  ok(idx.length > 0, "idx.length > 0: " + len);
-
-  finishTest();
-}

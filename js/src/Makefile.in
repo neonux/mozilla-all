@@ -150,6 +150,7 @@ CPPSRCS		= \
 		jsgcmark.cpp \
 		jsgcchunk.cpp \
 		jsgcstats.cpp \
+		jscrashreport.cpp \
 		jshash.cpp \
 		jsinterp.cpp \
 		jsinvoke.cpp \
@@ -206,6 +207,7 @@ INSTALLED_HEADERS = \
 		jsclone.h \
 		jscntxt.h \
 		jscompat.h \
+		jscrashreport.h \
 		jsdate.h \
 		jsdbgapi.h \
 		jsdhash.h \
@@ -529,6 +531,15 @@ ifneq (,$(filter OS2 WINNT,$(OS_ARCH)))
 SDK_LIBRARY = $(IMPORT_LIBRARY)
 else
 SDK_LIBRARY = $(SHARED_LIBRARY)
+endif
+
+# for compiler bug (http://support.microsoft.com/kb/982107) for MSVC x64
+ifdef _MSC_VER
+ifneq (,$(filter 1400 1500,$(_MSC_VER)))
+ifeq ($(OS_TEST),x86_64)
+ASFILES += jswin64.asm
+endif
+endif
 endif
 
 include $(topsrcdir)/config/config.mk

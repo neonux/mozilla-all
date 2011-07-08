@@ -1140,6 +1140,12 @@ JS_GetGlobalForObject(JSContext *cx, JSObject *obj);
 extern JS_PUBLIC_API(JSObject *)
 JS_GetGlobalForScopeChain(JSContext *cx);
 
+/*
+ * Initialize the 'Reflect' object on a global object.
+ */
+extern JS_PUBLIC_API(JSObject *)
+JS_InitReflect(JSContext *cx, JSObject *global);
+
 #ifdef JS_HAS_CTYPES
 /*
  * Initialize the 'ctypes' object on a global variable 'obj'. The 'ctypes'
@@ -1176,6 +1182,16 @@ typedef struct JSCTypesCallbacks JSCTypesCallbacks;
 extern JS_PUBLIC_API(JSBool)
 JS_SetCTypesCallbacks(JSContext *cx, JSObject *ctypesObj, JSCTypesCallbacks *callbacks);
 #endif
+
+typedef JSBool
+(* JSEnumerateDiagnosticMemoryCallback)(void *ptr, size_t length);
+
+/*
+ * Enumerate memory regions that contain diagnostic information
+ * intended to be included in crash report minidumps.
+ */
+extern JS_PUBLIC_API(void)
+JS_EnumerateDiagnosticMemoryRegions(JSEnumerateDiagnosticMemoryCallback callback);
 
 /*
  * Macros to hide interpreter stack layout details from a JSFastNative using
@@ -2471,9 +2487,6 @@ extern JS_PUBLIC_API(JSBool)
 JS_SetArrayLength(JSContext *cx, JSObject *obj, jsuint length);
 
 extern JS_PUBLIC_API(JSBool)
-JS_HasArrayLength(JSContext *cx, JSObject *obj, jsuint *lengthp);
-
-extern JS_PUBLIC_API(JSBool)
 JS_DefineElement(JSContext *cx, JSObject *obj, jsint index, jsval value,
                  JSPropertyOp getter, JSStrictPropertyOp setter, uintN attrs);
 
@@ -2590,6 +2603,21 @@ JS_SetContextSecurityCallbacks(JSContext *cx, JSSecurityCallbacks *callbacks);
 
 extern JS_PUBLIC_API(JSSecurityCallbacks *)
 JS_GetSecurityCallbacks(JSContext *cx);
+
+/*
+ * Code running with "trusted" principals will be given a deeper stack
+ * allocation than ordinary scripts. This allows trusted script to run after
+ * untrusted script has exhausted the stack. This function sets the
+ * runtime-wide trusted principal.
+ *
+ * This principals is not held (via JS_HoldPrincipals/JS_DropPrincipals) since
+ * there is no available JSContext. Instead, the caller must ensure that the
+ * given principals stays valid for as long as 'rt' may point to it. If the
+ * principals would be destroyed before 'rt', JS_SetTrustedPrincipals must be
+ * called again, passing NULL for 'prin'.
+ */
+extern JS_PUBLIC_API(void)
+JS_SetTrustedPrincipals(JSRuntime *rt, JSPrincipals *prin);
 
 /************************************************************************/
 
@@ -3305,12 +3333,6 @@ typedef JSBool (* JSONWriteCallback)(const jschar *buf, uint32 len, void *data);
 JS_PUBLIC_API(JSBool)
 JS_Stringify(JSContext *cx, jsval *vp, JSObject *replacer, jsval space,
              JSONWriteCallback callback, void *data);
-
-/*
- * Retrieve a toJSON function. If found, set vp to its result.
- */
-JS_PUBLIC_API(JSBool)
-JS_TryJSON(JSContext *cx, jsval *vp);
 
 /*
  * JSON.parse as specified by ES5.

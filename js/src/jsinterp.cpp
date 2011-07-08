@@ -625,7 +625,7 @@ Invoke(JSContext *cx, const CallArgs &argsRef, MaybeConstruct construct)
     /* N.B. Must be kept in sync with InvokeSessionGuard::start/invoke */
 
     CallArgs args = argsRef;
-    JS_ASSERT(args.argc() <= JS_ARGS_LENGTH_MAX);
+    JS_ASSERT(args.argc() <= StackSpace::ARGS_LENGTH_MAX);
 
     if (args.calleev().isPrimitive()) {
         js_ReportIsNotFunction(cx, &args.calleev(), ToReportFlags(construct));
@@ -746,7 +746,7 @@ InvokeSessionGuard::start(JSContext *cx, const Value &calleev, const Value &this
 
         /* Hoist dynamic checks from CheckStackAndEnterMethodJIT. */
         JS_CHECK_RECURSION(cx, return false);
-        stackLimit_ = stack.space().getStackLimit(cx);
+        stackLimit_ = stack.space().getStackLimit(cx, REPORT_ERROR);
         if (!stackLimit_)
             return false;
 
@@ -906,7 +906,7 @@ Execute(JSContext *cx, JSScript *script, JSObject &scopeChain, const Value &this
 
     AutoPreserveEnumerators preserve(cx);
     JSBool ok = RunScript(cx, script, fp);
-    if (result)
+    if (result && ok)
         *result = fp->returnValue();
 
     Probes::stopExecution(cx, script);
@@ -4077,6 +4077,8 @@ BEGIN_CASE(JSOP_FUNAPPLY)
 
     JSObject *callee;
     JSFunction *fun;
+
+    /* Don't bother trying to fast-path calls to scripted non-constructors. */
     if (!IsFunctionObject(args.calleev(), &callee, &fun) || !fun->isInterpretedConstructor()) {
         if (construct) {
             if (!InvokeConstructor(cx, args))
@@ -4093,7 +4095,7 @@ BEGIN_CASE(JSOP_FUNAPPLY)
     }
 
     JSScript *newScript = fun->script();
-    if (!cx->stack.pushInlineFrame(cx, regs, args, *callee, fun, newScript, construct, OOMCheck()))
+    if (!cx->stack.pushInlineFrame(cx, regs, args, *callee, fun, newScript, construct))
         goto error;
 
     /* Refresh local js::Interpret state. */
@@ -4588,12 +4590,12 @@ BEGIN_CASE(JSOP_CALLUPVAR_DBG)
     jsid id;
     JSAtom *atom;
     {
-        AutoLocalNameArray names(cx, fun);
-        if (!names)
+        Vector<JSAtom *> names(cx);
+        if (!fun->script()->bindings.getLocalNameArray(cx, &names))
             goto error;
 
         uintN index = fun->script()->bindings.countArgsAndVars() + GET_UINT16(regs.pc);
-        atom = JS_LOCAL_NAME_TO_ATOM(names[index]);
+        atom = names[index];
         id = ATOM_TO_JSID(atom);
 
         if (!js_FindProperty(cx, id, &obj, &obj2, &prop))
@@ -5308,7 +5310,7 @@ BEGIN_CASE(JSOP_INITELEM)
     if (rref.isMagic(JS_ARRAY_HOLE)) {
         JS_ASSERT(obj->isArray());
         JS_ASSERT(JSID_IS_INT(id));
-        JS_ASSERT(jsuint(JSID_TO_INT(id)) < JS_ARGS_LENGTH_MAX);
+        JS_ASSERT(jsuint(JSID_TO_INT(id)) < StackSpace::ARGS_LENGTH_MAX);
         if (js_GetOpcode(cx, script, regs.pc + JSOP_INITELEM_LENGTH) == JSOP_ENDINIT &&
             !js_SetLengthProperty(cx, obj, (jsuint) (JSID_TO_INT(id) + 1))) {
             goto error;
@@ -5961,7 +5963,7 @@ BEGIN_CASE(JSOP_ARRAYPUSH)
     JS_ASSERT(script->nfixed <= slot);
     JS_ASSERT(slot < script->nslots);
     JSObject *obj = &regs.fp()->slots()[slot].toObject();
-    if (!js_ArrayCompPush(cx, obj, regs.sp[-1]))
+    if (!js_NewbornArrayPush(cx, obj, regs.sp[-1]))
         goto error;
     regs.sp--;
 }
@@ -6245,7 +6247,16 @@ END_CASE(JSOP_ARRAYPUSH)
 # endif
 #endif
 
-    JS_ASSERT_IF(!regs.fp()->isGeneratorFrame(), !js_IsActiveWithOrBlock(cx, &regs.fp()->scopeChain(), 0));
+    JS_ASSERT_IF(!regs.fp()->isGeneratorFrame(),
+                 !js_IsActiveWithOrBlock(cx, &regs.fp()->scopeChain(), 0));
+
+#ifdef JS_METHODJIT
+    /*
+     * This path is used when it's guaranteed the method can be finished
+     * inside the JIT.
+     */
+  leave_on_safe_point:
+#endif
 
     return interpReturnOK;
 
@@ -6256,15 +6267,6 @@ END_CASE(JSOP_ARRAYPUSH)
             js_ReportIsNotDefined(cx, printable.ptr());
     }
     goto error;
-
-    /*
-     * This path is used when it's guaranteed the method can be finished
-     * inside the JIT.
-     */
-#if defined(JS_METHODJIT)
-  leave_on_safe_point:
-#endif
-    return interpReturnOK;
 }
 
 } /* namespace js */

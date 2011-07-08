@@ -628,6 +628,7 @@ pref("javascript.options.mem.high_water_mark", 128);
 pref("javascript.options.mem.max", -1);
 pref("javascript.options.mem.gc_per_compartment", true);
 pref("javascript.options.mem.log", false);
+pref("javascript.options.gc_on_memory_pressure", true);
 
 // advanced prefs
 pref("advanced.mailftp",                    false);
@@ -1292,6 +1293,17 @@ pref("layout.word_select.stop_at_punctuation", true);
 // 3 = caret moves and blinks as when there is no selection; word delete
 //     deletes the selection (Unix default)
 pref("layout.selection.caret_style", 0);
+
+// Prefs for auto scrolling by mouse drag.  When the mouse cursor is on edge of
+// inner scrollable frame than the selection root, the frame will be scrolled.
+// |.edge_width| defines the edge width by CSS pixels.
+// |.amout| defines the scrolling speed by CSS pixels.  The auto scroll method
+// uses scroll to a point function.  When the mouse cursor is on the edge, it
+// tries to scroll the frame to the point which is away from the edge.  The
+// value means how far the point is from edge in CSS pixels.
+// I.e., larger value makes faster scroll.
+pref("layout.selection.drag.autoscroll.inner_frame.edge_width", 32);
+pref("layout.selection.drag.autoscroll.inner_frame.amount", 8);
 
 // pref to control whether or not to replace backslashes with Yen signs
 // in documents encoded in one of Japanese legacy encodings (EUC-JP, 
