@@ -47,6 +47,8 @@ tabpanels {
   z-index: 2;
 }
 
+.tab-drag-image:not([target]) > .tab-drag-label,
+.tab-drag-image[target] > .tab-drag-thumbnail,
 .tab-throbber:not([busy]),
 .tab-throbber[busy] + .tab-icon-image {
   display: none;
