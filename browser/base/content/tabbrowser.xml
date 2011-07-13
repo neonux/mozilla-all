@@ -869,7 +869,8 @@
               updatePageReport = true;
 
             newBrowser.setAttribute("type", "content-primary");
-            newBrowser.docShellIsActive = true;
+            newBrowser.docShellIsActive =
+              (window.windowState != window.STATE_MINIMIZED);
             this.mCurrentBrowser = newBrowser;
             this.mCurrentTab = this.selectedTab;
             this.showTab(this.mCurrentTab);
@@ -2471,6 +2472,12 @@
             case "keypress":
               this._handleKeyEvent(aEvent);
               break;
+            case "sizemodechange":
+              if (aEvent.target == window) {
+                this.mCurrentBrowser.docShellIsActive =
+                  (window.windowState != window.STATE_MINIMIZED);
+              }
+              break;
           }
         ]]></body>
       </method>
@@ -2480,6 +2487,7 @@
           this.mCurrentBrowser = this.mPanelContainer.childNodes[0].firstChild.firstChild;
           this.mCurrentTab = this.tabContainer.firstChild;
           document.addEventListener("keypress", this, false);
+          window.addEventListener("sizemodechange", this, false);
 
           var uniqueId = "panel" + Date.now();
           this.mPanelContainer.childNodes[0].id = uniqueId;
@@ -2542,6 +2550,7 @@
             this.mTabListeners[i] = null;
           }
           document.removeEventListener("keypress", this, false);
+          window.removeEventListener("sizemodechange", this, false);
         ]]>
       </destructor>
 
