@@ -2992,7 +2992,8 @@
               delete draggedTab._maxWidth;
             }
           }
-          this.mTabstrip._updateScrollButtonsDisabledState();
+          if (this.getAttribute("overflow") == "true")
+            this.mTabstrip._updateScrollButtonsDisabledState();
           return state;
         ]]></body>
       </method>
@@ -3096,7 +3097,7 @@
 
       <method name="_endTabDrag">
         <parameter name="tab"/>
-        <body><![CDATA[
+        <body>
           document.removeEventListener("mousemove", this);
           document.removeEventListener("mouseup", this);
           this.mTabstrip.removeEventListener("scroll", this);
@@ -3112,8 +3113,7 @@
             return;
 
           tab.removeEventListener("TabAttrModified", this);
-          let state = this.getAttribute("drag");
-          if (state == "hint" || state == "detach")
+          if (this.getAttribute("drag") != "move")
             this._unlockTabSizing();
           this.removeAttribute("drag");
           this._clearDragTransforms();
@@ -3122,7 +3122,7 @@
           delete tab._dropIndex;
           delete tab._maxWidth;
           delete tab._savedEvent;
-        ]]></body>
+        </body>
       </method>
 
       <method name="_clearDragTransforms">
