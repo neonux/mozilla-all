@@ -929,8 +929,11 @@ SessionStoreService.prototype = {
 #endif
 
       // save the window if it has multiple tabs or a single saveable tab
-      if (winData.tabs.length > 1 ||
-          (winData.tabs.length == 1 && this._shouldSaveTabState(winData.tabs[0]))) {
+      if ((winData.tabs.length > 1 ||
+           (winData.tabs.length == 1 && this._shouldSaveTabState(winData.tabs[0]))) &&
+      // and at least one non-app tab, since app tabs will be merged to the
+      // next remaining window
+          tabbrowser._numPinnedTabs < tabbrowser.tabs.length) {
         this._closedWindows.unshift(winData);
         this._capClosedWindows();
       }
