@@ -439,9 +439,6 @@ nsPlacesAutoComplete.prototype = {
 
     var searchParamParts = aSearchParam.split(" ");
     this._enableActions = searchParamParts.indexOf("enable-actions") != -1;
-    
-    if (searchParamParts.indexOf("newtab-maxresults") != -1)
-      this._maxRichResults = 100;
 
     this._listener = aListener;
     let result = Cc["@mozilla.org/autocomplete/simple-result;1"].
