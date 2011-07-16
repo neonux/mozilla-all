@@ -6,6 +6,10 @@
 %define glassActiveBorderColor rgb(37, 44, 51)
 %define glassInactiveBorderColor rgb(102, 102, 102)
 
+%define panelBorder rgba(10%,10%,10%,.7) rgba(255,255,255,.7)
+%define panelGlass rgba(255,255,255,.3) rgba(255,255,255,.3) rgba(255,255,255,.3) rgba(255,255,255,.3)
+%define previewBorder rgba(20%,20%,20%,.7)
+
 @media not all and (-moz-windows-classic) {
   #main-window[sizemode="normal"] > #titlebar > #titlebar-content > #appmenu-button-container {
     margin-top: 1px;
@@ -55,6 +59,7 @@
                       -moz-linear-gradient(@customToolbarColor@, @customToolbarColor@);
   }
 
+  .tab-drag-label,
   .tabbrowser-tab[selected="true"]:not(:-moz-lwtheme) {
     background-image: -moz-linear-gradient(white, @toolbarHighlight@ 50%),
                       -moz-linear-gradient(@customToolbarColor@, @customToolbarColor@);
@@ -287,6 +292,47 @@
     background-image: url("chrome://browser/skin/tabview/grain.png"),
                       -moz-linear-gradient(rgba(255,255,255,0), #CCD9EA 200px, #C7D5E7);
     background-attachment: fixed;
+  }
+
+  .tab-drag-panel {
+    -moz-appearance: -moz-win-borderless-glass;
+    border-radius: 7px;
+  }
+  .tab-drag-label {
+    padding: 4px;
+    background-color: -moz-dialog;
+    border: 1px solid DimGray;
+    border-radius: 3px;
+  }
+  .tab-drag-panel:not([target]) > .tab-drag-label {
+    display: none;
+  }
+  .tab-drag-preview {
+    display: block;
+    margin: 5px;
+    box-shadow: 0 0 5px rgba(10%,10%,10%,.7);
+    border-width: 15px 7px 7px;
+    border-style: solid;
+    -moz-border-top-colors: @panelBorder@ @panelGlass@ @panelGlass@ @panelGlass@ @previewBorder@;
+    -moz-border-right-colors: @panelBorder@ @panelGlass@ @previewBorder@;
+    -moz-border-bottom-colors: @panelBorder@ @panelGlass@ @previewBorder@;
+    -moz-border-left-colors: @panelBorder@ @panelGlass@ @previewBorder@;
+    border-radius: 7px;
+  }
+  .tab-drag-preview::before {
+    content: "";
+    display: block;
+    margin: -14px 0 0 -2px;
+    width: 32px;
+    height: 7px;
+    background-image: -moz-linear-gradient(rgb(247,182,82), rgb(215,98,10) 95%);
+    background-clip: content-box;
+    border: 2px solid;
+    border-top-width: 0;
+    -moz-border-right-colors: rgba(255,255,255,.3) rgba(0,0,0,.7);
+    -moz-border-bottom-colors: rgba(255,255,255,.3) rgba(0,0,0,.7);
+    -moz-border-left-colors: rgba(255,255,255,.3) rgba(0,0,0,.7);
+    border-radius: 0 0 3px 3px;
   }
 }
 
