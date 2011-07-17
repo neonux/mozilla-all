@@ -2478,22 +2478,6 @@
                   (window.windowState != window.STATE_MINIMIZED);
               }
               break;
-            case "unload":
-              // merge app tabs into the next remaining window
-              let numPinned = this._numPinnedTabs;
-              let otherWin = Services.wm.getMostRecentWindow("navigator:browser");
-              if (numPinned && otherWin) {
-                let that = otherWin.gBrowser;
-                for (let i = 0; i < numPinned; i++) {
-                  let newTab = that.addTab("about:blank");
-                  let newBrowser = that.getBrowserForTab(newTab);
-                  newBrowser.stop();
-                  newBrowser.docShell;
-                  that.swapBrowsersAndCloseOther(newTab, this.tabs[0]);
-                  that.pinTab(newTab);
-                }
-              }
-              break;
           }
         ]]></body>
       </method>
@@ -2504,7 +2488,6 @@
           this.mCurrentTab = this.tabContainer.firstChild;
           document.addEventListener("keypress", this, false);
           window.addEventListener("sizemodechange", this, false);
-          window.addEventListener("unload", this, false);
 
           var uniqueId = "panel" + Date.now();
           this.mPanelContainer.childNodes[0].id = uniqueId;
