@@ -6,10 +6,6 @@
 %define glassActiveBorderColor rgb(37, 44, 51)
 %define glassInactiveBorderColor rgb(102, 102, 102)
 
-%define panelOuterBorderColors rgba(10%,10%,10%,.7) rgba(255,255,255,.7)
-%define panelMiddleBorderColors rgba(255,255,255,.3) rgba(255,255,255,.3) rgba(255,255,255,.3) rgba(255,255,255,.3)
-%define panelInnerBorderColor rgba(20%,20%,20%,.7)
-
 @media not all and (-moz-windows-classic) {
   #main-window[sizemode="normal"] > #titlebar > #titlebar-content > #appmenu-button-container {
     margin-top: 1px;
@@ -59,7 +55,6 @@
                       -moz-linear-gradient(@customToolbarColor@, @customToolbarColor@);
   }
 
-  .tab-drag-label,
   .tabbrowser-tab[selected="true"]:not(:-moz-lwtheme) {
     background-image: -moz-linear-gradient(white, @toolbarHighlight@ 50%),
                       -moz-linear-gradient(@customToolbarColor@, @customToolbarColor@);
@@ -292,29 +287,6 @@
     background-image: url("chrome://browser/skin/tabview/grain.png"),
                       -moz-linear-gradient(rgba(255,255,255,0), #CCD9EA 200px, #C7D5E7);
     background-attachment: fixed;
-  }
-
-  .tab-drag-image {
-    -moz-appearance: -moz-win-borderless-glass;
-    border-radius: 7px;
-  }
-  .tab-drag-label {
-    padding: 4px;
-    background-color: -moz-dialog;
-    border: 1px solid DimGray;
-    border-radius: 3px;
-  }
-  .tab-drag-image > html|canvas {
-    border-width: 15px 7px 7px;
-    border-style: solid;
-    -moz-border-top-colors: @panelOuterBorderColors@ @panelMiddleBorderColors@ @panelMiddleBorderColors@
-                            @panelMiddleBorderColors@ @panelInnerBorderColor@;
-    -moz-border-right-colors: @panelOuterBorderColors@ @panelMiddleBorderColors@ @panelInnerBorderColor@;
-    -moz-border-bottom-colors: @panelOuterBorderColors@ @panelMiddleBorderColors@ @panelInnerBorderColor@;
-    -moz-border-left-colors: @panelOuterBorderColors@ @panelMiddleBorderColors@ @panelInnerBorderColor@;
-    border-radius: 7px;
-    box-shadow: 0 0 5px rgba(10%,10%,10%,.7);
-    margin: 5px;
   }
 }
 

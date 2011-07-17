@@ -1837,20 +1837,6 @@ toolbarbutton.chevron > .toolbarbutton-menu-dropmarker {
  * Tab Drag and Drop
  */
 
-.tab-drag-image {
-  padding: 4px;
-}
-
-.tab-drag-label {
-  font: message-box;
-  font-weight: bold;
-  text-align: center;
-}
-
-.tab-drag-image > html|canvas {
-  border: 1px solid rgba(0,0,0,.15);
-}
-
 .tab-drop-indicator {
   list-style-image: url(chrome://browser/skin/tabbrowser/tabDragIndicator.png);
   margin-bottom: -8px;

@@ -20,10 +20,6 @@ tabbrowser {
   visibility: collapse;
 }
 
-#tabbrowser-tabs[drag=detach] > .tabbrowser-arrowscrollbox > .tabs-newtab-button {
-  opacity: 0;
-}
-
 .tabbrowser-tab {
   -moz-binding: url("chrome://browser/content/tabbrowser.xml#tabbrowser-tab");
 }
@@ -64,31 +60,6 @@ tabbrowser {
 .tabbrowser-tabs[positionpinnedtabs] > .tabbrowser-tab[pinned] {
   position: fixed !important;
   display: block; /* position:fixed already does this (bug 579776), but let's be explicit */
-}
-
-.tabbrowser-tabs[drag] > .tabbrowser-tab[selected] {
-  z-index: 2;
-  pointer-events: none; /* suppress tooltip */
-  -moz-transition: 0s; /* prevent width transition when temporarily hiding */
-}
-
-/* visibility: collapse might collapse the tab bar, so we use this instead */
-.tabbrowser-tabs[drag=detach] > .tabbrowser-tab[selected]:not(:only-child) {
-  min-width: 0 !important;
-  max-width: 0 !important;
-  border: 0 !important;
-  overflow: hidden;
-}
-.tabbrowser-tabs[drag=detach] > .tabbrowser-tab[selected]:only-child {
-  visibility: hidden;
-}
-
-.tabbrowser-tabs[drag=move] > .tabbrowser-tab[fadein]:not([selected]) {
-  -moz-transition: -moz-transform 200ms ease-out;
-}
-
-.tabbrowser-tabs[drag=finish] > .tabbrowser-tab[fadein] {
-  -moz-transition: -moz-transform 100ms ease-out;
 }
 
 #alltabs-popup {
