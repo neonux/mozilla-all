@@ -1560,7 +1560,6 @@ toolbarbutton.chevron > .toolbarbutton-menu-dropmarker {
   height: 26px;
 }
 
-.tab-drag-label,
 .tabbrowser-tab,
 .tabs-newtab-button {
   -moz-appearance: none;
@@ -1837,17 +1836,6 @@ toolbarbutton.chevron > .toolbarbutton-menu-dropmarker {
 /**
  * Tab Drag and Drop
  */
-
-.tab-drag-label {
-  background: -moz-linear-gradient(#eee, #ccc);
-  padding: 4px;
-  border-radius: 4px;
-}
-
-.tab-drag-panel:not([target]) > .tab-drag-label {
-  border-bottom: 1px solid DarkGray;
-  border-radius: 3px 3px 0 0;
-}
 
 .tab-drop-indicator {
   list-style-image: url(chrome://browser/skin/tabbrowser/tabDragIndicator.png);
