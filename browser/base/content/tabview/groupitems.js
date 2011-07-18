@@ -86,6 +86,8 @@ function GroupItem(listOfEls, options) {
   this.keepProportional = false;
   this._frozenItemSizeData = {};
 
+  this._onChildClose = this._onChildClose.bind(this);
+
   // Variable: _activeTab
   // The <TabItem> for the groupItem's active tab.
   this._activeTab = null;
@@ -809,7 +811,7 @@ GroupItem.prototype = Utils.extend(new Item(), new Subscribable(), {
     let shouldRemoveTabItems = [];
     let toClose = this._children.concat();
     toClose.forEach(function(child) {
-      child.removeSubscriber(self, "close");
+      child.removeSubscriber("close", self._onChildClose);
 
       let removed = child.close(true);
       if (removed) {
@@ -817,7 +819,7 @@ GroupItem.prototype = Utils.extend(new Item(), new Subscribable(), {
       } else {
         // child.removeSubscriber() must be called before child.close(), 
         // therefore we call child.addSubscriber() if the tab is not removed.
-        child.addSubscriber(self, "close", self._onChildClose.bind(self));
+        child.addSubscriber("close", self._onChildClose);
       }
     });
 
@@ -1000,7 +1002,7 @@ GroupItem.prototype = Utils.extend(new Item(), new Subscribable(), {
         item.droppable(false);
         item.groupItemData = {};
 
-        item.addSubscriber(this, "close", this._onChildClose.bind(this));
+        item.addSubscriber("close", this._onChildClose);
         item.setParent(this);
 
         if (typeof item.setResizable == 'function')
@@ -1101,7 +1103,7 @@ GroupItem.prototype = Utils.extend(new Item(), new Subscribable(), {
         item.setBounds(item.getBounds(), true, {force: true});
 
       item.droppable(true);
-      item.removeSubscriber(this, "close");
+      item.removeSubscriber("close", this._onChildClose);
 
       if (typeof item.setResizable == 'function')
         item.setResizable(true, options.immediately);

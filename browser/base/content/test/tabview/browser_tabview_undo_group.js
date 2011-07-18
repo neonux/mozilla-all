@@ -36,8 +36,8 @@ function onTabViewWindowLoaded() {
 }
 
 function testUndoGroup(contentWindow, groupItem) {
-  groupItem.addSubscriber(groupItem, "groupHidden", function() {
-    groupItem.removeSubscriber(groupItem, "groupHidden");
+  groupItem.addSubscriber("groupHidden", function onHidden() {
+    groupItem.removeSubscriber("groupHidden", onHidden);
 
     // check the data of the group
     let theGroupItem = contentWindow.GroupItems.groupItem(groupItem.id);
@@ -54,8 +54,8 @@ function testUndoGroup(contentWindow, groupItem) {
       { type: "click" }, theGroupItem.$undoContainer[0], contentWindow);
   });
 
-  groupItem.addSubscriber(groupItem, "groupShown", function() {
-    groupItem.removeSubscriber(groupItem, "groupShown");
+  groupItem.addSubscriber("groupShown", function onShown() {
+    groupItem.removeSubscriber("groupShown", onShown);
 
     // check the data of the group
     let theGroupItem = contentWindow.GroupItems.groupItem(groupItem.id);
@@ -77,8 +77,8 @@ function testUndoGroup(contentWindow, groupItem) {
 }
 
 function testCloseUndoGroup(contentWindow, groupItem) {
-  groupItem.addSubscriber(groupItem, "groupHidden", function() {
-    groupItem.removeSubscriber(groupItem, "groupHidden");
+  groupItem.addSubscriber("groupHidden", function onHidden() {
+    groupItem.removeSubscriber("groupHidden", onHidden);
 
     // check the data of the group
     let theGroupItem = contentWindow.GroupItems.groupItem(groupItem.id);
@@ -97,8 +97,8 @@ function testCloseUndoGroup(contentWindow, groupItem) {
       { type: "click" }, closeButton[0], contentWindow);
   });
 
-  groupItem.addSubscriber(groupItem, "close", function() {
-    groupItem.removeSubscriber(groupItem, "close");
+  groupItem.addSubscriber("close", function onClose() {
+    groupItem.removeSubscriber("close", onClose);
 
     let theGroupItem = contentWindow.GroupItems.groupItem(groupItem.id);
     ok(!theGroupItem, "The group item doesn't exists");

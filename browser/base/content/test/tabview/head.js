@@ -48,15 +48,15 @@ function createGroupItemWithBlankTabs(win, width, height, padding, numNewTabs, a
 
 // ----------
 function closeGroupItem(groupItem, callback) {
-  groupItem.addSubscriber(groupItem, "close", function () {
-    groupItem.removeSubscriber(groupItem, "close");
+  groupItem.addSubscriber("close", function onClose() {
+    groupItem.removeSubscriber("close", onClose);
     if ("function" == typeof callback)
       executeSoon(callback);
   });
 
   if (groupItem.getChildren().length) {
-    groupItem.addSubscriber(groupItem, "groupHidden", function () {
-      groupItem.removeSubscriber(groupItem, "groupHidden");
+    groupItem.addSubscriber("groupHidden", function onHide() {
+      groupItem.removeSubscriber("groupHidden", onHide);
       groupItem.closeHidden();
     });
   }
@@ -227,8 +227,8 @@ function whenSearchIsEnabled(callback, win) {
     return;
   }
 
-  contentWindow.addEventListener("tabviewsearchenabled", function () {
-    contentWindow.removeEventListener("tabviewsearchenabled", arguments.callee, false);
+  contentWindow.addEventListener("tabviewsearchenabled", function onSearchEnabled() {
+    contentWindow.removeEventListener("tabviewsearchenabled", onSearchEnabled, false);
     callback();
   }, false);
 }
@@ -243,8 +243,8 @@ function whenSearchIsDisabled(callback, win) {
     return;
   }
 
-  contentWindow.addEventListener("tabviewsearchdisabled", function () {
-    contentWindow.removeEventListener("tabviewsearchdisabled", arguments.callee, false);
+  contentWindow.addEventListener("tabviewsearchdisabled", function onSearchDisabled() {
+    contentWindow.removeEventListener("tabviewsearchdisabled", onSearchDisabled, false);
     callback();
   }, false);
 }
@@ -257,8 +257,8 @@ function hideGroupItem(groupItem, callback) {
     return;
   }
 
-  groupItem.addSubscriber(groupItem, "groupHidden", function () {
-    groupItem.removeSubscriber(groupItem, "groupHidden");
+  groupItem.addSubscriber("groupHidden", function onHide() {
+    groupItem.removeSubscriber("groupHidden", onHide);
     callback();
   });
   groupItem.closeAll();
@@ -271,8 +271,8 @@ function unhideGroupItem(groupItem, callback) {
     return;
   }
 
-  groupItem.addSubscriber(groupItem, "groupShown", function () {
-    groupItem.removeSubscriber(groupItem, "groupShown");
+  groupItem.addSubscriber("groupShown", function onShown() {
+    groupItem.removeSubscriber("groupShown", onShown);
     callback();
   });
   groupItem._unhide();
@@ -347,8 +347,8 @@ function restoreTab(callback, index, win) {
     return;
   }
 
-  tab._tabViewTabItem.addSubscriber(tab, "reconnected", function onReconnected() {
-    tab._tabViewTabItem.removeSubscriber(tab, "reconnected");
+  tab._tabViewTabItem.addSubscriber("reconnected", function onReconnected() {
+    tab._tabViewTabItem.removeSubscriber("reconnected", onReconnected);
     finalize();
   });
 }
