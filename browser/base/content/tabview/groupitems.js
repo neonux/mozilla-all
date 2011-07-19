@@ -1658,23 +1658,34 @@ GroupItem.prototype = Utils.extend(new Item(), new Subscribable(), {
       // only set the last mouse down target if it is a left click, not on the
       // close button, not on the new tab button, not on the title bar and its
       // element
-      if (Utils.isLeftClick(e) && self.$closeButton[0] != target &&
-          self.$titlebar[0] != target && !self.$titlebar.contains(target))
+      if (Utils.isLeftClick(e) &&
+          self.$closeButton[0] != target &&
+          self.$titlebar[0] != target &&
+          !self.$titlebar.contains(target) &&
+          !self.$appTabTray.contains(target)) {
         lastMouseDownTarget = target;
-      else
+      } else {
         lastMouseDownTarget = null;
+      }
     });
     container.mouseup(function(e) {
       let same = (e.target == lastMouseDownTarget);
       lastMouseDownTarget = null;
 
       if (same && !self.isDragging) {
-        let tabItem = self.getTopChild();
-        if (tabItem)
-          tabItem.zoomIn();
-        else
-          self.newTab();
-       }
+        if (gBrowser.selectedTab.pinned &&
+            UI.getActiveTab() != self.getActiveTab() &&
+            self.getChildren().length > 0) {
+          UI.setActive(self, { dontSetActiveTabInGroup: true });
+          UI.goToTab(gBrowser.selectedTab);
+        } else {
+          let tabItem = self.getTopChild();
+          if (tabItem)
+            tabItem.zoomIn();
+          else
+            self.newTab();
+        }
+      }
     });
 
     let dropIndex = false;

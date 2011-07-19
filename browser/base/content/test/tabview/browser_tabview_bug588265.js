@@ -6,7 +6,7 @@ let groupItemTwoId;
 
 function test() {
   waitForExplicitFinish();
-
+  
   registerCleanupFunction(function() {
     while (gBrowser.tabs[1])
       gBrowser.removeTab(gBrowser.tabs[1]);
@@ -17,8 +17,6 @@ function test() {
 }
 
 function setup() {
-  window.removeEventListener("tabviewshown", setup, false);
-
   registerCleanupFunction(function() {
     let groupItem = contentWindow.GroupItems.groupItem(groupItemTwoId);
     if (groupItem)
@@ -29,11 +27,11 @@ function setup() {
   is(contentWindow.GroupItems.groupItems.length, 1, "Has only one group");
 
   let groupItemOne = contentWindow.GroupItems.groupItems[0];
-    is(groupItemOne.getChildren().length, 2, "Group one has 2 tab items");
+  is(groupItemOne.getChildren().length, 2, "Group one has 2 tab items");
 
   let groupItemTwo = createGroupItemWithBlankTabs(window, 250, 250, 40, 1);
   groupItemTwoId = groupItemTwo.id;
-      testGroups(groupItemOne, groupItemTwo, contentWindow);
+  testGroups(groupItemOne, groupItemTwo, contentWindow);
 }
 
 function testGroups(groupItemOne, groupItemTwo, contentWindow) {
@@ -61,9 +59,7 @@ function testGroups(groupItemOne, groupItemTwo, contentWindow) {
          "The num of childen in group one is 2");
 
       // clean up and finish
-      groupItemTwo.addSubscriber("close", function onClose() {
-        groupItemTwo.removeSubscriber("close", onClose);
-
+      closeGroupItem(groupItemTwo, function() {
         gBrowser.removeTab(groupItemOne.getChild(1).tab);
         is(contentWindow.GroupItems.groupItems.length, 1, "Has only one group");
         is(groupItemOne.getChildren().length, 1, 
