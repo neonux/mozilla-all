@@ -131,6 +131,7 @@
 
 /* ::::: app menu button ::::: */
 
+.tab-drag-preview::before,
 #appmenu-button {
   -moz-appearance: none;
   background: -moz-linear-gradient(rgb(247,182,82), rgb(215,98,10) 95%);
@@ -162,6 +163,7 @@
 }
 %endif
 
+#main-window[privatebrowsingmode=temporary] #tabbrowser-tabs > hbox > .tab-drag-panel > .tab-drag-preview::before,
 #main-window[privatebrowsingmode=temporary] #appmenu-button {
   background-image: -moz-linear-gradient(rgb(153,38,211), rgb(105,19,163) 95%);
   border-color: rgba(43,8,65,.9);
