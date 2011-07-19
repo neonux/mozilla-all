@@ -68,6 +68,7 @@
 #include "nsMathUtils.h"
 #include "mozIStorageAsyncStatement.h"
 #include "mozIPlacesAutoComplete.h"
+#include "mozIURLInlineComplete.h"
 
 #include "nsNavBookmarks.h"
 #include "nsAnnotationService.h"
@@ -1792,12 +1793,22 @@ nsNavHistory::InternalAddNewPage(nsIURI* aURI,
   nsCAutoString spec;
   rv = aURI->GetSpec(spec);
   NS_ENSURE_SUCCESS(rv, rv);
+
+  PRInt32 startingFrecency = IsQueryURI(spec) ? 0 : -1;
   rv = stmt->BindInt32ByName(NS_LITERAL_CSTRING("frecency"),
-                             IsQueryURI(spec) ? 0 : -1);
+                             startingFrecency);
   NS_ENSURE_SUCCESS(rv, rv);
 
   rv = stmt->Execute();
   NS_ENSURE_SUCCESS(rv, rv);
+
+  nsCOMPtr<mozIURLInlineComplete> urlComplete =
+    do_GetService("@mozilla.org/autocomplete/search;1?name=urlinline");
+  if (!aHidden && urlComplete) {
+    // Add this place to our domain table as well
+    rv = urlComplete->AddDomain(spec, startingFrecency);
+    NS_ENSURE_SUCCESS(rv, rv);
+  }
 
   PRInt64 pageId = 0;
   {

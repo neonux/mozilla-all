@@ -1588,7 +1588,7 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
     FullZoom.init();
   }
   catch(ex) {
-    Components.utils.reportError("Failed to init content pref service:\n" + ex);
+    Cu.reportError("Failed to init content pref service:\n" + ex);
   }
 
 #ifdef MOZ_E10S_COMPAT
@@ -1697,6 +1697,16 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
 #ifdef MENUBAR_CAN_AUTOHIDE
     document.getElementById("appmenu_scratchpad").hidden = false;
 #endif
+  }
+
+  // Create the temporary table that stores all hostnames in Places.
+  // This will be used for inline autocomplete.
+  try {
+    Cc["@mozilla.org/autocomplete/search;1?name=urlinline"]
+      .getService(Ci.mozIURLInlineComplete)
+      .initDomainTable();
+  } catch (ex) {
+    Cu.reportError("URL domain table could not be initialized: " + ex);
   }
 
 #ifdef MENUBAR_CAN_AUTOHIDE
