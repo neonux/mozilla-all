@@ -1256,17 +1256,16 @@ nsAutoCompleteController::ProcessResult(PRInt32 aSearchIndex, nsIAutoCompleteRes
   if (aResult)
     aResult->GetMatchCount(&matchCount);
 
-  PRInt32 oldIndex = mResults.IndexOf(aResult);
-  if (oldIndex == -1) {
+  PRInt32 resultIndex = mResults.IndexOf(aResult);
+  if (resultIndex == -1) {
     // cache the result
     mResults.AppendObject(aResult);
     mMatchCounts.AppendElement(matchCount);
+    resultIndex = mResults.Count() - 1;
   }
   else {
-    // replace the cached result
-    mResults.ReplaceObjectAt(aResult, oldIndex);
     oldMatchCount = mMatchCounts[aSearchIndex];
-    mMatchCounts[oldIndex] = matchCount;
+    mMatchCounts[resultIndex] = matchCount;
   }
 
   PRBool hiddenResult = PR_FALSE;
@@ -1316,7 +1315,7 @@ nsAutoCompleteController::ProcessResult(PRInt32 aSearchIndex, nsIAutoCompleteRes
   if (result == nsIAutoCompleteResult::RESULT_SUCCESS ||
       result == nsIAutoCompleteResult::RESULT_SUCCESS_ONGOING) {
     // Try to autocomplete the default index for this search.
-    CompleteDefaultIndex(aSearchIndex);
+    CompleteDefaultIndex(resultIndex);
   }
 
   if (mSearchesOngoing == 0) {
@@ -1377,7 +1376,7 @@ nsAutoCompleteController::ClearResults()
 }
 
 nsresult
-nsAutoCompleteController::CompleteDefaultIndex(PRInt32 aSearchIndex)
+nsAutoCompleteController::CompleteDefaultIndex(PRInt32 aResultIndex)
 {
   if (mDefaultIndexCompleted || mBackspaced || mSearchString.Length() == 0)
     return NS_OK;
@@ -1399,7 +1398,7 @@ nsAutoCompleteController::CompleteDefaultIndex(PRInt32 aSearchIndex)
     return NS_OK;
 
   nsAutoString resultValue;
-  if (NS_SUCCEEDED(GetDefaultCompleteValue(aSearchIndex, PR_TRUE, resultValue)))
+  if (NS_SUCCEEDED(GetDefaultCompleteValue(aResultIndex, PR_TRUE, resultValue)))
     CompleteValue(resultValue);
 
   mDefaultIndexCompleted = PR_TRUE;
@@ -1408,12 +1407,12 @@ nsAutoCompleteController::CompleteDefaultIndex(PRInt32 aSearchIndex)
 }
 
 nsresult
-nsAutoCompleteController::GetDefaultCompleteValue(PRInt32 aSearchIndex,
+nsAutoCompleteController::GetDefaultCompleteValue(PRInt32 aResultIndex,
                                                   PRBool aPreserveCasing,
                                                   nsAString &_retval)
 {
   PRInt32 defaultIndex = -1;
-  PRInt32 index = aSearchIndex;
+  PRInt32 index = aResultIndex;
   if (index < 0) {
     PRUint32 count = mResults.Count();
     for (PRUint32 i = 0; i < count; ++i) {
