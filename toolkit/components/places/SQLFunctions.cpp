@@ -673,5 +673,92 @@ namespace places {
     return NS_OK;
   }
 
+////////////////////////////////////////////////////////////////////////////////
+//// Get URL Host Function
+
+  //////////////////////////////////////////////////////////////////////////////
+  //// GetURLHostFunction
+
+  /* static */
+  nsresult
+  GetURLHostFunction::create(mozIStorageConnection *aDBConn)
+  {
+    nsresult rv = NS_OK;
+
+    nsCOMPtr<GetURLHostFunction> function = new GetURLHostFunction();
+    function->mParser = do_GetService(NS_STDURLPARSER_CONTRACTID, &rv);
+    if (NS_FAILED(rv) || !function->mParser) {
+      return NS_ERROR_FAILURE;
+    }
+
+    rv = aDBConn->CreateFunction(
+      NS_LITERAL_CSTRING("hostname"), 1, function
+    );
+
+    return rv;
+  }
+
+  NS_IMPL_THREADSAFE_ISUPPORTS1(
+    GetURLHostFunction,
+    mozIStorageFunction
+  )
+
+  //////////////////////////////////////////////////////////////////////////////
+  //// mozIStorageFunction
+
+  NS_IMETHODIMP
+  GetURLHostFunction::OnFunctionCall(mozIStorageValueArray *aArguments,
+                                     nsIVariant **_result)
+  {
+    nsCAutoString url;
+    (void)aArguments->GetUTF8String(0, url);
+    const char* urlStr = url.get();
+
+    nsresult rv;
+
+    PRInt32 unusedInt;
+    PRUint32 unusedUint;
+
+    PRUint32 authPos;
+    PRInt32 authLen;
+    rv = mParser->ParseURL(urlStr, url.Length(),
+                           &unusedUint, &unusedInt, // scheme
+                           &authPos, &authLen, // authority (user, pass, host)
+                           &unusedUint, &unusedInt); // path
+    NS_ENSURE_SUCCESS(rv, rv);
+
+    if (authLen <= 0) {
+      // We were handed a URL without an authority, like a file: URL,
+      // so return nothing.
+      NS_ADDREF(*_result = new NullVariant());
+      return NS_OK;
+    }
+
+    PRUint32 hostPos;
+    PRInt32 hostLen;
+    rv = mParser->ParseAuthority(urlStr + authPos, authLen,
+                                 &unusedUint, &unusedInt, // username
+                                 &unusedUint, &unusedInt, // password
+                                 &hostPos, &hostLen, // host
+                                 &unusedInt); // port
+    NS_ENSURE_SUCCESS(rv, rv);
+
+    PRUint32 possibleSlashPos = authPos + hostPos + hostLen;
+    if (hostLen != -1 && possibleSlashPos < url.Length() &&
+        url[possibleSlashPos] == '/') {
+      // Make sure we include a trailing slash.
+      hostLen++;
+    }
+
+    nsDependentCSubstring host = Substring(url, authPos + hostPos, hostLen);
+    if (StringBeginsWith(host, NS_LITERAL_CSTRING("www."))) {
+      // Remove the www.
+      host.Rebind(host, 4);
+    }
+    
+    NS_ADDREF(*_result = new UTF8TextVariant(host));
+    return NS_OK;
+  }
+
 } // namespace places
 } // namespace mozilla
