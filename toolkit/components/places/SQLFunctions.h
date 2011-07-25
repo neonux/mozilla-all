@@ -46,7 +46,6 @@
  */
 
 #include "mozIStorageFunction.h"
-#include "nsIURLParser.h"
 
 class mozIStorageConnection;
 
@@ -242,35 +241,6 @@ public:
    *        The database connection to register with.
    */
   static nsresult create(mozIStorageConnection *aDBConn);
-};
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-//// Get URL Host Function
-
-/**
- * SQL function to get a hostname out of a URL.
- *
- * @param pageUrl
- *        The URL of a page to parse the hostname out of.
- */
-class GetURLHostFunction : public mozIStorageFunction
-{
-public:
-  NS_DECL_ISUPPORTS
-  NS_DECL_MOZISTORAGEFUNCTION
-
-  /**
-   * Registers the function with the specified database connection.
-   *
-   * @param aDBConn
-   *        The database connection to register with.
-   */
-  static nsresult create(mozIStorageConnection *aDBConn);
-
-protected:
-  nsCOMPtr<nsIURLParser> mParser;
 };
 
 } // namespace places

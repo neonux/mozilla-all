@@ -58,8 +58,6 @@
 #include "mozilla/Util.h"
 #include "nsContentUtils.h"
 
-#include "mozIURLInlineComplete.h"
-
 // Initial size for the cache holding visited status observers.
 #define VISIT_OBSERVERS_INITIAL_CACHE_SIZE 128
 
@@ -631,46 +629,6 @@ CanAddURI(nsIURI* aURI,
 
   return false;
 }
-
-/**
- * Adds a possible new domain to the domain table when a
- * new place is added
- */
-class AddToDomainTable : public nsRunnable
-{
-public:
-  /**
-   * Run the handler (which is written in JS) on the main thread.
-   *
-   * @param aSpec
-   *        The spec of the URI of the new place.
-   * @param aFrecency
-   *        The frecency of the new place.
-   */
-  AddToDomainTable(const nsCString& aSpec,
-                   PRInt32 aFrecency)
-  : mSpec(aSpec)
-  , mFrecency(aFrecency)
-  {
-  }
-
-  NS_IMETHOD Run()
-  {
-    NS_PRECONDITION(NS_IsMainThread(),
-                    "This should be called on the main thread");
-    nsCOMPtr<mozIURLInlineComplete> urlComplete =
-      do_GetService("@mozilla.org/autocomplete/search;1?name=urlinline");
-
-    if (urlComplete) {
-      nsresult rv = urlComplete->AddDomain(mSpec, mFrecency);
-      NS_ENSURE_SUCCESS(rv, rv);
-    }
-    return NS_OK;
-  }
-private:
-  const nsCString mSpec;
-  const PRInt32 mFrecency;
-};
 
 /**
  * Adds a visit to the database.
@@ -1429,12 +1387,6 @@ History::InsertPlace(const VisitData& aPlace)
   NS_ENSURE_SUCCESS(rv, rv);
   rv = stmt->Execute();
   NS_ENSURE_SUCCESS(rv, rv);
-
-  if (!aPlace.hidden) {
-    // Add the new page to the domain table if necessary
-    nsCOMPtr<nsIRunnable> event = new AddToDomainTable(aPlace.spec, -1);
-    (void)NS_DispatchToMainThread(event);
-  }
 
   return NS_OK;
 }

@@ -60,7 +60,6 @@ XPIDLSRCS += \
   mozIAsyncHistory.idl \
   mozIAsyncFavicons.idl \
   mozIPlacesAutoComplete.idl \
-  mozIURLInlineComplete.idl \
   nsIAnnotationService.idl \
   nsIBrowserHistory.idl \
   nsIDynamicContainer.idl \
