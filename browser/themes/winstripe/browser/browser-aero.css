@@ -130,11 +130,6 @@
     background-color: #556;
   }
 
-  #main-window[sizemode=normal] #navigator-toolbox > toolbar {
-    padding-left: 1px;
-    padding-right: 1px;
-  }
-
   #toolbar-menubar:not(:-moz-lwtheme),
   #TabsToolbar[tabsontop=true]:not(:-moz-lwtheme),
   #navigator-toolbox[tabsontop=false] > #nav-bar:not(:-moz-lwtheme),
