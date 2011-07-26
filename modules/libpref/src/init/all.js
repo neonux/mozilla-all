@@ -97,6 +97,11 @@ pref("dom.indexedDB.enabled", true);
 // Space to allow indexedDB databases before prompting (in MB).
 pref("dom.indexedDB.warningQuota", 50);
 
+// Whether or not Web Workers are enabled.
+pref("dom.workers.enabled", true);
+// The number of workers per domain allowed to run concurrently.
+pref("dom.workers.maxPerDomain", 20);
+
 // Whether window.performance is enabled
 pref("dom.enable_performance", true);
 
@@ -1106,6 +1111,44 @@ pref("intl.uidirection.fa", "rtl");
 pref("intl.hyphenation-alias.en", "en-us");
 // and for other subtags of en-*, if no specific patterns are available
 pref("intl.hyphenation-alias.en-*", "en-us");
+
+pref("intl.hyphenation-alias.af-*", "af");
+pref("intl.hyphenation-alias.bg-*", "bg");
+pref("intl.hyphenation-alias.ca-*", "ca");
+pref("intl.hyphenation-alias.cy-*", "cy");
+pref("intl.hyphenation-alias.da-*", "da");
+pref("intl.hyphenation-alias.eo-*", "eo");
+pref("intl.hyphenation-alias.es-*", "es");
+pref("intl.hyphenation-alias.et-*", "et");
+pref("intl.hyphenation-alias.gl-*", "gl");
+pref("intl.hyphenation-alias.hr-*", "hr");
+pref("intl.hyphenation-alias.hsb-*", "hsb");
+pref("intl.hyphenation-alias.ia-*", "ia");
+pref("intl.hyphenation-alias.is-*", "is");
+pref("intl.hyphenation-alias.kmr-*", "kmr");
+pref("intl.hyphenation-alias.la-*", "la");
+pref("intl.hyphenation-alias.mn-*", "mn");
+pref("intl.hyphenation-alias.nl-*", "nl");
+pref("intl.hyphenation-alias.pt-*", "pt");
+pref("intl.hyphenation-alias.sl-*", "sl");
+pref("intl.hyphenation-alias.sv-*", "sv");
+pref("intl.hyphenation-alias.uk-*", "uk");
+
+// use reformed (1996) German patterns by default unless specifically tagged as de-1901
+// (these prefs may soon be obsoleted by better BCP47-based tag matching, but for now...)
+pref("intl.hyphenation-alias.de", "de-1996");
+pref("intl.hyphenation-alias.de-*", "de-1996");
+pref("intl.hyphenation-alias.de-DE-1901", "de-1901");
+pref("intl.hyphenation-alias.de-CH-*", "de-CH");
+
+// patterns from TeX are tagged as "sh" (Serbo-Croatian) macrolanguage;
+// alias "sr" (Serbian) and "bs" (Bosnian) to those patterns
+// (Croatian has its own separate patterns).
+pref("intl.hyphenation-alias.sr", "sh");
+pref("intl.hyphenation-alias.bs", "sh");
+pref("intl.hyphenation-alias.sh-*", "sh");
+pref("intl.hyphenation-alias.sr-*", "sh");
+pref("intl.hyphenation-alias.bs-*", "sh");
 
 pref("font.mathfont-family", "STIXNonUnicode, STIXSizeOneSym, STIXSize1, STIXGeneral, Asana Math, Standard Symbols L, DejaVu Sans, Cambria Math");
 
