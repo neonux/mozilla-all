@@ -2458,7 +2458,7 @@
         <body><![CDATA[
           event.stopPropagation();
           var tab = document.tooltipNode;
-          if (tab.localName != "tab" ||
+          if (tab.localName != "tab" || this.tabContainer.draggedTab ||
               !tab.mOverCloseButton && !tab.getAttribute("label")) {
             event.preventDefault();
             return;
@@ -3815,6 +3815,19 @@
         if (!tab || !tab._fullyOpen || tab.closing)
           return;
 
+#ifdef XP_MACOSX
+        if (event.altKey) {
+#else
+        if (event.ctrlKey) {
+#endif
+          let dt = event.dataTransfer;
+          let spec = this.tabbrowser.getBrowserForTab(tab).currentURI.spec;
+          dt.setData("text/x-moz-url", spec);
+          let favicon = document.getAnonymousElementByAttribute(tab, "class", "tab-icon-image");
+          dt.setDragImage(favicon, 16, 16);
+          return;
+        }
+
         this.setAttribute("drag", "move");
         this.draggedTab = tab;
         tab.setAttribute("dragged", "true");
@@ -3889,7 +3902,6 @@
           return;
 
         this._tabDropIndicator.collapsed = true;
-        this._continueScroll(event);
         event.stopPropagation();
       ]]></handler>
     </handlers>
