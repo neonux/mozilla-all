@@ -1238,6 +1238,16 @@ toolbar[iconsize="small"] #feed-button {
   max-width : 36px; 
 }
 
+.ac-delete-button {
+  width: 16px;
+  height: 16px;
+  margin: 0 2px;
+}
+
+richlistitem[current="true"] > hbox > .ac-delete-button {
+  list-style-image: url("moz-icon://stock/gtk-close?size=menu");
+}
+
 .ac-result-type-bookmark,
 .autocomplete-treebody::-moz-tree-image(bookmark, treecolAutoCompleteImage) {
   list-style-image: url("chrome://browser/skin/places/pageStarred.png");

@@ -1196,6 +1196,17 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
   max-width: 36px;
 }
 
+.ac-delete-button {
+  width: 16px;
+  height: 16px;
+  margin: 0 2px;
+}
+
+richlistitem[current="true"] > hbox > .ac-delete-button {
+  list-style-image: url("chrome://global/skin/icons/close.png");
+  -moz-image-region: rect(0, 16px, 16px, 0);
+}
+
 .ac-result-type-bookmark,
 .autocomplete-treebody::-moz-tree-image(bookmark, treecolAutoCompleteImage) {
   list-style-image: url("chrome://browser/skin/places/editBookmark.png");
