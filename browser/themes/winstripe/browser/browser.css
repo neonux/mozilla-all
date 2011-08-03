@@ -58,7 +58,6 @@
 %define bgTabTextureHover -moz-linear-gradient(hsla(0,0%,100%,.3) 1px, hsla(0,0%,75%,.2) 80%, hsla(0,0%,60%,.2))
 %define navbarTextboxCustomBorder border-color: rgba(0,0,0,.32);
 %define navbarLargeIcons #navigator-toolbox[iconsize=large][mode=icons] > #nav-bar
-%define navbarConditionalForwardButton #navigator-toolbox[iconsize=large][mode=icons] > #nav-bar[currentset*="unified-back-forward-button,urlbar-container"]
 
 %ifdef MOZ_OFFICIAL_BRANDING
 %define appMenuButtonBorderColor rgba(255,255,255,.5) rgba(83,42,6,.9)
@@ -652,10 +651,6 @@ menuitem.bookmark-item {
   list-style-image: url("chrome://browser/skin/Toolbar.png");
 }
 
-.toolbarbutton-1[disabled="true"] {
-  list-style-image: url("chrome://browser/skin/Toolbar-disabled.png");
-}
-
 .toolbarbutton-1:-moz-lwtheme-brighttext {
   list-style-image: url("chrome://browser/skin/Toolbar-inverted.png");
 }
@@ -677,16 +672,10 @@ menuitem.bookmark-item {
 @navbarLargeIcons@ {
   -moz-padding-start: 0;
   -moz-padding-end: 2px;
-  padding-top: 5px;
-  padding-bottom: 5px;
 }
 
 @navbarLargeIcons@ :-moz-any(@primaryToolbarButtons@):not(#alltabs-button):not(#tabview-button):not(#new-tab-button) > .toolbarbutton-icon {
   list-style-image: url("chrome://browser/skin/Toolbar.png") !important;
-}
-
-@navbarLargeIcons@ :-moz-any(@primaryToolbarButtons@):not(#alltabs-button):not(#tabview-button):not(#new-tab-button)[disabled="true"] > .toolbarbutton-icon {
-  list-style-image: url("chrome://browser/skin/Toolbar-disabled.png") !important;
 }
 
 @navbarLargeIcons@ .toolbarbutton-1 > .toolbarbutton-menubutton-button,
@@ -694,9 +683,9 @@ menuitem.bookmark-item {
 @navbarLargeIcons@ .toolbarbutton-1 {
   -moz-appearance: none;
   padding: 1px 5px;
-  background: rgba(151,152,153,1)
-              -moz-linear-gradient(rgb(251,252,253), rgb(246,247,248) 49%, 
-                                   rgb(231,232,233) 51%, rgb(225,226,229));
+  background: rgba(151,152,153,.05)
+              -moz-linear-gradient(rgba(251,252,253,.95), rgba(246,247,248,.47) 49%, 
+                                   rgba(231,232,233,.45) 51%, rgba(225,226,229,.3));
   background-clip: padding-box;
   border-radius: 3.5px;
   border: 1px solid;
@@ -740,7 +729,10 @@ menuitem.bookmark-item {
   border-bottom-left-radius: 0;
 }
 
-@navbarLargeIcons@ .toolbarbutton-1[disabled="true"],
+@navbarLargeIcons@ .toolbarbutton-1[disabled="true"] {
+  opacity: .4;
+}
+
 @navbarLargeIcons@ .toolbarbutton-1[disabled="true"] > .toolbarbutton-menubutton-button > .toolbarbutton-icon,
 @navbarLargeIcons@ .toolbarbutton-1[disabled="true"] > .toolbarbutton-icon {
   opacity: 1;
@@ -883,8 +875,8 @@ toolbar[mode="full"] .toolbarbutton-1 > .toolbarbutton-menubutton-button {
   border-radius: 10000px;
   padding: 5px;
   border: none;
-  background-image: -moz-linear-gradient(rgb(251,252,253), rgb(246,247,248) 49%, 
-                                         rgb(231,232,233) 51%, rgb(225,226,229));
+  background-image: -moz-linear-gradient(rgba(251,252,253,.97), rgba(246,247,248,.5) 49%, 
+                                         rgba(231,232,233,.45) 51%, rgba(225,226,229,.2));
   box-shadow: 0 0 0 1px rgba(255,255,255,.3) inset,
               0 0 0 2px rgba(255,255,255,.1) inset,
               0 0 0 1px rgba(0,0,0,.15),
@@ -928,50 +920,11 @@ toolbar[mode="full"] .toolbarbutton-1 > .toolbarbutton-menubutton-button {
   padding-right: 3px;
 }
 
-@navbarConditionalForwardButton@ #forward-button {
-  /* -moz-margin-start cannot be used here because it is not transitionable */
-  margin-left: -6px !important;
-  margin-right: 0;
-  padding: 2px 3px 2px 7px;
-  margin-top: 3px;
-  margin-bottom: 3px;
-  border-top-width: 0;
-  border-bottom-width: 0;
-}
-
-/* Transition from occluded forward button to visible forward button */
-@navbarConditionalForwardButton@ #unified-back-forward-button:not([updatingCurrentBrowser]) #forward-button {
-  -moz-transition: margin-left 150ms ease-out 0s,
-                   margin-right 150ms ease-out 0s,
-                   visibility 1ms ease-out 50ms;
-}
-
-/* Transition from visible forward button to occluded forward button */
-@navbarConditionalForwardButton@ #unified-back-forward-button:not([updatingCurrentBrowser]) #forward-button[disabled="true"] {
-  -moz-transition: margin-left 150ms ease-out 0s,
-                   margin-right 150ms ease-out 0s,
-                   visibility 1ms ease-out 100ms;
-}
-
-@navbarConditionalForwardButton@ #forward-button[disabled="true"]:not(:hover) {
-  margin-left: -30px !important;
-  margin-right: 3px;
-  visibility: hidden;
-}
-
-@navbarConditionalForwardButton@ #forward-button:not([disabled="true"]):-moz-locale-dir(rtl) {
-  margin-left: 3px !important;
-  margin-right: -6px !important;
-}
-
-@navbarConditionalForwardButton@ #forward-button[disabled="true"]:not(:hover):-moz-locale-dir(rtl) {
-  margin-right: -30px !important;
-  margin-left: 3px !important;
-}
-
 @navbarLargeIcons@ #forward-button:not([disabled="true"]):not(:active):hover {
   /*mask: url(keyhole-forward-mask.svg#mask-hover);*/
   mask: url(chrome://browser/content/browser.xul#winstripe-keyhole-forward-mask-hover);
+  /* Don't animate the box shadow, as the blur and spread radii affect the mask. */
+  -moz-transition: background-color .4s ease-in;
 }
 
 .unified-nav-back[_moz-menuactive]:-moz-locale-dir(ltr),
@@ -1237,24 +1190,6 @@ toolbar[mode="full"] .toolbarbutton-1 > .toolbarbutton-menubutton-button {
   border-radius: 3.5px;
 }
 
-@navbarConditionalForwardButton@ #urlbar {
-  border-left-width: 0;
-  margin-left: -48px;
-  padding-left: 48px;
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-}
-
-@navbarConditionalForwardButton@ #unified-back-forward-button:not([updatingCurrentBrowser]) + #urlbar-container #urlbar {
-  -moz-transition: margin-left 150ms,
-                   padding-left 150ms;
-}
-
-@navbarConditionalForwardButton@ #unified-back-forward-button[forwardDisabled] + #urlbar-container #urlbar {
-  margin-left: -27px;
-  padding-left: 27px;
-}
-
 @media all and (-moz-windows-default-theme) {
   #urlbar,
   .searchbar-textbox {
@@ -1336,10 +1271,6 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
   padding: 2px;
   margin: -2px;
   -moz-margin-end: 0;
-}
-
-@navbarConditionalForwardButton@ #identity-box {
-  visibility: collapse;
 }
 
 #identity-box:-moz-locale-dir(ltr) {
@@ -1604,7 +1535,7 @@ richlistitem[type~="action"][actiontype="switchtab"] > .ac-url-box > .ac-action-
 }
 
 #urlbar-go-button:hover {
-  background-image: -moz-@navbarConditionalForwardButton@ #unified-back-forward-buttonlinear-gradient(rgb(96,221,96), rgb(71,191,71) 49%, rgb(54,171,54) 51%, rgb(50,147,50));
+  background-image: -moz-linear-gradient(rgb(96,221,96), rgb(71,191,71) 49%, rgb(54,171,54) 51%, rgb(50,147,50));
 }
 
 #urlbar-reload-button {
