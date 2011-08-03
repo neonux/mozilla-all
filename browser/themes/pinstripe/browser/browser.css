@@ -45,6 +45,8 @@
 @import url("chrome://global/skin/");
 
 %include shared.inc
+%filter substitution
+%define navbarConditionalForwardButton #navigator-toolbox[iconsize=large][mode=icons] > #nav-bar[currentset*="unified-back-forward-button,urlbar-container"]:not([customizing])
 
 @namespace url("http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul");
 @namespace html url("http://www.w3.org/1999/xhtml");
@@ -291,7 +293,10 @@ toolbarbutton.bookmark-item > menupopup {
 .toolbarbutton-1:not([type="menu-button"]),
 .toolbarbutton-1 > .toolbarbutton-menubutton-button,
 .toolbarbutton-1 > .toolbarbutton-menubutton-dropmarker,
-#restore-button {
+#restore-button,
+@navbarConditionalForwardButton@ :-moz-any(#back-button, #forward-button):-moz-lwtheme,
+@navbarConditionalForwardButton@ :-moz-any(#back-button, #forward-button):-moz-lwtheme-darktext,
+@navbarConditionalForwardButton@ :-moz-any(#back-button, #forward-button):-moz-lwtheme-brighttext {
   -moz-box-orient: vertical;
   padding: 0 3px;
   height: 22px;
@@ -331,6 +336,10 @@ toolbarbutton.bookmark-item > menupopup {
 #restore-button {
   margin: 0 4px;
   list-style-image: url("chrome://browser/skin/Toolbar.png");
+}
+
+#back-button[disabled="true"] {
+  list-style-image: url("chrome://browser/skin/Toolbar-disabled.png");
 }
 
 toolbar:not([mode="icons"]) .toolbarbutton-1:not([type="menu-button"]),
@@ -476,6 +485,11 @@ toolbar[mode="icons"] .toolbarbutton-1 > menupopup {
   -moz-box-align: center;
 }
 
+@navbarConditionalForwardButton@ #unified-back-forward-button {
+  position: relative;
+  z-index: 1;
+}
+
 #back-button,
 toolbar:not([mode="icons"]) #forward-button:-moz-locale-dir(rtl) {
   -moz-image-region: rect(0, 40px, 20px, 20px);
@@ -533,6 +547,49 @@ toolbar[mode="icons"] #forward-button {
   border-right-width: 0;
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
+}
+
+@navbarConditionalForwardButton@ #forward-button {
+  /* -moz-margin-start cannot be used here because it is not transitionable */
+  margin-left: -6px !important;
+  margin-right: 0;
+  padding: 2px 3px 2px 7px;
+  margin-top: 3px;
+  margin-bottom: 3px;
+  border-top-width: 0;
+  border-bottom-width: 0;
+  min-height: 20px;
+  height: 20px;
+}
+
+/* Transition from occluded forward button to visible forward button */
+@navbarConditionalForwardButton@ #unified-back-forward-button:not([updatingCurrentBrowser]) #forward-button {
+  -moz-transition: margin-left 150ms ease-out 0s,
+                   margin-right 150ms ease-out 0s,
+                   visibility 1ms ease-out 50ms;
+}
+
+/* Transition from visible forward button to occluded forward button */
+@navbarConditionalForwardButton@ #unified-back-forward-button:not([updatingCurrentBrowser]) #forward-button[disabled="true"] {
+  -moz-transition: margin-left 150ms ease-out 0s,
+                   margin-right 150ms ease-out 0s,
+                   visibility 1ms ease-out 100ms;
+}
+
+@navbarConditionalForwardButton@ #forward-button[disabled="true"]:not(:hover) {
+  margin-left: -30px !important;
+  margin-right: 3px;
+  visibility: hidden;
+}
+
+@navbarConditionalForwardButton@ #forward-button:not([disabled="true"]):-moz-locale-dir(rtl) {
+  margin-left: 3px !important;
+  margin-right: -6px !important;
+}
+
+@navbarConditionalForwardButton@ #forward-button[disabled="true"]:not(:hover):-moz-locale-dir(rtl) {
+  margin-right: -30px !important;
+  margin-left: 3px !important;
 }
 
 .unified-nav-back[_moz-menuactive]:-moz-locale-dir(ltr),
@@ -820,12 +877,49 @@ toolbar[mode="icons"] #zoom-in-button {
   -moz-padding-end: 3px;
 }
 
+@navbarConditionalForwardButton@ #urlbar:-moz-locale-dir(ltr) {
+  border-left-width: 0;
+  margin-left: -48px;
+  padding-left: 48px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+@navbarConditionalForwardButton@ #urlbar:-moz-locale-dir(rtl) {
+  border-right-width: 0;
+  margin-right: -48px;
+  padding-right: 48px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+@navbarConditionalForwardButton@ #unified-back-forward-button:not([updatingCurrentBrowser]) + #urlbar-container #urlbar {
+  -moz-transition: margin-left 150ms,
+                   margin-right 150ms,
+                   padding-left 150ms,
+                   padding-right 150ms;
+}
+
+@navbarConditionalForwardButton@ #unified-back-forward-button[forwardDisabled] + #urlbar-container #urlbar:-moz-locale-dir(ltr) {
+  margin-left: -27px;
+  padding-left: 27px;
+}
+
+@navbarConditionalForwardButton@ #unified-back-forward-button[forwardDisabled] + #urlbar-container #urlbar:-moz-locale-dir(ltr) {
+  margin-right: -27px;
+  padding-right: 27px;
+}
+
 #identity-box {
   background-image: -moz-linear-gradient(hsl(0,0%,98%), hsl(0,0%,92%));
   box-shadow: 0 1px 0 hsla(0,0%,0%,.05) inset;
   -moz-border-end: 1px solid hsla(0,0%,0%,.1);
   -moz-margin-end: 3px;
   padding: 1px 4px;
+}
+
+@navbarConditionalForwardButton@ #identity-box {
+  visibility: collapse;
 }
 
 #identity-box:-moz-locale-dir(ltr) {
