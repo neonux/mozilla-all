@@ -21,6 +21,7 @@ browser.jar:
         skin/classic/browser/Geolocation-64.png
         skin/classic/browser/Info.png                                (Info.png)
         skin/classic/browser/identity.png                            (identity.png)
+        skin/classic/browser/keyhole-forward-mask.svg
         skin/classic/browser/KUI-background.png
         skin/classic/browser/KUI-close.png
         skin/classic/browser/mainwindow-dropdown-arrow.png
@@ -134,6 +135,7 @@ browser.jar:
         skin/classic/aero/browser/Geolocation-64.png
         skin/classic/aero/browser/Info.png                           (Info-aero.png)
         skin/classic/aero/browser/identity.png                       (identity-aero.png)
+        skin/classic/aero/browser/keyhole-forward-mask.svg
         skin/classic/aero/browser/KUI-background.png
         skin/classic/aero/browser/KUI-close.png
         skin/classic/aero/browser/mainwindow-dropdown-arrow.png      (mainwindow-dropdown-arrow-aero.png)
