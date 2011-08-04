@@ -484,9 +484,8 @@
              context="toolbar-context-menu">
 
       <toolbaritem id="unified-back-forward-button" class="chromeclass-toolbar-additional"
-                   context="backForwardMenu" removable="true" forwardDisabled="true"
+                   context="backForwardMenu" removable="true"
                    title="&backForwardItem.title;">
-        <observes element="Browser:ForwardOrForwardDuplicate" attribute="disabled" onbroadcast="updateUnifiedButtonWithForwardNavigationState(this, event);"/>
         <toolbarbutton id="back-button" class="toolbarbutton-1"
                        label="&backCmd.label;"
                        command="Browser:BackOrBackDuplicate"
