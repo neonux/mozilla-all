@@ -43,6 +43,7 @@ browser.jar:
   skin/classic/browser/section_expanded.png
   skin/classic/browser/Secure-Glyph-White.png
   skin/classic/browser/Toolbar.png
+  skin/classic/browser/Toolbar-disabled.png
   skin/classic/browser/toolbarbutton-dropmarker.png
   skin/classic/browser/urlbar-arrow.png
   skin/classic/browser/urlbar-popup-blocked.png
