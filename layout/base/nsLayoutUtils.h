@@ -461,7 +461,7 @@ public:
    * @return A matrix equivalent to aMatrix, but operating in the coordinate system with
    *         origin aOrigin.
    */
-  static gfx3DMatrix ChangeMatrixBasis(const gfxPoint &aOrigin, const gfx3DMatrix &aMatrix);
+  static gfx3DMatrix ChangeMatrixBasis(const gfxPoint3D &aOrigin, const gfx3DMatrix &aMatrix);
 
   /**
    * Find IDs corresponding to a scrollable content element in the child process.
@@ -510,17 +510,11 @@ public:
                                    PRBool aShouldIgnoreSuppression = PR_FALSE,
                                    PRBool aIgnoreRootScrollFrame = PR_FALSE);
 
-  /**
-   * Returns the CTM at the specified frame. This matrix can be used to map
-   * coordinates from aFrame's to aStopAtAncestor's coordinate system.
-   *
-   * @param aFrame The frame at which we should calculate the CTM.
-   * @param aStopAtAncestor is an ancestor frame to stop at. If it's nsnull,
-   * matrix accumulating stops at root.
-   * @return The CTM at the specified frame.
-   */
-  static gfx3DMatrix GetTransformToAncestor(nsIFrame *aFrame,
-                                            nsIFrame* aStopAtAncestor = nsnull);
+  
+
+  static nsRect TransformRectToBoundsInAncestor(nsIFrame* aFrame,
+                                                const nsRect& aRect,
+                                                nsIFrame* aStopAtAncestor);
 
   /**
    * Given a point in the global coordinate space, returns that point expressed
@@ -533,7 +527,6 @@ public:
    */
   static nsPoint InvertTransformsToRoot(nsIFrame* aFrame,
                                         const nsPoint &aPt);
-
 
   /**
    * Helper function that, given a rectangle and a matrix, returns the smallest
@@ -922,6 +915,16 @@ public:
                     const nsIFrame::IntrinsicSize& aIntrinsicSize,
                     nsSize aIntrinsicRatio, nsSize aCBSize,
                     nsSize aMargin, nsSize aBorder, nsSize aPadding);
+
+  /*
+   * Calculate the used values for 'width' and 'height' when width
+   * and height are 'auto'. The tentWidth and tentHeight arguments should be
+   * the result of applying the rules for computing intrinsic sizes and ratios.
+   * as specified by CSS 2.1 sections 10.3.2 and 10.6.2
+   */
+  static nsSize ComputeAutoSizeWithIntrinsicDimensions(nscoord minWidth, nscoord minHeight,
+                                                       nscoord maxWidth, nscoord maxHeight,
+                                                       nscoord tentWidth, nscoord tentHeight);
 
   // Implement nsIFrame::GetPrefWidth in terms of nsIFrame::AddInlinePrefWidth
   static nscoord PrefWidthFromInline(nsIFrame* aFrame,
@@ -1387,6 +1390,11 @@ public:
                                       PRInt32 aEndOffset,
                                       PRBool aFollowContinuations,
                                       nsFontFaceList* aFontFaceList);
+
+  /**
+   * Checks if CSS 3D transforms are currently enabled.
+   */
+  static PRBool Are3DTransformsEnabled();
 
   static void Shutdown();
 

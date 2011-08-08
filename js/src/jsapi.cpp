@@ -746,9 +746,6 @@ JS_PUBLIC_API(JSRuntime *)
 JS_NewRuntime(uint32 maxbytes)
 {
     if (!js_NewRuntimeWasCalled) {
-#ifdef MOZ_ETW
-        EventRegisterMozillaSpiderMonkey();
-#endif
 #ifdef DEBUG
         /*
          * This code asserts that the numbers associated with the error names
@@ -789,18 +786,22 @@ JS_NewRuntime(uint32 maxbytes)
         return NULL;
     }
 
+    Probes::createRuntime(rt);
     return rt;
 }
 
 JS_PUBLIC_API(void)
 JS_DestroyRuntime(JSRuntime *rt)
 {
+    Probes::destroyRuntime(rt);
     Foreground::delete_(rt);
 }
 
 JS_PUBLIC_API(void)
 JS_ShutDown(void)
 {
+    Probes::shutdown();
+
 #ifdef MOZ_TRACEVIS
     StopTraceVis();
 #endif
@@ -809,10 +810,6 @@ JS_ShutDown(void)
     js_CleanupLocks();
 #endif
     PRMJ_NowShutdown();
-
-#ifdef MOZ_ETW
-    EventUnregisterMozillaSpiderMonkey();
-#endif
 }
 
 JS_PUBLIC_API(void *)
@@ -2691,6 +2688,8 @@ JS_GetGCParameter(JSRuntime *rt, JSGCParamKey key)
         return uint32(rt->gcMode);
       case JSGC_UNUSED_CHUNKS:
         return uint32(rt->gcChunksWaitingToExpire);
+      case JSGC_TOTAL_CHUNKS:
+        return uint32(rt->gcUserChunkSet.count() + rt->gcSystemChunkSet.count());
       default:
         JS_ASSERT(key == JSGC_NUMBER);
         return rt->gcNumber;
@@ -3524,79 +3523,6 @@ JS_DefineProperties(JSContext *cx, JSObject *obj, JSPropertySpec *ps)
     return ok;
 }
 
-JS_PUBLIC_API(JSBool)
-JS_AliasProperty(JSContext *cx, JSObject *obj, const char *name, const char *alias)
-{
-    JSObject *obj2;
-    JSProperty *prop;
-    JSBool ok;
-    Shape *shape;
-
-    CHECK_REQUEST(cx);
-    assertSameCompartment(cx, obj);
-
-    JSAtom *atom = js_Atomize(cx, name, strlen(name));
-    if (!atom)
-        return JS_FALSE;
-    if (!LookupPropertyById(cx, obj, ATOM_TO_JSID(atom), JSRESOLVE_QUALIFIED, &obj2, &prop))
-        return JS_FALSE;
-    if (!prop) {
-        js_ReportIsNotDefined(cx, name);
-        return JS_FALSE;
-    }
-    if (obj2 != obj || !obj->isNative()) {
-        JS_ReportErrorNumber(cx, js_GetErrorMessage, NULL, JSMSG_CANT_ALIAS,
-                             alias, name, obj2->getClass()->name);
-        return JS_FALSE;
-    }
-    atom = js_Atomize(cx, alias, strlen(alias));
-    if (!atom) {
-        ok = JS_FALSE;
-    } else {
-        shape = (Shape *)prop;
-        ok = (js_AddNativeProperty(cx, obj, ATOM_TO_JSID(atom),
-                                   shape->getter(), shape->setter(), shape->slot,
-                                   shape->attributes(), shape->getFlags() | Shape::ALIAS,
-                                   shape->shortid)
-              != NULL);
-    }
-    return ok;
-}
-
-JS_PUBLIC_API(JSBool)
-JS_AliasElement(JSContext *cx, JSObject *obj, const char *name, jsint alias)
-{
-    JSObject *obj2;
-    JSProperty *prop;
-    Shape *shape;
-
-    CHECK_REQUEST(cx);
-    assertSameCompartment(cx, obj);
-
-    JSAtom *atom = js_Atomize(cx, name, strlen(name));
-    if (!atom)
-        return JS_FALSE;
-    if (!LookupPropertyById(cx, obj, ATOM_TO_JSID(atom), JSRESOLVE_QUALIFIED, &obj2, &prop))
-        return JS_FALSE;
-    if (!prop) {
-        js_ReportIsNotDefined(cx, name);
-        return JS_FALSE;
-    }
-    if (obj2 != obj || !obj->isNative()) {
-        char numBuf[12];
-        JS_snprintf(numBuf, sizeof numBuf, "%ld", (long)alias);
-        JS_ReportErrorNumber(cx, js_GetErrorMessage, NULL, JSMSG_CANT_ALIAS,
-                             numBuf, name, obj2->getClass()->name);
-        return JS_FALSE;
-    }
-    shape = (Shape *)prop;
-    return js_AddNativeProperty(cx, obj, INT_TO_JSID(alias),
-                                shape->getter(), shape->setter(), shape->slot,
-                                shape->attributes(), shape->getFlags() | Shape::ALIAS,
-                                shape->shortid)
-           != NULL;
-}
-
 static JSBool
 GetPropertyDescriptorById(JSContext *cx, JSObject *obj, jsid id, uintN flags,
                           JSBool own, PropertyDescriptor *desc)
@@ -4045,7 +3971,7 @@ JS_NextProperty(JSContext *cx, JSObject *iterobj, jsid *idp)
         JS_ASSERT(iterobj->getParent()->isNative());
         shape = (Shape *) iterobj->getPrivate();
 
-        while (shape->previous() && (!shape->enumerable() || shape->isAlias()))
+        while (shape->previous() && !shape->enumerable())
             shape = shape->previous();
 
         if (!shape->previous()) {
@@ -4476,7 +4402,7 @@ CompileUCScriptForPrincipalsCommon(JSContext *cx, JSObject *obj, JSPrincipals *p
     if (script) {
         scriptObj = js_NewScriptObject(cx, script);
         if (!scriptObj)
-            js_DestroyScript(cx, script);
+            js_DestroyScript(cx, script, 3);
     }
     LAST_FRAME_CHECKS(cx, scriptObj);
     return scriptObj;
@@ -4663,7 +4589,7 @@ CompileFileHelper(JSContext *cx, JSObject *obj, JSPrincipals *principals,
 
     JSObject *scriptObj = js_NewScriptObject(cx, script);
     if (!scriptObj)
-        js_DestroyScript(cx, script);
+        js_DestroyScript(cx, script, 4);
 
     return scriptObj;
 }
@@ -4970,7 +4896,7 @@ EvaluateUCScriptForPrincipalsCommon(JSContext *cx, JSObject *obj,
 
     bool ok = ExternalExecute(cx, script, *obj, Valueify(rval));
     LAST_FRAME_CHECKS(cx, ok);
-    js_DestroyScript(cx, script);
+    js_DestroyScript(cx, script, 5);
     return ok;
 
 }

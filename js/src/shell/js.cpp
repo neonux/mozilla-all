@@ -74,8 +74,10 @@
 #include "jsscope.h"
 #include "jsscript.h"
 #include "jstypedarray.h"
+#include "jstypedarrayinlines.h"
 #include "jsxml.h"
 #include "jsperf.h"
+#include "jshashtable.h"
 
 #include "prmjtime.h"
 
@@ -91,6 +93,7 @@
 
 #include "jsoptparse.h"
 #include "jsworkers.h"
+#include "jsheaptools.h"
 
 #include "jsinterpinlines.h"
 #include "jsobjinlines.h"
@@ -883,7 +886,7 @@ FileAsTypedArray(JSContext *cx, const char *pathname)
             obj = js_CreateTypedArray(cx, TypedArray::TYPE_UINT8, len);
             if (!obj)
                 return NULL;
-            char *buf = (char *) TypedArray::fromJSObject(obj)->data;
+            char *buf = (char *) TypedArray::getDataOffset(TypedArray::getTypedArray(obj));
             size_t cc = fread(buf, 1, len, file);
             if (cc != len) {
                 JS_ReportError(cx, "can't read %s: %s", pathname,
@@ -4329,9 +4332,9 @@ Serialize(JSContext *cx, uintN argc, jsval *vp)
         JS_free(cx, datap);
         return false;
     }
-    TypedArray *array = TypedArray::fromJSObject(arrayobj);
-    JS_ASSERT((uintptr_t(array->data) & 7) == 0);
-    memcpy(array->data, datap, nbytes);
+    JSObject *array = TypedArray::getTypedArray(arrayobj);
+    JS_ASSERT((uintptr_t(TypedArray::getDataOffset(array)) & 7) == 0);
+    memcpy(TypedArray::getDataOffset(array), datap, nbytes);
     JS_free(cx, datap);
     JS_SET_RVAL(cx, vp, OBJECT_TO_JSVAL(arrayobj));
     return true;
@@ -4346,17 +4349,17 @@ Deserialize(JSContext *cx, uintN argc, jsval *vp)
         JS_ReportErrorNumber(cx, my_GetErrorMessage, NULL, JSSMSG_INVALID_ARGS, "deserialize");
         return false;
     }
-    TypedArray *array = TypedArray::fromJSObject(obj);
-    if ((array->byteLength & 7) != 0) {
+    JSObject *array = TypedArray::getTypedArray(obj);
+    if ((TypedArray::getByteLength(array) & 7) != 0) {
         JS_ReportErrorNumber(cx, my_GetErrorMessage, NULL, JSSMSG_INVALID_ARGS, "deserialize");
         return false;
     }
-    if ((uintptr_t(array->data) & 7) != 0) {
+    if ((uintptr_t(TypedArray::getDataOffset(array)) & 7) != 0) {
         JS_ReportErrorNumber(cx, my_GetErrorMessage, NULL, JSSMSG_BAD_ALIGNMENT);
         return false;
     }
 
-    if (!JS_ReadStructuredClone(cx, (uint64 *) array->data, array->byteLength,
+    if (!JS_ReadStructuredClone(cx, (uint64 *) TypedArray::getDataOffset(array), TypedArray::getByteLength(array),
                                 JS_STRUCTURED_CLONE_VERSION, &v, NULL, NULL)) {
         return false;
     }
@@ -4505,7 +4508,7 @@ static JSFunctionSpec shell_functions[] = {
     JS_FN("gcparam",        GCParameter,    2,0),
     JS_FN("countHeap",      CountHeap,      0,0),
     JS_FN("makeFinalizeObserver", MakeFinalizeObserver, 0,0),
-    JS_FN("finalizeCount",  FinalizeCount, 0,0),
+    JS_FN("finalizeCount",  FinalizeCount,  0,0),
 #ifdef JS_GC_ZEAL
     JS_FN("gczeal",         GCZeal,         2,0),
     JS_FN("schedulegc",     ScheduleGC,     1,0),
@@ -4530,6 +4533,7 @@ static JSFunctionSpec shell_functions[] = {
     JS_FN("dumpObject",     DumpObject,     1,0),
     JS_FN("notes",          Notes,          1,0),
     JS_FN("stats",          DumpStats,      1,0),
+    JS_FN("findReferences", FindReferences, 1,0),
 #endif
     JS_FN("dumpStack",      DumpStack,      1,0),
 #ifdef TEST_CVTARGS
@@ -4663,6 +4667,8 @@ static const char *const shell_help_messages[] = {
 "dumpObject()             Dump an internal representation of an object",
 "notes([fun])             Show source notes for functions",
 "stats([string ...])      Dump 'arena', 'atom', 'global' stats",
+"findReferences(target)\n"
+"  Walk the heap and return an object describing all references to target",
 #endif
 "dumpStack()              Dump the stack as an array of callees (youngest first)",
 #ifdef TEST_CVTARGS
@@ -4790,7 +4796,7 @@ Help(JSContext *cx, uintN argc, jsval *vp)
     fprintf(gOutFile, "%s\n", JS_GetImplementationVersion());
     if (argc == 0) {
         fputs(shell_help_header, gOutFile);
-        for (i = 0; shell_functions[i].name; i++)
+        for (i = 0; i < JS_ARRAY_LENGTH(shell_help_messages); ++i)
             fprintf(gOutFile, "%s\n", shell_help_messages[i]);
     } else {
         did_header = 0;
@@ -4807,11 +4813,16 @@ Help(JSContext *cx, uintN argc, jsval *vp)
                 str = NULL;
             }
             if (str) {
-                JSFlatString *flatStr = JS_FlattenString(cx, str);
-                if (!flatStr)
+                JSAutoByteString funcName(cx, str);
+                if (!funcName)
                     return JS_FALSE;
-                for (j = 0; shell_functions[j].name; j++) {
-                    if (JS_FlatStringEqualsAscii(flatStr, shell_functions[j].name)) {
+                for (j = 0; j < JS_ARRAY_LENGTH(shell_help_messages); ++j) {
+                    /* Help messages are required to be formatted "functionName(..." */
+                    const char *msg = shell_help_messages[j];
+                    const char *p = strchr(msg, '(');
+                    JS_ASSERT(p);
+
+                    if (strncmp(funcName.ptr(), msg, p - msg) == 0) {
                         if (!did_header) {
                             did_header = 1;
                             fputs(shell_help_header, gOutFile);
