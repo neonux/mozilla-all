@@ -442,8 +442,8 @@ ImageDocument::ShrinkToFit()
   // Keep image content alive while changing the attributes.
   nsCOMPtr<nsIContent> imageContent = mImageContent;
   nsCOMPtr<nsIDOMHTMLImageElement> image = do_QueryInterface(mImageContent);
-  imageContent->SetAttr(kNameSpaceID_None, nsGkAtoms::_class,
-                        NS_LITERAL_STRING("fitIfBigger"), PR_TRUE);
+  image->SetWidth(NS_MAX(1, NSToCoordFloor(GetRatio() * mImageWidth)));
+  image->SetHeight(NS_MAX(1, NSToCoordFloor(GetRatio() * mImageHeight)));
   
   // The view might have been scrolled when zooming in, scroll back to the
   // origin now that we're showing a shrunk-to-window version.
@@ -498,7 +498,8 @@ ImageDocument::RestoreImage()
   }
   // Keep image content alive while changing the attributes.
   nsCOMPtr<nsIContent> imageContent = mImageContent;
-  imageContent->UnsetAttr(kNameSpaceID_None, nsGkAtoms::_class, PR_TRUE);
+  imageContent->UnsetAttr(kNameSpaceID_None, nsGkAtoms::width, PR_TRUE);
+  imageContent->UnsetAttr(kNameSpaceID_None, nsGkAtoms::height, PR_TRUE);
   
   if (mImageIsOverflowing) {
     imageContent->SetAttr(kNameSpaceID_None, nsGkAtoms::style,
@@ -660,7 +661,9 @@ ImageDocument::CreateSyntheticDocument()
                                            nsIDOMNode::ELEMENT_NODE);
   NS_ENSURE_TRUE(nodeInfo, NS_ERROR_OUT_OF_MEMORY);
   nsRefPtr<nsGenericHTMLElement> styleContent = NS_NewHTMLStyleElement(nodeInfo.forget());
-  NS_ENSURE_TRUE(styleContent, NS_ERROR_OUT_OF_MEMORY);
+  if (!styleContent) {
+    return NS_ERROR_OUT_OF_MEMORY;
+  }
 
   styleContent->SetTextContent(NS_LITERAL_STRING("img { display: block; }"));
   body->AppendChildTo(styleContent, PR_FALSE);
@@ -672,8 +675,9 @@ ImageDocument::CreateSyntheticDocument()
   NS_ENSURE_TRUE(nodeInfo, NS_ERROR_OUT_OF_MEMORY);
 
   mImageContent = NS_NewHTMLImageElement(nodeInfo.forget());
-  NS_ENSURE_TRUE(mImageContent, NS_ERROR_OUT_OF_MEMORY);
-
+  if (!mImageContent) {
+    return NS_ERROR_OUT_OF_MEMORY;
+  }
   nsCOMPtr<nsIImageLoadingContent> imageLoader = do_QueryInterface(mImageContent);
   NS_ENSURE_TRUE(imageLoader, NS_ERROR_UNEXPECTED);
 
