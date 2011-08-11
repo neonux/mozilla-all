@@ -180,7 +180,8 @@
      because of the border radius on the toolbar below the tab bar. */
   #main-window[sizemode=normal][tabsontop=true] #nav-bar:not(:-moz-lwtheme),
   #main-window[sizemode=normal][tabsontop=true] > #nav-bar[collapsed=true]:not([customizing]) + toolbar:not(:-moz-lwtheme),
-  #main-window[sizemode=normal][tabsontop=true] > #nav-bar[collapsed=true]:not([customizing]) + #customToolbars + #PersonalToolbar:not(:-moz-lwtheme) {
+  #main-window[sizemode=normal][tabsontop=true] > #nav-bar[collapsed=true]:not([customizing]) + #customToolbars + #PersonalToolbar:not(:-moz-lwtheme),
+  #main-window[sizemode=normal][tabsontop=true][disablechrome] #navigator-toolbox:not(:-moz-lwtheme)::after {
     border-top: 1px solid @toolbarShadowColor@;
     border-top-left-radius: 3.5px;
     border-top-right-radius: 3.5px;
@@ -213,6 +214,14 @@
   #main-window[sizemode=normal] #TabsToolbar[tabsontop=false] {
     padding-left: 2px;
     padding-right: 2px;
+  }
+
+  /* Rounded corners for when chrome is disabled */
+  #main-window[sizemode=normal][tabsontop=true][disablechrome] #navigator-toolbox:not(:-moz-lwtheme)::after {
+    visibility: visible;
+    background-color: @customToolbarColor@;
+    background-image: -moz-linear-gradient(@toolbarHighlight@, @toolbarHighlight@);
+    height: 4px;
   }
 
   /* Make the window draggable by glassed toolbars (bug 555081) */

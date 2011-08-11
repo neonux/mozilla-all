@@ -108,5 +108,10 @@ var ContextCommands = {
   removeBookmark: function cc_removeBookmark() {
     let target = ContextHelper.popupState.target;
     target.remove();
+  },
+
+  shortcutBookmark: function cc_shortcutBookmark() {
+    let target = ContextHelper.popupState.target;
+    BookmarkHelper.createShortcut(target.getAttribute("title"), target.getAttribute("uri"), target.getAttribute("src"));
   }
 };

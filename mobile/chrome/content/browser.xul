@@ -357,14 +357,23 @@
       </hbox>
     </arrowbox>
 
-    <arrowbox id="bookmark-popup" class="arrowbox-dark" hidden="true" align="center" offset="12">
-      <label value="&bookmarkPopup.label;"/>
-      <separator class="thin"/>
-      <vbox>
-        <button id="bookmark-popup-edit" label="&bookmarkEdit.label;" oncommand="BookmarkHelper.edit();"/>
-        <spacer/>
-        <button id="bookmark-popup-remove" label="&bookmarkRemove.label;" oncommand="BookmarkPopup.hide(); BookmarkHelper.removeBookmarksForURI(getBrowser().currentURI);"/>
-      </vbox>
+    <arrowbox id="bookmark-popup" hidden="true" align="stretch" offset="12">
+      <hbox id="bookmark-popup-title">
+        <label value="&bookmarkPopup.label;"/>
+      </hbox>
+      <richlistbox id="bookmark-popup-commands" class="action-buttons" onclick="BookmarkPopup.hide();" flex="1">
+        <richlistitem class="action-button" id="bookmark-popup-edit" onclick="BookmarkHelper.edit();">
+          <label value="&bookmarkEdit.label;"/>
+        </richlistitem>
+        <richlistitem class="action-button" id="bookmark-popup-remove" onclick="BookmarkPopup.hide(); BookmarkHelper.removeBookmarksForURI(getBrowser().currentURI);">
+          <label value="&bookmarkRemove.label;"/>
+        </richlistitem>
+#ifdef ANDROID
+        <richlistitem class="action-button" id="bookmark-popup-shortcut" onclick="BookmarkPopup.addToHome();">
+          <label value="&bookmarkShortcut.label;"/>
+        </richlistitem>
+#endif
+      </richlistbox>
     </arrowbox>
 
     <box id="bookmark-container" class="perm-modal-block window-width window-height" hidden="true">
@@ -480,7 +489,7 @@
                     <setting pref="browser.ui.zoom.reflow" title="&reflowZoom.title;" type="bool"/>
                     <setting pref="permissions.default.image" title="&showImages.title;" type="boolint" on="1" off="2"/>
                     <setting pref="javascript.enabled" type="bool" title="&enableJavaScript.title;"/>
-                    <setting pref="browser.menu.showCharacterEncoding" type="bool" localized="true" title="&showCharset.title;"/>
+                    <setting pref="browser.menu.showCharacterEncoding" type="bool" localized="true" title="&showCharsetEncoding.title;"/>
                   </settings>
                 </richlistbox>
               </notificationbox>
@@ -663,6 +672,9 @@
             <label value="&contextRemoveBookmark.label;"/>
           </richlistitem>
 #ifdef ANDROID
+          <richlistitem class="context-command" id="context-shortcutbookmark" type="edit-bookmark" onclick="ContextCommands.shortcutBookmark();">
+            <label value="&contextShortcutBookmark.label;"/>
+          </richlistitem>
           <richlistitem class="context-command" id="context-select-input" type="input-text" onclick="ContextCommands.selectInput();">
             <label value="&inputMethod.label;"/>
           </richlistitem>

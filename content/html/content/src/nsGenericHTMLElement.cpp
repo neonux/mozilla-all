@@ -50,6 +50,7 @@
 #include "nsIDOMAttr.h"
 #include "nsIDOMDocumentFragment.h"
 #include "nsIDOMNSHTMLElement.h"
+#include "nsIDOMHTMLMenuElement.h"
 #include "nsIDOMElementCSSInlineStyle.h"
 #include "nsIDOMWindow.h"
 #include "nsIDOMDocument.h"
@@ -101,8 +102,6 @@
 
 #include "nsContentCID.h"
 
-#include "nsIDOMText.h"
-
 #include "nsDOMStringMap.h"
 
 #include "nsIEditor.h"
@@ -115,6 +114,7 @@
 #include "nsITextControlElement.h"
 #include "mozilla/dom/Element.h"
 #include "nsHTMLFieldSetElement.h"
+#include "nsHTMLMenuElement.h"
 
 #include "mozilla/Preferences.h"
 
@@ -763,6 +763,8 @@ nsGenericHTMLElement::SetInnerHTML(const nsAString& aInnerHTML)
     RemoveChildAt(0, PR_TRUE);
   }
 
+  nsAutoScriptLoaderDisabler sld(doc);
+  
   nsCOMPtr<nsIDOMDocumentFragment> df;
 
   if (doc->IsHTML()) {
@@ -826,6 +828,10 @@ nsGenericHTMLElement::InsertAdjacentHTML(const nsAString& aPosition,
   nsIDocument* doc = GetOwnerDoc();
   NS_ENSURE_STATE(doc);
 
+  // Needed when insertAdjacentHTML is used in combination with contenteditable
+  mozAutoDocUpdate updateBatch(doc, UPDATE_CONTENT_MODEL, PR_TRUE);
+  nsAutoScriptLoaderDisabler sld(doc);
+  
   // Batch possible DOMSubtreeModified events.
   mozAutoSubtreeModified subtree(doc, nsnull);
 
@@ -834,9 +840,6 @@ nsGenericHTMLElement::InsertAdjacentHTML(const nsAString& aPosition,
       (position == eBeforeEnd ||
        (position == eAfterEnd && !GetNextSibling()) ||
        (position == eAfterBegin && !GetFirstChild()))) {
-    // Needed when insertAdjacentHTML is used in combination with contenteditable
-    mozAutoDocUpdate updateBatch(doc, UPDATE_CONTENT_MODEL, PR_TRUE);
-
     PRInt32 oldChildCount = destination->GetChildCount();
     PRInt32 contextNs = destination->GetNameSpaceID();
     nsIAtom* contextLocal = destination->Tag();
@@ -866,6 +869,11 @@ nsGenericHTMLElement::InsertAdjacentHTML(const nsAString& aPosition,
                                                          getter_AddRefs(df));
   nsCOMPtr<nsINode> fragment = do_QueryInterface(df);
   NS_ENSURE_SUCCESS(rv, rv);
+
+  // Suppress assertion about node removal mutation events that can't have
+  // listeners anyway, because no one has had the chance to register mutation
+  // listeners on the fragment that comes from the parser.
+  nsAutoScriptBlockerSuppressNodeRemoved scriptBlocker;
 
   switch (position) {
     case eBeforeBegin:
@@ -2448,6 +2456,28 @@ nsGenericHTMLElement::GetIsContentEditable(PRBool* aContentEditable)
   }
 
   *aContentEditable = PR_FALSE;
+  return NS_OK;
+}
+
+nsresult
+nsGenericHTMLElement::GetContextMenu(nsIDOMHTMLMenuElement** aContextMenu)
+{
+  *aContextMenu = nsnull;
+
+  nsAutoString value;
+  GetAttr(kNameSpaceID_None, nsGkAtoms::contextmenu, value);
+
+  if (value.IsEmpty()) {
+    return NS_OK;
+  }
+
+  nsIDocument* doc = GetCurrentDoc();
+  if (doc) {
+    nsRefPtr<nsHTMLMenuElement> element =
+      nsHTMLMenuElement::FromContent(doc->GetElementById(value));
+    element.forget(aContextMenu);
+  }
+
   return NS_OK;
 }
 

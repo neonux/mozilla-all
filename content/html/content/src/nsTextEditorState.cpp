@@ -36,6 +36,8 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "nsTextEditorState.h"
+
 #include "nsCOMPtr.h"
 #include "nsIPresShell.h"
 #include "nsIView.h"
@@ -64,8 +66,7 @@
 #include "nsIEditor.h"
 #include "nsTextEditRules.h"
 #include "nsEventListenerManager.h"
-
-#include "nsTextEditorState.h"
+#include "nsContentUtils.h"
 
 using namespace mozilla::dom;
 

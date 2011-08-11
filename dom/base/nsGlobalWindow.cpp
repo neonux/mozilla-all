@@ -5952,7 +5952,7 @@ class PostMessageEvent : public nsRunnable
   private:
     nsRefPtr<nsGlobalWindow> mSource;
     nsString mCallerOrigin;
-    uint64* mMessage;
+    JSUint64* mMessage;
     size_t mMessageLen;
     nsRefPtr<nsGlobalWindow> mTargetWindow;
     nsCOMPtr<nsIURI> mProvidedOrigin;
@@ -7257,30 +7257,6 @@ nsGlobalWindow::AddEventListener(const nsAString& aType,
   NS_ENSURE_STATE(manager);
   return manager->AddEventListener(aType, aListener, aUseCapture,
                                    aWantsUntrusted);
-}
-
-nsresult
-nsGlobalWindow::AddEventListenerByIID(nsIDOMEventListener* aListener,
-                                      const nsIID& aIID)
-{
-  nsEventListenerManager* manager = GetListenerManager(PR_TRUE);
-  NS_ENSURE_STATE(manager);
-  return manager->AddEventListenerByIID(aListener, aIID, NS_EVENT_FLAG_BUBBLE);
-}
-
-nsresult
-nsGlobalWindow::RemoveEventListenerByIID(nsIDOMEventListener* aListener,
-                                         const nsIID& aIID)
-{
-  FORWARD_TO_INNER(RemoveEventListenerByIID, (aListener, aIID),
-                   NS_ERROR_NOT_INITIALIZED);
-
-  if (mListenerManager) {
-    mListenerManager->RemoveEventListenerByIID(aListener, aIID,
-                                               NS_EVENT_FLAG_BUBBLE);
-    return NS_OK;
-  }
-  return NS_ERROR_FAILURE;
 }
 
 nsEventListenerManager*
@@ -10099,6 +10075,19 @@ nsGlobalWindow::HasPerformanceSupport()
   return Preferences::GetBool("dom.enable_performance", PR_FALSE);
 }
 
+PRInt64
+nsGlobalWindow::SizeOf() const
+{
+  PRInt64 size = sizeof(*this);
+
+  if (IsInnerWindow() && mDoc) {
+    size += mDoc->SizeOf();
+  }
+
+  size += mNavigator ? mNavigator->SizeOf() : 0;
+
+  return size;
+}
 
 // nsGlobalChromeWindow implementation
 
@@ -11251,3 +11240,21 @@ NS_IMETHODIMP nsNavigator::GetMozNotification(nsIDOMDesktopNotificationCenter **
   NS_ADDREF(*aRetVal = mNotification);    
   return NS_OK; 
 }
+
+PRInt64
+nsNavigator::SizeOf() const
+{
+  PRInt64 size = sizeof(*this);
+
+  // TODO: add SizeOf() to nsMimeTypeArray, bug 674113.
+  size += mMimeTypes ? sizeof(*mMimeTypes.get()) : 0;
+  // TODO: add SizeOf() to nsPluginArray, bug 674114.
+  size += mPlugins ? sizeof(*mPlugins.get()) : 0;
+  // TODO: add SizeOf() to nsGeolocation, bug 674115.
+  size += mGeolocation ? sizeof(*mGeolocation.get()) : 0;
+  // TODO: add SizeOf() to nsDesktopNotificationCenter, bug 674116.
+  size += mNotification ? sizeof(*mNotification.get()) : 0;
+
+  return size;
+}
+
