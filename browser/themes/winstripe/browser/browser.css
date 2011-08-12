@@ -58,8 +58,6 @@
 %define bgTabTextureHover -moz-linear-gradient(hsla(0,0%,100%,.3) 1px, hsla(0,0%,75%,.2) 80%, hsla(0,0%,60%,.2))
 %define navbarTextboxCustomBorder border-color: rgba(0,0,0,.32);
 %define navbarLargeIcons #navigator-toolbox[iconsize=large][mode=icons] > #nav-bar
-%define navbarConditionalForwardButton #navigator-toolbox[iconsize=large][mode=icons] > #nav-bar[currentset*="unified-back-forward-button,urlbar-container"]:not([customizing])
-/*%define navbarConditionalForwardButton #navigator-toolbox[iconsize=large][mode=icons] > :-moz-any(#nav-bar[currentset*="unified-back-forward-button,urlbar-container"],#nav-bar:not([currentset])):not([customizing])*/
 
 %ifdef MOZ_OFFICIAL_BRANDING
 %define appMenuButtonBorderColor rgba(255,255,255,.5) rgba(83,42,6,.9)
@@ -680,12 +678,6 @@ menuitem.bookmark-item {
   list-style-image: url("chrome://browser/skin/Toolbar.png") !important;
 }
 
-/* The mutiple |:not()| makes this selector more specific than the preceding rule, and
-   uses ids that are against the rules of XML ids but valid CSS selectors. */
-@navbarConditionalForwardButton@ #back-button[disabled]:not(#_):not(#_) > .toolbarbutton-icon {
-  list-style-image: url("chrome://browser/skin/Toolbar-disabled.png") !important;
-}
-
 @navbarLargeIcons@ .toolbarbutton-1 > .toolbarbutton-menubutton-button,
 @navbarLargeIcons@ .toolbarbutton-1 > .toolbarbutton-menubutton-dropmarker,
 @navbarLargeIcons@ .toolbarbutton-1 {
@@ -702,12 +694,6 @@ menuitem.bookmark-item {
               0 0 0 2px rgba(255,255,255,.1) inset;
   color: black;
   text-shadow: 0 0 2px white;
-}
-
-@navbarConditionalForwardButton@ #back-button > .toolbarbutton-icon {
-  background: rgba(151,152,153,1)
-              -moz-linear-gradient(rgb(251,252,253), rgb(246,247,248) 49%, 
-                                   rgb(231,232,233) 51%, rgb(225,226,229));
 }
 
 @navbarLargeIcons@ .toolbarbutton-1 > .toolbarbutton-menubutton-dropmarker {
@@ -745,10 +731,6 @@ menuitem.bookmark-item {
 
 @navbarLargeIcons@ .toolbarbutton-1[disabled="true"] {
   opacity: .4;
-}
-
-@navbarConditionalForwardButton@ #back-button[disabled="true"] {
-  opacity: 1;
 }
 
 @navbarLargeIcons@ .toolbarbutton-1[disabled="true"] > .toolbarbutton-menubutton-button > .toolbarbutton-icon,
@@ -938,53 +920,11 @@ toolbar[mode="full"] .toolbarbutton-1 > .toolbarbutton-menubutton-button {
   padding-right: 3px;
 }
 
-@navbarConditionalForwardButton@ #forward-button {
-  padding: 2px 3px 2px 7px;
-  margin-top: 2px;
-  margin-bottom: 2px;
-  border-top-width: 0;
-  border-bottom-width: 0;
-}
-
-/* Transition from occluded forward button to visible forward button */
-@navbarConditionalForwardButton@ #unified-back-forward-button:not([updatingCurrentBrowser]) #forward-button {
-  -moz-transition: margin-left 150ms ease-out 0s,
-                   margin-right 150ms ease-out 0s,
-                   visibility 1ms ease-out 50ms;
-}
-
-/* Transition from visible forward button to occluded forward button */
-@navbarConditionalForwardButton@ #unified-back-forward-button:not([updatingCurrentBrowser]) #forward-button[disabled="true"] {
-  -moz-transition: margin-left 150ms ease-out 0s,
-                   margin-right 150ms ease-out 0s,
-                   visibility 1ms ease-out 100ms;
-}
-
-@navbarConditionalForwardButton@ #forward-button:-moz-locale-dir(ltr) {
-  /* -moz-margin-start cannot be used here because it is not transitionable */
-  margin-left: -6px !important;
-  margin-right: 0;
-}
-
-@navbarConditionalForwardButton@ #forward-button[disabled="true"]:not(:hover) {
-  margin-left: -30px !important;
-  margin-right: 3px;
-  visibility: hidden;
-}
-
-@navbarConditionalForwardButton@ #forward-button:not([disabled="true"]):-moz-locale-dir(rtl) {
-  margin-left: 0 !important;
-  margin-right: -6px !important;
-}
-
-@navbarConditionalForwardButton@ #forward-button[disabled="true"]:not(:hover):-moz-locale-dir(rtl) {
-  margin-right: -30px !important;
-  margin-left: 3px !important;
-}
-
 @navbarLargeIcons@ #forward-button:not([disabled="true"]):not(:active):hover {
   /*mask: url(keyhole-forward-mask.svg#mask-hover);*/
   mask: url(chrome://browser/content/browser.xul#winstripe-keyhole-forward-mask-hover);
+  /* Don't animate the box shadow, as the blur and spread radii affect the mask. */
+  -moz-transition: background-color .4s ease-in;
 }
 
 .unified-nav-back[_moz-menuactive]:-moz-locale-dir(ltr),
@@ -1250,39 +1190,6 @@ toolbar[mode="full"] .toolbarbutton-1 > .toolbarbutton-menubutton-button {
   border-radius: 3.5px;
 }
 
-@navbarConditionalForwardButton@ #urlbar:-moz-locale-dir(ltr) {
-  margin-left: -48px;
-  padding-left: 48px;
-  border-left-width: 0;
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-}
-
-@navbarConditionalForwardButton@ #urlbar:-moz-locale-dir(rtl) {
-  margin-right: -48px;
-  padding-right: 48px;
-  border-right-width: 0;
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
-}
-
-@navbarConditionalForwardButton@ #unified-back-forward-button:not([updatingCurrentBrowser]) + #urlbar-container #urlbar {
-  -moz-transition: margin-left 150ms,
-                   margin-right 150ms,
-                   padding-left 150ms,
-                   padding-right 150ms;
-}
-
-@navbarConditionalForwardButton@ #unified-back-forward-button[forwardDisabled] + #urlbar-container #urlbar:-moz-locale-dir(ltr) {
-  margin-left: -27px;
-  padding-left: 27px;
-}
-
-@navbarConditionalForwardButton@ #unified-back-forward-button[forwardDisabled] + #urlbar-container #urlbar:-moz-locale-dir(rtl) {
-  margin-right: -27px;
-  padding-right: 27px;
-}
-
 @media all and (-moz-windows-default-theme) {
   #urlbar,
   .searchbar-textbox {
@@ -1364,10 +1271,6 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
   padding: 2px;
   margin: -2px;
   -moz-margin-end: 0;
-}
-
-@navbarConditionalForwardButton@ #identity-box {
-  visibility: collapse;
 }
 
 #identity-box:-moz-locale-dir(ltr) {

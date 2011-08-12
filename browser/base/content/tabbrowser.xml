@@ -881,10 +881,6 @@
             // Update the URL bar.
             var loc = this.mCurrentBrowser.currentURI;
 
-            var unifiedButton = document.getElementById('unified-back-forward-button');
-            if (unifiedButton)
-              unifiedButton.setAttribute("updatingCurrentBrowser", "true");
-
 #ifdef MOZ_E10S_COMPAT
             // Bug 666801 - WebProgress support for e10s and
             // Bug 666809 - SecurityUI support for e10s
@@ -900,9 +896,6 @@
                                           [webProgress, null, securityUI.state], true, false);
             }
 #endif
-
-            if (unifiedButton)
-              unifiedButton.removeAttribute("updatingCurrentBrowser");
 
             var listener = this.mTabListeners[this.tabContainer.selectedIndex] || null;
             if (listener && listener.mStateFlags) {
