@@ -58,6 +58,7 @@
 %define bgTabTextureHover -moz-linear-gradient(hsla(0,0%,100%,.3) 1px, hsla(0,0%,75%,.2) 80%, hsla(0,0%,60%,.2))
 %define navbarTextboxCustomBorder border-color: rgba(0,0,0,.32);
 %define navbarLargeIcons #navigator-toolbox[iconsize=large][mode=icons] > #nav-bar
+%define navbarConditionalForwardButton #navigator-toolbox[iconsize=large][mode=icons] > #nav-bar[conditionalForwardButton]:not([customizing]):-moz-locale-dir(ltr)
 
 %ifdef MOZ_OFFICIAL_BRANDING
 %define appMenuButtonBorderColor rgba(255,255,255,.5) rgba(83,42,6,.9)
@@ -920,11 +921,53 @@ toolbar[mode="full"] .toolbarbutton-1 > .toolbarbutton-menubutton-button {
   padding-right: 3px;
 }
 
+@navbarConditionalForwardButton@ #forward-button {
+  padding: 2px 3px 2px 7px;
+  margin-top: 2px;
+  margin-bottom: 2px;
+  border-top-width: 0;
+  border-bottom-width: 0;
+}
+
+/* Transition from occluded forward button to visible forward button */
+@navbarConditionalForwardButton@ #unified-back-forward-button:not([updatingCurrentBrowser]) #forward-button {
+  -moz-transition: margin-left 150ms ease-out 0s,
+                   margin-right 150ms ease-out 0s,
+                   visibility 1ms ease-out 50ms;
+}
+
+/* Transition from visible forward button to occluded forward button */
+@navbarConditionalForwardButton@ #unified-back-forward-button:not([updatingCurrentBrowser]) #forward-button[disabled="true"] {
+  -moz-transition: margin-left 150ms ease-out 0s,
+                   margin-right 150ms ease-out 0s,
+                   visibility 1ms ease-out 100ms;
+}
+
+@navbarConditionalForwardButton@ #forward-button:-moz-locale-dir(ltr) {
+  /* -moz-margin-start cannot be used here because it is not transitionable */
+  margin-left: -6px !important;
+  margin-right: 0;
+}
+
+@navbarConditionalForwardButton@ #forward-button[disabled="true"]:not(:hover) {
+  margin-left: -30px !important;
+  margin-right: 3px;
+  visibility: hidden;
+}
+
+@navbarConditionalForwardButton@ #forward-button:not([disabled="true"]):-moz-locale-dir(rtl) {
+  margin-left: 0 !important;
+  margin-right: -6px !important;
+}
+
+@navbarConditionalForwardButton@ #forward-button[disabled="true"]:not(:hover):-moz-locale-dir(rtl) {
+  margin-right: -30px !important;
+  margin-left: 3px !important;
+}
+
 @navbarLargeIcons@ #forward-button:not([disabled="true"]):not(:active):hover {
   /*mask: url(keyhole-forward-mask.svg#mask-hover);*/
   mask: url(chrome://browser/content/browser.xul#winstripe-keyhole-forward-mask-hover);
-  /* Don't animate the box shadow, as the blur and spread radii affect the mask. */
-  -moz-transition: background-color .4s ease-in;
 }
 
 .unified-nav-back[_moz-menuactive]:-moz-locale-dir(ltr),
@@ -1190,6 +1233,42 @@ toolbar[mode="full"] .toolbarbutton-1 > .toolbarbutton-menubutton-button {
   border-radius: 3.5px;
 }
 
+@navbarConditionalForwardButton@ #urlbar:-moz-locale-dir(ltr) {
+  mask: url(chrome://browser/content/browser.xul#winstripe-urlbar-conditional-forward-mask);
+  padding-left: 63px;
+  margin-left: -59px;
+}
+
+@navbarConditionalForwardButton@ #urlbar:-moz-locale-dir(rtl) {
+  mask: url(chrome://browser/content/browser.xul#winstripe-urlbar-conditional-forward-mask-rtl);
+  padding-right: 63px;
+  margin-right: -59px;
+}
+
+@navbarConditionalForwardButton@ #unified-back-forward-button:not([updatingCurrentBrowser]) + #urlbar-container #urlbar {
+  -moz-transition: margin-left 150ms,
+                   margin-right 150ms,
+                   padding-left 150ms,
+                   padding-right 150ms;
+}
+
+@navbarConditionalForwardButton@ #urlbar[forwardDisabled]:-moz-locale-dir(ltr) {
+  mask: url(chrome://browser/content/browser.xul#winstripe-urlbar-conditional-forward-disabled-mask);
+  padding-left: 33px;
+  margin-left: -30px;
+}
+
+@navbarConditionalForwardButton@ #urlbar[forwardDisabled]:-moz-locale-dir(rtl) {
+  mask: url(chrome://browser/content/browser.xul#winstripe-urlbar-conditional-forward-disabled-mask-rtl);
+  padding-right: 33px;
+  margin-right: -30px;
+}
+
+@navbarConditionalForwardButton@ #unified-back-forward-button {
+  position: relative;
+  z-index: 1;
+}
+
 @media all and (-moz-windows-default-theme) {
   #urlbar,
   .searchbar-textbox {
@@ -1271,6 +1350,10 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
   padding: 2px;
   margin: -2px;
   -moz-margin-end: 0;
+}
+
+@navbarConditionalForwardButton@ #identity-box {
+  visibility: collapse;
 }
 
 #identity-box:-moz-locale-dir(ltr) {
