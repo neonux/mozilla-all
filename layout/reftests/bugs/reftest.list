@@ -588,7 +588,7 @@ fails-if(Android) != 367247-l-hidden.html 367247-l-scroll.html
 == 367612-1e.html 367612-1-ref.html
 == 367612-1f.html 367612-1-ref.html
 != 367612-1g.html 367612-1-ref.html
-== 368020-1.html 368020-1-ref.html
+random-if(/^Windows\x20NT\x205\.1/.test(http.oscpu)) == 368020-1.html 368020-1-ref.html
 == 368020-2.html 368020-2-ref.html
 fails == 368020-3.html 368020-3-ref.html # bug 368085
 fails == 368020-4.html 368020-4-ref.html # bug 368085
@@ -1654,3 +1654,5 @@ fails-if(layersGPUAccelerated&&cocoaWidget) == 654950-1.html 654950-1-ref.html #
 != 669015-1.xul 669015-1-notref.xul
 == 668319-1.xul about:blank
 == 670442-1.html 670442-1-ref.html
+== 670467-1.html 670467-1-ref.html
+== 670467-2.html 670467-2-ref.html

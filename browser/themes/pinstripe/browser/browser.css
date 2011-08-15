@@ -791,7 +791,6 @@ toolbar[mode="icons"] #zoom-out-button {
 toolbar[mode="icons"] #zoom-in-button {
   -moz-border-start: none;
   -moz-margin-start: 0;
-  height: 16px;
 }
 
 #zoom-out-button:-moz-locale-dir(ltr),
@@ -1626,7 +1625,7 @@ toolbarbutton.chevron > .toolbarbutton-menu-dropmarker {
 .tab-icon-image {
   width: 16px;
   height: 16px;
-  list-style-image: url("chrome://global/skin/tree/item.png");
+  list-style-image: url("chrome://mozapps/skin/places/defaultFavicon.png");
 }
 
 .tab-throbber {
@@ -2124,7 +2123,7 @@ toolbarbutton.chevron > .toolbarbutton-menu-dropmarker {
 
 /* All Tabs Menupopup */
 .alltabs-item > .menu-iconic-left > .menu-iconic-icon {
-  list-style-image: url("chrome://global/skin/tree/item.png");
+  list-style-image: url("chrome://mozapps/skin/places/defaultFavicon.png");
 }
 
 .alltabs-item[busy] > .menu-iconic-left > .menu-iconic-icon {
