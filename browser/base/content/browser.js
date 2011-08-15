@@ -1250,6 +1250,11 @@ function BrowserStartup() {
       loadOneOrMoreURIs(uriToLoad);
   }
 
+  let homeTab = gBrowser.addTab("about:home", {skipAnimation: true});
+  homeTab.setAttribute("hometab", "true");
+  gBrowser.pinTab(homeTab);
+  gBrowser.moveTabTo(homeTab, 0);
+
   if (window.opener && !window.opener.closed) {
     let openerSidebarBox = window.opener.document.getElementById("sidebar-box");
     // If the opener had a sidebar, open the same sidebar in our window.
@@ -4274,6 +4279,10 @@ var XULBrowserWindow = {
     // tab docshells (isAppTab will be false for app tab subframes).
     if (originalTarget != "" || !isAppTab)
       return originalTarget;
+
+    // Open links from home tab in new tabs.
+    if (linkNode.ownerDocument.documentURIObject.spec == "about:home")
+      return "_blank";
 
     // External links from within app tabs should always open in new tabs
     // instead of replacing the app tab's page (Bug 575561)
@@ -8750,10 +8759,11 @@ var TabContextMenu = {
     this.contextTab = document.popupNode.localName == "tab" ?
                       document.popupNode : gBrowser.selectedTab;
     let disabled = gBrowser.tabs.length == 1;
+    let isHomeTab = this.contextTab.hasAttribute("hometab");
 
     // Enable the "Close Tab" menuitem when the window doesn't close with the last tab.
     document.getElementById("context_closeTab").disabled =
-      disabled && gBrowser.tabContainer._closeWindowWithLastTab;
+      (disabled && gBrowser.tabContainer._closeWindowWithLastTab) || isHomeTab;
 
     var menuItems = aPopupMenu.getElementsByAttribute("tbattr", "tabbrowser-multiple");
     for (var i = 0; i < menuItems.length; i++)

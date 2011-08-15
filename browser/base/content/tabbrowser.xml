@@ -948,8 +948,16 @@
                                           true, false);
             }
 
-            if (this.mCurrentTab.selected)
+            if (this.mCurrentTab.selected) {
               this._setCloseKeyState(!this.mCurrentTab.pinned);
+
+              let isHomeTab = this.mCurrentTab.hasAttribute("hometab");
+              let closeCommand = document.getElementById("cmd_close");
+              if (isHomeTab)
+                closeCommand.setAttribute("disabled", "true");
+              else
+                closeCommand.removeAttribute("disabled");
+            }
 
             // TabSelect events are suppressed during preview mode to avoid confusing extensions and other bits of code
             // that might rely upon the other changes suppressed.

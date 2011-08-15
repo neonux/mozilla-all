@@ -336,6 +336,8 @@
             // We have a mouse event (from the go button), so use the standard
             // UI link behaviors
             let where = whereToOpenLink(aTriggeringEvent, false, false);
+            if (gBrowser.selectedTab.pinned && where == "current")
+              where == "tab";
             if (where == "current") {
               loadCurrent();
             } else {
@@ -343,8 +345,9 @@
               openUILinkIn(url, where,
                            { allowThirdPartyFixup: true, postData: postData });
             }
-          } else if (aTriggeringEvent && aTriggeringEvent.altKey &&
-                     !isTabEmpty(gBrowser.selectedTab)) {
+          } else if (gBrowser.selectedTab.pinned ||
+                     (aTriggeringEvent && aTriggeringEvent.altKey &&
+                      !isTabEmpty(gBrowser.selectedTab))) {
             this.handleRevert();
             gBrowser.loadOneTab(url, {
                                 postData: postData,
