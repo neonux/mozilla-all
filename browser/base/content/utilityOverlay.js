@@ -313,20 +313,6 @@ function checkForMiddleClick(node, event) {
   }
 }
 
-function updateUrlBarWithForwardNavigationState(obj) {
-  var urlbar = document.getElementById('urlbar');
-  var forwardDisabled = obj.parentNode.getAttribute('disabled');
-
-  if (urlbar) {
-    if (forwardDisabled == 'true' && !document.querySelector("#forward-button:hover")) {
-      // Make sure that mouse is not hovering over the forward button.
-      urlbar.setAttribute('forwardDisabled', forwardDisabled);
-    } else {
-      urlbar.removeAttribute('forwardDisabled');
-    }
-  }
-}
-
 // Closes all popups that are ancestors of the node.
 function closeMenus(node)
 {
