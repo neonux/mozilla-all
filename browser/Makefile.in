@@ -51,8 +51,8 @@ PARALLEL_DIRS = \
   $(NULL)
 
 DIRS = \
-  app \
   devtools \
+  app \
   $(NULL)
 
 ifeq ($(OS_ARCH),WINNT)
