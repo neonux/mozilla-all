@@ -313,6 +313,26 @@ function checkForMiddleClick(node, event) {
   }
 }
 
+function updateUrlBarWithForwardNavigationState(obj) {
+  var urlbar = document.getElementById('urlbar');
+  var unifiedBackForwardButton = document.getElementById('unified-back-forward-button');
+  var conditionalForwardButton = document.querySelector('#nav-bar[conditionalForwardButton]');
+  var forwardDisabled = obj.parentNode.getAttribute('disabled');
+
+  if (conditionalForwardButton && urlbar && unifiedBackForwardButton) {
+    if (forwardDisabled == 'true') {
+      if (!document.querySelector("#forward-button:hover")) {
+        // Make sure that mouse is not hovering over the forward button.
+        urlbar.setAttribute('forwardDisabled', 'true');
+      }
+      unifiedBackForwardButton.setAttribute('forwardDisabled', 'true');
+    } else {
+      urlbar.removeAttribute('forwardDisabled');
+      unifiedBackForwardButton.removeAttribute('forwardDisabled');
+    }
+  }
+}
+
 // Closes all popups that are ancestors of the node.
 function closeMenus(node)
 {
