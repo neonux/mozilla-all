@@ -25,7 +25,7 @@
 .searchbar-engine-image {
   width: 16px;
   height: 16px;
-  list-style-image: url("chrome://mozapps/skin/places/defaultFavicon.png");
+  list-style-image: url("chrome://browser/skin/Search.png");
 }
 
 .searchbar-dropmarker-image {
@@ -33,11 +33,65 @@
   -moz-margin-start: 2px;
 }
 
-.search-go-container {
-  -moz-box-align: center;
-  -moz-padding-end: 6px;
+.search-go-label {
+  text-align: center;
 }
 
-.search-go-button {
-  list-style-image: url("chrome://browser/skin/Search.png");
+.search-go-container {
+  -moz-box-align: center;
+  -moz-margin-start: 3px;
+  min-width: 5em;
+  max-width: 8em;
+  color: #000;
+  -moz-border-start: 1px solid hsla(0,0%,0%,.1);
+  background-origin: border-box;
+  background-color: #ccc;
+  background-image: -moz-linear-gradient(hsla(0,0%,100%,.5), hsla(0,0%,100%,.37) 49%, hsla(0,0%,100%,.32) 51%, hsla(0,0%,100%,0));
+  box-shadow: 0 1px 0 hsla(0,0%,0%,.1) inset,
+              0 0 2px hsla(0,0%,100%,.5) inset,
+              1px 0 0 hsla(0,0%,0%,.25);
 }
+
+.search-go-container:active:hover {
+  box-shadow: 0 1px 2px hsla(0,0%,0%,.35) inset,
+              0 0 5px hsla(0,0%,0%,.2) inset,
+              1px 0 0 hsla(0,0%,0%,.25);
+}
+
+.searchbar-textbox:not([focused]) > .search-go-container:not(:hover) {
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+  color: #000; /* override any custom text colors */
+}
+
+.search-go-container:-moz-locale-dir(ltr) {
+  border-top-right-radius: 10000px;
+  border-bottom-right-radius: 10000px;
+}
+
+.search-go-container:-moz-locale-dir(rtl) {
+  border-top-left-radius: 10000px;
+  border-bottom-left-radius: 10000px;
+}
+
+/* custom background colors for specific search providers */
+
+.search-go-container[engine="Bing"] {
+  background-color: #FFA615;
+}
+
+.search-go-container[engine="Yahoo"] {
+  color: #fff;
+  background-color: #7B0099;
+}
+
+.search-go-container[engine="eBay"] {
+  color: #fff;
+  background-color: #005DAA;
+}
+
+.search-go-container[engine="Amazon.com"] {
+  background-color: #FF9900;
+}
+
