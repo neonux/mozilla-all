@@ -8787,9 +8787,6 @@ var TabContextMenu = {
     document.getElementById("context_pinTab").hidden = this.contextTab.pinned;
     document.getElementById("context_unpinTab").hidden = !this.contextTab.pinned;
 
-    document.getElementById("context_unpinTab").disabled = isHomeTab;
-    document.getElementById("context_openTabInWindow").disabled = isHomeTab;
-
     // Hide chrome for app tabs
     let alwaysShowToolbarsElm = document.getElementById("context_alwaysShowToolbars");
     if (this.contextTab.pinned && !ChromelessAppTabs.isBlacklisted(this.contextTab.linkedBrowser.contentDocument.documentURI)) {
