@@ -882,7 +882,7 @@ pref("browser.privatebrowsing.dont_prompt_on_enter", false);
 pref("browser.bookmarks.editDialog.firstEditField", "namePicker");
 
 // base url for the wifi geolocation network provider
-pref("geo.wifi.uri", "https://www.google.com/loc/json");
+pref("geo.wifi.uri", "https://maps.googleapis.com/maps/api/browserlocation/json");
 pref("geo.wifi.protocol", 0);
 
 // Whether to use a panel that looks like an OS X sheet for customization
@@ -1055,7 +1055,7 @@ pref("devtools.editor.expandtab", true);
 //   provides programmer-specific editor features such as syntax highlighting,
 //   indenting and bracket recognition. It may not be appropriate for all
 //   locales (esp. RTL) or a11y situations.
-pref("devtools.editor.component", "textarea");
+pref("devtools.editor.component", "orion");
 
 // Whether the character encoding menu is under the main Firefox button. This
 // preference is a string so that localizers can alter it.
