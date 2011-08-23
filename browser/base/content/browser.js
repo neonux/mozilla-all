@@ -1350,8 +1350,6 @@ function BrowserStartup() {
   updateAppButtonDisplay();
 #endif
 
-  ConditionalForwardButton.init();
-
   CombinedStopReload.init();
 
   allTabs.readPref();
@@ -1732,8 +1730,6 @@ function BrowserShutdown() {
   // First clean up services initialized in BrowserStartup (or those whose
   // uninit methods don't depend on the services having been initialized).
   allTabs.uninit();
-
-  ConditionalForwardButton.uninit();
 
   CombinedStopReload.uninit();
 
@@ -3605,8 +3601,6 @@ function BrowserCustomizeToolbar()
   if (splitter)
     splitter.parentNode.removeChild(splitter);
 
-  ConditionalForwardButton.uninit();
-
   CombinedStopReload.uninit();
 
   PlacesToolbarHelper.customizeStart();
@@ -3677,8 +3671,6 @@ function BrowserToolboxCustomizeDone(aToolboxChanged) {
 
   PlacesToolbarHelper.customizeDone();
   BookmarksMenuButton.customizeDone();
-
-  ConditionalForwardButton.init();
 
   // The url bar splitter state is dependent on whether stop/reload
   // and the location bar are combined, so we need this ordering
@@ -4898,52 +4890,6 @@ var ChromelessAppTabs = {
     /^about:home$/,
     /^about:blank$/
   ]
-};
-
-var ConditionalForwardButton = {
-  init: function init() {
-    if (this._initialized)
-      return;
-
-    var navigatorToolbox = document.getElementById("navigator-toolbox");
-    var navbar = document.getElementById("nav-bar");
-    var unifiedBackForwardButton = document.getElementById("unified-back-forward-button");
-    var forwardButton = document.getElementById("forward-button");
-    var urlbar = document.getElementById("urlbar");
-    var urlbarContainer = document.getElementById("urlbar-container");
-
-    if (navigatorToolbox && navbar && unifiedBackForwardButton &&
-        forwardButton && urlbar && urlbarContainer &&
-        navigatorToolbox.getAttribute("mode") == "icons" &&
-        navigatorToolbox.getAttribute("iconsize") == "large" &&
-        unifiedBackForwardButton.nextSibling == urlbarContainer) {
-      navbar.setAttribute("conditionalForwardButton", "true");
-      forwardButton.addEventListener("mouseout", this, false);
-    }
-
-    this._initialized = true;
-    this.navbar = navbar;
-    this.urlbar = urlbar;
-    this.forwardButton = forwardButton;
-  },
-
-  uninit: function uninit() {
-    if (!this._initialized)
-      return;
-
-    this._initialized = false;
-    this.navbar.removeAttribute("conditionalForwardButton");
-    this.navbar = null;
-    this.urlbar = null;
-    this.forwardButton.removeEventListener("mouseout", this, false);
-    this.forwardButton = null;
-  },
-
-  handleEvent: function (event) {
-    // The only event we listen to is "mouseout" on the forward button
-    if (this.forwardButton && this.forwardButton.disabled && this.urlbar)
-      this.urlbar.setAttribute("forwardDisabled", "true");
-  }
 };
 
 var CombinedStopReload = {
