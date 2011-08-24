@@ -1888,6 +1888,15 @@ richlistitem[type~="action"][actiontype="switchtab"] > .ac-url-box > .ac-action-
   -moz-margin-end: 3px;
 }
 
+.tab-icon-image[hometab] {
+  list-style-image: url("chrome://browser/skin/Toolbar.png");
+  -moz-image-region: rect(0, 90px, 18px, 72px);
+}
+
+.tab-icon-image[hometab]:-moz-lwtheme-brighttext {
+  list-style-image: url("chrome://browser/skin/Toolbar-inverted.png");
+}
+
 .tab-throbber {
   list-style-image: url("chrome://browser/skin/tabbrowser/connecting.png");
 }

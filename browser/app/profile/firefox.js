@@ -233,6 +233,8 @@ pref("general.autoScroll", true);
 // is the default browser.
 pref("browser.shell.checkDefaultBrowser", true);
 
+pref("browser.hometab.enabled", false);
+
 // 0 = blank, 1 = home (browser.startup.homepage), 2 = last visited page, 3 = resume previous browser session
 // The behavior of option 3 is detailed at: http://wiki.mozilla.org/Session_Restore
 pref("browser.startup.page",                1);
