@@ -258,6 +258,7 @@ function UpdateBackForwardCommands(aWebNavigation) {
       forwardBroadcaster.removeAttribute("disabled");
     else
       forwardBroadcaster.setAttribute("disabled", true);
+    Services.obs.notifyObservers(null, "Browser:Forward", aWebNavigation.canGoForward ? "" : "disabled");
   }
 }
 
@@ -1350,6 +1351,8 @@ function BrowserStartup() {
   updateAppButtonDisplay();
 #endif
 
+  ConditionalForwardButton.init();
+
   CombinedStopReload.init();
 
   allTabs.readPref();
@@ -1732,6 +1735,8 @@ function BrowserShutdown() {
   // First clean up services initialized in BrowserStartup (or those whose
   // uninit methods don't depend on the services having been initialized).
   allTabs.uninit();
+
+  ConditionalForwardButton.uninit();
 
   CombinedStopReload.uninit();
 
@@ -3605,6 +3610,8 @@ function BrowserCustomizeToolbar()
   if (splitter)
     splitter.parentNode.removeChild(splitter);
 
+  ConditionalForwardButton.uninit();
+
   CombinedStopReload.uninit();
 
   PlacesToolbarHelper.customizeStart();
@@ -3675,6 +3682,8 @@ function BrowserToolboxCustomizeDone(aToolboxChanged) {
 
   PlacesToolbarHelper.customizeDone();
   BookmarksMenuButton.customizeDone();
+
+  ConditionalForwardButton.init();
 
   // The url bar splitter state is dependent on whether stop/reload
   // and the location bar are combined, so we need this ordering
@@ -4898,6 +4907,92 @@ var ChromelessAppTabs = {
     /^about:home$/,
     /^about:blank$/
   ]
+};
+
+var ConditionalForwardButton = {
+  _shouldEnable: function (navbar, unifiedButton, forwardButton, urlbar) {
+    var navigatorToolbox = document.getElementById("navigator-toolbox");
+    var urlbarContainer = document.getElementById("urlbar-container");
+    return navigatorToolbox && navbar && unifiedButton &&
+           forwardButton && urlbar && urlbarContainer &&
+           navigatorToolbox.getAttribute("mode") == "icons" &&
+           navigatorToolbox.getAttribute("iconsize") == "large" &&
+           unifiedButton.nextSibling == urlbarContainer;
+  },
+
+  init: function init() {
+    if (this._initialized)
+      return;
+
+    var navbar = document.getElementById("nav-bar");
+    var unifiedButton = document.getElementById("unified-back-forward-button");
+    var forwardButton = document.getElementById("forward-button");
+    var urlbar = document.getElementById("urlbar");
+    var mainWindow = document.getElementById("main-window");
+
+    if (this._shouldEnable(navbar, unifiedButton, forwardButton, urlbar)) {
+      if (mainWindow)
+        mainWindow.setAttribute("conditionalForwardButton", "true");
+      navbar.setAttribute("conditionalForwardButton", "true");
+      if (forwardButton.disabled)
+        unifiedButton.setAttribute("disabled", "true");
+
+      forwardButton.addEventListener("mouseout", this, false);
+      Services.obs.addObserver(this, "Browser:Forward", false);
+    }
+
+    this._initialized = true;
+    this.navbar = navbar;
+    this.urlbar = urlbar;
+    this.forwardButton = forwardButton;
+  },
+
+  uninit: function uninit() {
+    if (!this._initialized)
+      return;
+
+    this._initialized = false;
+    Services.obs.removeObserver(this, "Browser:Forward", false);
+
+    var mainWindow = document.getElementById("main-window");
+    if (mainWindow)
+      mainWindow.removeAttribute("conditionalForwardButton");
+
+    if (this.navbar)
+      this.navbar.removeAttribute("conditionalForwardButton");
+    this.navbar = null;
+    this.urlbar = null;
+    if (this.forwardButton)
+      this.forwardButton.removeEventListener("mouseout", this, false);
+    this.forwardButton = null;
+  },
+
+  handleEvent: function (event) {
+    // The only event we listen to is "mouseout" on the forward button
+    if (this.forwardButton && this.forwardButton.disabled && this.urlbar)
+      this.urlbar.setAttribute("forwardDisabled", "true");
+  },
+
+  observe: function (aSubject, aTopic, aState) {
+    if (aTopic != "Browser:Forward")
+      return;
+
+    var navbar = document.getElementById("nav-bar");
+    var forwardButton = document.getElementById("forward-button");
+    var urlbar = document.getElementById("urlbar");
+    var unifiedButton = document.getElementById("unified-back-forward-button");
+
+    if (this._shouldEnable(navbar, unifiedButton, forwardButton, urlbar)) {
+      if (aState == "disabled") {
+        if (!document.querySelector("#forward-button:hover"))
+          urlbar.setAttribute("forwardDisabled", "true");
+        unifiedButton.setAttribute("forwardDisabled", "true");
+      } else {
+        urlbar.removeAttribute("forwardDisabled");
+        unifiedButton.removeAttribute("forwardDisabled");
+      }
+    }
+  }
 };
 
 var CombinedStopReload = {
