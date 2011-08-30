@@ -45,8 +45,6 @@
 @import url("chrome://global/skin/");
 
 %include shared.inc
-%filter substitution
-%define navbarConditionalForwardButton window:not([chromehidden~='toolbar']) #navigator-toolbox[iconsize=large][mode=icons] > #nav-bar[conditionalForwardButton]:not([customizing]):-moz-locale-dir(ltr)
 
 @namespace url("http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul");
 @namespace html url("http://www.w3.org/1999/xhtml");
@@ -468,11 +466,6 @@ toolbar[mode="icons"] .toolbarbutton-1 > menupopup {
   -moz-box-align: center;
 }
 
-@navbarConditionalForwardButton@ #unified-back-forward-button {
-  position: relative;
-  z-index: 1;
-}
-
 #back-button,
 #forward-button:-moz-locale-dir(rtl),
 toolbar[mode="icons"] #back-button:-moz-locale-dir(rtl):-moz-lwtheme {
@@ -511,14 +504,6 @@ toolbar[mode="icons"] #forward-button:-moz-locale-dir(rtl):-moz-lwtheme {
   margin-bottom: -1px;
   background: url(chrome://browser/skin/keyhole-circle.png) 0 0 no-repeat;
   border-radius: 0;
-}
-
-@navbarConditionalForwardButton@ #back-button:-moz-lwtheme {
-  -moz-margin-end: -2px;
-}
-
-@navbarConditionalForwardButton@ #unified-back-forward-button[forwardDisabled] #back-button:-moz-lwtheme {
-  -moz-margin-end: 0;
 }
 
 #navigator-toolbox[iconsize="large"][mode="icons"] > #nav-bar #back-button:-moz-window-inactive:not(:-moz-lwtheme) {
@@ -567,56 +552,6 @@ toolbar[mode="icons"] #forward-button:-moz-lwtheme {
   border-right-width: 0;
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
-}
-
-@navbarConditionalForwardButton@ #forward-button {
-  /* -moz-margin-start cannot be used here because it is not transitionable */
-  margin-left: -6px !important;
-  margin-right: 0;
-  padding: 2px 0 2px 5px;
-  margin-top: 2px;
-  margin-bottom: 2px;
-  border-top-width: 0;
-  border-bottom-width: 0;
-  min-height: 22px;
-  height: 22px;
-  border-radius: 0;
-}
-
-@navbarConditionalForwardButton@ #forward-button:-moz-lwtheme {
-  min-height: 20px;
-  height: 20px;
-  padding: 2px 0 2px 5px;
-}
-
-/* Transition from occluded forward button to visible forward button */
-@navbarConditionalForwardButton@ #unified-back-forward-button:not([updatingCurrentBrowser]) #forward-button {
-  -moz-transition: margin-left 250ms ease-out 0s,
-                   margin-right 250ms ease-out 0s,
-                   visibility 1ms ease-out 50ms;
-}
-
-/* Transition from visible forward button to occluded forward button */
-@navbarConditionalForwardButton@ #unified-back-forward-button:not([updatingCurrentBrowser]) #forward-button[disabled="true"] {
-  -moz-transition: margin-left 250ms ease-out 0s,
-                   margin-right 250ms ease-out 0s,
-                   visibility 1ms ease-out 200ms;
-}
-
-@navbarConditionalForwardButton@ #forward-button[disabled="true"]:not(:hover) {
-  margin-left: -30px !important;
-  margin-right: 3px;
-  visibility: hidden;
-}
-
-@navbarConditionalForwardButton@ #forward-button:not([disabled="true"]):-moz-locale-dir(rtl) {
-  margin-left: 3px !important;
-  margin-right: -6px !important;
-}
-
-@navbarConditionalForwardButton@ #forward-button[disabled="true"]:not(:hover):-moz-locale-dir(rtl) {
-  margin-right: -30px !important;
-  margin-left: 3px !important;
 }
 
 .unified-nav-back[_moz-menuactive]:-moz-locale-dir(ltr),
@@ -895,18 +830,6 @@ toolbar[mode="icons"] #zoom-in-button {
   -moz-padding-end: 3px;
 }
 
-@navbarConditionalForwardButton@ #urlbar:-moz-locale-dir(ltr) {
-  mask: url(chrome://browser/content/browser.xul#pinstripe-urlbar-conditional-forward-mask);
-  padding-left: 50px;
-  margin-left: -55px;
-}
-
-@navbarConditionalForwardButton@ #urlbar[forwardDisabled]:-moz-locale-dir(ltr) {
-  mask: url(chrome://browser/content/browser.xul#pinstripe-urlbar-conditional-forward-disabled-mask);
-  padding-left: 27px;
-  margin-left: -33px;
-}
-
 #identity-box {
   background-image: -moz-linear-gradient(hsl(0,0%,98%), hsl(0,0%,92%));
   box-shadow: 0 1px 0 hsla(0,0%,0%,.05) inset;
@@ -923,10 +846,6 @@ toolbar[mode="icons"] #zoom-in-button {
 #identity-box:-moz-locale-dir(rtl) {
   border-top-right-radius: 2px;
   border-bottom-right-radius: 2px;
-}
-
-@navbarConditionalForwardButton@ #identity-box {
-  border-radius: 0;
 }
 
 #identity-box:active:hover,
@@ -2271,14 +2190,6 @@ toolbarbutton.chevron > .toolbarbutton-menu-dropmarker {
   border-radius: 2px 0 0 2px;
   -moz-border-image: url("chrome://browser/skin/urlbar-arrow.png") 0 8 0 0 / 0 8px 0 0;
   -moz-margin-end: -8px;
-}
-
-@navbarConditionalForwardButton@ #notification-popup-box {
-  padding-left: 6px;
-}
-
-@navbarConditionalForwardButton@ #notification-popup-box[hidden] + #identity-box {
-  -moz-padding-start: 8px;
 }
 
 #notification-popup-box:not([hidden]) + #identity-box {
