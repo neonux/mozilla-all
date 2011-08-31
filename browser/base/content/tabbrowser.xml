@@ -694,7 +694,7 @@
             }
 
             if ((browser.mIconURL || "") != aTab.getAttribute("image")) {
-              if (browser.mIconURL && !aTab.hasAttribute("hometab"))
+              if (browser.mIconURL)
                 aTab.setAttribute("image", browser.mIconURL);
               else
                 aTab.removeAttribute("image");
@@ -941,16 +941,8 @@
                                           true, false);
             }
 
-            if (this.mCurrentTab.selected) {
+            if (this.mCurrentTab.selected)
               this._setCloseKeyState(!this.mCurrentTab.pinned);
-
-              let isHomeTab = this.mCurrentTab.hasAttribute("hometab");
-              let closeCommand = document.getElementById("cmd_close");
-              if (isHomeTab)
-                closeCommand.setAttribute("disabled", "true");
-              else
-                closeCommand.removeAttribute("disabled");
-            }
 
             // TabSelect events are suppressed during preview mode to avoid confusing extensions and other bits of code
             // that might rely upon the other changes suppressed.
@@ -4004,7 +3996,7 @@
           <xul:image xbl:inherits="fadein,pinned,busy,progress,selected"
                      class="tab-throbber"
                      role="presentation"/>
-          <xul:image xbl:inherits="validate,src=image,fadein,pinned,selected,hometab"
+          <xul:image xbl:inherits="validate,src=image,fadein,pinned,selected"
                      class="tab-icon-image"
                      role="presentation"/>
           <xul:label flex="1"

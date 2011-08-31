@@ -1535,8 +1535,6 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
   // Enable/Disable auto-hide tabbar
   gBrowser.tabContainer.updateVisibility();
 
-  gHomeTab.init();
-
   gPrefService.addObserver(gHomeButton.prefDomain, gHomeButton, false);
 
   var homeButton = document.getElementById("home-button");
@@ -1789,8 +1787,6 @@ function BrowserShutdown() {
     Services.obs.removeObserver(gXPInstallObserver, "addon-install-failed");
     Services.obs.removeObserver(gXPInstallObserver, "addon-install-complete");
     Services.obs.removeObserver(gFormSubmitObserver, "invalidformsubmit");
-
-    gHomeTab.uninit();
 
     try {
       gPrefService.removeObserver(gHomeButton.prefDomain, gHomeButton);
@@ -4278,10 +4274,6 @@ var XULBrowserWindow = {
     if (originalTarget != "" || !isAppTab)
       return originalTarget;
 
-    // Open links from home tab in new tabs.
-    if (linkNode.ownerDocument.documentURIObject.spec == "about:home")
-      return "_blank";
-
     // External links from within app tabs should always open in new tabs
     // instead of replacing the app tab's page (Bug 575561)
     let linkHost;
@@ -5515,49 +5507,6 @@ function fireSidebarFocusedEvent() {
   var event = document.createEvent("Events");
   event.initEvent("SidebarFocused", true, false);
   sidebar.contentWindow.dispatchEvent(event);
-}
-
-var gHomeTab = {
-  prefDomain: "browser.hometab.enabled",
-  homeTab: null,
-
-  get isEnabled() {
-    return gPrefService.getBoolPref(this.prefDomain);
-  },
-
-  init: function() {
-    gPrefService.addObserver(this.prefDomain, this, false);
-
-    if (this.isEnabled)
-      this.addHomeTab();
-  },
-
-  uninit: function() {
-    gPrefService.removeObserver(this.prefDomain, this);
-  },
-
-  observe: function (aSubject, aTopic, aPrefName) {
-    if (aTopic != "nsPref:changed" || aPrefName != this.prefDomain)
-      return;
-
-    if (this.isEnabled)
-      this.addHomeTab();
-    else
-      this.removeHomeTab();
-  },
-
-  addHomeTab: function() {
-    let homeTab = gBrowser.addTab("about:home", {skipAnimation: true});
-    homeTab.setAttribute("hometab", "true");
-    gBrowser.pinTab(homeTab);
-    gBrowser.moveTabTo(homeTab, 0);
-    
-    this.homeTab = homeTab;
-  },
-
-  removeHomeTab: function() {
-    gBrowser.removeTab(this.homeTab);
-  }
 }
 
 var gHomeButton = {
@@ -8759,11 +8708,10 @@ var TabContextMenu = {
     this.contextTab = document.popupNode.localName == "tab" ?
                       document.popupNode : gBrowser.selectedTab;
     let disabled = gBrowser.tabs.length == 1;
-    let isHomeTab = this.contextTab.hasAttribute("hometab");
 
     // Enable the "Close Tab" menuitem when the window doesn't close with the last tab.
     document.getElementById("context_closeTab").disabled =
-      (disabled && gBrowser.tabContainer._closeWindowWithLastTab) || isHomeTab;
+      disabled && gBrowser.tabContainer._closeWindowWithLastTab;
 
     var menuItems = aPopupMenu.getElementsByAttribute("tbattr", "tabbrowser-multiple");
     for (var i = 0; i < menuItems.length; i++)
@@ -8783,9 +8731,6 @@ var TabContextMenu = {
     // Only one of pin/unpin should be visible
     document.getElementById("context_pinTab").hidden = this.contextTab.pinned;
     document.getElementById("context_unpinTab").hidden = !this.contextTab.pinned;
-
-    document.getElementById("context_unpinTab").disabled = isHomeTab;
-    document.getElementById("context_openTabInWindow").disabled = isHomeTab;
 
     // Hide chrome for app tabs
     let alwaysShowToolbarsElm = document.getElementById("context_alwaysShowToolbars");

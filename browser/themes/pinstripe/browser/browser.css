@@ -1557,11 +1557,6 @@ toolbarbutton.chevron > .toolbarbutton-menu-dropmarker {
   list-style-image: url("chrome://mozapps/skin/places/defaultFavicon.png");
 }
 
-.tab-icon-image[hometab] {
-  list-style-image: url("chrome://browser/skin/Toolbar.png");
-  -moz-image-region: rect(0, 120px, 20px, 100px);
-}
-
 .tab-throbber {
   list-style-image: url("chrome://browser/skin/tabbrowser/connecting.png");
 }
