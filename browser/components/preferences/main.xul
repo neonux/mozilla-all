@@ -72,6 +72,9 @@
       <preference id="browser.startup.homepage"
                   name="browser.startup.homepage"
                   type="wstring"/>
+      <preference id="browser.hometab.enabled"
+                  name="browser.hometab.enabled"
+                  type="bool"/>
 
       <preference id="pref.browser.homepage.disable_button.current_page"
                   name="pref.browser.homepage.disable_button.current_page"
@@ -156,6 +159,12 @@
                 oncommand="gMainPane.restoreDefaultHomePage();"
                 id="restoreDefaultHomePage"
                 preference="pref.browser.homepage.disable_button.restore_default"/>
+      </hbox>
+      <hbox align="center">
+        <checkbox id="homeTab"
+                  label="Enable Home Tab"
+                  accesskey=""
+                  preference="browser.hometab.enabled"/>
       </hbox>
     </groupbox>
 
