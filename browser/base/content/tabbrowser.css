@@ -16,12 +16,6 @@
   display: -moz-box;
 }
 
-.tab-close-button[selected="true"] {
-  /* Make this button focusable so clicking on it will not focus the tab while
-     it's getting closed */
-  -moz-user-focus: normal;
-}
-
 .tabbrowser-tab[label=""] > .tab-stack > .tab-content > .tab-icon-image {
   visibility: hidden;
 }

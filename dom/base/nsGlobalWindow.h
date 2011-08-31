@@ -486,6 +486,7 @@ public:
   nsresult Observe(nsISupports* aSubject, const char* aTopic,
                    const PRUnichar* aData);
 
+  static void Init();
   static void ShutDown();
   static void CleanupCachedXBLHandlers(nsGlobalWindow* aWindow);
   static PRBool IsCallerChrome();
@@ -538,6 +539,11 @@ public:
   static nsGlobalWindow* GetOuterWindowWithId(PRUint64 aWindowID) {
     nsGlobalWindow* outerWindow = sWindowsById->Get(aWindowID);
     return outerWindow && !outerWindow->IsInnerWindow() ? outerWindow : nsnull;
+  }
+
+  static nsGlobalWindow* GetInnerWindowWithId(PRUint64 aInnerWindowID) {
+    nsGlobalWindow* innerWindow = sWindowsById->Get(aInnerWindowID);
+    return innerWindow && innerWindow->IsInnerWindow() ? innerWindow : nsnull;
   }
 
   static bool HasIndexedDBSupport();
