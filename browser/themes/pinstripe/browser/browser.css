@@ -153,7 +153,7 @@ toolbarbutton.bookmark-item {
   color: #222;
   border: 0;
   border-radius: 10000px;
-  padding: 1px 8px;
+  padding: 1px 6px;
   margin: 0 0 1px;
 }
 
@@ -161,8 +161,7 @@ toolbarbutton.bookmark-item {
   list-style-image: url("chrome://browser/skin/places/folderDropArrow.png");
   -moz-image-region: rect(0, 7px, 5px, 0);
   margin-top: 1px;
-  -moz-margin-start: 3px;
-  -moz-margin-end: -2px;
+  -moz-margin-start: 4px;
 }
 
 .bookmark-item > .toolbarbutton-text {
@@ -172,7 +171,7 @@ toolbarbutton.bookmark-item {
 
 toolbarbutton.bookmark-item:hover,
 toolbarbutton.bookmark-item[open="true"] {
-  background-color: rgba(0, 0, 0, .205);
+  background-color: rgba(0, 0, 0, .2);
 }
 
 toolbarbutton.bookmark-item:hover,
@@ -205,8 +204,43 @@ toolbarbutton.bookmark-item > menupopup {
 
 .bookmark-item > .toolbarbutton-icon[label]:not([label=""]),
 .bookmark-item > .toolbarbutton-icon[type="menu"] {
-  -moz-margin-end: 5px;
+  -moz-margin-end: 6px;
 }
+
+
+
+toolbarbutton.bookmark-item[container] {
+  list-style-image: url("chrome://browser/skin/places/folder-toolbar.png");
+  -moz-image-region: rect(0, 16px, 16px, 0);
+}
+toolbarbutton.bookmark-item[container]:hover,
+toolbarbutton.bookmark-item[container]:hover:active,
+toolbarbutton.bookmark-item[container][open="true"] {
+  -moz-image-region: rect(0, 32px, 16px, 16px);
+}
+
+toolbarbutton.bookmark-item[livemark] {
+  list-style-image: url("chrome://browser/skin/places/feed-toolbar.png");
+  -moz-image-region: rect(0, 16px, 16px, 0);
+}
+toolbarbutton.bookmark-item[livemark]:hover,
+toolbarbutton.bookmark-item[livemark]:hover:active,
+toolbarbutton.bookmark-item[livemark][open="true"] {
+  -moz-image-region: rect(0, 32px, 16px, 16px);
+}
+
+toolbarbutton.bookmark-item[query] {
+  list-style-image: url("chrome://browser/skin/places/query-toolbar.png");
+  -moz-image-region: rect(0, 16px, 16px, 0);
+}
+toolbarbutton.bookmark-item[query][tagContainer]:hover,
+toolbarbutton.bookmark-item[query][tagContainer]:hover:active,
+toolbarbutton.bookmark-item[query][tagContainer][open="true"] {
+  -moz-image-region: rect(0, 32px, 16px, 16px);
+}
+
+
+
 
 .bookmark-item[container] {
   list-style-image: url("chrome://global/skin/tree/folder.png");
@@ -259,6 +293,16 @@ toolbarbutton.bookmark-item > menupopup {
   max-width: 15em !important;
   list-style-image: url("chrome://browser/skin/places/bookmarksToolbar.png") !important;
 }
+
+
+
+
+@media (-moz-mac-lion-theme) {
+  toolbarbutton.bookmark-item:not(:hover):-moz-window-inactive {
+    opacity: .5;
+  }
+}
+
 
 /* ----- BOOKMARK MENUS ----- */
 
@@ -672,9 +716,25 @@ toolbar[mode="icons"] #forward-button:-moz-lwtheme {
   -moz-image-region: rect(20px, 180px, 40px, 160px);
 }
 
+#bookmarks-button[checked="true"]:active:hover {
+  -moz-image-region: rect(40px, 180px, 60px, 160px);
+}
+
+#bookmarks-menu-button.bookmark-item  > .toolbarbutton-icon {
+  width: 20px;
+}
 #bookmarks-menu-button.bookmark-item {
-  -moz-image-region: rect(2px, 178px, 18px, 162px);
+  -moz-image-region: rect(2px, 180px, 18px, 160px);
   list-style-image: url("chrome://browser/skin/Toolbar.png");
+}
+#bookmarks-menu-button.bookmark-item {
+  -moz-image-region: rect(2px, 180px, 18px, 160px);
+  list-style-image: url("chrome://browser/skin/Toolbar.png");
+}
+#bookmarks-menu-button.bookmark-item:hover,
+#bookmarks-menu-button.bookmark-item:hover:active,
+#bookmarks-menu-button.bookmark-item[open="true"] {
+  -moz-image-region: rect(22px, 180px, 38px, 160px);
 }
 
 #bookmarks-menu-button.toolbarbutton-1 {
