@@ -8097,7 +8097,7 @@ TraceRecorder::updateAtoms()
 JS_REQUIRES_STACK void
 TraceRecorder::updateAtoms(JSScript *script)
 {
-    atoms = script->atomMap.vector;
+    atoms = script->atoms;
     consts = JSScript::isValidOffset(script->constOffset) ? script->consts()->vector : 0;
     strictModeCode_ins = w.name(w.immi(script->strictModeCode), "strict");
 }
@@ -14516,7 +14516,7 @@ TraceRecorder::record_JSOP_OBJECT()
 {
     StackFrame* const fp = cx->fp();
     JSScript* script = fp->script();
-    unsigned index = atoms - script->atomMap.vector + GET_INDEX(cx->regs().pc);
+    unsigned index = atoms - script->atoms + GET_INDEX(cx->regs().pc);
 
     JSObject* obj;
     obj = script->getObject(index);
@@ -15444,7 +15444,7 @@ jsatomid
 TraceRecorder::getFullIndex(ptrdiff_t pcoff)
 {
     jsatomid index = GET_INDEX(cx->regs().pc + pcoff);
-    index += atoms - cx->fp()->script()->atomMap.vector;
+    index += atoms - cx->fp()->script()->atoms;
     return index;
 }
 
@@ -15831,7 +15831,7 @@ TraceRecorder::record_JSOP_REGEXP()
 {
     StackFrame* const fp = cx->fp();
     JSScript* script = fp->script();
-    unsigned index = atoms - script->atomMap.vector + GET_INDEX(cx->regs().pc);
+    unsigned index = atoms - script->atoms + GET_INDEX(cx->regs().pc);
 
     LIns* proto_ins;
     CHECK_STATUS_A(getClassPrototype(JSProto_RegExp, proto_ins));
@@ -16562,7 +16562,7 @@ StartTraceVisNative(JSContext *cx, uintN argc, jsval *vp)
 
     if (argc > 0 && JSVAL_IS_STRING(JS_ARGV(cx, vp)[0])) {
         JSString *str = JSVAL_TO_STRING(JS_ARGV(cx, vp)[0]);
-        char *filename = DeflateString(cx, str->chars(), str->length());
+        char *filename = DeflateString(cx, str->getChars(cx), str->length());
         if (!filename)
             goto error;
         ok = StartTraceVis(filename);
@@ -16979,7 +16979,7 @@ LoopProfile::profileOperation(JSContext* cx, JSOp op)
     TraceMonitor* tm = JS_TRACE_MONITOR_FROM_CONTEXT(cx);
 
     JS_ASSERT(tm == traceMonitor);
-    JS_ASSERT(entryScript->compartment->traceMonitor() == tm);
+    JS_ASSERT(entryScript->compartment()->traceMonitor() == tm);
 
     if (profiled) {
         stopProfiling(cx);
@@ -17171,7 +17171,6 @@ LoopProfile::profileOperation(JSContext* cx, JSOp op)
         stackPush(StackValue(v1.isConst && v2.isConst));
     } else if (op == JSOP_AND) {
         bool b = !!js_ValueToBoolean(cx->regs().sp[-1]);
-        StackValue v = stackAt(-1);
         if (b)
             stackPop();
     } else {

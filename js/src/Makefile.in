@@ -124,7 +124,6 @@ CPPSRCS		= \
 		jshash.cpp \
 		jsinfer.cpp \
 		jsinterp.cpp \
-		jsinvoke.cpp \
 		jsiter.cpp \
 		jslock.cpp \
 		jslog2.cpp \
@@ -826,12 +825,6 @@ ifeq ($(OS_RELEASE),4.1)
 EXTRA_LIBS	+= -ldl -lnsl
 else
 EXTRA_LIBS	+= -lposix4 -ldl -lnsl -lsocket
-endif
-endif
-
-ifdef MOZ_MEMORY
-ifeq ($(OS_ARCH),Darwin)
-LDFLAGS += -ljemalloc
 endif
 endif
 
