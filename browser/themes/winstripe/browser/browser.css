@@ -1462,11 +1462,6 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
   opacity: 0.5;
 }
 
-#page-proxy-favicon[hometab] { 
-  list-style-image: url("chrome://browser/skin/Toolbar.png");
-  -moz-image-region: rect(0, 90px, 18px, 72px);
-}
-
 #urlbar-throbber {
   list-style-image: url("chrome://browser/skin/places/searching_16.png");
 }
@@ -1879,15 +1874,6 @@ richlistitem[type~="action"][actiontype="switchtab"] > .ac-url-box > .ac-action-
   list-style-image: url("chrome://mozapps/skin/places/defaultFavicon.png");
   -moz-margin-start: 2px;
   -moz-margin-end: 3px;
-}
-
-.tab-icon-image[hometab] {
-  list-style-image: url("chrome://browser/skin/Toolbar.png");
-  -moz-image-region: rect(0, 90px, 18px, 72px);
-}
-
-.tab-icon-image[hometab]:-moz-lwtheme-brighttext {
-  list-style-image: url("chrome://browser/skin/Toolbar-inverted.png");
 }
 
 .tab-throbber {

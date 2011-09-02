@@ -991,11 +991,6 @@ toolbar[mode="icons"] #zoom-in-button {
   opacity: 0.5;
 }
 
-#page-proxy-favicon[hometab] { 
-  list-style-image: url("chrome://browser/skin/Toolbar.png");
-  -moz-image-region: rect(0, 120px, 20px, 100px);
-}
-
 #urlbar-throbber {
   list-style-image: url("chrome://browser/skin/places/searching_16.png");
 }
@@ -1620,11 +1615,6 @@ toolbarbutton.chevron > .toolbarbutton-menu-dropmarker {
   width: 16px;
   height: 16px;
   list-style-image: url("chrome://mozapps/skin/places/defaultFavicon.png");
-}
-
-.tab-icon-image[hometab] {
-  list-style-image: url("chrome://browser/skin/Toolbar.png");
-  -moz-image-region: rect(0, 120px, 20px, 100px);
 }
 
 .tab-throbber {

@@ -1008,10 +1008,6 @@ toolbar[iconsize="small"] #feed-button {
   opacity: 0.3;
 }
 
-#page-proxy-favicon[hometab] { 
-  list-style-image: url("moz-icon://stock/gtk-home?size=toolbar");
-}
-
 #urlbar-throbber {
   list-style-image: url("chrome://browser/skin/places/searching_16.png");
 }
@@ -1596,10 +1592,6 @@ richlistitem[type~="action"][actiontype="switchtab"] > .ac-url-box > .ac-action-
   height: 16px;
   -moz-margin-end: 3px;
   list-style-image: url("chrome://mozapps/skin/places/defaultFavicon.png");
-}
-
-.tab-icon-image[hometab] {
-  list-style-image: url("moz-icon://stock/gtk-home?size=toolbar");
 }
 
 .tab-throbber {
