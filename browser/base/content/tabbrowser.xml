@@ -166,6 +166,13 @@
         false
       </field>
 
+      <field name="_homeTabEnabled">
+        Services.prefs.getBoolPref("browser.tabs.homeTab");
+      </field>
+      <field name="mHomeTab">
+        null
+      </field>
+
       <property name="_numPinnedTabs" readonly="true">
         <getter><![CDATA[
           for (var i = 0; i < this.tabs.length; i++) {
@@ -274,6 +281,53 @@
           event.initEvent("TabUnpinned", true, false);
           aTab.dispatchEvent(event);
         ]]></body>
+      </method>
+
+      <method name="updateHomeTab">
+        <body>
+          <![CDATA[
+            let isPopupWindow = !!document.documentElement.getAttribute("chromehidden");
+            if (this._homeTabEnabled && !isPopupWindow)
+              this._addHomeTab();
+            else
+              this._removeHomeTab();
+          ]]>
+        </body>
+      </method>
+
+      <method name="_addHomeTab">
+        <body>
+          <![CDATA[
+            // Don't add a new home tab if one already exists.
+            if (this.mHomeTab)
+              return;
+            
+            // If about:home is the only tab in the window, just turn it into the home tab.
+            let useFirstTab = this.tabs.length == 1 &&
+                              this.tabs[0].linkedBrowser.currentURI.spec == "about:home";
+            
+            let homeTab = useFirstTab ? this.tabs[0] : this.addTab("about:home", {skipAnimation: true});
+            homeTab.setAttribute("hometab", "true");
+            this.pinTab(homeTab);
+
+            if (!useFirstTab)
+              this.moveTabTo(homeTab, 0);
+            
+            this.mHomeTab = homeTab;
+          ]]>
+        </body>
+      </method>
+
+      <method name="_removeHomeTab">
+        <body>
+          <![CDATA[
+            if (!this.mHomeTab)
+              return;
+
+            this.removeTab(this.mHomeTab);
+            this.mHomeTab = null;
+          ]]>
+        </body>
       </method>
 
       <method name="previewTab">
@@ -941,8 +995,15 @@
                                           true, false);
             }
 
-            if (this.mCurrentTab.selected)
+            if (this.mCurrentTab.selected) {
               this._setCloseKeyState(!this.mCurrentTab.pinned);
+
+              let closeCommand = document.getElementById("cmd_close");
+              if (this.mCurrentTab.isHomeTab)
+                closeCommand.setAttribute("disabled", "true");
+              else
+                closeCommand.removeAttribute("disabled");
+            }
 
             // TabSelect events are suppressed during preview mode to avoid confusing extensions and other bits of code
             // that might rely upon the other changes suppressed.
@@ -2806,6 +2867,10 @@
               this.tabContainer._closeWindowWithLastTab = Services.prefs.getBoolPref(data);
               this.tabContainer.adjustTabstrip();
               break;
+            case "browser.tabs.homeTab":
+              this.tabContainer.tabbrowser._homeTabEnabled = Services.prefs.getBoolPref(data);
+              this.tabContainer.tabbrowser.updateHomeTab();
+              break;
           }
         }
       });]]></field>
@@ -2940,7 +3005,8 @@
           // Keep the dragged tab visually within the region of like tabs.
           let tabs = this.tabbrowser.visibleTabs;
           let numPinned = this.tabbrowser._numPinnedTabs;
-          let leftmostTab = draggedTab.pinned ? tabs[0] : tabs[numPinned];
+          let minIndex = tabs[0].isHomeTab ? 1 : 0;
+          let leftmostTab = draggedTab.pinned ? tabs[minIndex] : tabs[numPinned];
           let rightmostTab = draggedTab.pinned ? tabs[numPinned-1] : tabs[tabs.length-1];
           let tabWidth = draggedTab.getBoundingClientRect().width;
           let ltr = (window.getComputedStyle(this).direction == "ltr");
@@ -3617,6 +3683,16 @@
         <parameter name="event"/>
         <parameter name="draggedTab"/>
         <body><![CDATA[
+          // Don't drop tabs to the left of the home tab if it exists.
+          let leftMostIndex = this.tabbrowser.tabs[0].isHomeTab ? 1 : 0;
+          return this._getUnadjustedDropIndex(event, draggedTab) || leftMostIndex;
+        ]]></body>
+      </method>
+
+      <method name="_getUnadjustedDropIndex">
+        <parameter name="event"/>
+        <parameter name="draggedTab"/>
+        <body><![CDATA[
           function compare(a, b, lessThan) lessThan ? a < b : a > b;
           let ltr = (window.getComputedStyle(this).direction == "ltr");
           let eX = event.screenX;
@@ -3808,7 +3884,7 @@
         if (this.draggedTab)
           return;
         var tab = this._getDragTargetTab(event);
-        if (!tab || !tab._fullyOpen || tab.closing)
+        if (!tab || !tab._fullyOpen || tab.closing || tab.isHomeTab)
           return;
 
 #ifdef XP_MACOSX
@@ -4020,6 +4096,11 @@
       <property name="hidden" readonly="true">
         <getter>
           return this.getAttribute("hidden") == "true";
+        </getter>
+      </property>
+      <property name="isHomeTab" readonly="true">
+        <getter>
+          return this.getAttribute("hometab") == "true";
         </getter>
       </property>
 
