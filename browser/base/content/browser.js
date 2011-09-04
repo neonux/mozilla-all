@@ -1535,6 +1535,8 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
   // Enable/Disable auto-hide tabbar
   gBrowser.tabContainer.updateVisibility();
 
+  gBrowser.updateHomeTab();
+
   gPrefService.addObserver(gHomeButton.prefDomain, gHomeButton, false);
 
   var homeButton = document.getElementById("home-button");
@@ -2513,9 +2515,11 @@ function URLBarSetURI(aURI) {
   if (value == null) {
     let uri = aURI || getWebNavigation().currentURI;
 
+    if (gBrowser.mCurrentTab.isHomeTab)
+      value = "";
     // Replace initial page URIs with an empty string
     // only if there's no opener (bug 370555).
-    if (gInitialPages.indexOf(uri.spec) != -1)
+    else if (gInitialPages.indexOf(uri.spec) != -1)
       value = content.opener ? uri.spec : "";
     else
       value = losslessDecodeURI(uri);
@@ -4273,6 +4277,10 @@ var XULBrowserWindow = {
     // tab docshells (isAppTab will be false for app tab subframes).
     if (originalTarget != "" || !isAppTab)
       return originalTarget;
+
+    // Open links from home tab in new tabs.
+    if (linkNode.ownerDocument.documentURIObject.spec == "about:home")
+      return "_blank";
 
     // External links from within app tabs should always open in new tabs
     // instead of replacing the app tab's page (Bug 575561)
@@ -8727,6 +8735,9 @@ var TabContextMenu = {
       Cc["@mozilla.org/browser/sessionstore;1"].
       getService(Ci.nsISessionStore).
       getClosedTabCount(window) == 0;
+
+    document.getElementById("context_unpinTab").disabled = this.contextTab.isHomeTab;
+    document.getElementById("context_openTabInWindow").disabled = this.contextTab.isHomeTab || disabled;
 
     // Only one of pin/unpin should be visible
     document.getElementById("context_pinTab").hidden = this.contextTab.pinned;
