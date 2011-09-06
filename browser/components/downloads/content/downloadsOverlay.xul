@@ -53,6 +53,8 @@
 
   <script type="application/javascript"
           src="chrome://browser/content/downloads/downloads.js"/>
+  <script type="application/javascript"
+          src="chrome://browser/content/downloads/indicator.js"/>
 
   <commandset>
     <command id="downloadsCmd_doDefault"
@@ -151,5 +153,36 @@
               accesskey="&downloadshistory.accesskey;"
               oncommand="DownloadsPanel.showDownloadsHistory();"/>
     </panel>
+  </popupset>
+
+  <popupset>
+    <!-- The downloads indicator is placed in its final toolbar location
+         programmatically, and can be shown temporarily even when its
+         placeholder is removed from the toolbars.  Its initial location within
+         the document must not be a toolbar or the toolbar palette, otherwise
+         the toolbar handling code could remove it from the document. -->
+    <toolbaritem id="downloads-indicator"
+                 orient="horizontal"
+                 align="center"
+                 collapsed="true"
+                 onclick="DownloadsIndicatorView.onClick(event);"
+                 ondrop="DownloadsIndicatorView.onDrop(event)"
+                 ondragover="DownloadsIndicatorView.onDragOver(event)"
+                 ondragenter="DownloadsIndicatorView.onDragOver(event)"
+                 ondragleave="DownloadsIndicatorView.onDragLeave(event)">
+      <stack>
+        <image id="downloads-indicator-icon"/>
+        <image id="downloads-indicator-notification"/>
+      </stack>
+      <vbox align="center"
+            pack="center"
+            hidden="true">
+        <description id="downloads-indicator-counter"/>
+        <progressmeter id="downloads-indicator-progress"
+                       class="plain"
+                       min="0"
+                       max="100"/>
+      </vbox>
+    </toolbaritem>
   </popupset>
 </overlay>

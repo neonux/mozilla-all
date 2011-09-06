@@ -96,19 +96,20 @@ DownloadsUI.prototype = {
       aReason = Ci.nsIDownloadManagerUI.REASON_USER_INTERACTED;
     }
 
-    // Don't show the panel for downloads after the first one in the session.
-    if (aReason == Ci.nsIDownloadManagerUI.REASON_NEW_DOWNLOAD) {
-      if (this.firstDownloadShown) {
-        // TODO: Get attention on the indicator.
-        return;
-      }
-      this.firstDownloadShown = true;
-    }
-
     // Show the panel in the most recent browser window, if present.
     let browserWin = gBrowserGlue.getMostRecentBrowserWindow();
     if (browserWin) {
       browserWin.focus();
+      if (aReason == Ci.nsIDownloadManagerUI.REASON_NEW_DOWNLOAD) {
+        if (this.firstDownloadShown) {
+          // For new downloads after the first one in the session, don't show
+          // the panel automatically, but provide a visible notification in the
+          // topmost browser window, if the status indicator is already visible.
+          browserWin.DownloadsIndicatorView.showEventNotification();
+          return;
+        }
+        this.firstDownloadShown = true;
+      }
       browserWin.DownloadsPanel.showPanel();
       return;
     }

@@ -236,6 +236,9 @@ const DownloadsPanel = {
       return;
     }
 
+    // Since at most one popup is open at any given time, we can set globally.
+    DownloadsCommon.indicatorData.attentionSuppressed = true;
+
     // Ensure that an item is selected when the panel is opened.
     if (DownloadsView.richListBox.itemCount &&
         !DownloadsView.richListBox.selectedItem) {
@@ -251,6 +254,12 @@ const DownloadsPanel = {
     if (aEvent.target != aEvent.currentTarget) {
       return;
     }
+
+    // Since at most one popup is open at any given time, we can set globally.
+    DownloadsCommon.indicatorData.attentionSuppressed = false;
+
+    // Allow the anchor to be hidden.
+    DownloadsButton.releaseAnchor();
 
     // Allows the panel to be reopened.
     this._panelState = this.kPanelHidden;
@@ -307,12 +316,16 @@ const DownloadsPanel = {
     this.panel.popupBoxObject.setConsumeRollupEvent(Ci.nsIPopupBoxObject
                                                       .ROLLUP_CONSUME);
 
-    // If the downloads button has been removed from the toolbar, anchor the
-    // panel to the toolbar itself.
-    this.panel.openPopup(document.getElementById("downloads-button") ||
-                         document.getElementById("nav-bar"),
-                         "bottomcenter topright", 0, 0, false, null);
+    // Ensure the anchor is visible, and if that is not possible show the panel
+    // anchored to the top area of the window, near the default anchor position.
+    let anchor = DownloadsButton.getAnchor();
+    if (anchor) {
+      this.panel.openPopup(anchor, "bottomcenter topright", 0, 0, false, null);
+    } else {
+      this.panel.openPopup(document.getElementById("TabsToolbar"),
+                           "after_end", 0, 0, false, null);
     }
+  }
 };
 
 XPCOMUtils.defineLazyGetter(DownloadsPanel, "panel", function()
