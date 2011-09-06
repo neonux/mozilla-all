@@ -1,0 +1,39 @@
+%define WINSTRIPE_AERO
+%include downloads.css
+%undef WINSTRIPE_AERO
+
+#downloadsPanel .panel-inner-arrowcontent {
+  padding: 0;
+}
+
+@media all and (-moz-windows-default-theme) {
+  #downloadsHistory {
+    background-color: #f1f5fb;
+  }
+
+  richlistitem[type="download"] {
+    border: 1px solid transparent;
+    border-bottom: 1px solid hsl(213,40%,90%);
+  }
+
+  richlistitem[type="download"][state="1"]:hover {
+    border: 1px solid hsl(213,45%,65%);
+    box-shadow: 0 0 0 1px hsla(0,0%,100%,.5) inset,
+                0 1px 0 hsla(0,0%,100%,.3) inset;
+    background-image: -moz-linear-gradient(hsl(212,86%,92%), hsl(212,91%,86%));
+    color: black;
+  }
+}
+
+@media not all and (-moz-windows-classic) {
+  richlistitem[type="download"][state="1"]:hover .downloadButton {
+    list-style-image: url("chrome://browser/skin/downloads/buttons.png");
+  }
+
+  @media all and (-moz-windows-classic) {
+    richlistitem[type="download"][state="1"]:hover .downloadDetails {
+      color: greytext;
+      opacity: 1;
+    }
+  }
+}
