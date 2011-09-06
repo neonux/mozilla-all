@@ -876,6 +876,11 @@ nsDownloadManager::Init()
   nsCOMPtr<nsINavHistoryService> history =
     do_GetService(NS_NAVHISTORYSERVICE_CONTRACTID);
 
+  (void)mObserverService->NotifyObservers(
+                                static_cast<nsIDownloadManager *>(this),
+                                "download-manager-initialized",
+                                nsnull);
+
   // The following AddObserver calls must be the last lines in this function,
   // because otherwise, this function may fail (and thus, this object would be not
   // completely initialized), but the observerservice would still keep a reference
@@ -1816,6 +1821,12 @@ nsDownloadManager::SwitchDatabaseTypeTo(enum nsDownloadManager::DatabaseType aTy
   // restoring downloads to a consistent state
   rv = RestoreDatabaseState();
   NS_ENSURE_SUCCESS(rv, rv);
+
+  // Notify that the database type changed before resuming current downloads
+  (void)mObserverService->NotifyObservers(
+                                static_cast<nsIDownloadManager *>(this),
+                                "download-manager-database-type-changed",
+                                nsnull);
 
   rv = RestoreActiveDownloads();
   NS_WARN_IF_FALSE(NS_SUCCEEDED(rv), "Failed to restore all active downloads");
