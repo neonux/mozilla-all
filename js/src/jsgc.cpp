@@ -534,7 +534,7 @@ Chunk::releaseArena(ArenaHeader *aheader)
 inline Chunk *
 AllocateGCChunk(JSRuntime *rt)
 {
-    Chunk *p = (Chunk *)rt->gcChunkAllocator->alloc();
+    Chunk *p = static_cast<Chunk *>(AllocGCChunk());
 #ifdef MOZ_GCTIMER
     if (p)
         JS_ATOMIC_INCREMENT(&newChunkCount);
@@ -549,7 +549,7 @@ ReleaseGCChunk(JSRuntime *rt, Chunk *p)
 #ifdef MOZ_GCTIMER
     JS_ATOMIC_INCREMENT(&destroyChunkCount);
 #endif
-    rt->gcChunkAllocator->free_(p);
+    FreeGCChunk(p);
 }
 
 /* The caller must hold the GC lock. */
@@ -1316,6 +1316,7 @@ ArenaLists::finalizeLater(JSContext *cx, AllocKind thingKind)
 #endif
 }
 
+#ifdef JS_THREADSAFE
 /*static*/ void
 ArenaLists::backgroundFinalize(JSContext *cx, ArenaHeader *listHead)
 {
@@ -1356,6 +1357,7 @@ ArenaLists::backgroundFinalize(JSContext *cx, ArenaHeader *listHead)
         lists->backgroundFinalizeState[thingKind] = BFS_DONE;
     }
 }
+#endif /* JS_THREADSAFE */
 
 void
 ArenaLists::finalizeObjects(JSContext *cx)
