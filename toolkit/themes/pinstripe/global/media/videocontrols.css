@@ -33,7 +33,7 @@
   background: url(chrome://global/skin/media/unmuteButton.png) no-repeat center;
 }
 
-.volumeStack:not([audioonly]) {
+.volumeStack {
   width: 28px;
   height: 70px;
   background-color: rgba(35,31,32,.74);
@@ -43,18 +43,13 @@
   position: relative; /* Trick to work around negative margin interfering with dragging the thumb. */
   padding-top: 6px;
 }
-.volumeStack[audioonly] {
-  width: 30px;
-  height: 12px;
-  margin: 8px 3px 8px 6px;
-}
 
-.volumeStack:not([audioonly]) > .volumeControl {
+.volumeControl {
   min-height: 64px;
 }
 
 /* .scale-thumb is an element inside the <scale> implementation. */
-.volumeStack:not([audioonly]) > .volumeControl .scale-thumb {
+.volumeControl .scale-thumb {
   /* Override the default thumb appearance with a custom image. */
   -moz-appearance: none;
   background: url(chrome://global/skin/media/volumeThumb.png) no-repeat center;
@@ -62,33 +57,12 @@
   min-width: 16px;
   min-height: 11px;
 }
-.volumeStack[audioonly] > .volumeControl .scale-thumb {
-  -moz-appearance: none;
-  border: none;
-  min-width: 1px;
-  min-height: 16px;
-  opacity: 0;
-}
 
-.volumeStack:not([audioonly]) > .volumeBackgroundBar {
+.volumeBackgroundBar {
   /* margin left/right: make bar 8px wide (control width = 28, minus 2 * 10 margin) */
   margin: 0 10px;
   background-color: rgba(255,255,255,.5);
   border-radius: 4px 4px;
-}
-.volumeStack[audioonly] {
-  background-image: -moz-linear-gradient(left, #777, #777 3px, transparent 3px, transparent);
-  background-size: 5px auto;
-}
-.volumeStack[audioonly]:hover {
-  background-image: -moz-linear-gradient(left, #888, #888 3px, transparent 3px, transparent);
-}
-.volumeStack[audioonly] > .volumeBackgroundBar {
-  background-image: -moz-linear-gradient(left, #ddd, #ddd 3px, transparent 3px, transparent);
-  background-size: 5px auto;
-}
-.volumeStack[audioonly]:hover > .volumeBackgroundBar {
-  background-image: -moz-linear-gradient(left, #eee, #eee 3px, transparent 3px, transparent);
 }
 
 .durationBox {
