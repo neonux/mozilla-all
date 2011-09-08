@@ -36,37 +36,26 @@
 }
 
 .volumeStack {
-  width: 28px;
-  height: 70px;
-  background-color: rgba(35,31,32,.74);
-  /* use negative margin to place stack over the mute button to its left. */
-  margin: -70px 3px 28px -31px;
-  overflow: hidden; /* crop it when sliding down, don't grow the control bar */
-  position: relative; /* Trick to work around negative margin interfering with dragging the thumb. */
-  padding-top: 6px;
-}
-
-.volumeControl {
-  min-height: 64px;
+  width: 32px;
+  margin: 7px 7px 7px 0;
+  overflow: hidden;
 }
 
 /* .scale-thumb is an element inside the <scale> implementation. */
 .volumeControl .scale-thumb {
-  /* Override the default thumb appearance with a custom image. */
   -moz-appearance: none;
-  background: url(chrome://global/skin/media/volumeThumb.png) no-repeat center;
   border: none;
-  min-width: 16px;
-  min-height: 11px;
+  min-width: 1px;
+  opacity: 0;
 }
 
 .volumeBackgroundBar {
-  /* margin left/right: make bar 8px wide (control width = 28, minus 2 * 10 margin) */
-  margin: 0 10px;
-  background-color: rgba(255,255,255,.5);
-  border-radius: 4px 4px;
+  background-image: -moz-linear-gradient(#fff, #fff),
+                    -moz-linear-gradient(rgba(255,255,255,.5), rgba(255,255,255,.5));
+  background-clip: content-box, padding-box;
+  -moz-transform: skewY(-22.5deg);
+  -moz-transform-origin: right top;
 }
-
 
 .durationBox {
   -moz-box-pack: center;
@@ -196,14 +185,6 @@
 }
 .controlBar[fadeout] {
   opacity: 0;
-}
-.volumeStack:not([immediate]) {
-  -moz-transition-property: opacity, margin-top;
-  -moz-transition-duration: 200ms, 200ms;
-}
-.volumeStack[fadeout] {
-  opacity: 0;
-  margin-top: 0;
 }
 .statusOverlay:not([immediate]) {
   -moz-transition-property: opacity;
