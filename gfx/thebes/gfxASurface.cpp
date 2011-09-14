@@ -38,7 +38,7 @@
 
 #include "nsIMemoryReporter.h"
 #include "nsMemory.h"
-#include "CheckedInt.h"
+#include "mozilla/CheckedInt.h"
 
 #include "gfxASurface.h"
 #include "gfxContext.h"

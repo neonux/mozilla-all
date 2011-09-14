@@ -61,7 +61,7 @@
 #include "GLContextProvider.h"
 #include "Layers.h"
 
-#include "CheckedInt.h"
+#include "mozilla/CheckedInt.h"
 
 class nsIDocShell;
 class nsIPropertyBag;

@@ -41,7 +41,7 @@
 #include "nsNetUtil.h"
 #include "prmem.h"
 #include "nsDOMFile.h"
-#include "CheckedInt.h"
+#include "mozilla/CheckedInt.h"
 
 #include "nsIScriptSecurityManager.h"
 #include "nsIXPConnect.h"

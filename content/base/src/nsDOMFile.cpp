@@ -62,7 +62,7 @@
 #include "nsIUUIDGenerator.h"
 #include "nsFileDataProtocolHandler.h"
 #include "nsStringStream.h"
-#include "CheckedInt.h"
+#include "mozilla/CheckedInt.h"
 #include "nsJSUtils.h"
 #include "mozilla/Preferences.h"
 

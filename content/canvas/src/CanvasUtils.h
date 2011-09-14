@@ -40,7 +40,7 @@
 
 #include "prtypes.h"
 
-#include "CheckedInt.h"
+#include "mozilla/CheckedInt.h"
 
 class nsHTMLCanvasElement;
 class nsIPrincipal;

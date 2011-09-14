@@ -37,7 +37,7 @@
  * ***** END LICENSE BLOCK ***** */
 
 
-#include "CheckedInt.h"
+#include "mozilla/CheckedInt.h"
 #include <iostream>
 
 namespace CheckedInt_test {

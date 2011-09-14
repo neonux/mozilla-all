@@ -41,7 +41,7 @@
 
 #include "mozilla/Preferences.h"
 
-#include "CheckedInt.h"
+#include "mozilla/CheckedInt.h"
 
 #include "jstypedarray.h"
 

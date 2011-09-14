@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <math.h>
 
-#include "CheckedInt.h"
+#include "mozilla/CheckedInt.h"
 #include "mozilla/Util.h"
 
 #include "mozilla/gfx/Blur.h"

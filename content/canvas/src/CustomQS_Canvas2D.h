@@ -40,7 +40,7 @@
 
 #include "nsDOMError.h"
 #include "nsIDOMCanvasRenderingContext2D.h"
-#include "CheckedInt.h"
+#include "mozilla/CheckedInt.h"
 #include "nsMathUtils.h"
 
 typedef NS_STDCALL_FUNCPROTO(nsresult, CanvasStyleSetterType, nsIDOMCanvasRenderingContext2D,

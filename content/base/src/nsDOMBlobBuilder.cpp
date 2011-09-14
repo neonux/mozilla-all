@@ -44,7 +44,7 @@
 #include "nsTArray.h"
 #include "nsJSUtils.h"
 #include "nsContentUtils.h"
-#include "CheckedInt.h"
+#include "mozilla/CheckedInt.h"
 
 // XXXkhuey shamelessly stolen from VideoUtils.h.  We should patch NSPR.
 #define PR_INT64_MAX (~((PRInt64)(1) << 63))
