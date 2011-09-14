@@ -45,8 +45,9 @@ namespace gfx {
 class SourceSurfaceCairo : public SourceSurface
 {
 public:
-  SourceSurfaceCairo();
-  ~SourceSurfaceCairo();
+  SourceSurfaceCairo(cairo_surface_t* aSurface, const IntSize& aSize,
+                     const SurfaceFormat& aFormat);
+  virtual ~SourceSurfaceCairo();
 
   virtual SurfaceType GetType() const { return SURFACE_CAIRO; }
   virtual IntSize GetSize() const;
@@ -63,6 +64,23 @@ private:
   IntSize mSize;
   SurfaceFormat mFormat;
   cairo_surface_t* mSurface;
+};
+
+class DataSourceSurfaceCairo : public DataSourceSurface
+{
+public:
+  DataSourceSurfaceCairo(cairo_surface_t* imageSurf);
+  virtual ~DataSourceSurfaceCairo();
+  virtual unsigned char *GetData();
+  virtual int32_t Stride();
+
+  virtual SurfaceType GetType() const { return SURFACE_DATA; }
+  virtual IntSize GetSize() const;
+  virtual SurfaceFormat GetFormat() const;
+  virtual TemporaryRef<DataSourceSurface> GetDataSurface();
+
+private:
+  cairo_surface_t* mImageSurface;
 };
 
 }

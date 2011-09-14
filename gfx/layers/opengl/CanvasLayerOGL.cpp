@@ -39,6 +39,7 @@
 #include "mozilla/layers/ShadowLayers.h"
 
 #include "gfxSharedImageSurface.h"
+#include "gfxPlatform.h"
 
 #include "CanvasLayerOGL.h"
 
@@ -118,8 +119,14 @@ CanvasLayerOGL::Initialize(const Data& aData)
     mGLBufferIsPremultiplied = aData.mGLBufferIsPremultiplied;
 
     mNeedsYFlip = PR_TRUE;
+  } else if (aData.mDrawTarget) {
+    mDrawTarget = aData.mDrawTarget;
+    // This needs to return the Cairo surface we draw to in the Cairo backend,
+    // since we only call this once.
+    mCanvasSurface = gfxPlatform::GetPlatform()->GetThebesSurfaceForDrawTarget(mDrawTarget);
+    mNeedsYFlip = PR_FALSE;
   } else {
-    NS_WARNING("CanvasLayerOGL::Initialize called without surface or GL context!");
+    NS_WARNING("CanvasLayerOGL::Initialize called without surface, GL context or draw target!");
     return;
   }
 
@@ -133,7 +140,7 @@ CanvasLayerOGL::Initialize(const Data& aData)
     MakeTexture();
     // This should only ever occur with 2d canvas, WebGL can't already have a texture
     // of this size can it?
-    NS_ABORT_IF_FALSE(mCanvasSurface, 
+    NS_ABORT_IF_FALSE(mCanvasSurface || mDrawTarget,
                       "Invalid texture size when WebGL surface already exists at that size?");
   }
 }
@@ -171,6 +178,10 @@ CanvasLayerOGL::UpdateSurface()
     return;
   }
 #endif
+
+  if (mDrawTarget) {
+    mDrawTarget->Flush();
+  }
 
   mOGLManager->MakeCurrent();
 

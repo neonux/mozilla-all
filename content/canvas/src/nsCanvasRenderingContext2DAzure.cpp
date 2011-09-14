@@ -989,15 +989,13 @@ PRUint8 (*nsCanvasRenderingContext2DAzure::sPremultiplyTable)[256] = nsnull;
 nsresult
 NS_NewCanvasRenderingContext2DAzure(nsIDOMCanvasRenderingContext2D** aResult)
 {
-#ifndef XP_WIN
-  return NS_ERROR_NOT_AVAILABLE;
-#else
-
+#ifdef XP_WIN
   if (gfxWindowsPlatform::GetPlatform()->GetRenderMode() !=
       gfxWindowsPlatform::RENDER_DIRECT2D ||
       !gfxWindowsPlatform::GetPlatform()->DWriteEnabled()) {
     return NS_ERROR_NOT_AVAILABLE;
   }
+#endif
 
   nsRefPtr<nsIDOMCanvasRenderingContext2D> ctx = new nsCanvasRenderingContext2DAzure();
   if (!ctx)
@@ -1005,7 +1003,6 @@ NS_NewCanvasRenderingContext2DAzure(nsIDOMCanvasRenderingContext2D** aResult)
 
   *aResult = ctx.forget().get();
   return NS_OK;
-#endif
 }
 
 nsCanvasRenderingContext2DAzure::nsCanvasRenderingContext2DAzure()

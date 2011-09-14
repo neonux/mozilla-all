@@ -65,6 +65,8 @@
 #include "GLContext.h"
 #include "pixman.h"
 
+using namespace mozilla::gfx;
+
 namespace mozilla {
 namespace layers {
 
@@ -2021,6 +2023,33 @@ BasicLayerManager::CreateReadbackLayer()
   nsRefPtr<ReadbackLayer> layer = new BasicReadbackLayer(this);
   return layer.forget();
 }
+
+static gfxASurface::gfxContentType
+SurfaceFormatToContentType(SurfaceFormat aFormat)
+{
+  switch(aFormat) {
+    case FORMAT_B8G8R8A8:
+      return gfxASurface::CONTENT_COLOR_ALPHA;
+    case FORMAT_B8G8R8X8:
+      return gfxASurface::CONTENT_COLOR;
+    case FORMAT_A8:
+      return gfxASurface::CONTENT_ALPHA;
+  }
+
+  NS_NOTREACHED("Unhandled surface format!");
+  return gfxASurface::CONTENT_COLOR_ALPHA;
+}
+
+TemporaryRef<DrawTarget>
+BasicLayerManager::CreateDrawTarget(const IntSize &aSize, SurfaceFormat aFormat)
+{
+  gfxIntSize size(aSize.width, aSize.height);
+  nsRefPtr<gfxASurface> surf =
+    gfxPlatform::GetPlatform()->CreateOffscreenSurface(size,
+                                                       SurfaceFormatToContentType(aFormat));
+  return Factory::CreateDrawTargetForCairoSurface(surf->CairoSurface());
+}
+
 
 class BasicShadowableThebesLayer;
 class BasicShadowableLayer : public ShadowableLayer

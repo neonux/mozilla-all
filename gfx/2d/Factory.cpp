@@ -135,18 +135,18 @@ Factory::GetDirect3D10Device()
 
 #endif // XP_WIN
 
-#ifdef USE_CAIRO
 TemporaryRef<DrawTarget>
 Factory::CreateDrawTargetForCairoSurface(cairo_surface_t* aSurface)
 {
+#ifdef USE_CAIRO
   RefPtr<DrawTargetCairo> newTarget = new DrawTargetCairo();
   if (newTarget->Init(aSurface)) {
     return newTarget;
   }
+#endif
 
   return NULL;
 }
-#endif
 
 }
 }

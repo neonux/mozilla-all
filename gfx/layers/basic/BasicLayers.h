@@ -177,6 +177,10 @@ public:
   virtual bool HasShadowManagerInternal() const { return false; }
   bool HasShadowManager() const { return HasShadowManagerInternal(); }
 
+  virtual TemporaryRef<mozilla::gfx::DrawTarget>
+    CreateDrawTarget(const mozilla::gfx::IntSize &aSize,
+                     mozilla::gfx::SurfaceFormat aFormat);
+
 protected:
 #ifdef DEBUG
   enum TransactionPhase {

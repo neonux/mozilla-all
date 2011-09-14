@@ -42,8 +42,46 @@
 namespace mozilla {
 namespace gfx {
 
-SourceSurfaceCairo::SourceSurfaceCairo()
+static cairo_format_t
+GfxFormatToCairoFormat(SurfaceFormat format)
 {
+  switch (format)
+  {
+    case FORMAT_B8G8R8A8:
+      return CAIRO_FORMAT_ARGB32;
+    case FORMAT_B8G8R8X8:
+      return CAIRO_FORMAT_RGB24;
+    case FORMAT_A8:
+      return CAIRO_FORMAT_A8;
+  }
+
+  return CAIRO_FORMAT_ARGB32;
+}
+
+static SurfaceFormat
+CairoFormatToSurfaceFormat(cairo_format_t format)
+{
+  switch (format)
+  {
+    case CAIRO_FORMAT_ARGB32:
+      return FORMAT_B8G8R8A8;
+    case CAIRO_FORMAT_RGB24:
+      return FORMAT_B8G8R8X8;
+    case CAIRO_FORMAT_A8:
+      return FORMAT_A8;
+  }
+
+  return FORMAT_B8G8R8A8;
+}
+
+SourceSurfaceCairo::SourceSurfaceCairo(cairo_surface_t* aSurface,
+                                       const IntSize& aSize,
+                                       const SurfaceFormat& aFormat)
+ : mSize(aSize)
+ , mFormat(aFormat)
+ , mSurface(aSurface)
+{
+  cairo_surface_reference(mSurface);
 }
 
 SourceSurfaceCairo::~SourceSurfaceCairo()
@@ -66,7 +104,26 @@ SourceSurfaceCairo::GetFormat() const
 TemporaryRef<DataSourceSurface>
 SourceSurfaceCairo::GetDataSurface()
 {
-  return NULL;
+  RefPtr<DataSourceSurfaceCairo> dataSurf;
+
+  if (cairo_surface_get_type(mSurface) == CAIRO_SURFACE_TYPE_IMAGE) {
+    dataSurf = new DataSourceSurfaceCairo(mSurface);
+  } else {
+    cairo_surface_t* imageSurf = cairo_image_surface_create(GfxFormatToCairoFormat(mFormat),
+                                                            mSize.width, mSize.height);
+
+    // Fill the new image surface with the contents of our surface.
+    cairo_t* ctx = cairo_create(imageSurf);
+    cairo_pattern_t* pat = cairo_pattern_create_for_surface(mSurface);
+    cairo_set_source(ctx, pat);
+    cairo_paint(ctx);
+    cairo_destroy(ctx);
+
+    dataSurf = new DataSourceSurfaceCairo(imageSurf);
+    cairo_surface_destroy(imageSurf);
+  }
+
+  return dataSurf;
 }
 
 cairo_surface_t*
@@ -75,17 +132,49 @@ SourceSurfaceCairo::GetSurface()
   return mSurface;
 }
 
-bool
-SourceSurfaceCairo::InitFromSurface(cairo_surface_t* aSurface,
-                                    const IntSize& aSize,
-                                    const SurfaceFormat& aFormat)
+DataSourceSurfaceCairo::DataSourceSurfaceCairo(cairo_surface_t* imageSurf)
+ : mImageSurface(imageSurf)
 {
-  mSurface = aSurface;
-  cairo_surface_reference(mSurface);
-  mSize = aSize;
-  mFormat = aFormat;
+  cairo_surface_reference(mImageSurface);
+}
 
-  return true;
+DataSourceSurfaceCairo::~DataSourceSurfaceCairo()
+{
+  cairo_surface_destroy(mImageSurface);
+}
+
+unsigned char *
+DataSourceSurfaceCairo::GetData()
+{
+  return cairo_image_surface_get_data(mImageSurface);
+}
+
+int32_t
+DataSourceSurfaceCairo::Stride()
+{
+  return cairo_image_surface_get_stride(mImageSurface);
+}
+
+IntSize
+DataSourceSurfaceCairo::GetSize() const
+{
+  IntSize size;
+  size.width = cairo_image_surface_get_width(mImageSurface);
+  size.height = cairo_image_surface_get_height(mImageSurface);
+
+  return size;
+}
+
+SurfaceFormat
+DataSourceSurfaceCairo::GetFormat() const
+{
+  return CairoFormatToSurfaceFormat(cairo_image_surface_get_format(mImageSurface));
+}
+
+TemporaryRef<DataSourceSurface>
+DataSourceSurfaceCairo::GetDataSurface()
+{
+  return this;
 }
 
 }

@@ -45,6 +45,7 @@
 #include "GLXLibrary.h"
 #include "mozilla/X11Util.h"
 #endif
+#include "mozilla/gfx/2d.h"
 
 namespace mozilla {
 namespace layers {
@@ -81,6 +82,7 @@ protected:
 
   nsRefPtr<gfxASurface> mCanvasSurface;
   nsRefPtr<GLContext> mCanvasGLContext;
+  mozilla::RefPtr<mozilla::gfx::DrawTarget> mDrawTarget;
   gl::ShaderProgramType mLayerProgram;
 
   void MakeTexture();

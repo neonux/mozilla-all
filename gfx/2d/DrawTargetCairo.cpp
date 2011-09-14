@@ -37,6 +37,17 @@
 #include "DrawTargetCairo.h"
 #include "SourceSurfaceCairo.h"
 
+#include "cairo.h"
+
+#ifdef CAIRO_HAS_QUARTZ_SURFACE
+#include "cairo-quartz.h"
+#include <ApplicationServices/ApplicationServices.h>
+#endif
+
+#ifdef CAIRO_HAS_XLIB_SURFACE
+#include "cairo-xlib.h"
+#endif
+
 namespace mozilla {
 namespace gfx {
 
@@ -90,6 +101,22 @@ GfxFormatToCairoFormat(SurfaceFormat format)
   return CAIRO_FORMAT_ARGB32;
 }
 
+cairo_content_t
+GfxFormatToCairoContent(SurfaceFormat format)
+{
+  switch(format)
+  {
+    case FORMAT_B8G8R8A8:
+      return CAIRO_CONTENT_COLOR_ALPHA;
+    case FORMAT_B8G8R8X8:
+      return CAIRO_CONTENT_COLOR;
+    case FORMAT_A8:
+      return CAIRO_CONTENT_ALPHA;
+  }
+
+  return CAIRO_CONTENT_COLOR_ALPHA;
+}
+
 void
 GfxMatrixToCairoMatrix(const Matrix& mat, cairo_matrix_t& retval)
 {
@@ -120,18 +147,28 @@ DrawTargetCairo::Flush()
 }
 
 void
+DrawTargetCairo::PrepareForDrawing(cairo_t* aContext)
+{
+  cairo_matrix_t mat;
+  GfxMatrixToCairoMatrix(mTransform, mat);
+  cairo_set_matrix(aContext, &mat);
+}
+
+void
 DrawTargetCairo::DrawSurface(SourceSurface *aSurface,
                              const Rect &aDest,
                              const Rect &aSource,
                              const DrawSurfaceOptions &aSurfOptions,
                              const DrawOptions &aOptions)
 {
+  PrepareForDrawing(mContext);
+
   float sx = aSource.Width() / aDest.Width();
   float sy = aSource.Height() / aDest.Height();
 
   cairo_matrix_t src_mat;
   cairo_matrix_init_scale(&src_mat, sx, sy);
-  cairo_matrix_translate(&src_mat, -aSource.X(), -aSource.Y());
+  cairo_matrix_translate(&src_mat, aSource.X(), aSource.Y());
 
   cairo_surface_t* surf = NULL;
   if (aSurface->GetType() == SURFACE_CAIRO) {
@@ -142,10 +179,20 @@ DrawTargetCairo::DrawSurface(SourceSurface *aSurface,
   cairo_pattern_set_matrix(pat, &src_mat);
   cairo_pattern_set_filter(pat, GfxFilterToCairoFilter(aSurfOptions.mFilter));
 
+  cairo_save(mContext);
+
   cairo_set_operator(mContext, GfxOpToCairoOp(aOptions.mCompositionOp));
-  cairo_rectangle(mContext, aDest.X(), aDest.Y(),
-                  aDest.Width(), aDest.Height());
-  cairo_fill(mContext);
+
+  cairo_translate(mContext, aDest.X(), aDest.Y());
+
+  cairo_set_source(mContext, pat);
+
+  cairo_new_path(mContext);
+  cairo_rectangle(mContext, 0, 0, aDest.Width(), aDest.Height());
+  cairo_clip(mContext);
+  cairo_paint(mContext);
+
+  cairo_restore(mContext);
 
   cairo_pattern_destroy(pat);
 }
@@ -155,6 +202,10 @@ DrawTargetCairo::FillRect(const Rect &aRect,
                           const Pattern &aPattern,
                           const DrawOptions &aOptions)
 {
+  PrepareForDrawing(mContext);
+
+  cairo_save(mContext);
+
   cairo_new_path(mContext);
   cairo_rectangle(mContext, aRect.x, aRect.y, aRect.Width(), aRect.Height());
 
@@ -167,6 +218,24 @@ DrawTargetCairo::FillRect(const Rect &aRect,
   }
 
   cairo_fill(mContext);
+
+  cairo_restore(mContext);
+}
+
+void
+DrawTargetCairo::ClearRect(const Rect& aRect)
+{
+  PrepareForDrawing(mContext);
+
+  cairo_save(mContext);
+
+  cairo_new_path(mContext);
+  cairo_set_operator(mContext, CAIRO_OPERATOR_CLEAR);
+  cairo_rectangle(mContext, aRect.X(), aRect.Y(),
+                  aRect.Width(), aRect.Height());
+  cairo_fill(mContext);
+
+  cairo_restore(mContext);
 }
 
 TemporaryRef<SourceSurface>
@@ -180,8 +249,7 @@ DrawTargetCairo::CreateSourceSurfaceFromData(unsigned char *aData,
                                                               aSize.width,
                                                               aSize.height,
                                                               aStride);
-  RefPtr<SourceSurfaceCairo> source_surf = new SourceSurfaceCairo();
-  source_surf->InitFromSurface(surf, aSize, aFormat);
+  RefPtr<SourceSurfaceCairo> source_surf = new SourceSurfaceCairo(surf, aSize, aFormat);
   cairo_surface_destroy(surf);
   return source_surf;
 }
@@ -189,12 +257,76 @@ DrawTargetCairo::CreateSourceSurfaceFromData(unsigned char *aData,
 TemporaryRef<SourceSurface>
 DrawTargetCairo::OptimizeSourceSurface(SourceSurface *aSurface) const
 {
-  return NULL;
+  return aSurface;
+}
+
+static bool
+GetCairoSurfaceSize(cairo_surface_t* surface, IntSize& size)
+{
+  switch (cairo_surface_get_type(surface)) {
+    case CAIRO_SURFACE_TYPE_IMAGE:
+    {
+      size.width = cairo_image_surface_get_width(surface);
+      size.height = cairo_image_surface_get_height(surface);
+      return true;
+    }
+
+#ifdef CAIRO_HAS_XLIB_SURFACE
+    case CAIRO_SURFACE_TYPE_XLIB:
+    {
+      size.width = cairo_xlib_surface_get_width(surface);
+      size.height = cairo_xlib_surface_get_height(surface);
+      return true;
+    }
+#endif
+
+#ifdef CAIRO_HAS_QUARTZ_SURFACE
+    case CAIRO_SURFACE_TYPE_QUARTZ:
+    {
+      CGContextRef cgc = cairo_quartz_surface_get_cg_context(surface);
+
+      // It's valid to call these CGBitmapContext functions on non-bitmap
+      // contexts; they'll just return 0 in that case.
+      size.width = CGBitmapContextGetWidth(cgc);
+      size.height = CGBitmapContextGetWidth(cgc);
+      return size.width != 0;
+    }
+#endif
+
+    default:
+      return false;
+  }
 }
 
 TemporaryRef<SourceSurface>
 DrawTargetCairo::CreateSourceSurfaceFromNativeSurface(const NativeSurface &aSurface) const
 {
+  if (aSurface.mType == NATIVE_SURFACE_CAIRO_SURFACE) {
+    IntSize size;
+    cairo_surface_t* surf = static_cast<cairo_surface_t*>(aSurface.mSurface);
+    if (GetCairoSurfaceSize(surf, size)) {
+      RefPtr<SourceSurfaceCairo> sourcesurf =
+        new SourceSurfaceCairo(surf, size, aSurface.mFormat);
+      return sourcesurf;
+    }
+  }
+
+  return NULL;
+}
+
+TemporaryRef<DrawTarget>
+DrawTargetCairo::CreateSimilarDrawTarget(const IntSize &aSize, SurfaceFormat aFormat) const
+{
+  cairo_surface_t* similar = cairo_surface_create_similar(cairo_get_target(mContext),
+                                                          GfxFormatToCairoContent(aFormat),
+                                                          aSize.width, aSize.height);
+
+  if (!cairo_surface_status(similar)) {
+    RefPtr<DrawTargetCairo> target = new DrawTargetCairo();
+    target->Init(similar);
+    return target;
+  }
+
   return NULL;
 }
 
@@ -206,13 +338,14 @@ DrawTargetCairo::Init(cairo_surface_t* aSurface)
   return true;
 }
 
-void
-DrawTargetCairo::SetTransform(const Matrix& aTransform)
+void *
+DrawTargetCairo::GetNativeSurface(NativeSurfaceType aType)
 {
-  cairo_matrix_t mat;
-  GfxMatrixToCairoMatrix(aTransform, mat);
-  cairo_set_matrix(mContext, &mat);
-  mTransform = aTransform;
+  if (aType == NATIVE_SURFACE_CAIRO_SURFACE) {
+    return cairo_get_target(mContext);
+  }
+
+  return NULL;
 }
 
 }

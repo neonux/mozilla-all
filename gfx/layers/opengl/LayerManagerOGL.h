@@ -45,6 +45,7 @@
 #include "mozilla/layers/ShadowLayers.h"
 
 #include "mozilla/TimeStamp.h"
+#include "mozilla/gfx/2d.h"
 
 #ifdef XP_WIN
 #include <windows.h>
@@ -171,6 +172,9 @@ public:
 
   virtual LayersBackend GetBackendType() { return LAYERS_OPENGL; }
   virtual void GetBackendName(nsAString& name) { name.AssignLiteral("OpenGL"); }
+
+  virtual TemporaryRef<mozilla::gfx::DrawTarget>
+    CreateDrawTarget(const mozilla::gfx::IntSize &aSize, mozilla::gfx::SurfaceFormat aFormat);
 
   /**
    * Image Container management.

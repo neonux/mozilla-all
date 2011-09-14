@@ -67,8 +67,7 @@ public:
                                      CompositionOp aOperator)
   { }
 
-  virtual void ClearRect(const Rect &aRect)
-  { }
+  virtual void ClearRect(const Rect &aRect);
 
   virtual void CopySurface(SourceSurface *aSurface,
                            const IntRect &aSourceRect,
@@ -120,20 +119,17 @@ public:
   virtual TemporaryRef<SourceSurface>
     CreateSourceSurfaceFromNativeSurface(const NativeSurface &aSurface) const;
   virtual TemporaryRef<DrawTarget>
-    CreateSimilarDrawTarget(const IntSize &aSize, SurfaceFormat aFormat) const
-  { return NULL; }
+    CreateSimilarDrawTarget(const IntSize &aSize, SurfaceFormat aFormat) const;
 
   virtual TemporaryRef<GradientStops> CreateGradientStops(GradientStop *aStops, uint32_t aNumStops) const
   { return NULL; }
 
-  virtual void *GetNativeSurface(NativeSurfaceType aType)
-  { return NULL; }
-
-  virtual void SetTransform(const Matrix& aTransform);
+  virtual void *GetNativeSurface(NativeSurfaceType aType);
 
   bool Init(cairo_surface_t* aSurface);
 
 private:
+  void PrepareForDrawing(cairo_t* aContext);
 
   cairo_t* mContext;
 };

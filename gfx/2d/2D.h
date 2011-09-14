@@ -688,9 +688,7 @@ protected:
 class Factory
 {
 public:
-#ifdef USE_CAIRO
   static TemporaryRef<DrawTarget> CreateDrawTargetForCairoSurface(cairo_surface_t* aSurface);
-#endif
 
   static TemporaryRef<DrawTarget> CreateDrawTarget(BackendType aBackend, const IntSize &aSize, SurfaceFormat aFormat);
   static TemporaryRef<ScaledFont> CreateScaledFontForNativeFont(const NativeFont &aNativeFont, Float aSize);

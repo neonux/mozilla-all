@@ -414,17 +414,22 @@ cairo_user_data_key_t kDrawTarget;
 RefPtr<DrawTarget>
 gfxPlatform::CreateDrawTargetForSurface(gfxASurface *aSurface)
 {
+  RefPtr<DrawTarget> drawTarget;
+
 #ifdef XP_WIN
   if (aSurface->GetType() == gfxASurface::SurfaceTypeD2D) {
-    RefPtr<DrawTarget> drawTarget =
-      Factory::CreateDrawTargetForD3D10Texture(static_cast<gfxD2DSurface*>(aSurface)->GetTexture(), FORMAT_B8G8R8A8);
-    aSurface->SetData(&kDrawTarget, drawTarget, NULL);
-    return drawTarget;
+    drawTarget = Factory::CreateDrawTargetForD3D10Texture(static_cast<gfxD2DSurface*>(aSurface)->GetTexture(), FORMAT_B8G8R8A8);
   }
 #endif
 
-  // Can't create a draw target for general cairo surfaces yet.
-  return NULL;
+  if (!drawTarget) {
+    drawTarget = Factory::CreateDrawTargetForCairoSurface(aSurface->CairoSurface());
+  }
+
+  if (drawTarget)
+    aSurface->SetData(&kDrawTarget, drawTarget, NULL);
+
+  return drawTarget;
 }
 
 cairo_user_data_key_t kSourceSurface;
@@ -452,6 +457,12 @@ gfxPlatform::GetSourceSurfaceForSurface(DrawTarget *aTarget, gfxASurface *aSurfa
     format = FORMAT_B8G8R8A8;
   }
 
+  // Flush any pending draws on an associated DrawTarget.
+  mozilla::gfx::DrawTarget *dt = static_cast<mozilla::gfx::DrawTarget*>(aSurface->GetData(&kDrawTarget));
+  if (dt) {
+    dt->Flush();
+  }
+
   RefPtr<SourceSurface> srcBuffer;
 
 #ifdef XP_WIN
@@ -460,14 +471,20 @@ gfxPlatform::GetSourceSurfaceForSurface(DrawTarget *aTarget, gfxASurface *aSurfa
     surf.mFormat = format;
     surf.mType = NATIVE_SURFACE_D3D10_TEXTURE;
     surf.mSurface = static_cast<gfxD2DSurface*>(aSurface)->GetTexture();
-    mozilla::gfx::DrawTarget *dt = static_cast<mozilla::gfx::DrawTarget*>(aSurface->GetData(&kDrawTarget));
-    if (dt) {
-      dt->Flush();
-    }
     srcBuffer = aTarget->CreateSourceSurfaceFromNativeSurface(surf);
   }
 #endif
 
+  if (!srcBuffer) {
+    NativeSurface surf;
+    surf.mFormat = format;
+    surf.mType = NATIVE_SURFACE_CAIRO_SURFACE;
+    surf.mSurface = aSurface->CairoSurface();
+    srcBuffer = aTarget->CreateSourceSurfaceFromNativeSurface(surf);
+  }
+
+  // Last resort: convert the surface to an image surface and create the source
+  // surface from that.
   if (!srcBuffer) {
     nsRefPtr<gfxImageSurface> imgSurface = aSurface->GetAsImageSurface();
 
@@ -500,7 +517,13 @@ gfxPlatform::GetScaledFontForFont(gfxFont *aFont)
 already_AddRefed<gfxASurface>
 gfxPlatform::GetThebesSurfaceForDrawTarget(DrawTarget *aTarget)
 {
-  // Don't know how to do this outside of Windows with D2D yet.
+  if (aTarget->GetType() == BACKEND_CAIRO) {
+    cairo_surface_t* csurf =
+      static_cast<cairo_surface_t*>(aTarget->GetNativeSurface(NATIVE_SURFACE_CAIRO_SURFACE));
+
+    return gfxASurface::Wrap(csurf);
+  }
+
   return NULL;
 }
 
