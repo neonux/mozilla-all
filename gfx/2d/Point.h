@@ -59,7 +59,8 @@ struct Point :
 
   Point() : Super() {}
   Point(Float aX, Float aY) : Super(aX, aY) {}
-  Point(const IntPoint& point) : Super(point.x, point.y) {}
+  Point(const IntPoint& point) : Super(Float(point.x),
+                                       Float(point.y)) {}
 };
 
 struct IntSize :
@@ -76,7 +77,7 @@ struct Size :
 
   Size() : Super() {}
   Size(Float aWidth, Float aHeight) : Super(aWidth, aHeight) {}
-  Size(const IntSize& size) : Super(size.width, size.height) {}
+  Size(const IntSize& size) : Super(Float(size.width), Float(size.height)) {}
 };
 
 }

@@ -63,6 +63,34 @@ int sGfxLogLevel = LOG_DEBUG;
 ID3D10Device1 *Factory::mD3D10Device;
 #endif
 
+class SimpleDataSourceSurface : public DataSourceSurface
+{
+public:
+  SimpleDataSourceSurface(unsigned char *aData, int32_t aStride,
+                          const IntSize &aSize, SurfaceFormat aFormat,
+                          bool aOwned)
+    : mData(aData)
+    , mStride(aStride)
+    , mSize(aSize)
+    , mFormat(aFormat)
+    , mOwned(aOwned)
+  {}
+  virtual ~SimpleDataSourceSurface()
+  { if (mOwned) delete [] mData; }
+
+  virtual unsigned char *GetData() { return mData; }
+  virtual int32_t Stride() { return mStride; }
+  virtual IntSize GetSize() const { return mSize; }
+  virtual SurfaceFormat GetFormat() const { return mFormat; }
+
+private:
+  unsigned char *mData;
+  int32_t mStride;
+  IntSize mSize;
+  SurfaceFormat mFormat;
+  bool mOwned;
+};
+
 TemporaryRef<DrawTarget>
 Factory::CreateDrawTarget(BackendType aBackend, const IntSize &aSize, SurfaceFormat aFormat)
 {
@@ -146,6 +174,38 @@ Factory::CreateDrawTargetForCairoSurface(cairo_surface_t* aSurface)
 #endif
 
   return NULL;
+}
+
+TemporaryRef<DataSourceSurface>
+Factory::CreateDataSourceSurface(const IntSize &aSize, SurfaceFormat aFormat)
+{
+  uint32_t bytesPerPixel = 1;
+
+  switch (aFormat) {
+  case FORMAT_A8:
+    bytesPerPixel = 1;
+  default:
+    bytesPerPixel = 4;
+  }
+
+  unsigned char *data =
+    new unsigned char[aSize.width * aSize.height * bytesPerPixel];
+
+  RefPtr<DataSourceSurface> surf =
+    new SimpleDataSourceSurface(data, aSize.width * bytesPerPixel,
+                                aSize, aFormat, true);
+
+  return surf;
+}
+
+TemporaryRef<DataSourceSurface>
+Factory::CreateDataSourceSurfaceFromData(unsigned char *aData, int32_t aStride,
+                                         const IntSize &aSize, SurfaceFormat aFormat)
+{
+  RefPtr<DataSourceSurface> surf =
+    new SimpleDataSourceSurface(aData, aStride, aSize, aFormat, false);
+
+  return surf;
 }
 
 }
