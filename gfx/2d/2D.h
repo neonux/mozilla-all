@@ -311,6 +311,7 @@ public:
 class DataSourceSurface : public SourceSurface
 {
 public:
+  virtual SurfaceType GetType() const { return SURFACE_DATA; }
   /* Get the raw bitmap data of the surface */
   virtual unsigned char *GetData() = 0;
   /*
@@ -318,6 +319,12 @@ public:
    * data belonging to row y and row y+1. This may be negative.
    */
   virtual int32_t Stride() = 0;
+
+  /*
+   * This fucntion is called after modifying the data on the source surface
+   * directly through the data pointer.
+   */
+  virtual void MarkDirty() {}
 
   virtual TemporaryRef<DataSourceSurface> GetDataSurface() { RefPtr<DataSourceSurface> temp = this; return temp.forget(); }
 };
@@ -690,8 +697,29 @@ class Factory
 public:
   static TemporaryRef<DrawTarget> CreateDrawTargetForCairoSurface(cairo_surface_t* aSurface);
 
-  static TemporaryRef<DrawTarget> CreateDrawTarget(BackendType aBackend, const IntSize &aSize, SurfaceFormat aFormat);
-  static TemporaryRef<ScaledFont> CreateScaledFontForNativeFont(const NativeFont &aNativeFont, Float aSize);
+  static TemporaryRef<DrawTarget>
+    CreateDrawTarget(BackendType aBackend, const IntSize &aSize, SurfaceFormat aFormat);
+
+  static TemporaryRef<ScaledFont>
+    CreateScaledFontForNativeFont(const NativeFont &aNativeFont, Float aSize);
+
+  /*
+   * This creates a simple data source surface for a certain size. It allocates
+   * new memory for the surface. This memory is freed when the surface is
+   * destroyed.
+   */
+  static TemporaryRef<DataSourceSurface>
+    CreateDataSourceSurface(const IntSize &aSize, SurfaceFormat aFormat);
+  
+  /*
+   * This creates a simple data source surface for some existing data. It will
+   * wrap this data and the data for this source surface. The caller is
+   * responsible for deallocating the memory only after destruction of the
+   * surface.
+   */
+  static TemporaryRef<DataSourceSurface>
+    CreateDataSourceSurfaceFromData(unsigned char *aData, int32_t aStride,
+                                    const IntSize &aSize, SurfaceFormat aFormat);
 
 #ifdef WIN32
   static TemporaryRef<DrawTarget> CreateDrawTargetForD3D10Texture(ID3D10Texture2D *aTexture, SurfaceFormat aFormat);
