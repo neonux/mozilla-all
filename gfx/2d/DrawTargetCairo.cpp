@@ -48,10 +48,12 @@
 #include "cairo-xlib.h"
 #endif
 
+#include <algorithm>
+
 namespace mozilla {
 namespace gfx {
 
-cairo_operator_t
+static cairo_operator_t
 GfxOpToCairoOp(CompositionOp op)
 {
   switch (op)
@@ -71,7 +73,7 @@ GfxOpToCairoOp(CompositionOp op)
   return CAIRO_OPERATOR_OVER;
 }
 
-cairo_filter_t
+static cairo_filter_t
 GfxFilterToCairoFilter(Filter filter)
 {
   switch (filter)
@@ -85,7 +87,7 @@ GfxFilterToCairoFilter(Filter filter)
   return CAIRO_FILTER_BILINEAR;
 }
 
-cairo_format_t
+static cairo_format_t
 GfxFormatToCairoFormat(SurfaceFormat format)
 {
   switch (format)
@@ -101,7 +103,7 @@ GfxFormatToCairoFormat(SurfaceFormat format)
   return CAIRO_FORMAT_ARGB32;
 }
 
-cairo_content_t
+static cairo_content_t
 GfxFormatToCairoContent(SurfaceFormat format)
 {
   switch(format)
@@ -117,6 +119,60 @@ GfxFormatToCairoContent(SurfaceFormat format)
   return CAIRO_CONTENT_COLOR_ALPHA;
 }
 
+static SurfaceFormat
+CairoContentToGfxFormat(cairo_content_t content)
+{
+  switch(content)
+  {
+    case CAIRO_CONTENT_COLOR_ALPHA:
+      return FORMAT_B8G8R8A8;
+    case CAIRO_CONTENT_COLOR:
+      return FORMAT_B8G8R8X8;
+    case CAIRO_CONTENT_ALPHA:
+      return FORMAT_A8;
+  }
+
+  return FORMAT_B8G8R8A8;
+}
+
+static bool
+GetCairoSurfaceSize(cairo_surface_t* surface, IntSize& size)
+{
+  switch (cairo_surface_get_type(surface)) {
+    case CAIRO_SURFACE_TYPE_IMAGE:
+    {
+      size.width = cairo_image_surface_get_width(surface);
+      size.height = cairo_image_surface_get_height(surface);
+      return true;
+    }
+
+#ifdef CAIRO_HAS_XLIB_SURFACE
+    case CAIRO_SURFACE_TYPE_XLIB:
+    {
+      size.width = cairo_xlib_surface_get_width(surface);
+      size.height = cairo_xlib_surface_get_height(surface);
+      return true;
+    }
+#endif
+
+#ifdef CAIRO_HAS_QUARTZ_SURFACE
+    case CAIRO_SURFACE_TYPE_QUARTZ:
+    {
+      CGContextRef cgc = cairo_quartz_surface_get_cg_context(surface);
+
+      // It's valid to call these CGBitmapContext functions on non-bitmap
+      // contexts; they'll just return 0 in that case.
+      size.width = CGBitmapContextGetWidth(cgc);
+      size.height = CGBitmapContextGetWidth(cgc);
+      return size.width != 0;
+    }
+#endif
+
+    default:
+      return false;
+  }
+}
+
 void
 GfxMatrixToCairoMatrix(const Matrix& mat, cairo_matrix_t& retval)
 {
@@ -130,12 +186,30 @@ DrawTargetCairo::DrawTargetCairo()
 
 DrawTargetCairo::~DrawTargetCairo()
 {
+  MarkSnapshotsIndependent();
   cairo_destroy(mContext);
+}
+
+IntSize
+DrawTargetCairo::GetSize()
+{
+  return IntSize();
 }
 
 TemporaryRef<SourceSurface>
 DrawTargetCairo::Snapshot()
 {
+  cairo_surface_t* csurf = cairo_get_target(mContext);
+  IntSize size;
+  if (GetCairoSurfaceSize(csurf, size)) {
+    cairo_content_t content = cairo_surface_get_content(csurf);
+    RefPtr<SourceSurfaceCairo> surf = new SourceSurfaceCairo(csurf, size,
+                                                             CairoContentToGfxFormat(content),
+                                                             this);
+    AppendSnapshot(surf);
+    return surf;
+  }
+
   return NULL;
 }
 
@@ -149,6 +223,8 @@ DrawTargetCairo::Flush()
 void
 DrawTargetCairo::PrepareForDrawing(cairo_t* aContext)
 {
+  MarkChanged();
+
   cairo_matrix_t mat;
   GfxMatrixToCairoMatrix(mTransform, mat);
   cairo_set_matrix(aContext, &mat);
@@ -198,6 +274,17 @@ DrawTargetCairo::DrawSurface(SourceSurface *aSurface,
 }
 
 void
+DrawTargetCairo::DrawSurfaceWithShadow(SourceSurface *aSurface,
+                                       const Point &aDest,
+                                       const Color &aColor,
+                                       const Point &aOffset,
+                                       Float aSigma,
+                                       CompositionOp aOperator)
+{
+  PrepareForDrawing(mContext);
+}
+
+void
 DrawTargetCairo::FillRect(const Rect &aRect,
                           const Pattern &aPattern,
                           const DrawOptions &aOptions)
@@ -223,6 +310,14 @@ DrawTargetCairo::FillRect(const Rect &aRect,
 }
 
 void
+DrawTargetCairo::CopySurface(SourceSurface *aSurface,
+                             const IntRect &aSourceRect,
+                             const IntPoint &aDestination)
+{
+  PrepareForDrawing(mContext);
+}
+
+void
 DrawTargetCairo::ClearRect(const Rect& aRect)
 {
   PrepareForDrawing(mContext);
@@ -236,6 +331,73 @@ DrawTargetCairo::ClearRect(const Rect& aRect)
   cairo_fill(mContext);
 
   cairo_restore(mContext);
+}
+
+void
+DrawTargetCairo::StrokeRect(const Rect &aRect,
+                          const Pattern &aPattern,
+                          const StrokeOptions &aStrokeOptions /* = StrokeOptions() */,
+                          const DrawOptions &aOptions /* = DrawOptions() */)
+{
+  PrepareForDrawing(mContext);
+}
+
+void
+DrawTargetCairo::StrokeLine(const Point &aStart,
+                            const Point &aEnd,
+                            const Pattern &aPattern,
+                            const StrokeOptions &aStrokeOptions /* = StrokeOptions() */,
+                            const DrawOptions &aOptions /* = DrawOptions() */)
+{
+  PrepareForDrawing(mContext);
+}
+
+void
+DrawTargetCairo::Stroke(const Path *aPath,
+                        const Pattern &aPattern,
+                        const StrokeOptions &aStrokeOptions /* = StrokeOptions() */,
+                        const DrawOptions &aOptions /* = DrawOptions() */)
+{
+  PrepareForDrawing(mContext);
+}
+
+void
+DrawTargetCairo::Fill(const Path *aPath,
+                      const Pattern &aPattern,
+                      const DrawOptions &aOptions /* = DrawOptions() */)
+{
+  PrepareForDrawing(mContext);
+}
+
+void
+DrawTargetCairo::FillGlyphs(ScaledFont *aFont,
+                            const GlyphBuffer &aBuffer,
+                            const Pattern &aPattern,
+                            const DrawOptions &aOptions)
+{
+  PrepareForDrawing(mContext);
+}
+
+void
+DrawTargetCairo::PushClip(const Path *aPath)
+{
+}
+
+void
+DrawTargetCairo::PopClip()
+{
+}
+
+TemporaryRef<PathBuilder>
+DrawTargetCairo::CreatePathBuilder(FillRule aFillRule /* = FILL_WINDING */) const
+{
+  return NULL;
+}
+
+TemporaryRef<GradientStops>
+DrawTargetCairo::CreateGradientStops(GradientStop *aStops, uint32_t aNumStops) const
+{
+  return NULL;
 }
 
 TemporaryRef<SourceSurface>
@@ -258,44 +420,6 @@ TemporaryRef<SourceSurface>
 DrawTargetCairo::OptimizeSourceSurface(SourceSurface *aSurface) const
 {
   return aSurface;
-}
-
-static bool
-GetCairoSurfaceSize(cairo_surface_t* surface, IntSize& size)
-{
-  switch (cairo_surface_get_type(surface)) {
-    case CAIRO_SURFACE_TYPE_IMAGE:
-    {
-      size.width = cairo_image_surface_get_width(surface);
-      size.height = cairo_image_surface_get_height(surface);
-      return true;
-    }
-
-#ifdef CAIRO_HAS_XLIB_SURFACE
-    case CAIRO_SURFACE_TYPE_XLIB:
-    {
-      size.width = cairo_xlib_surface_get_width(surface);
-      size.height = cairo_xlib_surface_get_height(surface);
-      return true;
-    }
-#endif
-
-#ifdef CAIRO_HAS_QUARTZ_SURFACE
-    case CAIRO_SURFACE_TYPE_QUARTZ:
-    {
-      CGContextRef cgc = cairo_quartz_surface_get_cg_context(surface);
-
-      // It's valid to call these CGBitmapContext functions on non-bitmap
-      // contexts; they'll just return 0 in that case.
-      size.width = CGBitmapContextGetWidth(cgc);
-      size.height = CGBitmapContextGetWidth(cgc);
-      return size.width != 0;
-    }
-#endif
-
-    default:
-      return false;
-  }
 }
 
 TemporaryRef<SourceSurface>
@@ -347,6 +471,47 @@ DrawTargetCairo::GetNativeSurface(NativeSurfaceType aType)
 
   return NULL;
 }
+
+void
+DrawTargetCairo::MarkSnapshotsIndependent()
+{
+  for (std::vector<SourceSurfaceCairo*>::iterator iter = mSnapshots.begin();
+       iter != mSnapshots.end();
+       ++iter) {
+    (*iter)->MarkIndependent();
+  }
+}
+
+void
+DrawTargetCairo::AppendSnapshot(SourceSurfaceCairo* aSnapshot)
+{
+  mSnapshots.push_back(aSnapshot);
+}
+
+void
+DrawTargetCairo::RemoveSnapshot(SourceSurfaceCairo* aSnapshot)
+{
+  std::vector<SourceSurfaceCairo*>::iterator iter = std::find(mSnapshots.begin(),
+                                                              mSnapshots.end(),
+                                                              aSnapshot);
+  if (iter != mSnapshots.end()) {
+    mSnapshots.erase(iter);
+  }
+}
+
+void
+DrawTargetCairo::MarkChanged()
+{
+  if (!mSnapshots.empty()) {
+    for (std::vector<SourceSurfaceCairo*>::iterator iter = mSnapshots.begin();
+         iter != mSnapshots.end(); ++iter) {
+      (*iter)->DrawTargetWillChange();
+    }
+    // All snapshots will now have copied data.
+    mSnapshots.clear();
+  }
+}
+
 
 }
 }

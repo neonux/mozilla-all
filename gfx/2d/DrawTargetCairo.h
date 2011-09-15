@@ -40,8 +40,12 @@
 #include "2D.h"
 #include "cairo.h"
 
+#include <vector>
+
 namespace mozilla {
 namespace gfx {
+
+class SourceSurfaceCairo;
 
 class DrawTargetCairo : public DrawTarget
 {
@@ -51,7 +55,7 @@ public:
 
   virtual BackendType GetType() const { return BACKEND_CAIRO; }
   virtual TemporaryRef<SourceSurface> Snapshot();
-  virtual IntSize GetSize() { return IntSize(); }
+  virtual IntSize GetSize();
 
   virtual void Flush();
   virtual void DrawSurface(SourceSurface *aSurface,
@@ -64,15 +68,13 @@ public:
                                      const Color &aColor,
                                      const Point &aOffset,
                                      Float aSigma,
-                                     CompositionOp aOperator)
-  { }
+                                     CompositionOp aOperator);
 
   virtual void ClearRect(const Rect &aRect);
 
   virtual void CopySurface(SourceSurface *aSurface,
                            const IntRect &aSourceRect,
-                           const IntPoint &aDestination)
-  { }
+                           const IntPoint &aDestination);
 
   virtual void FillRect(const Rect &aRect,
                         const Pattern &aPattern,
@@ -80,36 +82,31 @@ public:
   virtual void StrokeRect(const Rect &aRect,
                           const Pattern &aPattern,
                           const StrokeOptions &aStrokeOptions = StrokeOptions(),
-                          const DrawOptions &aOptions = DrawOptions())
-  { return; }
+                          const DrawOptions &aOptions = DrawOptions());
   virtual void StrokeLine(const Point &aStart,
                           const Point &aEnd,
                           const Pattern &aPattern,
                           const StrokeOptions &aStrokeOptions = StrokeOptions(),
-                          const DrawOptions &aOptions = DrawOptions())
-  { return; }
+                          const DrawOptions &aOptions = DrawOptions());
 
   virtual void Stroke(const Path *aPath,
                       const Pattern &aPattern,
                       const StrokeOptions &aStrokeOptions = StrokeOptions(),
-                      const DrawOptions &aOptions = DrawOptions())
-  { return; }
+                      const DrawOptions &aOptions = DrawOptions());
 
   virtual void Fill(const Path *aPath,
                     const Pattern &aPattern,
-                    const DrawOptions &aOptions = DrawOptions())
-  { return; }
+                    const DrawOptions &aOptions = DrawOptions());
 
   virtual void FillGlyphs(ScaledFont *aFont,
                           const GlyphBuffer &aBuffer,
                           const Pattern &aPattern,
-                          const DrawOptions &aOptions)
-  { return; }
+                          const DrawOptions &aOptions);
 
-  virtual void PushClip(const Path *aPath) { }
-  virtual void PopClip() { }
+  virtual void PushClip(const Path *aPath);
+  virtual void PopClip();
 
-  virtual TemporaryRef<PathBuilder> CreatePathBuilder(FillRule aFillRule = FILL_WINDING) const { return NULL; }
+  virtual TemporaryRef<PathBuilder> CreatePathBuilder(FillRule aFillRule = FILL_WINDING) const;
 
   virtual TemporaryRef<SourceSurface> CreateSourceSurfaceFromData(unsigned char *aData,
                                                             const IntSize &aSize,
@@ -121,17 +118,31 @@ public:
   virtual TemporaryRef<DrawTarget>
     CreateSimilarDrawTarget(const IntSize &aSize, SurfaceFormat aFormat) const;
 
-  virtual TemporaryRef<GradientStops> CreateGradientStops(GradientStop *aStops, uint32_t aNumStops) const
-  { return NULL; }
+  virtual TemporaryRef<GradientStops> CreateGradientStops(GradientStop *aStops, uint32_t aNumStops) const;
 
   virtual void *GetNativeSurface(NativeSurfaceType aType);
 
   bool Init(cairo_surface_t* aSurface);
 
-private:
+private: // methods
   void PrepareForDrawing(cairo_t* aContext);
 
+  // Copy-on-write support for snapshot surfaces.
+  friend class SourceSurfaceCairo;
+  void AppendSnapshot(SourceSurfaceCairo* aSnapshot);
+  void RemoveSnapshot(SourceSurfaceCairo* aSnapshot);
+
+  // Call before you make any changes to the backing surface with which this
+  // context is associated.
+  void MarkChanged();
+
+  // Call if there is any reason to disassociate all snapshots from this draw
+  // target; for example, because we're going to be destroyed.
+  void MarkSnapshotsIndependent();
+
+private: // data
   cairo_t* mContext;
+  std::vector<SourceSurfaceCairo*> mSnapshots;
 };
 
 }

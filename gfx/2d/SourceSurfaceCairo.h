@@ -42,11 +42,19 @@
 namespace mozilla {
 namespace gfx {
 
+class DrawTargetCairo;
+
 class SourceSurfaceCairo : public SourceSurface
 {
 public:
+  // Create a SourceSurfaceCairo. The surface will not be copied, but simply
+  // referenced.
+  // If aDrawTarget is non-NULL, it is assumed that this is a snapshot source
+  // surface, and we'll call DrawTargetCairo::RemoveSnapshot(this) on it when
+  // we're destroyed.
   SourceSurfaceCairo(cairo_surface_t* aSurface, const IntSize& aSize,
-                     const SurfaceFormat& aFormat);
+                     const SurfaceFormat& aFormat,
+                     DrawTargetCairo* aDrawTarget = NULL);
   virtual ~SourceSurfaceCairo();
 
   virtual SurfaceType GetType() const { return SURFACE_CAIRO; }
@@ -56,14 +64,16 @@ public:
 
   cairo_surface_t* GetSurface();
 
-  bool InitFromSurface(cairo_surface_t* aSurface,
-                       const IntSize& aSize,
-                       const SurfaceFormat& aFormat);
+private: // methods
+  friend class DrawTargetCairo;
+  void DrawTargetWillChange();
+  void MarkIndependent();
 
-private:
+private: // data
   IntSize mSize;
   SurfaceFormat mFormat;
   cairo_surface_t* mSurface;
+  DrawTargetCairo* mDrawTarget;
 };
 
 class DataSourceSurfaceCairo : public DataSourceSurface

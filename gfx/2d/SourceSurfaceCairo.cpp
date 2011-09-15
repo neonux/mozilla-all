@@ -36,6 +36,7 @@
  * ***** END LICENSE BLOCK ***** */
 
 #include "SourceSurfaceCairo.h"
+#include "DrawTargetCairo.h"
 
 #include "cairo.h"
 
@@ -74,18 +75,37 @@ CairoFormatToSurfaceFormat(cairo_format_t format)
   return FORMAT_B8G8R8A8;
 }
 
+static cairo_content_t
+GfxFormatToCairoContent(SurfaceFormat format)
+{
+  switch(format)
+  {
+    case FORMAT_B8G8R8A8:
+      return CAIRO_CONTENT_COLOR_ALPHA;
+    case FORMAT_B8G8R8X8:
+      return CAIRO_CONTENT_COLOR;
+    case FORMAT_A8:
+      return CAIRO_CONTENT_ALPHA;
+  }
+
+  return CAIRO_CONTENT_COLOR_ALPHA;
+}
+
 SourceSurfaceCairo::SourceSurfaceCairo(cairo_surface_t* aSurface,
                                        const IntSize& aSize,
-                                       const SurfaceFormat& aFormat)
+                                       const SurfaceFormat& aFormat,
+                                       DrawTargetCairo* aDrawTarget /* = NULL */)
  : mSize(aSize)
  , mFormat(aFormat)
  , mSurface(aSurface)
+ , mDrawTarget(aDrawTarget)
 {
   cairo_surface_reference(mSurface);
 }
 
 SourceSurfaceCairo::~SourceSurfaceCairo()
 {
+  MarkIndependent();
   cairo_surface_destroy(mSurface);
 }
 
@@ -130,6 +150,37 @@ cairo_surface_t*
 SourceSurfaceCairo::GetSurface()
 {
   return mSurface;
+}
+
+void
+SourceSurfaceCairo::DrawTargetWillChange()
+{
+  if (mDrawTarget) {
+    mDrawTarget = NULL;
+
+    // We're about to lose our version of the surface, so make a copy of it.
+    cairo_surface_t* surface = cairo_surface_create_similar(mSurface,
+                                                            GfxFormatToCairoContent(mFormat),
+                                                            mSize.width, mSize.height);
+    cairo_t* ctx = cairo_create(surface);
+    cairo_pattern_t* pat = cairo_pattern_create_for_surface(mSurface);
+    cairo_set_source(ctx, pat);
+    cairo_paint(ctx);
+    cairo_destroy(ctx);
+
+    // Swap in this new surface.
+    cairo_surface_destroy(mSurface);
+    mSurface = surface;
+  }
+}
+
+void
+SourceSurfaceCairo::MarkIndependent()
+{
+  if (mDrawTarget) {
+    mDrawTarget->RemoveSnapshot(this);
+    mDrawTarget = NULL;
+  }
 }
 
 DataSourceSurfaceCairo::DataSourceSurfaceCairo(cairo_surface_t* imageSurf)
