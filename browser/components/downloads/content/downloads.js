@@ -488,6 +488,33 @@ const DownloadsView = {
     goDoCommand("downloadsCmd_open");
   },
 
+  onDownloadKeyPress: function DV_onDownloadKeyPress(aEvent)
+  {
+    // Only do the action for unmodified keys.
+    if (aEvent.altKey || aEvent.ctrlKey || aEvent.shiftKey || aEvent.metaKey) {
+      return;
+    }
+
+    // Pressing the key on buttons should not invoke the action because the
+    // event has already been handled by the button itself.
+    if (aEvent.originalTarget.hasAttribute("command") ||
+        aEvent.originalTarget.hasAttribute("oncommand")) {
+      return;
+    }
+
+    if (aEvent.charCode == " ".charCodeAt(0)) {
+      goDoCommand("downloadsCmd_pauseResume");
+      return;
+    }
+
+    switch (aEvent.keyCode) {
+      case KeyEvent.DOM_VK_ENTER:
+      case KeyEvent.DOM_VK_RETURN:
+        goDoCommand("downloadsCmd_doDefault");
+        break;
+    }
+  },
+
   onDownloadContextMenu: function DV_onDownloadContextMenu(aEvent)
   {
     let element = this.richListBox.selectedItem;

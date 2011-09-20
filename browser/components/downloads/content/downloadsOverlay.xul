@@ -75,15 +75,6 @@
              oncommand="goDoCommand('downloadsCmd_copyLocation')"/>
   </commandset>
 
-  <keyset>
-    <key keycode="VK_ENTER"
-         command="downloadsCmd_doDefault"/>
-    <key keycode="VK_RETURN"
-         command="downloadsCmd_doDefault"/>
-    <key key=" "
-         command="downloadsCmd_pauseResume"/>
-  </keyset>
-
   <popupset>
     <!-- The panel has level="top" to ensure that it is never hidden by the
          taskbar on Windows.  See bug 672365.  For accessibility to screen
@@ -144,6 +135,7 @@
                    flex="1"
                    context="downloadsContextMenu"
                    onclick="DownloadsView.onDownloadClick(event);"
+                   onkeypress="DownloadsView.onDownloadKeyPress(event);"
                    oncontextmenu="DownloadsView.onDownloadContextMenu(event);"
                    ondragstart="DownloadsView.onDownloadDragStart(event);"/>
 
