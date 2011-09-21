@@ -148,13 +148,18 @@ struct StrokeOptions {
  *
  * mFilter - Filter used when resampling source surface region to the
  *           destination region.
+ * mSurfaceClipped - This indicates whether the implementation is allowed
+ *                   to sample pixels outside the source rectangle on the
+ *                   surface.
  */
 struct DrawSurfaceOptions {
-  DrawSurfaceOptions(Filter aFilter = FILTER_LINEAR)
+  DrawSurfaceOptions(Filter aFilter = FILTER_LINEAR, bool aSurfaceClipped = false)
     : mFilter(aFilter)
+    , mSurfaceClipped(aSurfaceClipped)
   { }
 
   Filter mFilter : 3;
+  bool mSurfaceClipped : 1;
 };
 
 /*
