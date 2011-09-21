@@ -935,6 +935,8 @@
             this.mCurrentTab.removeAttribute("unread");
             this.showTab(this.mCurrentTab);
 
+            document.documentElement.setAttribute("switchingtabs", "true");
+
             if (updatePageReport)
               this.mCurrentBrowser.updatePageReport();
 
@@ -1000,6 +1002,8 @@
                                            nsIWebProgressListener.STATE_IS_NETWORK, 0],
                                           true, false);
             }
+
+            document.documentElement.removeAttribute("switchingtabs");
 
             if (this.mCurrentTab.selected) {
               this._setCloseKeyState(!this.mCurrentTab.pinned);
