@@ -147,7 +147,7 @@ SourceSurfaceCairo::GetDataSurface()
 }
 
 cairo_surface_t*
-SourceSurfaceCairo::GetSurface()
+SourceSurfaceCairo::GetSurface() const
 {
   return mSurface;
 }
@@ -222,10 +222,10 @@ DataSourceSurfaceCairo::GetFormat() const
   return CairoFormatToSurfaceFormat(cairo_image_surface_get_format(mImageSurface));
 }
 
-TemporaryRef<DataSourceSurface>
-DataSourceSurfaceCairo::GetDataSurface()
+cairo_surface_t*
+DataSourceSurfaceCairo::GetSurface() const
 {
-  return this;
+  return mImageSurface;
 }
 
 }
