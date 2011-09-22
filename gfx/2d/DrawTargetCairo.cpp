@@ -39,6 +39,8 @@
 
 #include "cairo.h"
 
+#include "Blur.h"
+
 #ifdef CAIRO_HAS_QUARTZ_SURFACE
 #include "cairo-quartz.h"
 #include <ApplicationServices/ApplicationServices.h>
@@ -281,7 +283,83 @@ DrawTargetCairo::DrawSurfaceWithShadow(SourceSurface *aSurface,
                                        Float aSigma,
                                        CompositionOp aOperator)
 {
-  PrepareForDrawing(mContext);
+  MarkChanged();
+
+  if (aSurface->GetType() != SURFACE_CAIRO) {
+    return;
+  }
+
+  SourceSurfaceCairo* sourcesurf = static_cast<SourceSurfaceCairo*>(aSurface);
+
+  Float width = aSurface->GetSize().width,
+        height = aSurface->GetSize().height;
+  Rect extents(0, 0, width, height);
+
+  AlphaBoxBlur blur(extents, IntSize(0, 0),
+                    AlphaBoxBlur::CalculateBlurRadius(Point(aSigma, aSigma)),
+                    NULL, NULL);
+  if (!blur.GetData()) {
+    return;
+  }
+
+  IntSize blursize = blur.GetSize();
+
+  cairo_surface_t* blursurf = cairo_image_surface_create_for_data(blur.GetData(),
+                                                                  CAIRO_FORMAT_A8,
+                                                                  blursize.width,
+                                                                  blursize.height,
+                                                                  blur.GetStride());
+
+  // Draw the source surface into the surface we're going to blur.
+  cairo_surface_t* surf = sourcesurf->GetSurface();
+  cairo_pattern_t* pat = cairo_pattern_create_for_surface(surf);
+
+  cairo_t* ctx = cairo_create(blursurf);
+
+  cairo_set_source(ctx, pat);
+
+  IntRect blurrect = blur.GetRect();
+  cairo_new_path(ctx);
+  cairo_rectangle(ctx, blurrect.x, blurrect.y, blurrect.width, blurrect.height);
+  cairo_clip(ctx);
+  cairo_paint(ctx);
+
+  cairo_destroy(ctx);
+
+  // Blur the result, then use that blurred result as a mask to draw the shadow
+  // colour to the surface.
+  blur.Blur();
+
+  cairo_save(mContext);
+
+  cairo_set_operator(mContext, CAIRO_OPERATOR_OVER);
+  cairo_set_source_rgba(mContext, aColor.r, aColor.g, aColor.b, aColor.a);
+
+  cairo_identity_matrix(mContext);
+  cairo_translate(mContext, aOffset.x, aOffset.y);
+
+  cairo_new_path(mContext);
+  cairo_rectangle(mContext, 0, 0, width, height);
+  cairo_clip(mContext);
+
+  cairo_mask_surface(mContext, blursurf, aOffset.x, aOffset.y);
+
+  // Now that the shadow has been drawn, we can draw the surface on top.
+
+  cairo_set_operator(mContext, GfxOpToCairoOp(aOperator));
+
+  cairo_translate(mContext, aDest.x, aDest.y);
+
+  cairo_set_source(mContext, pat);
+
+  cairo_new_path(mContext);
+  cairo_rectangle(mContext, 0, 0, width, height);
+  cairo_clip(mContext);
+  cairo_paint(mContext);
+
+  cairo_restore(mContext);
+
+  cairo_pattern_destroy(pat);
 }
 
 void
