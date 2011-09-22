@@ -50,6 +50,9 @@
 #include "gfxPath.h"
 #include "nsISupportsImpl.h"
 
+#include "mozilla/gfx/2D.h"
+#include <vector>
+
 typedef struct _cairo cairo_t;
 template <typename T> class FallibleTArray;
 
@@ -75,6 +78,12 @@ public:
      * Initialize this context from a surface.
      */
     gfxContext(gfxASurface *surface);
+
+    /**
+     * Initialize this context from a DrawTarget.
+     */
+    gfxContext(mozilla::gfx::DrawTarget *aTarget);
+
     ~gfxContext();
 
     /**
@@ -97,7 +106,9 @@ public:
      * Return the raw cairo_t object.
      * XXX this should go away at some point.
      */
-    cairo_t *GetCairo() { return mCairo; }
+    cairo_t *GetCairo();
+
+    mozilla::gfx::DrawTarget *GetDT() { return mDT; }
 
     /**
      * Returns true if the cairo context is in an error state.
@@ -681,12 +692,30 @@ public:
     void ClearFlag(PRInt32 aFlag) { mFlags &= ~aFlag; }
     PRInt32 GetFlags() const { return mFlags; }
 
+    bool IsAzure() const { return !mCairo; }
+
 private:
+  struct AzureState {
+    mozilla::gfx::CompositionOp op;
+    mozilla::gfx::Color color;
+  };
+
+  bool mPathIsRect;
+  mozilla::gfx::Rect mRect;
+  mozilla::RefPtr<mozilla::gfx::PathBuilder> mPathBuilder;
+  mozilla::RefPtr<mozilla::gfx::Path> mPath;
+  std::vector<AzureState> mStateStack;
+
+  AzureState &CurrentState() { return mStateStack.front(); }
+
+
     cairo_t *mCairo;
+    cairo_t *mRefCairo;
     nsRefPtr<gfxASurface> mSurface;
     PRInt32 mFlags;
-};
 
+    mozilla::RefPtr<mozilla::gfx::DrawTarget> mDT;
+};
 
 /**
  * Sentry helper class for functions with multiple return points that need to

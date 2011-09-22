@@ -72,10 +72,15 @@ PreparePatternForUntiledDrawing(gfxPattern* aPattern,
                                 gfxASurface *currentTarget,
                                 const gfxPattern::GraphicsFilter aDefaultFilter)
 {
+    // XXX - For Azure we select Image as a type, this way no special code
+    // is run.
+    gfxASurface::gfxSurfaceType type =
+      currentTarget ? currentTarget->GetType() : gfxASurface::SurfaceTypeImage;
+
     // In theory we can handle this using cairo's EXTEND_PAD,
     // but implementation limitations mean we have to consult
     // the surface type.
-    switch (currentTarget->GetType()) {
+    switch (type) {
 
 #ifdef MOZ_X11
         case gfxASurface::SurfaceTypeXlib:

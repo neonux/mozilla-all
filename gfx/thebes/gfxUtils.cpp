@@ -375,7 +375,10 @@ gfxUtils::DrawPixelSnapped(gfxContext*      aContext,
     PRBool doTile = !aImageRect.Contains(aSourceRect);
 
     nsRefPtr<gfxASurface> currentTarget = aContext->CurrentSurface();
-    gfxASurface::gfxSurfaceType surfaceType = currentTarget->GetType();
+    // XXX - For an Azure context (!currentTarget) we specify Quartz as a type,
+    // this will cause a quick return.
+    gfxASurface::gfxSurfaceType surfaceType = 
+      currentTarget ? currentTarget->GetType() : gfxASurface::SurfaceTypeQuartz;
     gfxMatrix deviceSpaceToImageSpace =
         DeviceToImageTransform(aContext, aUserSpaceToImageSpace);
 

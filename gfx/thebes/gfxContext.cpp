@@ -56,28 +56,49 @@
 #include "gfxPlatform.h"
 #include "gfxTeeSurface.h"
 
-gfxContext::gfxContext(gfxASurface *surface) :
-    mSurface(surface)
-{
-    MOZ_COUNT_CTOR(gfxContext);
+using namespace mozilla::gfx;
 
-    mCairo = cairo_create(surface->CairoSurface());
-    mFlags = surface->GetDefaultContextFlags();
-    if (mSurface->GetRotateForLandscape()) {
-        // Rotate page 90 degrees to draw landscape page on portrait paper
-        gfxIntSize size = mSurface->GetSize();
-        Translate(gfxPoint(0, size.width));
-        gfxMatrix matrix(0, -1,
-                         1,  0,
-                         0,  0);
-        Multiply(matrix);
-    }
+gfxContext::gfxContext(gfxASurface *surface)
+  : mSurface(surface)
+  , mRefCairo(NULL)
+{
+  MOZ_COUNT_CTOR(gfxContext);
+
+  mCairo = cairo_create(surface->CairoSurface());
+  mFlags = surface->GetDefaultContextFlags();
+  if (mSurface->GetRotateForLandscape()) {
+    // Rotate page 90 degrees to draw landscape page on portrait paper
+    gfxIntSize size = mSurface->GetSize();
+    Translate(gfxPoint(0, size.width));
+    gfxMatrix matrix(0, -1,
+                      1,  0,
+                      0,  0);
+    Multiply(matrix);
+  }
 }
+
+gfxContext::gfxContext(DrawTarget *aTarget)
+  : mSurface(NULL)
+  , mCairo(NULL)
+  , mRefCairo(NULL)
+  , mFlags(0)
+  , mDT(aTarget)
+{
+  mStateStack.resize(1);
+}
+
 gfxContext::~gfxContext()
 {
+  if (mCairo) {
     cairo_destroy(mCairo);
-
-    MOZ_COUNT_DTOR(gfxContext);
+  }
+  if (mRefCairo) {
+    cairo_destroy(mRefCairo);
+  }
+  if (mDT) {
+    mDT->Flush();
+  }
+  MOZ_COUNT_DTOR(gfxContext);
 }
 
 gfxASurface *
@@ -89,6 +110,7 @@ gfxContext::OriginalSurface()
 already_AddRefed<gfxASurface>
 gfxContext::CurrentSurface(gfxFloat *dx, gfxFloat *dy)
 {
+  if (mCairo) {
     cairo_surface_t *s = cairo_get_group_target(mCairo);
     if (s == mSurface->CairoSurface()) {
         if (dx && dy)
@@ -101,107 +123,183 @@ gfxContext::CurrentSurface(gfxFloat *dx, gfxFloat *dy)
     if (dx && dy)
         cairo_surface_get_device_offset(s, dx, dy);
     return gfxASurface::Wrap(s);
+  } else {
+    if (dx && dy) {
+      *dx = *dy = 0;
+    }
+    return NULL;
+  }
+}
+
+cairo_t *
+gfxContext::GetCairo()
+{
+  if (mCairo) {
+    return mCairo;
+  }
+
+  if (mRefCairo) {
+    // Set transform!
+    return mRefCairo;
+  }
+
+  mRefCairo = cairo_create(gfxPlatform::GetPlatform()->ScreenReferenceSurface()->CairoSurface()); 
+
+  return mRefCairo;
 }
 
 void
 gfxContext::Save()
 {
+  if (mCairo) {
     cairo_save(mCairo);
+  } else {
+  }
 }
 
 void
 gfxContext::Restore()
 {
+  if (mCairo) {
     cairo_restore(mCairo);
+  } else {
+  }
 }
 
 // drawing
 void
 gfxContext::NewPath()
 {
+  if (mCairo) {
     cairo_new_path(mCairo);
+  } else {
+    mPathBuilder = NULL;
+    mPathIsRect = false;
+  }
 }
 
 void
 gfxContext::ClosePath()
 {
+  if (mCairo) {
     cairo_close_path(mCairo);
+  } else {
+  }
 }
 
 already_AddRefed<gfxPath> gfxContext::CopyPath() const
 {
+  if (mCairo) {
     nsRefPtr<gfxPath> path = new gfxPath(cairo_copy_path(mCairo));
     return path.forget();
+  } else {
+    return NULL;
+  }
 }
 
 void gfxContext::AppendPath(gfxPath* path)
 {
+  if (mCairo) {
     if (path->mPath->status == CAIRO_STATUS_SUCCESS && path->mPath->num_data != 0)
         cairo_append_path(mCairo, path->mPath);
+  } else {
+  }
 }
 
 gfxPoint
 gfxContext::CurrentPoint() const
 {
+  if (mCairo) {
     double x, y;
     cairo_get_current_point(mCairo, &x, &y);
     return gfxPoint(x, y);
+  } else {
+    return gfxPoint();
+  }
 }
 
 void
 gfxContext::Stroke()
 {
+  if (mCairo) {
     cairo_stroke_preserve(mCairo);
+  } else {
+    if (mPathIsRect) {
+      mDT->StrokeRect(mRect, ColorPattern(CurrentState().color));
+    }
+  }
 }
 
 void
 gfxContext::Fill()
 {
+  if (mCairo) {
     cairo_fill_preserve(mCairo);
+  } else {
+    if (mPathIsRect) {
+      mDT->FillRect(mRect, ColorPattern(CurrentState().color));
+    }
+  }
 }
 
 void
 gfxContext::FillWithOpacity(gfxFloat aOpacity)
 {
-  // This method exists in the hope that one day cairo gets a direct
-  // API for this, and then we would change this method to use that
-  // API instead.
-  if (aOpacity != 1.0) {
-    gfxContextAutoSaveRestore saveRestore(this);
-    Clip();
-    Paint(aOpacity);
+  if (mCairo) {
+    // This method exists in the hope that one day cairo gets a direct
+    // API for this, and then we would change this method to use that
+    // API instead.
+    if (aOpacity != 1.0) {
+      gfxContextAutoSaveRestore saveRestore(this);
+      Clip();
+      Paint(aOpacity);
+    } else {
+      Fill();
+    }
   } else {
-    Fill();
   }
 }
 
 void
 gfxContext::MoveTo(const gfxPoint& pt)
 {
+  if (mCairo) {
     cairo_move_to(mCairo, pt.x, pt.y);
+  } else {
+  }
 }
 
 void
 gfxContext::NewSubPath()
 {
+  if (mCairo) {
     cairo_new_sub_path(mCairo);
+  } else {
+  }
 }
 
 void
 gfxContext::LineTo(const gfxPoint& pt)
 {
+  if (mCairo) {
     cairo_line_to(mCairo, pt.x, pt.y);
+  } else {
+  }
 }
 
 void
 gfxContext::CurveTo(const gfxPoint& pt1, const gfxPoint& pt2, const gfxPoint& pt3)
 {
+  if (mCairo) {
     cairo_curve_to(mCairo, pt1.x, pt1.y, pt2.x, pt2.y, pt3.x, pt3.y);
+  } else {
+  }
 }
 
 void
 gfxContext::QuadraticCurveTo(const gfxPoint& pt1, const gfxPoint& pt2)
 {
+  if (mCairo) {
     double cx, cy;
     cairo_get_current_point(mCairo, &cx, &cy);
     cairo_curve_to(mCairo,
@@ -211,27 +309,38 @@ gfxContext::QuadraticCurveTo(const gfxPoint& pt1, const gfxPoint& pt2)
                    (pt1.y * 2.0 + pt2.y) / 3.0,
                    pt2.x,
                    pt2.y);
+  } else {
+  }
 }
 
 void
 gfxContext::Arc(const gfxPoint& center, gfxFloat radius,
                 gfxFloat angle1, gfxFloat angle2)
 {
+  if (mCairo) {
     cairo_arc(mCairo, center.x, center.y, radius, angle1, angle2);
+  } else {
+  }
 }
 
 void
 gfxContext::NegativeArc(const gfxPoint& center, gfxFloat radius,
                         gfxFloat angle1, gfxFloat angle2)
 {
+  if (mCairo) {
     cairo_arc_negative(mCairo, center.x, center.y, radius, angle1, angle2);
+  } else {
+  }
 }
 
 void
 gfxContext::Line(const gfxPoint& start, const gfxPoint& end)
 {
+  if (mCairo) {
     MoveTo(start);
     LineTo(end);
+  } else {
+  }
 }
 
 // XXX snapToPixels is only valid when snapping for filled
@@ -241,6 +350,7 @@ gfxContext::Line(const gfxPoint& start, const gfxPoint& end)
 void
 gfxContext::Rectangle(const gfxRect& rect, PRBool snapToPixels)
 {
+  if (mCairo) {
     if (snapToPixels) {
         gfxRect snappedRect(rect);
 
@@ -257,21 +367,38 @@ gfxContext::Rectangle(const gfxRect& rect, PRBool snapToPixels)
     }
 
     cairo_rectangle(mCairo, rect.X(), rect.Y(), rect.Width(), rect.Height());
+  } else {
+    Rect rec = ToRect(rect);
+    if (!mPathBuilder && !mPathIsRect) {
+      mPathIsRect = true;
+      mRect = rec;
+    } else if (mPathBuilder) {
+      mPathBuilder->MoveTo(rec.TopLeft());
+      mPathBuilder->LineTo(rec.TopRight());
+      mPathBuilder->LineTo(rec.BottomRight());
+      mPathBuilder->LineTo(rec.BottomLeft());
+      mPathBuilder->Close();
+    }
+  }
 }
 
 void
 gfxContext::Ellipse(const gfxPoint& center, const gfxSize& dimensions)
 {
+  if (mCairo) {
     gfxSize halfDim = dimensions / 2.0;
     gfxRect r(center - gfxPoint(halfDim.width, halfDim.height), dimensions);
     gfxCornerSizes c(halfDim, halfDim, halfDim, halfDim);
 
     RoundedRectangle (r, c);
+  } else {
+  }
 }
 
 void
 gfxContext::Polygon(const gfxPoint *points, PRUint32 numPoints)
 {
+  if (mCairo) {
     if (numPoints == 0)
         return;
 
@@ -279,11 +406,14 @@ gfxContext::Polygon(const gfxPoint *points, PRUint32 numPoints)
     for (PRUint32 i = 1; i < numPoints; ++i) {
         cairo_line_to(mCairo, points[i].x, points[i].y);
     }
+  } else {
+  }
 }
 
 void
 gfxContext::DrawSurface(gfxASurface *surface, const gfxSize& size)
 {
+  if (mCairo) {
     cairo_save(mCairo);
     cairo_set_source_surface(mCairo, surface->CairoSurface(), 0, 0);
     cairo_new_path(mCairo);
@@ -293,108 +423,156 @@ gfxContext::DrawSurface(gfxASurface *surface, const gfxSize& size)
 
     cairo_fill(mCairo);
     cairo_restore(mCairo);
+  } else {
+  }
 }
 
 // transform stuff
 void
 gfxContext::Translate(const gfxPoint& pt)
 {
+  if (mCairo) {
     cairo_translate(mCairo, pt.x, pt.y);
+  } else {
+  }
 }
 
 void
 gfxContext::Scale(gfxFloat x, gfxFloat y)
 {
+  if (mCairo) {
     cairo_scale(mCairo, x, y);
+  } else {
+  }
 }
 
 void
 gfxContext::Rotate(gfxFloat angle)
 {
+  if (mCairo) {
     cairo_rotate(mCairo, angle);
+  } else {
+  }
 }
 
 void
 gfxContext::Multiply(const gfxMatrix& matrix)
 {
+  if (mCairo) {
     const cairo_matrix_t& mat = reinterpret_cast<const cairo_matrix_t&>(matrix);
     cairo_transform(mCairo, &mat);
+  } else {
+  }
 }
 
 void
 gfxContext::SetMatrix(const gfxMatrix& matrix)
 {
+  if (mCairo) {
     const cairo_matrix_t& mat = reinterpret_cast<const cairo_matrix_t&>(matrix);
     cairo_set_matrix(mCairo, &mat);
+  } else {
+  }
 }
 
 void
 gfxContext::IdentityMatrix()
 {
+  if (mCairo) {
     cairo_identity_matrix(mCairo);
+  } else {
+  }
 }
 
 gfxMatrix
 gfxContext::CurrentMatrix() const
 {
+  if (mCairo) {
     cairo_matrix_t mat;
     cairo_get_matrix(mCairo, &mat);
     return gfxMatrix(*reinterpret_cast<gfxMatrix*>(&mat));
+  } else {
+    return gfxMatrix();
+  }
 }
 
 void
 gfxContext::NudgeCurrentMatrixToIntegers()
 {
+  if (mCairo) {
     cairo_matrix_t mat;
     cairo_get_matrix(mCairo, &mat);
     gfxMatrix(*reinterpret_cast<gfxMatrix*>(&mat)).NudgeToIntegers();
     cairo_set_matrix(mCairo, &mat);
+  } else {
+  }
 }
 
 gfxPoint
 gfxContext::DeviceToUser(const gfxPoint& point) const
 {
+  if (mCairo) {
     gfxPoint ret = point;
     cairo_device_to_user(mCairo, &ret.x, &ret.y);
     return ret;
+  } else {
+    return gfxPoint(0, 0);
+  }
 }
 
 gfxSize
 gfxContext::DeviceToUser(const gfxSize& size) const
 {
+  if (mCairo) {
     gfxSize ret = size;
     cairo_device_to_user_distance(mCairo, &ret.width, &ret.height);
     return ret;
+  } else {
+    return gfxSize(0, 0);
+  }
 }
 
 gfxRect
 gfxContext::DeviceToUser(const gfxRect& rect) const
 {
+  if (mCairo) {
     gfxRect ret = rect;
     cairo_device_to_user(mCairo, &ret.x, &ret.y);
     cairo_device_to_user_distance(mCairo, &ret.width, &ret.height);
     return ret;
+  } else {
+    return gfxRect(0, 0, 0, 0);
+  }
 }
 
 gfxPoint
 gfxContext::UserToDevice(const gfxPoint& point) const
 {
+  if (mCairo) {
     gfxPoint ret = point;
     cairo_user_to_device(mCairo, &ret.x, &ret.y);
     return ret;
+  } else {
+    return gfxPoint(0, 0);
+  }
 }
 
 gfxSize
 gfxContext::UserToDevice(const gfxSize& size) const
 {
+  if (mCairo) {
     gfxSize ret = size;
     cairo_user_to_device_distance(mCairo, &ret.width, &ret.height);
     return ret;
+  } else {
+    return gfxSize(0, 0);
+  }
 }
 
 gfxRect
 gfxContext::UserToDevice(const gfxRect& rect) const
 {
+  if (mCairo) {
     double xmin = rect.X(), ymin = rect.Y(), xmax = rect.XMost(), ymax = rect.YMost();
 
     double x[3], y[3];
@@ -414,11 +592,15 @@ gfxContext::UserToDevice(const gfxRect& rect) const
     }
 
     return gfxRect(xmin, ymin, xmax - xmin, ymax - ymin);
+  } else {
+    return gfxRect(0, 0, 0, 0);
+  }
 }
 
 PRBool
 gfxContext::UserToDevicePixelSnapped(gfxRect& rect, PRBool ignoreScale) const
 {
+  if (mCairo) {
     if (GetFlags() & FLAG_DISABLE_SNAPPING)
         return PR_FALSE;
 
@@ -456,11 +638,15 @@ gfxContext::UserToDevicePixelSnapped(gfxRect& rect, PRBool ignoreScale) const
     }
 
     return PR_FALSE;
+  } else {
+    return PR_FALSE;
+  }
 }
 
 PRBool
 gfxContext::UserToDevicePixelSnapped(gfxPoint& pt, PRBool ignoreScale) const
 {
+  if (mCairo) {
     if (GetFlags() & FLAG_DISABLE_SNAPPING)
         return PR_FALSE;
 
@@ -476,12 +662,16 @@ gfxContext::UserToDevicePixelSnapped(gfxPoint& pt, PRBool ignoreScale) const
     pt = UserToDevice(pt);
     pt.Round();
     return PR_TRUE;
+  } else {
+    return PR_TRUE;
+  }
 }
 
 void
 gfxContext::PixelSnappedRectangleAndSetPattern(const gfxRect& rect,
                                                gfxPattern *pattern)
 {
+  if (mCairo) {
     gfxRect r(rect);
 
     // Bob attempts to pixel-snap the rectangle, and returns true if
@@ -508,30 +698,40 @@ gfxContext::PixelSnappedRectangleAndSetPattern(const gfxRect& rect,
     SetPattern(pattern);
 
     SetMatrix(mat);
+  } else {
+  }
 }
 
 void
 gfxContext::SetAntialiasMode(AntialiasMode mode)
 {
+  if (mCairo) {
     if (mode == MODE_ALIASED) {
         cairo_set_antialias(mCairo, CAIRO_ANTIALIAS_NONE);
     } else if (mode == MODE_COVERAGE) {
         cairo_set_antialias(mCairo, CAIRO_ANTIALIAS_DEFAULT);
     }
+  } else {
+  }
 }
 
 gfxContext::AntialiasMode
 gfxContext::CurrentAntialiasMode() const
 {
+  if (mCairo) {
     cairo_antialias_t aa = cairo_get_antialias(mCairo);
     if (aa == CAIRO_ANTIALIAS_NONE)
         return MODE_ALIASED;
     return MODE_COVERAGE;
+  } else {
+    return MODE_COVERAGE;
+  }
 }
 
 void
 gfxContext::SetDash(gfxLineType ltype)
 {
+  if (mCairo) {
     static double dash[] = {5.0, 5.0};
     static double dot[] = {1.0, 1.0};
 
@@ -547,51 +747,72 @@ gfxContext::SetDash(gfxLineType ltype)
             SetDash(nsnull, 0, 0.0);
             break;
     }
+  } else {
+  }
 }
 
 void
 gfxContext::SetDash(gfxFloat *dashes, int ndash, gfxFloat offset)
 {
+  if (mCairo) {
     cairo_set_dash(mCairo, dashes, ndash, offset);
+  } else {
+  }
 }
 
 bool
 gfxContext::CurrentDash(FallibleTArray<gfxFloat>& dashes, gfxFloat* offset) const
 {
+  if (mCairo) {
     int count = cairo_get_dash_count(mCairo);
     if (count <= 0 || !dashes.SetLength(count)) {
         return false;
     }
     cairo_get_dash(mCairo, dashes.Elements(), offset);
     return true;
+  } else {
+    return true;
+  }
 }
 
 gfxFloat
 gfxContext::CurrentDashOffset() const
 {
+  if (mCairo) {
     if (cairo_get_dash_count(mCairo) <= 0) {
         return 0.0;
     }
     gfxFloat offset;
     cairo_get_dash(mCairo, NULL, &offset);
     return offset;
+  } else {
+    return 0.0;
+  }
 }
 
 void
 gfxContext::SetLineWidth(gfxFloat width)
 {
+  if (mCairo) {
     cairo_set_line_width(mCairo, width);
+  } else {
+  }
 }
 
 gfxFloat
 gfxContext::CurrentLineWidth() const
 {
+  if (mCairo) {
     return cairo_get_line_width(mCairo);
+  } else {
+    return 1.0;
+  }
 }
 
 void
 gfxContext::SetOperator(GraphicsOperator op)
 {
+  if (mCairo) {
     if (mFlags & FLAG_SIMPLIFY_OPERATORS) {
         if (op != OPERATOR_SOURCE &&
             op != OPERATOR_CLEAR &&
@@ -600,105 +821,154 @@ gfxContext::SetOperator(GraphicsOperator op)
     }
 
     cairo_set_operator(mCairo, (cairo_operator_t)op);
+  } else {
+  }
 }
 
 gfxContext::GraphicsOperator
 gfxContext::CurrentOperator() const
 {
+  if (mCairo) {
     return (GraphicsOperator)cairo_get_operator(mCairo);
+  } else {
+    return OPERATOR_OVER;
+  }
 }
 
 void
 gfxContext::SetLineCap(GraphicsLineCap cap)
 {
+  if (mCairo) {
     cairo_set_line_cap(mCairo, (cairo_line_cap_t)cap);
+  } else {
+  }
 }
 
 gfxContext::GraphicsLineCap
 gfxContext::CurrentLineCap() const
 {
+  if (mCairo) {
     return (GraphicsLineCap)cairo_get_line_cap(mCairo);
+  } else {
+    return LINE_CAP_BUTT;
+  }
 }
 
 void
 gfxContext::SetLineJoin(GraphicsLineJoin join)
 {
+  if (mCairo) {
     cairo_set_line_join(mCairo, (cairo_line_join_t)join);
+  } else {
+  }
 }
 
 gfxContext::GraphicsLineJoin
 gfxContext::CurrentLineJoin() const
 {
+  if (mCairo) {
     return (GraphicsLineJoin)cairo_get_line_join(mCairo);
+  } else {
+    return LINE_JOIN_MITER;
+  }
 }
 
 void
 gfxContext::SetMiterLimit(gfxFloat limit)
 {
+  if (mCairo) {
     cairo_set_miter_limit(mCairo, limit);
+  }
 }
 
 gfxFloat
 gfxContext::CurrentMiterLimit() const
 {
+  if (mCairo) {
     return cairo_get_miter_limit(mCairo);
+  } else {
+    return 10.0;
+  }
 }
 
 void
 gfxContext::SetFillRule(FillRule rule)
 {
+  if (mCairo) {
     cairo_set_fill_rule(mCairo, (cairo_fill_rule_t)rule);
+  } else {
+  }
 }
 
 gfxContext::FillRule
 gfxContext::CurrentFillRule() const
 {
+  if (mCairo) {
     return (FillRule)cairo_get_fill_rule(mCairo);
+  } else {
+    return FILL_RULE_WINDING;
+  }
 }
 
 // clipping
 void
 gfxContext::Clip(const gfxRect& rect)
 {
+  if (mCairo) {
     cairo_new_path(mCairo);
     cairo_rectangle(mCairo, rect.X(), rect.Y(), rect.Width(), rect.Height());
     cairo_clip(mCairo);
+  } else {
+  }
 }
 
 void
 gfxContext::Clip()
 {
+  if (mCairo) {
     cairo_clip_preserve(mCairo);
+  } else {
+  }
 }
 
 void
 gfxContext::ResetClip()
 {
+  if (mCairo) {
     cairo_reset_clip(mCairo);
+  } else {
+  }
 }
 
 void
 gfxContext::UpdateSurfaceClip()
 {
+  if (mCairo) {
     NewPath();
     // we paint an empty rectangle to ensure the clip is propagated to
     // the destination surface
     SetDeviceColor(gfxRGBA(0,0,0,0));
     Rectangle(gfxRect(0,1,1,0));
     Fill();
+  }
 }
 
 gfxRect
 gfxContext::GetClipExtents()
 {
+  if (mCairo) {
     double xmin, ymin, xmax, ymax;
     cairo_clip_extents(mCairo, &xmin, &ymin, &xmax, &ymax);
     return gfxRect(xmin, ymin, xmax - xmin, ymax - ymin);
+  } else {
+    return gfxRect(0, 0, 0, 0);
+  }
 }
 
 PRBool
 gfxContext::ClipContainsRect(const gfxRect& aRect)
 {
+  if (mCairo) {
     cairo_rectangle_list_t *clip =
         cairo_copy_clip_rectangle_list(mCairo);
 
@@ -717,6 +987,8 @@ gfxContext::ClipContainsRect(const gfxRect& aRect)
 
    cairo_rectangle_list_destroy(clip);
    return result;
+  } else {
+  }
 }
 
 // rendering sources
@@ -724,6 +996,7 @@ gfxContext::ClipContainsRect(const gfxRect& aRect)
 void
 gfxContext::SetColor(const gfxRGBA& c)
 {
+  if (mCairo) {
     if (gfxPlatform::GetCMSMode() == eCMSMode_All) {
 
         gfxRGBA cms;
@@ -735,40 +1008,69 @@ gfxContext::SetColor(const gfxRGBA& c)
     }
     else
         cairo_set_source_rgba(mCairo, c.r, c.g, c.b, c.a);
+  } else {
+    if (gfxPlatform::GetCMSMode() == eCMSMode_All) {
+
+        gfxRGBA cms;
+        gfxPlatform::TransformPixel(c, cms, gfxPlatform::GetCMSRGBTransform());
+
+        // Use the original alpha to avoid unnecessary float->byte->float
+        // conversion errors
+        CurrentState().color = ToColor(cms);
+    }
+    else
+        CurrentState().color = ToColor(c);
+  }
 }
 
 void
 gfxContext::SetDeviceColor(const gfxRGBA& c)
 {
+  if (mCairo) {
     cairo_set_source_rgba(mCairo, c.r, c.g, c.b, c.a);
+  } else {
+    CurrentState().color = ToColor(c);
+  }
 }
 
 PRBool
 gfxContext::GetDeviceColor(gfxRGBA& c)
 {
+  if (mCairo) {
     return cairo_pattern_get_rgba(cairo_get_source(mCairo),
                                   &c.r,
                                   &c.g,
                                   &c.b,
                                   &c.a) == CAIRO_STATUS_SUCCESS;
+  } else {
+    c = GFXRGBA(CurrentState().color);
+    return PR_TRUE;
+  }
 }
 
 void
 gfxContext::SetSource(gfxASurface *surface, const gfxPoint& offset)
 {
+  if (mCairo) {
     NS_ASSERTION(surface->GetAllowUseAsSource(), "Surface not allowed to be used as source!");
     cairo_set_source_surface(mCairo, surface->CairoSurface(), offset.x, offset.y);
+  } else {
+  }
 }
 
 void
 gfxContext::SetPattern(gfxPattern *pattern)
 {
+  if (mCairo) {
     cairo_set_source(mCairo, pattern->CairoPattern());
+  } else {
+  }
 }
 
 already_AddRefed<gfxPattern>
 gfxContext::GetPattern()
 {
+  if (mCairo) {
     cairo_pattern_t *pat = cairo_get_source(mCairo);
     NS_ASSERTION(pat, "I was told this couldn't be null");
 
@@ -780,6 +1082,9 @@ gfxContext::GetPattern()
 
     NS_IF_ADDREF(wrapper);
     return wrapper;
+  } else {
+    return NULL;
+  }
 }
 
 
@@ -788,19 +1093,29 @@ gfxContext::GetPattern()
 void
 gfxContext::Mask(gfxPattern *pattern)
 {
+  if (mCairo) {
     cairo_mask(mCairo, pattern->CairoPattern());
+  } else {
+  }
 }
 
 void
 gfxContext::Mask(gfxASurface *surface, const gfxPoint& offset)
 {
+  if (mCairo) {
     cairo_mask_surface(mCairo, surface->CairoSurface(), offset.x, offset.y);
+  } else {
+  }
 }
 
 void
 gfxContext::Paint(gfxFloat alpha)
 {
+  if (mCairo) {
     cairo_paint_with_alpha(mCairo, alpha);
+  } else {
+    mDT->FillRect(Rect(0, 0, 10000, 10000), ColorPattern(CurrentState().color), DrawOptions(alpha));
+  }
 }
 
 // groups
@@ -808,17 +1123,20 @@ gfxContext::Paint(gfxFloat alpha)
 void
 gfxContext::PushGroup(gfxASurface::gfxContentType content)
 {
+  if (mCairo) {
     cairo_push_group_with_content(mCairo, (cairo_content_t) content);
+  } else {
+  }
 }
 
 static gfxRect
 GetRoundOutDeviceClipExtents(gfxContext* aCtx)
 {
-    gfxContextMatrixAutoSaveRestore save(aCtx);
-    aCtx->IdentityMatrix();
-    gfxRect r = aCtx->GetClipExtents();
-    r.RoundOut();
-    return r;
+  gfxContextMatrixAutoSaveRestore save(aCtx);
+  aCtx->IdentityMatrix();
+  gfxRect r = aCtx->GetClipExtents();
+  r.RoundOut();
+  return r;
 }
 
 /**
@@ -837,6 +1155,7 @@ CopySurface(gfxASurface* aSrc, gfxASurface* aDest, const gfxPoint& aTranslation)
 void
 gfxContext::PushGroupAndCopyBackground(gfxASurface::gfxContentType content)
 {
+  if (mCairo) {
     if (content == gfxASurface::CONTENT_COLOR_ALPHA &&
         !(GetFlags() & FLAG_DISABLE_COPY_BACKGROUND)) {
         nsRefPtr<gfxASurface> s = CurrentSurface();
@@ -865,73 +1184,110 @@ gfxContext::PushGroupAndCopyBackground(gfxASurface::gfxContentType content)
         }
     }
     cairo_push_group_with_content(mCairo, (cairo_content_t) content);
+  } else {
+  }
 }
 
 already_AddRefed<gfxPattern>
 gfxContext::PopGroup()
 {
+  if (mCairo) {
     cairo_pattern_t *pat = cairo_pop_group(mCairo);
     gfxPattern *wrapper = new gfxPattern(pat);
     cairo_pattern_destroy(pat);
     NS_IF_ADDREF(wrapper);
     return wrapper;
+  } else {
+    return NULL;
+  }
 }
 
 void
 gfxContext::PopGroupToSource()
 {
+  if (mCairo) {
     cairo_pop_group_to_source(mCairo);
+  } else {
+  }
 }
 
 PRBool
 gfxContext::PointInFill(const gfxPoint& pt)
 {
+  if (mCairo) {
     return cairo_in_fill(mCairo, pt.x, pt.y);
+  } else {
+    return PR_FALSE;
+  }
 }
 
 PRBool
 gfxContext::PointInStroke(const gfxPoint& pt)
 {
+  if (mCairo) {
     return cairo_in_stroke(mCairo, pt.x, pt.y);
+  } else {
+    return PR_FALSE;
+  }
 }
 
 gfxRect
 gfxContext::GetUserPathExtent()
 {
+  if (mCairo) {
     double xmin, ymin, xmax, ymax;
     cairo_path_extents(mCairo, &xmin, &ymin, &xmax, &ymax);
     return gfxRect(xmin, ymin, xmax - xmin, ymax - ymin);
+  } else {
+    return gfxRect(0, 0, 0, 0);
+  }
 }
 
 gfxRect
 gfxContext::GetUserFillExtent()
 {
+  if (mCairo) {
     double xmin, ymin, xmax, ymax;
     cairo_fill_extents(mCairo, &xmin, &ymin, &xmax, &ymax);
     return gfxRect(xmin, ymin, xmax - xmin, ymax - ymin);
+  } else {
+    return gfxRect(0, 0, 0, 0);
+  }
 }
 
 gfxRect
 gfxContext::GetUserStrokeExtent()
 {
+  if (mCairo) {
     double xmin, ymin, xmax, ymax;
     cairo_stroke_extents(mCairo, &xmin, &ymin, &xmax, &ymax);
     return gfxRect(xmin, ymin, xmax - xmin, ymax - ymin);
+  } else {
+    return gfxRect(0, 0, 0, 0);
+  }
 }
 
 already_AddRefed<gfxFlattenedPath>
 gfxContext::GetFlattenedPath()
 {
+  if (mCairo) {
     gfxFlattenedPath *path =
         new gfxFlattenedPath(cairo_copy_path_flat(mCairo));
     NS_IF_ADDREF(path);
     return path;
+  } else {
+    return NULL;
+  }
 }
 
 PRBool
 gfxContext::HasError()
 {
-     return cairo_status(mCairo) != CAIRO_STATUS_SUCCESS;
+  if (mCairo) {
+    return cairo_status(mCairo) != CAIRO_STATUS_SUCCESS;
+  } else {
+    return PR_FALSE;
+  }
 }
 
 void
@@ -1008,6 +1364,8 @@ gfxContext::RoundedRectangle(const gfxRect& rect,
     // For the various corners and for each axis, the sign of this
     // constant changes, or it might be 0 -- it's multiplied by the
     // appropriate multiplier from the list before using.
+
+  if (mCairo) {
     const gfxFloat alpha = 0.55191497064665766025;
 
     typedef struct { gfxFloat a, b; } twoFloats;
@@ -1066,4 +1424,6 @@ gfxContext::RoundedRectangle(const gfxRect& rect,
     }
 
     cairo_close_path (mCairo);
+  } else {
+  }
 }

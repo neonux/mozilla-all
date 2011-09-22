@@ -19,9 +19,19 @@ inline Rect ToRect(const gfxRect &aRect)
               Float(aRect.width), Float(aRect.height));
 }
 
+inline Color ToColor(const gfxRGBA &aRGBA)
+{
+  return Color(aRGBA.r, aRGBA.g, aRGBA.b, aRGBA.a);
+}
+
 inline gfxRect GFXRect(const Rect &aRect)
 {
   return gfxRect(aRect.x, aRect.y, aRect.width, aRect.height);
+}
+
+inline gfxRGBA GFXRGBA(const Color &aColor)
+{
+  return gfxRGBA(aColor.r, aColor.g, aColor.b, aColor.a);
 }
 
 inline gfxASurface::gfxContentType ContentForFormat(const SurfaceFormat &aFormat)

@@ -1859,11 +1859,12 @@ BasicLayerManager::PaintLayer(gfxContext* aTarget,
 
   PRBool pushedTargetOpaqueRect = PR_FALSE;
   nsRefPtr<gfxASurface> currentSurface = aTarget->CurrentSurface();
-  const gfxRect& targetOpaqueRect = currentSurface->GetOpaqueRect();
+  const gfxRect& targetOpaqueRect = currentSurface ? currentSurface->GetOpaqueRect() : gfxRect();
 
   // Try to annotate currentSurface with a region of pixels that have been
   // (or will be) painted opaque, if no such region is currently set.
-  if (targetOpaqueRect.IsEmpty() && visibleRegion.GetNumRects() == 1 &&
+  if (currentSurface &&
+      targetOpaqueRect.IsEmpty() && visibleRegion.GetNumRects() == 1 &&
       (aLayer->GetContentFlags() & Layer::CONTENT_OPAQUE) &&
       !transform.HasNonAxisAlignedTransform()) {
     const nsIntRect& bounds = visibleRegion.GetBounds();
@@ -1946,7 +1947,7 @@ BasicLayerManager::PaintLayer(gfxContext* aTarget,
     }
   }
 
-  if (pushedTargetOpaqueRect) {
+  if (currentSurface && pushedTargetOpaqueRect) {
     currentSurface->SetOpaqueRect(gfxRect(0, 0, 0, 0));
   }
 
@@ -2049,7 +2050,6 @@ BasicLayerManager::CreateDrawTarget(const IntSize &aSize, SurfaceFormat aFormat)
                                                        SurfaceFormatToContentType(aFormat));
   return Factory::CreateDrawTargetForCairoSurface(surf->CairoSurface());
 }
-
 
 class BasicShadowableThebesLayer;
 class BasicShadowableLayer : public ShadowableLayer

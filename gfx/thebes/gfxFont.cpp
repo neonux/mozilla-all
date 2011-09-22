@@ -1190,13 +1190,19 @@ gfxFont::Draw(gfxTextRun *aTextRun, PRUint32 aStart, PRUint32 aEnd,
     double x = aPt->x;
     double y = aPt->y;
 
+    cairo_t *cr = aContext->GetCairo();
+
+    if (aContext->IsAzure()) {
+      // XXX - Azure code here!
+      return;
+    }
+
     PRBool success = SetupCairoFont(aContext);
     if (NS_UNLIKELY(!success))
         return;
 
     GlyphBuffer glyphs;
     cairo_glyph_t *glyph;
-    cairo_t *cr = aContext->GetCairo();
 
     if (aSpacing) {
         x += direction*aSpacing[0].mBefore;
@@ -1640,6 +1646,7 @@ void
 gfxFont::SetupGlyphExtents(gfxContext *aContext, PRUint32 aGlyphID, PRBool aNeedTight,
                            gfxGlyphExtents *aExtents)
 {
+  return;
     gfxMatrix matrix = aContext->CurrentMatrix();
     aContext->IdentityMatrix();
     cairo_glyph_t glyph;
