@@ -62,12 +62,26 @@ GfxOpToCairoOp(CompositionOp op)
   {
     case OP_OVER:
       return CAIRO_OPERATOR_OVER;
-    case OP_SOURCE:
-      return CAIRO_OPERATOR_SOURCE;
     case OP_ADD:
       return CAIRO_OPERATOR_ADD;
     case OP_ATOP:
       return CAIRO_OPERATOR_ATOP;
+    case OP_OUT:
+      return CAIRO_OPERATOR_OUT;
+    case OP_IN:
+      return CAIRO_OPERATOR_IN;
+    case OP_SOURCE:
+      return CAIRO_OPERATOR_SOURCE;
+    case OP_DEST_IN:
+      return CAIRO_OPERATOR_DEST_IN;
+    case OP_DEST_OUT:
+      return CAIRO_OPERATOR_DEST_OUT;
+    case OP_DEST_OVER:
+      return CAIRO_OPERATOR_DEST_OVER;
+    case OP_DEST_ATOP:
+      return CAIRO_OPERATOR_DEST_ATOP;
+    case OP_XOR:
+      return CAIRO_OPERATOR_XOR;
     case OP_COUNT:
       break;
   }
@@ -89,11 +103,26 @@ GfxFilterToCairoFilter(Filter filter)
   return CAIRO_FILTER_BILINEAR;
 }
 
+static cairo_extend_t
+GfxExtendToCairoExtend(ExtendMode extend)
+{
+  switch (extend)
+  {
+    case EXTEND_CLAMP:
+      return CAIRO_EXTEND_PAD;
+    case EXTEND_WRAP:
+      return CAIRO_EXTEND_REPEAT;
+    case EXTEND_MIRROR:
+      return CAIRO_EXTEND_REFLECT;
+  }
+
+  return CAIRO_EXTEND_PAD;
+}
+
 static cairo_format_t
 GfxFormatToCairoFormat(SurfaceFormat format)
 {
-  switch (format)
-  {
+  switch (format) {
     case FORMAT_B8G8R8A8:
       return CAIRO_FORMAT_ARGB32;
     case FORMAT_B8G8R8X8:
@@ -108,7 +137,7 @@ GfxFormatToCairoFormat(SurfaceFormat format)
 static cairo_content_t
 GfxFormatToCairoContent(SurfaceFormat format)
 {
-  switch(format)
+  switch (format)
   {
     case FORMAT_B8G8R8A8:
       return CAIRO_CONTENT_COLOR_ALPHA;
@@ -124,7 +153,7 @@ GfxFormatToCairoContent(SurfaceFormat format)
 static SurfaceFormat
 CairoContentToGfxFormat(cairo_content_t content)
 {
-  switch(content)
+  switch (content)
   {
     case CAIRO_CONTENT_COLOR_ALPHA:
       return FORMAT_B8G8R8A8;
@@ -140,7 +169,8 @@ CairoContentToGfxFormat(cairo_content_t content)
 static bool
 GetCairoSurfaceSize(cairo_surface_t* surface, IntSize& size)
 {
-  switch (cairo_surface_get_type(surface)) {
+  switch (cairo_surface_get_type(surface))
+  {
     case CAIRO_SURFACE_TYPE_IMAGE:
     {
       size.width = cairo_image_surface_get_width(surface);
@@ -371,18 +401,109 @@ DrawTargetCairo::FillRect(const Rect &aRect,
 
   cairo_save(mContext);
 
-  cairo_new_path(mContext);
-  cairo_rectangle(mContext, aRect.x, aRect.y, aRect.Width(), aRect.Height());
-
   cairo_set_operator(mContext, GfxOpToCairoOp(aOptions.mCompositionOp));
 
-  if (aPattern.GetType() == PATTERN_COLOR) {
-    Color color = static_cast<const ColorPattern&>(aPattern).mColor;
-    cairo_set_source_rgba(mContext, color.r, color.g,
-                                    color.b, color.a);
+  cairo_pattern_t* pat;
+
+  switch (aPattern.GetType())
+  {
+    case PATTERN_COLOR:
+    {
+      Color color = static_cast<const ColorPattern&>(aPattern).mColor;
+      pat = cairo_pattern_create_rgba(color.r, color.g, color.b, color.a);
+      break;
+    }
+
+    case PATTERN_SURFACE:
+    {
+      const SurfacePattern& pattern = static_cast<const SurfacePattern&>(aPattern);
+      cairo_surface_t* surf = NULL;
+
+      if (pattern.mSurface->GetType() == SURFACE_CAIRO) {
+        const SourceSurfaceCairo* sourcesurf = static_cast<const SourceSurfaceCairo*>(pattern.mSurface.get());
+        surf = sourcesurf->GetSurface();
+        cairo_surface_reference(surf);
+      } else if (pattern.mSurface->GetType() == SURFACE_CAIRO_IMAGE) {
+        const DataSourceSurfaceCairo* sourcesurf =
+          static_cast<const DataSourceSurfaceCairo*>(pattern.mSurface.get());
+        surf = sourcesurf->GetSurface();
+        cairo_surface_reference(surf);
+      } else {
+        RefPtr<DataSourceSurface> sourcesurf = pattern.mSurface->GetDataSurface();
+        surf = cairo_image_surface_create_for_data(sourcesurf->GetData(),
+                                                   GfxFormatToCairoFormat(sourcesurf->GetFormat()),
+                                                   sourcesurf->GetSize().width,
+                                                   sourcesurf->GetSize().height,
+                                                   sourcesurf->Stride());
+      }
+
+      pat = cairo_pattern_create_for_surface(surf);
+      cairo_pattern_set_filter(pat, GfxFilterToCairoFilter(pattern.mFilter));
+      cairo_pattern_set_extend(pat, GfxExtendToCairoExtend(pattern.mExtendMode));
+
+      cairo_surface_destroy(surf);
+
+      break;
+    }
+    case PATTERN_LINEAR_GRADIENT:
+    {
+      const LinearGradientPattern& pattern = static_cast<const LinearGradientPattern&>(aPattern);
+      RefPtr<GradientStops> stops = pattern.mStops;
+      if (stops->GetBackendType() == BACKEND_CAIRO) {
+        pat = cairo_pattern_create_linear(pattern.mBegin.x, pattern.mBegin.y,
+                                          pattern.mEnd.x, pattern.mEnd.y);
+
+        const std::vector<GradientStop>& stops =
+          static_cast<GradientStopsCairo*>(pattern.mStops.get())->GetStops();
+        for (std::vector<GradientStop>::const_iterator i = stops.begin();
+             i != stops.end();
+             ++i) {
+          cairo_pattern_add_color_stop_rgba(pat, i->offset, i->color.r,
+                                            i->color.g, i->color.b,
+                                            i->color.a);
+        }
+      }
+
+      break;
+    }
+    case PATTERN_RADIAL_GRADIENT:
+    {
+      const RadialGradientPattern& pattern = static_cast<const RadialGradientPattern&>(aPattern);
+      RefPtr<GradientStops> stops = pattern.mStops;
+      if (stops->GetBackendType() == BACKEND_CAIRO) {
+        pat = cairo_pattern_create_radial(pattern.mCenter1.x, pattern.mCenter1.y, pattern.mRadius1,
+                                          pattern.mCenter2.x, pattern.mCenter2.y, pattern.mRadius2);
+
+        const std::vector<GradientStop>& stops =
+          static_cast<GradientStopsCairo*>(pattern.mStops.get())->GetStops();
+        for (std::vector<GradientStop>::const_iterator i = stops.begin();
+             i != stops.end();
+             ++i) {
+          cairo_pattern_add_color_stop_rgba(pat, i->offset, i->color.r,
+                                            i->color.g, i->color.b,
+                                            i->color.a);
+        }
+      }
+
+      break;
+    }
   }
 
-  cairo_fill(mContext);
+  if (pat) {
+    cairo_set_source(mContext, pat);
+
+    cairo_new_path(mContext);
+    cairo_rectangle(mContext, aRect.x, aRect.y, aRect.Width(), aRect.Height());
+
+    if (aOptions.mAlpha != 1.0) {
+      cairo_clip(mContext);
+      cairo_paint_with_alpha(mContext, aOptions.mAlpha);
+    } else {
+      cairo_fill(mContext);
+    }
+
+    cairo_pattern_destroy(pat);
+  }
 
   cairo_restore(mContext);
 }
@@ -475,7 +596,8 @@ DrawTargetCairo::CreatePathBuilder(FillRule aFillRule /* = FILL_WINDING */) cons
 TemporaryRef<GradientStops>
 DrawTargetCairo::CreateGradientStops(GradientStop *aStops, uint32_t aNumStops) const
 {
-  return NULL;
+  RefPtr<GradientStopsCairo> stops = new GradientStopsCairo(aStops, aNumStops);
+  return stops;
 }
 
 TemporaryRef<SourceSurface>

@@ -47,6 +47,29 @@ namespace gfx {
 
 class SourceSurfaceCairo;
 
+class GradientStopsCairo : public GradientStops
+{
+  public:
+    GradientStopsCairo(GradientStop* aStops, uint32_t aNumStops)
+    {
+      for (uint32_t i = 0; i < aNumStops; ++i) {
+        mStops.push_back(aStops[i]);
+      }
+    }
+
+    virtual ~GradientStopsCairo() {}
+
+    const std::vector<GradientStop>& GetStops() const
+    {
+      return mStops;
+    }
+
+    virtual BackendType GetBackendType() const { return BACKEND_CAIRO; }
+
+  private:
+    std::vector<GradientStop> mStops;
+};
+
 class DrawTargetCairo : public DrawTarget
 {
 public:
