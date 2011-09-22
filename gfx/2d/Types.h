@@ -68,6 +68,7 @@ enum SurfaceType
   SURFACE_D2D1_BITMAP, /* Surface wrapping a ID2D1Bitmap */
   SURFACE_D2D1_DRAWTARGET, /* Surface made from a D2D draw target */
   SURFACE_CAIRO, /* Surface wrapping a cairo surface */
+  SURFACE_CAIRO_IMAGE, /* Data surface wrapping a cairo image surface */
   SURFACE_COREGRAPHICS_IMAGE /* Surface wrapping a CoreGraphics Image */
 };
 

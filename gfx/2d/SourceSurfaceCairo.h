@@ -62,7 +62,7 @@ public:
   virtual SurfaceFormat GetFormat() const;
   virtual TemporaryRef<DataSourceSurface> GetDataSurface();
 
-  cairo_surface_t* GetSurface();
+  cairo_surface_t* GetSurface() const;
 
 private: // methods
   friend class DrawTargetCairo;
@@ -84,10 +84,11 @@ public:
   virtual unsigned char *GetData();
   virtual int32_t Stride();
 
-  virtual SurfaceType GetType() const { return SURFACE_DATA; }
+  virtual SurfaceType GetType() const { return SURFACE_CAIRO_IMAGE; }
   virtual IntSize GetSize() const;
   virtual SurfaceFormat GetFormat() const;
-  virtual TemporaryRef<DataSourceSurface> GetDataSurface();
+
+  cairo_surface_t* GetSurface() const;
 
 private:
   cairo_surface_t* mImageSurface;
