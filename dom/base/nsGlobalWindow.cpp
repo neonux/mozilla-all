@@ -274,6 +274,7 @@ static PRPackedBool         gDragServiceDisabled       = PR_FALSE;
 static FILE                *gDumpFile                  = nsnull;
 static PRUint64             gNextWindowID              = 0;
 static PRUint32             gSerialCounter             = 0;
+static PRBool               gDoNotTrackEnabled         = PR_FALSE;
 
 #ifdef DEBUG_jst
 PRInt32 gTimeoutCnt                                    = 0;
@@ -431,22 +432,6 @@ static const char kCryptoContractID[] = NS_CRYPTO_CONTRACTID;
 static const char kPkcs11ContractID[] = NS_PKCS11_CONTRACTID;
 #endif
 static const char sPopStatePrefStr[] = "browser.history.allowPopState";
-
-static PRBool
-IsAboutBlank(nsIURI* aURI)
-{
-  NS_PRECONDITION(aURI, "Must have URI");
-    
-  // GetSpec can be expensive for some URIs, so check the scheme first.
-  PRBool isAbout = PR_FALSE;
-  if (NS_FAILED(aURI->SchemeIs("about", &isAbout)) || !isAbout) {
-    return PR_FALSE;
-  }
-    
-  nsCAutoString str;
-  aURI->GetSpec(str);
-  return str.EqualsLiteral("about:blank");  
-}
 
 class nsDummyJavaPluginOwner : public nsIPluginInstanceOwner
 {
@@ -961,6 +946,10 @@ nsGlobalWindow::Init()
   CallGetService(NS_ENTROPYCOLLECTOR_CONTRACTID, &gEntropyCollector);
   NS_ASSERTION(gEntropyCollector,
                "gEntropyCollector should have been initialized!");
+
+  mozilla::Preferences::AddBoolVarCache(&gDoNotTrackEnabled,
+                                        "privacy.donottrackheader.enabled",
+                                        PR_FALSE);
 
 #ifdef PR_LOGGING
   gDOMLeakPRLog = PR_NewLogModule("DOMLeak");
@@ -1610,7 +1599,7 @@ nsGlobalWindow::WouldReuseInnerWindow(nsIDocument *aNewDocument)
     return PR_FALSE;
   }
   
-  NS_ASSERTION(IsAboutBlank(mDoc->GetDocumentURI()),
+  NS_ASSERTION(NS_IsAboutBlank(mDoc->GetDocumentURI()),
                "How'd this happen?");
   
   // Great, we're the original document, check for one of the other
@@ -1659,8 +1648,8 @@ nsGlobalWindow::SetOpenerScriptPrincipal(nsIPrincipal* aPrincipal)
     // something is really weird.
     nsCOMPtr<nsIURI> uri;
     mDoc->NodePrincipal()->GetURI(getter_AddRefs(uri));
-    NS_ASSERTION(uri && IsAboutBlank(uri) &&
-                 IsAboutBlank(mDoc->GetDocumentURI()),
+    NS_ASSERTION(uri && NS_IsAboutBlank(uri) &&
+                 NS_IsAboutBlank(mDoc->GetDocumentURI()),
                  "Unexpected original document");
 #endif
 
@@ -5008,7 +4997,7 @@ nsGlobalWindow::Focus()
     NS_ASSERTION(doc, "Bogus doc?");
     nsIURI* ourURI = doc->GetDocumentURI();
     if (ourURI) {
-      lookForPresShell = !IsAboutBlank(ourURI);
+      lookForPresShell = !NS_IsAboutBlank(ourURI);
     }
   }
 
@@ -11113,6 +11102,18 @@ nsNavigator::GetBuildID(nsAString& aBuildID)
 
   aBuildID.Truncate();
   AppendASCIItoUTF16(buildID, aBuildID);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsNavigator::GetDoNotTrack(nsAString &aResult)
+{
+  if (gDoNotTrackEnabled) {
+    aResult.AssignLiteral("yes");
+  }
+  else {
+    aResult.AssignLiteral("unspecified");
+  }
   return NS_OK;
 }
 

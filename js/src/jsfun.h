@@ -204,12 +204,12 @@ struct JSFunction : public JSObject_Slots2
         return isInterpreted() ? script() : NULL;
     }
 
-    js::Native native() const {
+    JSNative native() const {
         JS_ASSERT(isNative());
         return u.n.native;
     }
 
-    js::Native maybeNative() const {
+    JSNative maybeNative() const {
         return isInterpreted() ? NULL : native();
     }
 
@@ -306,7 +306,7 @@ IsNativeFunction(const js::Value &v, JSFunction **fun)
 }
 
 static JS_ALWAYS_INLINE bool
-IsNativeFunction(const js::Value &v, Native native)
+IsNativeFunction(const js::Value &v, JSNative native)
 {
     JSFunction *fun;
     return IsFunctionObject(v, &fun) && fun->maybeNative() == native;
@@ -321,7 +321,7 @@ IsNativeFunction(const js::Value &v, Native native)
  * TODO: a per-thread shape-based cache would be faster and simpler.
  */
 static JS_ALWAYS_INLINE bool
-ClassMethodIsNative(JSContext *cx, JSObject *obj, Class *clasp, jsid methodid, Native native)
+ClassMethodIsNative(JSContext *cx, JSObject *obj, Class *clasp, jsid methodid, JSNative native)
 {
     JS_ASSERT(obj->getClass() == clasp);
 
@@ -398,6 +398,11 @@ GetFunctionNameBytes(JSContext *cx, JSFunction *fun, JSAutoByteString *bytes)
     return js_anonymous_str;
 }
 
+extern JSFunctionSpec function_methods[];
+
+extern JSBool
+Function(JSContext *cx, uintN argc, Value *vp);
+
 extern bool
 IsBuiltinFunctionConstructor(JSFunction *fun);
 
@@ -422,14 +427,8 @@ extern JSString *
 fun_toStringHelper(JSContext *cx, JSObject *obj, uintN indent);
 
 extern JSFunction *
-js_NewFunction(JSContext *cx, JSObject *funobj, js::Native native, uintN nargs,
+js_NewFunction(JSContext *cx, JSObject *funobj, JSNative native, uintN nargs,
                uintN flags, JSObject *parent, JSAtom *atom);
-
-extern JSObject *
-js_InitFunctionClass(JSContext *cx, JSObject *obj);
-
-extern JSObject *
-js_InitArgumentsClass(JSContext *cx, JSObject *obj);
 
 extern void
 js_FinalizeFunction(JSContext *cx, JSFunction *fun);
@@ -488,7 +487,7 @@ extern JSObject *
 js_NewFlatClosure(JSContext *cx, JSFunction *fun, JSOp op, size_t oplen);
 
 extern JSFunction *
-js_DefineFunction(JSContext *cx, JSObject *obj, jsid id, js::Native native,
+js_DefineFunction(JSContext *cx, JSObject *obj, jsid id, JSNative native,
                   uintN nargs, uintN flags);
 
 /*

@@ -427,7 +427,7 @@ static void
 Process(JSContext *cx, JSObject *obj, const char *filename, bool forceTTY)
 {
     JSBool ok, hitEOF;
-    JSObject *scriptObj;
+    JSScript *script;
     jsval result;
     JSString *str;
     char *buffer;
@@ -477,10 +477,10 @@ Process(JSContext *cx, JSObject *obj, const char *filename, bool forceTTY)
         int64 t1 = PRMJ_Now();
         oldopts = JS_GetOptions(cx);
         JS_SetOptions(cx, oldopts | JSOPTION_COMPILE_N_GO | JSOPTION_NO_SCRIPT_RVAL);
-        scriptObj = JS_CompileFileHandle(cx, obj, filename, file);
+        script = JS_CompileFileHandle(cx, obj, filename, file);
         JS_SetOptions(cx, oldopts);
-        if (scriptObj && !compileOnly) {
-            (void) JS_ExecuteScript(cx, obj, scriptObj, NULL);
+        if (script && !compileOnly) {
+            (void) JS_ExecuteScript(cx, obj, script, NULL);
             int64 t2 = PRMJ_Now() - t1;
             if (printTiming)
                 printf("runtime = %.3f ms\n", double(t2) / PRMJ_USEC_PER_MSEC);
@@ -575,13 +575,12 @@ Process(JSContext *cx, JSObject *obj, const char *filename, bool forceTTY)
         oldopts = JS_GetOptions(cx);
         if (!compileOnly)
             JS_SetOptions(cx, oldopts | JSOPTION_COMPILE_N_GO);
-        scriptObj = JS_CompileUCScript(cx, obj, uc_buffer, uc_len, "typein",
-                                       startline);
+        script = JS_CompileUCScript(cx, obj, uc_buffer, uc_len, "typein", startline);
         if (!compileOnly)
             JS_SetOptions(cx, oldopts);
 
-        if (scriptObj && !compileOnly) {
-            ok = JS_ExecuteScript(cx, obj, scriptObj, &result);
+        if (script && !compileOnly) {
+            ok = JS_ExecuteScript(cx, obj, script, &result);
             if (ok && !JSVAL_IS_VOID(result)) {
                 str = JS_ValueToSource(cx, result);
                 ok = !!str;
@@ -786,12 +785,12 @@ Load(JSContext *cx, uintN argc, jsval *vp)
         errno = 0;
         uint32 oldopts = JS_GetOptions(cx);
         JS_SetOptions(cx, oldopts | JSOPTION_COMPILE_N_GO | JSOPTION_NO_SCRIPT_RVAL);
-        JSObject *scriptObj = JS_CompileFile(cx, thisobj, filename.ptr());
+        JSScript *script = JS_CompileFile(cx, thisobj, filename.ptr());
         JS_SetOptions(cx, oldopts);
-        if (!scriptObj)
+        if (!script)
             return false;
 
-        if (!compileOnly && !JS_ExecuteScript(cx, thisobj, scriptObj, NULL))
+        if (!compileOnly && !JS_ExecuteScript(cx, thisobj, script, NULL))
             return false;
     }
 
@@ -955,9 +954,9 @@ Run(JSContext *cx, uintN argc, jsval *vp)
     JS_SetOptions(cx, oldopts | JSOPTION_COMPILE_N_GO | JSOPTION_NO_SCRIPT_RVAL);
 
     int64 startClock = PRMJ_Now();
-    JSObject *scriptObj = JS_CompileUCScript(cx, thisobj, ucbuf, buflen, filename.ptr(), 1);
+    JSScript *script = JS_CompileUCScript(cx, thisobj, ucbuf, buflen, filename.ptr(), 1);
     JS_SetOptions(cx, oldopts);
-    if (!scriptObj || !JS_ExecuteScript(cx, thisobj, scriptObj, NULL))
+    if (!script || !JS_ExecuteScript(cx, thisobj, script, NULL))
         return false;
 
     int64 endClock = PRMJ_Now();
@@ -1199,7 +1198,7 @@ GC(JSContext *cx, uintN argc, jsval *vp)
 {
     JSCompartment *comp = NULL;
     if (argc == 1) {
-        Value arg = Valueify(vp[2]);
+        Value arg = vp[2];
         if (arg.isObject())
             comp = arg.toObject().unwrap()->compartment();
     }
@@ -1328,7 +1327,7 @@ GCZeal(JSContext *cx, uintN argc, jsval *vp)
         if (!JS_ValueToECMAUint32(cx, vp[3], &frequency))
             return JS_FALSE;
     if (argc >= 3)
-        compartment = js_ValueToBoolean(Valueify(vp[3]));
+        compartment = js_ValueToBoolean(vp[3]);
 
     JS_SetGCZeal(cx, (uint8)zeal, frequency, compartment);
     *vp = JSVAL_VOID;
@@ -1352,7 +1351,7 @@ ScheduleGC(JSContext *cx, uintN argc, jsval *vp)
     if (!JS_ValueToECMAUint32(cx, vp[2], &count))
         return JS_FALSE;
     if (argc == 2)
-        compartment = js_ValueToBoolean(Valueify(vp[3]));
+        compartment = js_ValueToBoolean(vp[3]);
 
     JS_ScheduleGC(cx, count, compartment);
     *vp = JSVAL_VOID;
@@ -1551,10 +1550,10 @@ FinalizeCount(JSContext *cx, uintN argc, jsval *vp)
 }
 
 static JSScript *
-ValueToScript(JSContext *cx, jsval v)
+ValueToScript(JSContext *cx, jsval v, JSFunction **funp = NULL)
 {
     JSScript *script = NULL;
-    JSFunction *fun;
+    JSFunction *fun = NULL;
 
     if (!JSVAL_IS_PRIMITIVE(v)) {
         JSObject *obj = JSVAL_TO_OBJECT(v);
@@ -1579,6 +1578,8 @@ ValueToScript(JSContext *cx, jsval v)
                                  JSSMSG_SCRIPTS_ONLY);
         }
     }
+    if (fun && funp)
+        *funp = fun;
 
     return script;
 }
@@ -2002,58 +2003,51 @@ TryNotes(JSContext *cx, JSScript *script, Sprinter *sp)
 }
 
 static bool
-DisassembleValue(JSContext *cx, jsval v, bool lines, bool recursive, Sprinter *sp)
+DisassembleScript(JSContext *cx, JSScript *script, JSFunction *fun, bool lines, bool recursive,
+                  Sprinter *sp)
 {
-    JSScript *script = ValueToScript(cx, v);
-    if (!script)
-        return false;
-    if (!JSVAL_IS_PRIMITIVE(v) && JSVAL_TO_OBJECT(v)->isFunction()) {
-        JSFunction *fun = JS_ValueToFunction(cx, v);
-        if (fun && (fun->flags & ~7U)) {
-            uint16 flags = fun->flags;
-            Sprint(sp, "flags:");
-
+    if (fun && (fun->flags & ~7U)) {
+        uint16 flags = fun->flags;
+        Sprint(sp, "flags:");
+        
 #define SHOW_FLAG(flag) if (flags & JSFUN_##flag) Sprint(sp, " " #flag);
-
-            SHOW_FLAG(LAMBDA);
-            SHOW_FLAG(HEAVYWEIGHT);
-            SHOW_FLAG(EXPR_CLOSURE);
-            SHOW_FLAG(TRCINFO);
-
+        
+        SHOW_FLAG(LAMBDA);
+        SHOW_FLAG(HEAVYWEIGHT);
+        SHOW_FLAG(EXPR_CLOSURE);
+        SHOW_FLAG(TRCINFO);
+        
 #undef SHOW_FLAG
-
-            if (fun->isInterpreted()) {
-                if (fun->isNullClosure())
-                    Sprint(sp, " NULL_CLOSURE");
-                else if (fun->isFlatClosure())
-                    Sprint(sp, " FLAT_CLOSURE");
-
-                JSScript *script = fun->script();
-                if (script->bindings.hasUpvars()) {
-                    Sprint(sp, "\nupvars: {\n");
-
-                    Vector<JSAtom *> localNames(cx);
-                    if (!script->bindings.getLocalNameArray(cx, &localNames))
-                        return false;
-
-                    JSUpvarArray *uva = script->upvars();
-                    uintN upvar_base = script->bindings.countArgsAndVars();
-
-                    for (uint32 i = 0, n = uva->length; i < n; i++) {
-                        JSAtom *atom = localNames[upvar_base + i];
-                        UpvarCookie cookie = uva->vector[i];
-                        JSAutoByteString printable;
-                        if (js_AtomToPrintableString(cx, atom, &printable)) {
-                            Sprint(sp, "  %s: {skip:%u, slot:%u},\n",
-                                   printable.ptr(), cookie.level(), cookie.slot());
-                        }
-                    }
-
-                    Sprint(sp, "}");
+        
+        if (fun->isNullClosure())
+            Sprint(sp, " NULL_CLOSURE");
+        else if (fun->isFlatClosure())
+            Sprint(sp, " FLAT_CLOSURE");
+        
+        JSScript *script = fun->script();
+        if (script->bindings.hasUpvars()) {
+            Sprint(sp, "\nupvars: {\n");
+            
+            Vector<JSAtom *> localNames(cx);
+            if (!script->bindings.getLocalNameArray(cx, &localNames))
+                return false;
+            
+            JSUpvarArray *uva = script->upvars();
+            uintN upvar_base = script->bindings.countArgsAndVars();
+            
+            for (uint32 i = 0, n = uva->length; i < n; i++) {
+                JSAtom *atom = localNames[upvar_base + i];
+                UpvarCookie cookie = uva->vector[i];
+                JSAutoByteString printable;
+                if (js_AtomToPrintableString(cx, atom, &printable)) {
+                    Sprint(sp, "  %s: {skip:%u, slot:%u},\n",
+                           printable.ptr(), cookie.level(), cookie.slot());
                 }
             }
-            Sprint(sp, "\n");
+            
+            Sprint(sp, "}");
         }
+        Sprint(sp, "\n");
     }
 
     if (!js_Disassemble(cx, script, lines, sp))
@@ -2067,7 +2061,9 @@ DisassembleValue(JSContext *cx, jsval v, bool lines, bool recursive, Sprinter *s
             JSObject *obj = objects->vector[i];
             if (obj->isFunction()) {
                 Sprint(sp, "\n");
-                if (!DisassembleValue(cx, OBJECT_TO_JSVAL(obj), lines, recursive, sp))
+                JSFunction *fun = obj->getFunctionPrivate();
+                JSScript *nested = fun->maybeScript();
+                if (!DisassembleScript(cx, nested, fun, lines, recursive, sp))
                     return false;
             }
         }
@@ -2075,24 +2071,44 @@ DisassembleValue(JSContext *cx, jsval v, bool lines, bool recursive, Sprinter *s
     return true;
 }
 
+namespace {
+
+struct DisassembleOptionParser {
+    uintN   argc;
+    jsval   *argv;
+    bool    lines;
+    bool    recursive;
+
+    DisassembleOptionParser(uintN argc, jsval *argv)
+      : argc(argc), argv(argv), lines(false), recursive(false) {}
+
+    bool parse(JSContext *cx) {
+        /* Read options off early arguments */
+        while (argc > 0 && JSVAL_IS_STRING(argv[0])) {
+            JSString *str = JSVAL_TO_STRING(argv[0]);
+            JSFlatString *flatStr = JS_FlattenString(cx, str);
+            if (!flatStr)
+                return false;
+            if (JS_FlatStringEqualsAscii(flatStr, "-l"))
+                lines = true;
+            else if (JS_FlatStringEqualsAscii(flatStr, "-r"))
+                recursive = true;
+            else
+                break;
+            argv++, argc--;
+        }
+        return true;
+    }
+};
+
+} /* anonymous namespace */
+
 static JSBool
 DisassembleToString(JSContext *cx, uintN argc, jsval *vp)
 {
-    jsval *argv = JS_ARGV(cx, vp);
-
-    /* Read options off early arguments */
-    bool lines = false, recursive = false;
-    while (argc > 0 && JSVAL_IS_STRING(argv[0])) {
-        JSString *str = JSVAL_TO_STRING(argv[0]);
-        JSFlatString *flatStr = JS_FlattenString(cx, str);
-        if (!flatStr)
-            return JS_FALSE;
-        lines |= !!JS_FlatStringEqualsAscii(flatStr, "-l");
-        recursive |= !!JS_FlatStringEqualsAscii(flatStr, "-r");
-        if (!lines && !recursive)
-            break;
-        argv++, argc--;
-    }
+    DisassembleOptionParser p(argc, JS_ARGV(cx, vp));
+    if (!p.parse(cx))
+        return false;
 
     void *mark = JS_ARENA_MARK(&cx->tempPool);
     Sprinter sprinter;
@@ -2100,11 +2116,11 @@ DisassembleToString(JSContext *cx, uintN argc, jsval *vp)
     Sprinter *sp = &sprinter;
 
     bool ok = true;
-    if (argc == 0) {
+    if (p.argc == 0) {
         /* Without arguments, disassemble the current script. */
         if (JSStackFrame *frame = JS_GetScriptedCaller(cx, NULL)) {
             JSScript *script = JS_GetFrameScript(cx, frame);
-            if (js_Disassemble(cx, script, lines, sp)) {
+            if (js_Disassemble(cx, script, p.lines, sp)) {
                 SrcNotes(cx, script, sp);
                 TryNotes(cx, script, sp);
             } else {
@@ -2112,8 +2128,11 @@ DisassembleToString(JSContext *cx, uintN argc, jsval *vp)
             }
         }
     } else {
-        for (uintN i = 0; i < argc; i++)
-            ok = ok && DisassembleValue(cx, argv[i], lines, recursive, sp);
+        for (uintN i = 0; i < p.argc; i++) {
+            JSFunction *fun;
+            JSScript *script = ValueToScript(cx, p.argv[i], &fun);
+            ok = ok && script && DisassembleScript(cx, script, fun, p.lines, p.recursive, sp);
+        }
     }
 
     JSString *str = ok ? JS_NewStringCopyZ(cx, sprinter.base) : NULL;
@@ -2127,21 +2146,9 @@ DisassembleToString(JSContext *cx, uintN argc, jsval *vp)
 static JSBool
 Disassemble(JSContext *cx, uintN argc, jsval *vp)
 {
-    jsval *argv = JS_ARGV(cx, vp);
-
-    /* Read options off early arguments */
-    bool lines = false, recursive = false;
-    while (argc > 0 && JSVAL_IS_STRING(argv[0])) {
-        JSString *str = JSVAL_TO_STRING(argv[0]);
-        JSFlatString *flatStr = JS_FlattenString(cx, str);
-        if (!flatStr)
-            return JS_FALSE;
-        lines |= !!JS_FlatStringEqualsAscii(flatStr, "-l");
-        recursive |= !!JS_FlatStringEqualsAscii(flatStr, "-r");
-        if (!lines && !recursive)
-            break;
-        argv++, argc--;
-    }
+    DisassembleOptionParser p(argc, JS_ARGV(cx, vp));
+    if (!p.parse(cx))
+        return false;
 
     void *mark = JS_ARENA_MARK(&cx->tempPool);
     Sprinter sprinter;
@@ -2149,11 +2156,11 @@ Disassemble(JSContext *cx, uintN argc, jsval *vp)
     Sprinter *sp = &sprinter;
 
     bool ok = true;
-    if (argc == 0) {
+    if (p.argc == 0) {
         /* Without arguments, disassemble the current script. */
         if (JSStackFrame *frame = JS_GetScriptedCaller(cx, NULL)) {
             JSScript *script = JS_GetFrameScript(cx, frame);
-            if (js_Disassemble(cx, script, lines, sp)) {
+            if (js_Disassemble(cx, script, p.lines, sp)) {
                 SrcNotes(cx, script, sp);
                 TryNotes(cx, script, sp);
             } else {
@@ -2161,8 +2168,11 @@ Disassemble(JSContext *cx, uintN argc, jsval *vp)
             }
         }
     } else {
-        for (uintN i = 0; i < argc; i++)
-            ok = ok && DisassembleValue(cx, argv[i], lines, recursive, sp);
+        for (uintN i = 0; i < p.argc; i++) {
+            JSFunction *fun;
+            JSScript *script = ValueToScript(cx, p.argv[i], &fun);
+            ok = ok && script && DisassembleScript(cx, script, fun, p.lines, p.recursive, sp);
+        }
     }
 
     if (ok)
@@ -2175,23 +2185,21 @@ Disassemble(JSContext *cx, uintN argc, jsval *vp)
 static JSBool
 DisassFile(JSContext *cx, uintN argc, jsval *vp)
 {
-    jsval *argv = JS_ARGV(cx, vp);
-
-    if (!argc) {
+    /* Support extra options at the start, just like Dissassemble. */
+    DisassembleOptionParser p(argc, JS_ARGV(cx, vp));
+    if (!p.parse(cx))
+        return false;
+    
+    if (!p.argc) {
         JS_SET_RVAL(cx, vp, JSVAL_VOID);
         return JS_TRUE;
     }
-
-    /* Support extra options at the start, just like Dissassemble. */
-    uintN _argc = argc;
-    argv += argc-1;
-    argc = 1;
 
     JSObject *thisobj = JS_THIS_OBJECT(cx, vp);
     if (!thisobj)
         return JS_FALSE;
 
-    JSString *str = JS_ValueToString(cx, argv[0]);
+    JSString *str = JS_ValueToString(cx, p.argv[0]);
     if (!str)
         return JS_FALSE;
     JSAutoByteString filename(cx, str);
@@ -2200,15 +2208,23 @@ DisassFile(JSContext *cx, uintN argc, jsval *vp)
 
     uint32 oldopts = JS_GetOptions(cx);
     JS_SetOptions(cx, oldopts | JSOPTION_COMPILE_N_GO | JSOPTION_NO_SCRIPT_RVAL);
-    JSObject *scriptObj = JS_CompileFile(cx, thisobj, filename.ptr());
+    JSScript *script = JS_CompileFile(cx, thisobj, filename.ptr());
     JS_SetOptions(cx, oldopts);
-    if (!scriptObj)
+    if (!script)
         return false;
 
-    argv[0] = OBJECT_TO_JSVAL(scriptObj);
-    JSBool ok = Disassemble(cx, _argc, vp); /* gross, but works! */
+    void *mark = JS_ARENA_MARK(&cx->tempPool);
+    Sprinter sprinter;
+    INIT_SPRINTER(cx, &sprinter, &cx->tempPool, 0);
+    bool ok = DisassembleScript(cx, script, NULL, p.lines, p.recursive, &sprinter);
+    if (ok)
+        fprintf(stdout, "%s\n", sprinter.base);
+    JS_ARENA_RELEASE(&cx->tempPool, mark);
+    if (!ok)
+        return false;
+    
     JS_SET_RVAL(cx, vp, JSVAL_VOID);
-    return ok;
+    return true;
 }
 
 static JSBool
@@ -2347,7 +2363,7 @@ DumpStats(JSContext *cx, uintN argc, jsval *vp)
             if (!js_FindProperty(cx, id, false, &obj, &obj2, &prop))
                 return JS_FALSE;
             if (prop) {
-                if (!obj->getProperty(cx, id, &value))
+                if (!obj->getGeneric(cx, id, &value))
                     return JS_FALSE;
             }
             if (!prop || !value.isObjectOrNull()) {
@@ -2518,7 +2534,7 @@ DumpStack(JSContext *cx, uintN argc, Value *vp)
         } else {
             v = iter.nativeArgs().calleev();
         }
-        if (!JS_SetElement(cx, arr, index, Jsvalify(&v)))
+        if (!JS_SetElement(cx, arr, index, &v))
             return false;
     }
 
@@ -3023,7 +3039,7 @@ EvalInContext(JSContext *cx, uintN argc, jsval *vp)
         }
     }
 
-    if (!cx->compartment->wrap(cx, Valueify(&rval)))
+    if (!cx->compartment->wrap(cx, &rval))
         return false;
 
     JS_SET_RVAL(cx, vp, rval);
@@ -3138,10 +3154,10 @@ CopyProperty(JSContext *cx, JSObject *obj, JSObject *referent, jsid id,
         desc.attrs = shape->attributes();
         desc.getter = shape->getter();
         if (!desc.getter && !(desc.attrs & JSPROP_GETTER))
-            desc.getter = PropertyStub;
+            desc.getter = JS_PropertyStub;
         desc.setter = shape->setter();
         if (!desc.setter && !(desc.attrs & JSPROP_SETTER))
-            desc.setter = StrictPropertyStub;
+            desc.setter = JS_StrictPropertyStub;
         desc.shortid = shape->shortid;
         propFlags = shape->getFlags();
    } else if (referent->isProxy()) {
@@ -3155,13 +3171,13 @@ CopyProperty(JSContext *cx, JSObject *obj, JSObject *referent, jsid id,
             return false;
         if (*objp != referent)
             return true;
-        if (!referent->getProperty(cx, id, &desc.value) ||
+        if (!referent->getGeneric(cx, id, &desc.value) ||
             !referent->getAttributes(cx, id, &desc.attrs)) {
             return false;
         }
         desc.attrs &= JSPROP_ENUMERATE | JSPROP_READONLY | JSPROP_PERMANENT;
-        desc.getter = PropertyStub;
-        desc.setter = StrictPropertyStub;
+        desc.getter = JS_PropertyStub;
+        desc.setter = JS_StrictPropertyStub;
         desc.shortid = 0;
     }
 
@@ -4161,7 +4177,7 @@ ParseLegacyJSON(JSContext *cx, uintN argc, jsval *vp)
     const jschar *chars = JS_GetStringCharsAndLength(cx, str, &length);
     if (!chars)
         return false;
-    return js::ParseJSONWithReviver(cx, chars, length, js::NullValue(), js::Valueify(vp), LEGACY);
+    return js::ParseJSONWithReviver(cx, chars, length, js::NullValue(), vp, LEGACY);
 }
 
 static JSBool
@@ -5723,9 +5739,12 @@ main(int argc, char **argv, char **envp)
     CALIBRATION_DELAY_COUNT = 0;
 #endif
 
-    rt = JS_NewRuntime(160L * 1024L * 1024L);
+    /* Use the same parameters as the browser in xpcjsruntime.cpp. */
+    rt = JS_NewRuntime(32L * 1024L * 1024L);
     if (!rt)
         return 1;
+
+    JS_SetGCParameter(rt, JSGC_MAX_BYTES, 0xffffffff);
 
     JS_SetTrustedPrincipals(rt, &shellTrustedPrincipals);
     JS_SetRuntimeSecurityCallbacks(rt, &securityCallbacks);

@@ -1,4 +1,5 @@
-/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
+/* vim: set ts=2 et sw=2 tw=80: */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
@@ -12,15 +13,15 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is TransforMiiX XSLT processor code.
+ * The Original Code is mozilla.org code.
  *
  * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2001
+ * Mozilla Foundation.
+ * Portions created by the Initial Developer are Copyright (C) 2011
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
- *   Peter Van der Beken <peterv@propagandism.org>
+ *   Masayuki Nakano <masayuki@d-toybox.com>
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -36,13 +37,27 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-#ifndef TRANSFRMX_ATOMS_H
-#define TRANSFRMX_ATOMS_H
+#ifndef nsDOMCompositionEvent_h__
+#define nsDOMCompositionEvent_h__
 
-#include "nsGkAtoms.h"
-typedef class nsGkAtoms txXPathAtoms;
-typedef class nsGkAtoms txXMLAtoms;
-typedef class nsGkAtoms txXSLTAtoms;
-typedef class nsGkAtoms txHTMLAtoms;
+#include "nsDOMUIEvent.h"
+#include "nsIDOMCompositionEvent.h"
 
-#endif
+class nsDOMCompositionEvent : public nsDOMUIEvent,
+                              public nsIDOMCompositionEvent
+{
+public:
+  nsDOMCompositionEvent(nsPresContext* aPresContext,
+                        nsCompositionEvent* aEvent);
+  virtual ~nsDOMCompositionEvent();
+
+  NS_DECL_ISUPPORTS_INHERITED
+  NS_FORWARD_TO_NSDOMUIEVENT
+  NS_DECL_NSIDOMCOMPOSITIONEVENT
+
+protected:
+  nsString mData;
+  nsString mLocale;
+};
+
+#endif // nsDOMCompositionEvent_h__

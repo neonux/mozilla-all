@@ -342,6 +342,10 @@ toolbarbutton.urlbar-button {
   list-style-image: url("chrome://browser/skin/images/settings-default-hdpi.png");
 }
 
+#tool-menu {
+  list-style-image: url("chrome://browser/skin/images/menu-hdpi.png");
+}
+
 %ifndef ANDROID
 /* MAEMO (and desktop) only */
 .panel-close {
@@ -873,10 +877,6 @@ autocompleteresult.noresults > .autocomplete-item-container {
 #tabs-container {
   -moz-border-end: @border_width_large@ solid #262629;
   background: @color_background_default@;
-}
-
-#tabs:-moz-locale-dir(rtl) {
-  -moz-box-align: start;
 }
 
 #tabs > .tabs-scrollbox {
