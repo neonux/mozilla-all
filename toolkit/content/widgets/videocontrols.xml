@@ -215,9 +215,12 @@
                         <label class="positionLabel" role="presentation"/>
                         <label class="durationLabel" role="presentation"/>
                     </vbox>
-                    <stack class="volumeStack">
+                    <button class="muteButton"
+                            mutelabel="&muteButton.muteLabel;"
+                            unmutelabel="&muteButton.unmuteLabel;"/>
+                    <stack class="volumeStack" hidden="true" fadeout="true">
                         <box class="volumeBackgroundBar"/>
-                        <scale class="volumeControl" orient="horizontal" dir="normal" movetoclick="true"/>
+                        <scale class="volumeControl" orient="vertical" dir="reverse" movetoclick="true"/>
                     </stack>
                 </hbox>
             </vbox>
@@ -241,6 +244,7 @@
                 videocontrols : null,
                 controlBar : null,
                 playButton : null,
+                muteButton : null,
                 volumeStack    : null,
                 volumeControl  : null,
                 durationLabel  : null,
@@ -298,6 +302,7 @@
                     this.videocontrols.randomID = this.randomID;
 
                     this.setPlayButtonState(this.video.paused);
+                    this.setMuteButtonState(this.video.muted);
 
                     var volume = this.video.muted ? 0 : Math.round(this.video.volume * 100);
                     this.volumeControl.value = volume;
@@ -402,6 +407,7 @@
                             break;
                         case "volumechange":
                             var volume = this.video.muted ? 0 : Math.round(this.video.volume * 100);
+                            this.setMuteButtonState(this.video.muted);
                             this.volumeControl.value = volume;
                             break;
                         case "loadedmetadata":
@@ -565,7 +571,6 @@
 
                 setVolume : function(newVolume) {
                     this.log("*** setting volume to " + newVolume);
-                    this.volumeStack.firstChild.style.paddingRight = (1 - newVolume) * 32 + "px";
                     this.video.volume = newVolume;
                     this.video.muted = false;
                 },
@@ -628,6 +633,15 @@
                     }
                     this.bufferBar.max = duration;
                     this.bufferBar.value = endTime;
+                },
+
+                onVolumeMouseInOut : function (event) {
+                    // Ignore events caused by transitions between mute button and volumeStack,
+                    // or between nodes inside these two elements.
+                    if (this.isEventWithin(event, this.muteButton, this.volumeStack))
+                        return;
+                    var isMouseOver = (event.type == "mouseover");
+                    this.startFade(this.volumeStack, isMouseOver);
                 },
 
                 onMouseInOut : function (event) {
@@ -732,6 +746,14 @@
                   var attrName = aPaused ? "playlabel" : "pauselabel";
                   var value = this.playButton.getAttribute(attrName);
                   this.playButton.setAttribute("aria-label", value);
+                },
+
+                setMuteButtonState : function(aMuted) {
+                  this.muteButton.setAttribute("muted", aMuted);
+
+                  var attrName = aMuted ? "unmutelabel" : "mutelabel";
+                  var value = this.muteButton.getAttribute(attrName);
+                  this.muteButton.setAttribute("aria-label", value);
                 },
 
                 keyHandler : function(event) {
@@ -893,6 +915,7 @@
                     this.statusIcon    = document.getAnonymousElementByAttribute(binding, "class", "statusIcon");
                     this.controlBar    = document.getAnonymousElementByAttribute(binding, "class", "controlBar");
                     this.playButton    = document.getAnonymousElementByAttribute(binding, "class", "playButton");
+                    this.muteButton    = document.getAnonymousElementByAttribute(binding, "class", "muteButton");
                     this.volumeControl = document.getAnonymousElementByAttribute(binding, "class", "volumeControl");
                     this.volumeStack   = document.getAnonymousElementByAttribute(binding, "class", "volumeStack");
                     this.progressBar   = document.getAnonymousElementByAttribute(binding, "class", "progressBar");
@@ -926,8 +949,15 @@
                         this.video.addEventListener(event, this, (event == "error") ? true : false);
 
                     var self = this;
+                    this.muteButton.addEventListener("command", function() { self.toggleMute(); }, false);
                     this.playButton.addEventListener("command", function() { self.togglePause(); }, false);
                     this.controlsSpacer.addEventListener("click", function(e) { if (e.button == 0) { self.togglePause(); } }, false);
+                    if (!this.isAudioOnly) {
+                      this.muteButton.addEventListener("mouseover",  function(e) { self.onVolumeMouseInOut(e); }, false);
+                      this.muteButton.addEventListener("mouseout",   function(e) { self.onVolumeMouseInOut(e); }, false);
+                      this.volumeStack.addEventListener("mouseover", function(e) { self.onVolumeMouseInOut(e); }, false);
+                      this.volumeStack.addEventListener("mouseout",  function(e) { self.onVolumeMouseInOut(e); }, false);
+                    }
 
                     this.videocontrols.addEventListener("transitionend", function(e) { self.onTransitionEnd(e); }, false);
 
