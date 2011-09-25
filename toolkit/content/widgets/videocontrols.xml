@@ -218,9 +218,9 @@
                     <button class="muteButton"
                             mutelabel="&muteButton.muteLabel;"
                             unmutelabel="&muteButton.unmuteLabel;"/>
-                    <stack class="volumeStack">
+                    <stack class="volumeStack" hidden="true" fadeout="true">
                         <box class="volumeBackgroundBar"/>
-                        <scale class="volumeControl" movetoclick="true"/>
+                        <scale class="volumeControl" orient="vertical" dir="reverse" movetoclick="true"/>
                     </stack>
                 </hbox>
             </vbox>
@@ -571,8 +571,6 @@
 
                 setVolume : function(newVolume) {
                     this.log("*** setting volume to " + newVolume);
-                    this.volumeStack.firstChild.style.paddingRight =
-                      (1 - newVolume) * this.volumeStack.clientWidth + "px";
                     this.video.volume = newVolume;
                     this.video.muted = false;
                 },
@@ -635,6 +633,15 @@
                     }
                     this.bufferBar.max = duration;
                     this.bufferBar.value = endTime;
+                },
+
+                onVolumeMouseInOut : function (event) {
+                    // Ignore events caused by transitions between mute button and volumeStack,
+                    // or between nodes inside these two elements.
+                    if (this.isEventWithin(event, this.muteButton, this.volumeStack))
+                        return;
+                    var isMouseOver = (event.type == "mouseover");
+                    this.startFade(this.volumeStack, isMouseOver);
                 },
 
                 onMouseInOut : function (event) {
@@ -945,6 +952,12 @@
                     this.muteButton.addEventListener("command", function() { self.toggleMute(); }, false);
                     this.playButton.addEventListener("command", function() { self.togglePause(); }, false);
                     this.controlsSpacer.addEventListener("click", function(e) { if (e.button == 0) { self.togglePause(); } }, false);
+                    if (!this.isAudioOnly) {
+                      this.muteButton.addEventListener("mouseover",  function(e) { self.onVolumeMouseInOut(e); }, false);
+                      this.muteButton.addEventListener("mouseout",   function(e) { self.onVolumeMouseInOut(e); }, false);
+                      this.volumeStack.addEventListener("mouseover", function(e) { self.onVolumeMouseInOut(e); }, false);
+                      this.volumeStack.addEventListener("mouseout",  function(e) { self.onVolumeMouseInOut(e); }, false);
+                    }
 
                     this.videocontrols.addEventListener("transitionend", function(e) { self.onTransitionEnd(e); }, false);
 
@@ -993,9 +1006,9 @@
                         <button class="muteButton"
                                 mutelabel="&muteButton.muteLabel;"
                                 unmutelabel="&muteButton.unmuteLabel;"/>
-                        <stack class="volumeStack">
+                        <stack class="volumeStack" hidden="true" fadeout="true">
                             <box class="volumeBackgroundBar"/>
-                            <scale class="volumeControl" movetoclick="true"/>
+                            <scale class="volumeControl" orient="vertical" dir="reverse" movetoclick="true"/>
                         </stack>
                     </hbox>
                     <stack class="scrubberStack" flex="1">
