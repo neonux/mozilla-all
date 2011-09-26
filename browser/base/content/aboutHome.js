@@ -169,8 +169,7 @@ function onSearchSubmit(aEvent)
     for (let key in SEARCH_TOKENS) {
       url = url.replace(key, SEARCH_TOKENS[key]);
     }
-    window.open(url);
-    document.getElementById("searchText").value = "";
+    window.location.href = url;
   }
 
   aEvent.preventDefault();
