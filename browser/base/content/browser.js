@@ -1250,10 +1250,6 @@ function BrowserStartup() {
       loadOneOrMoreURIs(uriToLoad);
   }
 
-  // Use the first tab as the home tab if we're only loading about:home
-  let useFirstTab = !uriToLoad || uriToLoad == "about:home";
-  gBrowser.addHomeTab(useFirstTab);
-
   if (window.opener && !window.opener.closed) {
     let openerSidebarBox = window.opener.document.getElementById("sidebar-box");
     // If the opener had a sidebar, open the same sidebar in our window.
@@ -2523,11 +2519,9 @@ function URLBarSetURI(aURI) {
   if (value == null) {
     let uri = aURI || getWebNavigation().currentURI;
 
-    if (gBrowser.mCurrentTab.isHomeTab)
-      value = "";
     // Replace initial page URIs with an empty string
     // only if there's no opener (bug 370555).
-    else if (gInitialPages.indexOf(uri.spec) != -1)
+    if (gInitialPages.indexOf(uri.spec) != -1)
       value = content.opener ? uri.spec : "";
     else
       value = losslessDecodeURI(uri);
@@ -4265,10 +4259,6 @@ var XULBrowserWindow = {
     // tab docshells (isAppTab will be false for app tab subframes).
     if (originalTarget != "" || !isAppTab)
       return originalTarget;
-
-    // Open links from home tab in new tabs.
-    if (linkNode.ownerDocument.documentURIObject.spec == "about:home")
-      return "_blank";
 
     // External links from within app tabs should always open in new tabs
     // instead of replacing the app tab's page (Bug 575561)
@@ -8707,7 +8697,7 @@ var TabContextMenu = {
 
     // Enable the "Close Tab" menuitem when the window doesn't close with the last tab.
     document.getElementById("context_closeTab").disabled =
-      disabled && gBrowser.tabContainer._closeWindowWithLastTab || this.contextTab.isHomeTab;
+      disabled && gBrowser.tabContainer._closeWindowWithLastTab;
 
     var menuItems = aPopupMenu.getElementsByAttribute("tbattr", "tabbrowser-multiple");
     for (var i = 0; i < menuItems.length; i++)
@@ -8723,9 +8713,6 @@ var TabContextMenu = {
       Cc["@mozilla.org/browser/sessionstore;1"].
       getService(Ci.nsISessionStore).
       getClosedTabCount(window) == 0;
-
-    document.getElementById("context_unpinTab").disabled = this.contextTab.isHomeTab;
-    document.getElementById("context_openTabInWindow").disabled = this.contextTab.isHomeTab || disabled;
 
     // Only one of pin/unpin should be visible
     document.getElementById("context_pinTab").hidden = this.contextTab.pinned;
