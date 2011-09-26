@@ -195,7 +195,6 @@ function openLinkIn(url, where, params) {
   var aCharset              = params.charset;
   var aReferrerURI          = params.referrerURI;
   var aRelatedToCurrent     = params.relatedToCurrent;
-  var aInBackground         = params.inBackground;
 
   if (where == "save") {
     saveURL(url, null, null, true, null, aReferrerURI);
@@ -241,12 +240,9 @@ function openLinkIn(url, where, params) {
     return;
   }
 
-  let loadInBackground = aInBackground;
-  if (loadInBackground == null) {
-    loadInBackground = aFromChrome ?
+  var loadInBackground = aFromChrome ?
                          getBoolPref("browser.tabs.loadBookmarksInBackground") :
                          getBoolPref("browser.tabs.loadInBackground");
-  }
 
   if (where == "current" && w.gBrowser.selectedTab.pinned) {
     try {

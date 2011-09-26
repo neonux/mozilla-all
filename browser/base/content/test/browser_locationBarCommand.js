@@ -132,12 +132,6 @@ let tests = [
       aCallback();
     });
   },
-
-  function testAltReturnPopup(aCallback) {
-    // TODO: make popup window, then try to open url with alt+enter - url should open in full browser window
-    
-    aCallback();
-  }
 ]
 
 /** 
