@@ -1541,6 +1541,12 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
   // Enable/Disable auto-hide tabbar
   gBrowser.tabContainer.updateVisibility();
 
+  gPrefService.addObserver(gHomeButton.prefDomain, gHomeButton, false);
+
+  var homeButton = document.getElementById("home-button");
+  gHomeButton.updateTooltip(homeButton);
+  gHomeButton.updatePersonalToolbarStyle(homeButton);
+
 #ifdef HAVE_SHELL_SERVICE
   // Perform default browser checking (after window opens).
   var shell = getShellService();
@@ -1791,6 +1797,12 @@ function BrowserShutdown() {
     Services.obs.removeObserver(gXPInstallObserver, "addon-install-failed");
     Services.obs.removeObserver(gXPInstallObserver, "addon-install-complete");
     Services.obs.removeObserver(gFormSubmitObserver, "invalidformsubmit");
+
+    try {
+      gPrefService.removeObserver(gHomeButton.prefDomain, gHomeButton);
+    } catch (ex) {
+      Components.utils.reportError(ex);
+    }
 
     BrowserOffline.uninit();
     OfflineApps.uninit();
@@ -3087,6 +3099,43 @@ var browserDragAndDrop = {
   drop: function (aEvent, aName) Services.droppedLinkHandler.dropLink(aEvent, aName)
 };
 
+var homeButtonObserver = {
+  onDrop: function (aEvent)
+    {
+      setTimeout(openHomeDialog, 0, browserDragAndDrop.drop(aEvent, { }));
+    },
+
+  onDragOver: function (aEvent)
+    {
+      browserDragAndDrop.dragOver(aEvent);
+      aEvent.dropEffect = "link";
+    },
+  onDragExit: function (aEvent)
+    {
+    }
+}
+
+function openHomeDialog(aURL)
+{
+  var promptTitle = gNavigatorBundle.getString("droponhometitle");
+  var promptMsg   = gNavigatorBundle.getString("droponhomemsg");
+  var pressedVal  = Services.prompt.confirmEx(window, promptTitle, promptMsg,
+                          Services.prompt.STD_YES_NO_BUTTONS,
+                          null, null, null, null, {value:0});
+
+  if (pressedVal == 0) {
+    try {
+      var str = Components.classes["@mozilla.org/supports-string;1"]
+                          .createInstance(Components.interfaces.nsISupportsString);
+      str.data = aURL;
+      gPrefService.setComplexValue("browser.startup.homepage",
+                                   Components.interfaces.nsISupportsString, str);
+    } catch (ex) {
+      dump("Failed to set the home page.\n"+ex+"\n");
+    }
+  }
+}
+
 var bookmarksButtonObserver = {
   onDrop: function (aEvent)
   {
@@ -3603,6 +3652,7 @@ function BrowserToolboxCustomizeDone(aToolboxChanged) {
     gURLBar = document.getElementById("urlbar");
 
     gProxyFavIcon = document.getElementById("page-proxy-favicon");
+    gHomeButton.updateTooltip();
     gIdentityHandler._cacheElements();
     window.XULBrowserWindow.init();
 
@@ -3656,6 +3706,7 @@ function BrowserToolboxCustomizeChange(aType) {
       retrieveToolbarIconsizesFromTheme();
       break;
     default:
+      gHomeButton.updatePersonalToolbarStyle();
       BookmarksMenuButton.customizeChange();
       allTabs.readPref();
   }
@@ -5454,9 +5505,30 @@ function fireSidebarFocusedEvent() {
   sidebar.contentWindow.dispatchEvent(event);
 }
 
-// The home button was removed, but this object remains as a way to get at the home page pref
 var gHomeButton = {
   prefDomain: "browser.startup.homepage",
+  observe: function (aSubject, aTopic, aPrefName)
+  {
+    if (aTopic != "nsPref:changed" || aPrefName != this.prefDomain)
+      return;
+
+    this.updateTooltip();
+  },
+
+  updateTooltip: function (homeButton)
+  {
+    if (!homeButton)
+      homeButton = document.getElementById("home-button");
+    if (homeButton) {
+      var homePage = this.getHomePage();
+      homePage = homePage.replace(/\|/g,', ');
+      if (homePage.toLowerCase() == "about:home")
+        homeButton.setAttribute("tooltiptext", homeButton.getAttribute("aboutHomeOverrideTooltip"));
+      else
+        homeButton.setAttribute("tooltiptext", homePage);
+    }
+  },
+
   getHomePage: function ()
   {
     var url;
@@ -5474,6 +5546,17 @@ var gHomeButton = {
     }
 
     return url;
+  },
+
+  updatePersonalToolbarStyle: function (homeButton)
+  {
+    if (!homeButton)
+      homeButton = document.getElementById("home-button");
+    if (homeButton)
+      homeButton.className = homeButton.parentNode.id == "PersonalToolbar"
+                               || homeButton.parentNode.parentNode.id == "PersonalToolbar" ?
+                             homeButton.className.replace("toolbarbutton-1", "bookmark-item") :
+                             homeButton.className.replace("bookmark-item", "toolbarbutton-1");
   }
 };
 

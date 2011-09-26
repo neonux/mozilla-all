@@ -628,10 +628,7 @@ nsBrowserContentHandler.prototype = {
     try {
       var choice = prefb.getIntPref("browser.startup.page");
       if (choice == 1 || choice == 3)
-        startPage = "about:home";
-
-      if (choice == 4)
-        startPage = this.startPage;  
+        startPage = this.startPage;
 
       if (choice == 2)
         startPage = Components.classes["@mozilla.org/browser/global-history;2"]

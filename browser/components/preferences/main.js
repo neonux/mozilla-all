@@ -90,14 +90,6 @@ var gMainPane = {
     let startupPref = document.getElementById("browser.startup.page");
     let restoreOnDemandPref = document.getElementById("browser.sessionstore.restore_on_demand");
     restoreOnDemandPref.disabled = startupPref.value != 3;
-
-    let homePagePref = document.getElementById("browser.startup.homepage");
-    let useBookmark = document.getElementById("useBookmark");
-    homePagePref.disabled = useBookmark.disabled = startupPref.value != 4;
-
-    // Don't accidentally re-enable useCurrent button
-    let useCurrent = document.getElementById("useCurrent");
-    useCurrent.disabled = useCurrent.disabled || startupPref.value != 4;
   },
 
   syncFromHomePref: function ()
@@ -148,7 +140,7 @@ var gMainPane = {
 
     if (win) {
       var homePage = document.getElementById("browser.startup.homepage");
-      var tabs = win.gBrowser.visibleTabs.slice(1);
+      var tabs = win.gBrowser.visibleTabs;
       function getTabURI(t) t.linkedBrowser.currentURI.spec;
       // FIXME Bug 244192: using dangerous "|" joiner!
       homePage.value = tabs.map(getTabURI).join("|");
@@ -197,7 +189,7 @@ var gMainPane = {
       windowIsPresent = true;
 
       var tabbrowser = win.document.getElementById("content");
-      if (tabbrowser.browsers.length > 2)
+      if (tabbrowser.browsers.length > 1)
         useCurrent.label = useCurrent.getAttribute("label2");
       else
         useCurrent.label = useCurrent.getAttribute("label1");
@@ -212,9 +204,16 @@ var gMainPane = {
         ("pref.browser.homepage.disable_button.current_page").locked)
       return;
 
-    // Don't accidentally re-enable the useCurrent button
-    useCurrent.disabled = useCurrent.disabled || !windowIsPresent ||
-                          win.gBrowser.selectedTab.isHomeTab;
+    useCurrent.disabled = !windowIsPresent;
+  },
+
+  /**
+   * Restores the default home page as the user's home page.
+   */
+  restoreDefaultHomePage: function ()
+  {
+    var homePage = document.getElementById("browser.startup.homepage");
+    homePage.value = homePage.defaultValue;
   },
 
   // DOWNLOADS

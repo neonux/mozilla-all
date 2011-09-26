@@ -79,6 +79,9 @@
       <preference id="pref.browser.homepage.disable_button.bookmark_page"
                   name="pref.browser.homepage.disable_button.bookmark_page"
                   type="bool"/>
+      <preference id="pref.browser.homepage.disable_button.restore_default"
+                  name="pref.browser.homepage.disable_button.restore_default"
+                  type="bool"/>
 
       <preference id="browser.privatebrowsing.autostart"
                   name="browser.privatebrowsing.autostart"
@@ -110,43 +113,50 @@
     <groupbox id="startupGroup">
       <caption label="&startup.label;"/>
 
-      <hbox align="top">
+      <hbox align="center">
         <label value="&startupPage.label;" accesskey="&startupPage.accesskey;"
                control="browserStartupPage"/>
-        <radiogroup id="browserStartupPage" preference="browser.startup.page">
-          <radio label="&startupHomeTab.label;"      value="1" id="browserStartupHomeTab"/>
-          <radio label="&startupBlankPage.label;"    value="0" id="browserStartupBlank"/>
-          <radio label="&startupLastSession.label;"  value="3" id="browserStartupLastSession"/>
-          <hbox align="center">
-            <checkbox id="restoreOnDemand"
-                      label="&restoreOnDemand.label;"
-                      accesskey="&restoreOnDemand.accesskey;"
-                      class="indent"
-                      preference="browser.sessionstore.restore_on_demand"/>
-          </hbox>
-          <radio label="&startupPages.label;"        value="4" id="browserStartupPages"/>
-          <hbox align="center">
-            <textbox id="browserHomePage" class="padded uri-element" flex="1"
-                     type="autocomplete" autocompletesearch="history"
-                     onsyncfrompreference="return gMainPane.syncFromHomePref();"
-                     onsynctopreference="return gMainPane.syncToHomePref(this.value);"
-                     preference="browser.startup.homepage"/>
-          </hbox>
-          <hbox align="center" pack="end">
-            <button label="" accesskey="&useCurrentPage.accesskey;"
-                    label1="&useCurrentPage.label;"
-                    label2="&useMultiple.label;"
-                    oncommand="gMainPane.setHomePageToCurrent();"
-                    id="useCurrent"
-                    preference="pref.browser.homepage.disable_button.current_page"/>
-            <button label="&chooseBookmark.label;" accesskey="&chooseBookmark.accesskey;"
-                    oncommand="gMainPane.setHomePageToBookmark();"
-                    id="useBookmark"
-                    preference="pref.browser.homepage.disable_button.bookmark_page"/>
-          </hbox>
-        </radiogroup>
+        <menulist id="browserStartupPage" preference="browser.startup.page">
+          <menupopup>
+            <menuitem label="&startupHomePage.label;"     value="1" id="browserStartupHomePage"/>
+            <menuitem label="&startupBlankPage.label;"    value="0" id="browserStartupBlank"/>
+            <menuitem label="&startupLastSession.label;"  value="3" id="browserStartupLastSession"/>
+          </menupopup>
+        </menulist>
       </hbox>
-
+      <hbox align="center">
+        <checkbox id="restoreOnDemand"
+                  label="&restoreOnDemand.label;"
+                  accesskey="&restoreOnDemand.accesskey;"
+                  class="indent"
+                  preference="browser.sessionstore.restore_on_demand"/>
+      </hbox>
+      <separator class="thin"/>
+      <hbox align="center">
+        <label value="&homepage.label;" accesskey="&homepage.accesskey;" control="browserHomePage"/>
+        <textbox id="browserHomePage" class="padded uri-element" flex="1"
+                 type="autocomplete" autocompletesearch="history"
+                 onsyncfrompreference="return gMainPane.syncFromHomePref();"
+                 onsynctopreference="return gMainPane.syncToHomePref(this.value);"
+                 placeholder="&abouthome.pageTitle;"
+                 preference="browser.startup.homepage"/>
+      </hbox>
+      <hbox align="center" pack="end">
+        <button label="" accesskey="&useCurrentPage.accesskey;"
+                label1="&useCurrentPage.label;"
+                label2="&useMultiple.label;"
+                oncommand="gMainPane.setHomePageToCurrent();"
+                id="useCurrent"
+                preference="pref.browser.homepage.disable_button.current_page"/>
+        <button label="&chooseBookmark.label;" accesskey="&chooseBookmark.accesskey;"
+                oncommand="gMainPane.setHomePageToBookmark();"
+                id="useBookmark"
+                preference="pref.browser.homepage.disable_button.bookmark_page"/>
+        <button label="&restoreDefault.label;" accesskey="&restoreDefault.accesskey;"
+                oncommand="gMainPane.restoreDefaultHomePage();"
+                id="restoreDefaultHomePage"
+                preference="pref.browser.homepage.disable_button.restore_default"/>
+      </hbox>
     </groupbox>
 
     <!-- Downloads -->
