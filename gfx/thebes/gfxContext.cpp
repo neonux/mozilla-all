@@ -237,7 +237,11 @@ gfxContext::Fill()
     cairo_fill_preserve(mCairo);
   } else {
     if (mPathIsRect) {
-      mDT->FillRect(mRect, ColorPattern(CurrentState().color));
+      if (CurrentState().pattern) {
+        mDT->FillRect(mRect, *CurrentState().pattern->GetPattern(mDT));
+      } else {
+        mDT->FillRect(mRect, ColorPattern(CurrentState().color));
+      }
     }
   }
 }
@@ -1009,6 +1013,8 @@ gfxContext::SetColor(const gfxRGBA& c)
     else
         cairo_set_source_rgba(mCairo, c.r, c.g, c.b, c.a);
   } else {
+    CurrentState().pattern = NULL;
+
     if (gfxPlatform::GetCMSMode() == eCMSMode_All) {
 
         gfxRGBA cms;
@@ -1064,6 +1070,7 @@ gfxContext::SetPattern(gfxPattern *pattern)
   if (mCairo) {
     cairo_set_source(mCairo, pattern->CairoPattern());
   } else {
+    CurrentState().pattern = pattern;
   }
 }
 
@@ -1083,7 +1090,7 @@ gfxContext::GetPattern()
     NS_IF_ADDREF(wrapper);
     return wrapper;
   } else {
-    return NULL;
+    return CurrentState().pattern;
   }
 }
 

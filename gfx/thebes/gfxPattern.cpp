@@ -42,6 +42,8 @@
 
 #include "cairo.h"
 
+using namespace mozilla::gfx;
+
 gfxPattern::gfxPattern(cairo_pattern_t *aPattern)
 {
     mPattern = cairo_pattern_reference(aPattern);
@@ -112,6 +114,42 @@ gfxPattern::GetMatrix() const
     cairo_matrix_t mat;
     cairo_pattern_get_matrix(mPattern, &mat);
     return gfxMatrix(*reinterpret_cast<gfxMatrix*>(&mat));
+}
+
+Pattern*
+gfxPattern::GetPattern(mozilla::gfx::DrawTarget *aTarget)
+{
+  switch (cairo_pattern_get_type(mPattern)) {
+  case CAIRO_PATTERN_TYPE_SURFACE:
+    {
+      cairo_matrix_t mat;
+      cairo_pattern_get_matrix(mPattern, &mat);
+      gfxMatrix matrix(*reinterpret_cast<gfxMatrix*>(&mat));
+      if (mSourceSurface) {
+        Matrix newMat = ToMatrix(matrix);
+        newMat.Invert();
+        new (mSurfacePattern.addr()) SurfacePattern(mSourceSurface, EXTEND_CLAMP, newMat);
+        return mSurfacePattern.addr();
+      }
+      cairo_surface_t *surf = NULL;
+      cairo_pattern_get_surface(mPattern, &surf);
+
+      nsRefPtr<gfxASurface> gfxSurf = gfxASurface::Wrap(surf);
+      mSourceSurface =
+        gfxPlatform::GetPlatform()->GetSourceSurfaceForSurface(aTarget, gfxSurf);
+
+      if (mSourceSurface) {
+        Matrix newMat = ToMatrix(matrix);
+        newMat.Invert();
+        new (mSurfacePattern.addr()) SurfacePattern(mSourceSurface, EXTEND_CLAMP, newMat);
+        return mSurfacePattern.addr();
+      }
+      break;
+    }
+  }
+
+  new (mColorPattern.addr()) ColorPattern(Color(0, 0, 0, 0));
+  return mColorPattern.addr();
 }
 
 void

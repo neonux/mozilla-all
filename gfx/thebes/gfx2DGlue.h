@@ -1,6 +1,8 @@
 
 #include "gfxRect.h"
+#include "gfxMatrix.h"
 #include "mozilla/gfx/Rect.h"
+#include "mozilla/gfx/2D.h"
 
 namespace mozilla {
 namespace gfx {
@@ -22,6 +24,11 @@ inline Rect ToRect(const gfxRect &aRect)
 inline Color ToColor(const gfxRGBA &aRGBA)
 {
   return Color(aRGBA.r, aRGBA.g, aRGBA.b, aRGBA.a);
+}
+
+inline Matrix ToMatrix(const gfxMatrix &aMatrix)
+{
+  return Matrix(aMatrix.xx, aMatrix.xy, aMatrix.yx, aMatrix.yy, aMatrix.x0, aMatrix.y0);
 }
 
 inline gfxRect GFXRect(const Rect &aRect)

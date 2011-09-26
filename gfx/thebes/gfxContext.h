@@ -698,12 +698,16 @@ private:
   struct AzureState {
     mozilla::gfx::CompositionOp op;
     mozilla::gfx::Color color;
+    nsRefPtr<gfxPattern> pattern;
+    mozilla::gfx::Matrix mTransform;
+    uint32_t mPushedClips;
   };
 
   bool mPathIsRect;
   mozilla::gfx::Rect mRect;
   mozilla::RefPtr<mozilla::gfx::PathBuilder> mPathBuilder;
   mozilla::RefPtr<mozilla::gfx::Path> mPath;
+  mozilla::gfx::Matrix mTransform;
   std::vector<AzureState> mStateStack;
 
   AzureState &CurrentState() { return mStateStack.front(); }
