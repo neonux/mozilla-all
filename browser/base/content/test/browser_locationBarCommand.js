@@ -137,16 +137,7 @@ let tests = [
     // TODO: make popup window, then try to open url with alt+enter - url should open in full browser window
     
     aCallback();
-  },
-
-  function testReturnPinned(aCallback) {
-    testUrlbarCommand(false, TEST_URL_1, {}, function(aTab) {
-      testLoadTab(TEST_URL_1, aTab);
-      aCallback();
-    }, null, true);    
   }
-  
-  // TODO: add more pinned tab tests
 ]
 
 /** 
@@ -159,10 +150,8 @@ let tests = [
  * (optional) aOriginalURL will be loaded in the tab before we interact with
  *   the urlbar.
  */
-function testUrlbarCommand(aClick, aURL, aEvent, aCallback, aOriginalURL, aPinTab) {
+function testUrlbarCommand(aClick, aURL, aEvent, aCallback, aOriginalURL) {
   let tab = gBrowser.selectedTab = gBrowser.addTab(aOriginalURL);
-  if (aPinTab)
-    gBrowser.pinTab(tab);
 
   addPageShowListener(function () {
     gURLBar.value = aURL;
