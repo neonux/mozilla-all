@@ -37,6 +37,14 @@
 .controlBar[fadeout] {
   opacity: 0;
 }
+.volumeStack:not([immediate]) {
+  -moz-transition-property: opacity, margin-top;
+  -moz-transition-duration: 1ms, 1ms;
+}
+.volumeStack[fadeout] {
+  opacity: 0;
+  margin-top: 0;
+}
 .statusOverlay:not([immediate]) {
   -moz-transition-property: opacity;
   -moz-transition-duration: 1ms;
