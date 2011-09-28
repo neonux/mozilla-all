@@ -145,7 +145,7 @@ function appUpdater()
   this.updateBtn = document.getElementById("updateButton");
 
   // The button label value must be set so its height is correct.
-  this.setupUpdateButton("update.checkInsideButton"); // "Check for Updates"
+  this.setupUpdateButton("update.checkInsideButton");
 
   let manualURL = Services.urlFormatter.formatURLPref("app.update.url.manual");
   let manualLink = document.getElementById("manualLink");
@@ -169,15 +169,12 @@ function appUpdater()
     return;
   }
 
-  // If app.update.enabled is false, we don't pop up an update dialog
-  // automatically, but opening the About dialog is treated as manually
-  // checking for updates, so we always check.
-  // If app.update.auto is false, we ask before downloading though,
-  // in onCheckComplete.
-  this.selectPanel("checkingForUpdates");
-  this.isChecking = true;
-  this.checker.checkForUpdates(this.updateCheckListener, true);
-  return;
+  if (this.updateEnabled && this.updateAuto) {
+    this.selectPanel("checkingForUpdates");
+    this.isChecking = true;
+    this.checker.checkForUpdates(this.updateCheckListener, true);
+    return;
+  }
 }
 
 appUpdater.prototype =
@@ -249,8 +246,8 @@ appUpdater.prototype =
    *         The prefix for the properties file entry to use for setting the
    *         label and accesskey.
    */
-  setupUpdateButton: function(aKeyPrefix, updateName) {
-    this.updateBtn.label = this.bundle.formatStringFromName(aKeyPrefix + ".label", [updateName], 1);
+  setupUpdateButton: function(aKeyPrefix) {
+    this.updateBtn.label = this.bundle.GetStringFromName(aKeyPrefix + ".label");
     this.updateBtn.accessKey = this.bundle.GetStringFromName(aKeyPrefix + ".accesskey");
     if (!document.commandDispatcher.focusedElement ||
         document.commandDispatcher.focusedElement.isSameNode(this.updateBtn))
@@ -261,9 +258,7 @@ appUpdater.prototype =
    * Handles oncommand for the update button.
    */
   buttonOnCommand: function() {
-    // case 1: the update has been downloaded and the "Apply Update"
-    //         or "Upgrade Now" button has been pressed
-    if (this.isPending) { 
+    if (this.isPending) {
       // Notify all windows that an application quit has been requested.
       let cancelQuit = Components.classes["@mozilla.org/supports-PRBool;1"].
                        createInstance(Components.interfaces.nsISupportsPRBool);
@@ -287,12 +282,11 @@ appUpdater.prototype =
       return;
     }
 
-    // case 2: the update dialog has to be opened to display the billboard or license
+    const URI_UPDATE_PROMPT_DIALOG = "chrome://mozapps/content/update/updates.xul";
     // Firefox no longer displays a license for updates and the licenseURL check
     // is just in case a distibution does.
-    const URI_UPDATE_PROMPT_DIALOG = "chrome://mozapps/content/update/updates.xul";
-    if (this.update && this.addons && (this.update.billboardURL ||
-        this.update.licenseURL || this.addons.length != 0)) {
+    if (this.update && (this.update.billboardURL || this.update.licenseURL ||
+        this.addons.length != 0)) {
       var ary = null;
       ary = Components.classes["@mozilla.org/supports-array;1"].
             createInstance(Components.interfaces.nsISupportsArray);
@@ -301,18 +295,11 @@ appUpdater.prototype =
       Services.ww.openWindow(null, URI_UPDATE_PROMPT_DIALOG, "", openFeatures, ary);
       window.close();
       return;
-     }
-
-    // case 3: "Update to Firefox X" button
-    // skip the compatibility check if the update doesn't provide appVersion,
-    // or the appVersion is unchanged, e.g. nightly update
-    if (!gAppUpdater.update.appVersion ||
-        Services.vc.compare(gAppUpdater.update.appVersion,
-                            Services.appinfo.version) == 0) {
-      gAppUpdater.startDownload();
-    } else {
-      gAppUpdater.checkAddonCompatibility();
     }
+
+    this.selectPanel("checkingForUpdates");
+    this.isChecking = true;
+    this.checker.checkForUpdates(this.updateCheckListener, true);
   },
 
   /**
@@ -355,22 +342,14 @@ appUpdater.prototype =
         return;
       }
 
-      if (gAppUpdater.updateAuto) { // automatically download and install
-        // skip the compatibility check if the update doesn't provide appVersion,
-        // or the appVersion is unchanged, e.g. nightly update
-        if (!gAppUpdater.update.appVersion ||
-            Services.vc.compare(gAppUpdater.update.appVersion,
-                                Services.appinfo.version) == 0) {
-          gAppUpdater.startDownload();
-        } else {
-          gAppUpdater.checkAddonCompatibility();
-        }
-
-      } else { // ask
-          gAppUpdater.selectPanel("updateButtonBox");
-          gAppUpdater.setupUpdateButton("update.downloadAndInstallButton",
-                                        gAppUpdater.update.name);
+      if (!gAppUpdater.update.appVersion ||
+          Services.vc.compare(gAppUpdater.update.appVersion,
+                              Services.appinfo.version) == 0) {
+        gAppUpdater.startDownload();
+        return;
       }
+
+      gAppUpdater.checkAddonCompatibility();
     },
 
     /**

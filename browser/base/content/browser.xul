@@ -60,7 +60,6 @@
 <?xul-overlay href="chrome://global/content/editMenuOverlay.xul"?>
 <?xul-overlay href="chrome://browser/content/baseMenuOverlay.xul"?>
 <?xul-overlay href="chrome://browser/content/places/placesOverlay.xul"?>
-<?xul-overlay href="chrome://browser/content/downloads/downloadsOverlay.xul"?>
 
 # All DTD information is stored in a separate file so that it can be shared by
 # hiddenWindow.xul.
@@ -125,10 +124,6 @@
       <menuitem id="context_unpinTab" label="&unpinAppTab.label;" hidden="true"
                 accesskey="&unpinAppTab.accesskey;"
                 oncommand="gBrowser.unpinTab(TabContextMenu.contextTab);"/>
-      <menuitem id="context_alwaysShowToolbars" label="&appTabShowToolbars.label;" hidden="true"
-                accesskey="&appTabShowToolbars.accesskey;"
-                type="checkbox"
-                oncommand="ChromelessAppTabs.togglePrefForTab(this, TabContextMenu.contextTab);" />
       <menu id="context_tabViewMenu" label="&moveToGroup.label;"
             accesskey="&moveToGroup.accesskey;">
         <menupopup id="context_tabViewMenuPopup"
@@ -477,7 +472,6 @@
 
       <toolbaritem id="unified-back-forward-button" class="chromeclass-toolbar-additional"
                    context="backForwardMenu" removable="true"
-                   forwarddisabled="true"
                    title="&backForwardItem.title;">
         <toolbarbutton id="back-button" class="toolbarbutton-1"
                        label="&backCmd.label;"
@@ -489,13 +483,6 @@
                        command="Browser:ForwardOrForwardDuplicate"
                        onclick="checkForMiddleClick(this, event);"
                        tooltip="forward-button-tooltip"/>
-        <dummyobservertarget hidden="true"
-                             onbroadcast="if (this.getAttribute('disabled') == 'true')
-                                            this.parentNode.setAttribute('forwarddisabled', 'true');
-                                          else
-                                            this.parentNode.removeAttribute('forwarddisabled');">
-          <observes element="Browser:ForwardOrForwardDuplicate" attribute="disabled"/>
-        </dummyobservertarget>
       </toolbaritem>
 
       <toolbaritem id="urlbar-container" align="center" flex="400" persist="width" combined="true"
@@ -503,7 +490,7 @@
         <textbox id="urlbar" flex="1"
                  placeholder="&urlbar.placeholder;"
                  type="autocomplete"
-                 autocompletesearch="urlinline history"
+                 autocompletesearch="history"
                  autocompletesearchparam="enable-actions"
                  autocompletepopup="PopupAutoCompleteRichResult"
                  completeselectedindex="true"
@@ -778,9 +765,9 @@
              aria-label="&tabsToolbar.label;"
              context="toolbar-context-menu"
 #ifdef APPMENU_ON_TABBAR
-             defaultset="appmenu-toolbar-button,tabbrowser-tabs,new-tab-button,alltabs-button,tabs-closebutton,downloads-button"
+             defaultset="appmenu-toolbar-button,tabbrowser-tabs,new-tab-button,alltabs-button,tabs-closebutton"
 #else
-             defaultset="tabbrowser-tabs,new-tab-button,alltabs-button,tabs-closebutton,downloads-button"
+             defaultset="tabbrowser-tabs,new-tab-button,alltabs-button,tabs-closebutton"
 #endif
              collapsed="true">
 
@@ -813,12 +800,6 @@
                      ondragover="newTabButtonObserver.onDragOver(event)"
                      ondragenter="newTabButtonObserver.onDragOver(event)"
                      ondragexit="newTabButtonObserver.onDragExit(event)"
-                     removable="true"/>
-
-      <toolbarbutton id="downloads-button"
-                     class="toolbarbutton-1 chromeclass-toolbar-additional"
-                     label="&downloads.label;"
-                     tooltiptext="&downloads.tooltip;"
                      removable="true"/>
 
       <toolbarbutton id="alltabs-button"
@@ -864,6 +845,15 @@
                    mousethrough="always">
         <image/>
       </toolbaritem>
+
+      <toolbarbutton id="downloads-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
+                     observes="Tools:Downloads"
+                     ondrop="DownloadsButtonDNDObserver.onDrop(event)"
+                     ondragover="DownloadsButtonDNDObserver.onDragOver(event)"
+                     ondragenter="DownloadsButtonDNDObserver.onDragOver(event)"
+                     ondragexit="DownloadsButtonDNDObserver.onDragExit(event)"
+                     label="&downloads.label;"
+                     tooltiptext="&downloads.tooltip;"/>
 
       <toolbarbutton id="history-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
                      observes="viewHistorySidebar" label="&historyButton.label;"
@@ -1012,10 +1002,6 @@
       <svg:rect x="0" y="0" width="1" height="1" fill="white"/>
       <svg:circle cx="-0.35" cy="0.5" r="0.58"/>
     </svg:mask>
-    <svg:mask id="winstripe-urlbar-back-button-mask" maskContentUnits="userSpaceOnUse">
-      <svg:rect x="0" y="0" width="1000000" height="50" fill="white"/>
-      <svg:circle cx="-11" cy="12" r="15"/>
-    </svg:mask>
   </svg:svg>
 #endif
 #ifdef XP_MACOSX
@@ -1023,10 +1009,6 @@
     <svg:mask id="pinstripe-keyhole-forward-mask" maskContentUnits="objectBoundingBox">
       <svg:rect x="0" y="0" width="1" height="1" fill="white"/>
       <svg:circle cx="-0.41" cy="0.5" r="0.65"/>
-    </svg:mask>
-    <svg:mask id="pinstripe-urlbar-back-button-mask" maskContentUnits="userSpaceOnUse">
-      <svg:rect x="0" y="-5" width="1000000" height="55" fill="white"/>
-      <svg:circle cx="-10" cy="12" r="15"/>
     </svg:mask>
     <svg:mask id="pinstripe-tab-ontop-left-curve-mask" maskContentUnits="userSpaceOnUse">
       <svg:circle cx="9" cy="3" r="3" fill="white"/>

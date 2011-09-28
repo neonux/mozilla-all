@@ -78,8 +78,6 @@ protected:
   PRInt32 mDefaultIndex;
   PRUint32 mSearchResult;
 
-  PRBool mTypeAheadResult;
-
   nsCOMPtr<nsIAutoCompleteSimpleResultListener> mListener;
 };
 

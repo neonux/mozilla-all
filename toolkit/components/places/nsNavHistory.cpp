@@ -1190,41 +1190,6 @@ mozStorageFunctionGetUnreversedHost::OnFunctionCall(
   return NS_OK;
 }
 
-class mozStorageFunctionFixupUrl: public mozIStorageFunction
-{
-public:
-  NS_DECL_ISUPPORTS
-  NS_DECL_MOZISTORAGEFUNCTION
-};
-
-NS_IMPL_ISUPPORTS1(mozStorageFunctionFixupUrl, mozIStorageFunction)
-
-NS_IMETHODIMP
-mozStorageFunctionFixupUrl::OnFunctionCall(
-  mozIStorageValueArray* aFunctionArguments,
-  nsIVariant** _retval)
-{
-  NS_ASSERTION(aFunctionArguments, "Must have non-null function args");
-  NS_ASSERTION(_retval, "Must have non-null return pointer");
-
-  nsAutoString src;
-  aFunctionArguments->GetString(0, src);
-
-  nsresult rv;
-  nsCOMPtr<nsIWritableVariant> result(do_CreateInstance(
-      "@mozilla.org/variant;1", &rv));
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  // Remove common URL hostname prefixes
-  if (StringBeginsWith(src, NS_LITERAL_STRING("www."))) {
-    src.Cut(0, 4);
-  }
-
-  result->SetAsAString(src);
-  NS_ADDREF(*_retval = result);
-  return NS_OK;
-}
-
 nsresult
 nsNavHistory::InitFunctions()
 {
@@ -1233,13 +1198,6 @@ nsNavHistory::InitFunctions()
   NS_ENSURE_TRUE(func, NS_ERROR_OUT_OF_MEMORY);
   nsresult rv = mDBConn->CreateFunction(
     NS_LITERAL_CSTRING("get_unreversed_host"), 1, func
-  );
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  func = new mozStorageFunctionFixupUrl;
-  NS_ENSURE_TRUE(func, NS_ERROR_OUT_OF_MEMORY);
-  rv = mDBConn->CreateFunction(
-    NS_LITERAL_CSTRING("fixup_url"), 1, func
   );
   NS_ENSURE_SUCCESS(rv, rv);
 

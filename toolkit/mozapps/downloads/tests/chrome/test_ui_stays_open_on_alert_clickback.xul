@@ -79,12 +79,6 @@ function test()
   let win = wm.getMostRecentWindow("Download:Manager");
   if (win) win.close();
 
-  // Ensure that the download manager callbacks always display the window UI
-  // instead of the panel in the browser's window
-  Cc["@mozilla.org/preferences-service;1"].
-    getService(Ci.nsIPrefBranch).
-    setBoolPref("browser.download.manager.useWindowUI", true);
-
   let os = Cc["@mozilla.org/observer-service;1"].
            getService(Ci.nsIObserverService);
   const DLMGR_UI_DONE = "download-manager-ui-done";
@@ -112,11 +106,6 @@ function test()
         getService(Ci.nsIPrefBranch).
         clearUserPref("browser.download.manager.closeWhenDone");
       } catch (err) { }
-
-      Cc["@mozilla.org/preferences-service;1"].
-        getService(Ci.nsIPrefBranch).
-        clearUserPref("browser.download.manager.useWindowUI");
-
       SimpleTest.finish();
     }
   };

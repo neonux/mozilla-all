@@ -36,6 +36,9 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+const Cc = Components.classes;
+const Ci = Components.interfaces;
+
 // main
 function run_test() {
   var result = Cc["@mozilla.org/autocomplete/controller;1"].

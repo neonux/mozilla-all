@@ -166,7 +166,7 @@
 
       <property name="timeout"
                 onset="this.setAttribute('timeout', val); return val;"
-                onget="var t = parseInt(this.getAttribute('timeout')); return isNaN(t) ? 50 : t;"/>
+                onget="return parseInt(this.getAttribute('timeout')) || 50;"/>
 
       <property name="searchParam"
                 onget="return this.getAttribute('autocompletesearchparam') || '';"
@@ -936,19 +936,6 @@
       </xul:hbox>
     </content>
 
-    <handlers>
-      <handler event="click">
-        <![CDATA[
-        // Handle clicks on the delete button
-        if (event.originalTarget.className != "ac-delete-button")
-          return;
-
-        // The item we want to delete will already be selected if its delete button was clicked
-        this.mInput.mController.handleDelete();
-      ]]>
-      </handler>
-    </handlers>
-
     <implementation implements="nsIAutoCompletePopup">
       <field name="_currentIndex">0</field>
 
@@ -1211,7 +1198,6 @@
           <xul:description anonid="extra" class="ac-normal-text ac-comment" xbl:inherits="selected"/>
         </xul:hbox>
         <xul:image anonid="type-image" class="ac-type-icon"/>
-        <xul:image class="ac-delete-button"/>
       </xul:hbox>
       <xul:hbox align="center" class="ac-url-box">
         <xul:spacer class="ac-site-icon"/>
@@ -1624,9 +1610,6 @@
         <![CDATA[
         // don't call onPopupClick for the scrollbar buttons, thumb, slider, etc.
         var item = event.originalTarget;
-
-        if (item.className == "ac-delete-button")
-          return;
 
         while (item && item.localName != "richlistitem")
           item = item.parentNode;

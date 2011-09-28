@@ -9,16 +9,15 @@
 
 .textbox-input-box {
   margin: 0;
-  height: 18px;
 }
 
 /* ::::: searchbar-engine-button ::::: */
 
 .searchbar-engine-image {
-  list-style-image: url("chrome://global/skin/icons/Search-glass.png");
-%ifndef WINSTRIPE_AERO
-  -moz-image-region: rect(0px 16px 16px 0px);
-%endif
+  height: 16px;
+  width: 16px;
+  list-style-image: url("chrome://global/skin/icons/folder-item.png");
+  -moz-image-region: rect(0px, 16px, 16px, 0px);
   -moz-margin-start: 2px;
 }
 
@@ -48,73 +47,36 @@
   -moz-image-region: rect(0, 26px, 11px, 13px);
 }
 
+
 /* ::::: search-go-button ::::: */
-.search-go-label {
-  text-align: center;
-}
 
 .search-go-container {
   -moz-box-align: center;
-  margin: -2px;
-  -moz-margin-start: 3px;
-  color: #000;
-  min-width: 5em;
-  max-width: 8em;
- -moz-border-start: 1px solid hsla(0,0%,0%,.1);
-  background-origin: border-box;
-  background-image: -moz-linear-gradient(#fafbfd, #e5ebf3);
-  box-shadow: 0 0 2px hsla(0,0%,100%,.5) inset,
-              0 1px 0 hsla(210,54%,20%,.03),
-              0 0 4px hsla(210,54%,20%,.2);
 }
 
-.search-go-container:active:hover {
-  background-image: -moz-linear-gradient(#fafbfd, #e5ebf3);
-  background-image: -moz-linear-gradient(hsla(0,0%,100%,0), hsla(0,0%,100%,.25) 49%, hsla(0,0%,100%,.3) 51%, hsla(0,0%,100%,.4));
-  box-shadow: 0 1px 1px hsla(0,0%,0%,.1) inset,
-              0 0 2px hsla(0,0%,0%,.3) inset;
+.search-go-button {
+  padding: 1px;
+  list-style-image: url("chrome://global/skin/icons/Search-glass.png");
+  -moz-image-region: rect(0px 16px 16px 0px);
 }
 
-.searchbar-textbox:not([focused]) > .search-go-container:not(:hover) {
-  background-color: transparent;
-  background-image: none;
-  box-shadow: 0 0 2px rgba(255, 255, 255, 0.5) inset;
-  color: #000; /* override any custom text colors */
+.search-go-button:-moz-system-metric(touch-enabled) {
+  -moz-padding-start: 5px;
+  -moz-padding-end: 3px;
 }
 
-.search-go-container:-moz-locale-dir(ltr) {
-  border-top-right-radius: 2px;
-  border-bottom-right-radius: 2px;
+.search-go-button:-moz-locale-dir(rtl) {
+  -moz-transform: scaleX(-1);
 }
 
-.search-go-container:-moz-locale-dir(rtl) {
-  border-top-left-radius: 2px;
-  border-bottom-left-radius: 2px;
+.search-go-button:hover {
+  -moz-image-region: rect(0px 32px 16px 16px);
 }
 
-/* custom background colors for specific search providers */
-
-.search-go-container[engine="Bing"],
-.search-go-container[engine="Yahoo"],
-.search-go-container[engine="eBay"],
-.search-go-container[engine="Amazon.com"] {
-  background-image: -moz-linear-gradient(hsla(0,0%,100%,.65), hsla(0,0%,100%,.47) 49%, hsla(0,0%,100%,.42) 51%, hsla(0,0%,100%,0));
+.search-go-button:hover:active {
+  -moz-image-region: rect(0px, 48px, 16px, 32px);
 }
 
-.search-go-container[engine="Bing"] {
-  background-color: #FFA615;
-}
-
-.search-go-container[engine="Yahoo"] {
-  color: #fff;
-  background-color: #7B0099;
-}
-
-.search-go-container[engine="eBay"] {
-  color: #fff;
-  background-color: #005DAA;
-}
-
-.search-go-container[engine="Amazon.com"] {
-  background-color: #FF9900;
+.searchbar-engine-menuitem[selected="true"] > .menu-iconic-text {
+  font-weight: bold;
 }

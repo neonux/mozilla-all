@@ -181,7 +181,6 @@ XPCOMUtils.defineLazyGetter(this, "InspectorUI", function() {
 
 let gInitialPages = [
   "about:blank",
-  "about:newtab",
   "about:privatebrowsing",
   "about:sessionrestore"
 ];
@@ -1367,8 +1366,6 @@ function BrowserStartup() {
 
   gPrivateBrowsingUI.init();
 
-  DownloadsButton.initializePlaceholder();
-
   retrieveToolbarIconsizesFromTheme();
 
   gDelayedStartupTimeoutId = setTimeout(delayedStartup, 0, isLoadingBlank, mustLoadSidebar);
@@ -1510,7 +1507,6 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
 
   BrowserOffline.init();
   OfflineApps.init();
-  ChromelessAppTabs.init();
   IndexedDBPromptHelper.init();
   gFormSubmitObserver.init();
   AddonManager.addAddonListener(AddonsMgrListener);
@@ -1652,11 +1648,6 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
       tempScope.DownloadTaskbarProgress.onBrowserWindowLoad(window);
     }
   }, 10000);
-
-  // We can intialize the downloads indicator here in delayedStartup() because
-  // it is initially invisible, at least until the download manager is started,
-  // thus no flickering occurs when we set its position.
-  DownloadsButton.initializeIndicator();
 
 #ifndef XP_MACOSX
   updateEditUIVisibility();
@@ -1811,7 +1802,6 @@ function BrowserShutdown() {
 
     BrowserOffline.uninit();
     OfflineApps.uninit();
-    ChromelessAppTabs.uninit();
     IndexedDBPromptHelper.uninit();
     AddonManager.removeAddonListener(AddonsMgrListener);
   }
@@ -2135,7 +2125,6 @@ function loadOneOrMoreURIs(aURIString)
 }
 
 function focusAndSelectUrlBar() {
-  let navBar = document.getElementById("nav-bar");
   if (gURLBar && !gURLBar.readOnly) {
     if (window.fullScreen)
       FullScreen.mouseoverToggle(true);
@@ -2143,17 +2132,6 @@ function focusAndSelectUrlBar() {
       gURLBar.focus();
       gURLBar.select();
       return true;
-    } else if (!isElementVisible(navBar) && 
-               !navBar.collapsed &&
-               navBar.compareDocumentPosition(gURLBar) & Node.DOCUMENT_POSITION_CONTAINED_BY) {
-
-      ChromelessAppTabs.showNavBar();
-
-      if (isElementVisible(gURLBar)) {
-        gURLBar.focus();
-        gURLBar.select();
-        return true;
-      }
     }
   }
   return false;
@@ -2198,7 +2176,7 @@ function BrowserOpenTab()
                       "chrome,all,dialog=no", "about:blank");
     return;
   }
-  gBrowser.loadOneTab("about:newtab", {inBackground: false});
+  gBrowser.loadOneTab("about:blank", {inBackground: false});
   focusAndSelectUrlBar();
 }
 
@@ -3202,6 +3180,29 @@ var newWindowButtonObserver = {
   }
 }
 
+var DownloadsButtonDNDObserver = {
+  onDragOver: function (aEvent)
+  {
+    var types = aEvent.dataTransfer.types;
+    if (types.contains("text/x-moz-url") ||
+        types.contains("text/uri-list") ||
+        types.contains("text/plain"))
+      aEvent.preventDefault();
+  },
+
+  onDragExit: function (aEvent)
+  {
+  },
+
+  onDrop: function (aEvent)
+  {
+    let name = { };
+    let url = browserDragAndDrop.drop(aEvent, name);
+    if (url)
+      saveURL(url, name, null, true, true);
+  }
+}
+
 const DOMLinkHandler = {
   handleEvent: function (event) {
     switch (event.type) {
@@ -3605,7 +3606,6 @@ function BrowserCustomizeToolbar()
 
   PlacesToolbarHelper.customizeStart();
   BookmarksMenuButton.customizeStart();
-  DownloadsButton.customizeStart();
 
   TabsInTitlebar.allowedBy("customizing-toolbars", false);
 
@@ -3672,7 +3672,6 @@ function BrowserToolboxCustomizeDone(aToolboxChanged) {
 
   PlacesToolbarHelper.customizeDone();
   BookmarksMenuButton.customizeDone();
-  DownloadsButton.customizeDone();
 
   // The url bar splitter state is dependent on whether stop/reload
   // and the location bar are combined, so we need this ordering
@@ -4489,6 +4488,12 @@ var XULBrowserWindow = {
         PlacesStarButton.updateState();
       }
 
+      // Show or hide browser chrome based on the whitelist
+      if (this.hideChromeForLocation(location))
+        document.documentElement.setAttribute("disablechrome", "true");
+      else
+        document.documentElement.removeAttribute("disablechrome");
+
       // Disable find commands in documents that ask for them to be disabled.
       let docElt = content.document.documentElement;
       let disableFind = aLocationURI &&
@@ -4526,28 +4531,12 @@ var XULBrowserWindow = {
 
   asyncUpdateUI: function () {
     FeedHandler.updateFeeds();
-    // Show or hide browser chrome based on the whitelist for in-content UI
-    // or the tab pinned status
-    this.updateToolbarVisibility();
   },
 
   hideChromeForLocation: function(aLocation) {
     return this.inContentWhitelist.some(function(aSpec) {
       return aSpec == aLocation;
     });
-  },
-
-  updateToolbarVisibility: function() {
-
-    let hideChrome = this.hideChromeForLocation(gBrowser.currentURI.spec) ||
-                     ChromelessAppTabs.shouldHideToolbars();
-
-    if (hideChrome) {
-      document.documentElement.setAttribute("disablechrome", "true");
-    } else {
-      document.documentElement.removeAttribute("disablechrome");
-    }
-
   },
 
   onStatusChange: function (aWebProgress, aRequest, aStatus, aMessage) {
@@ -4742,156 +4731,6 @@ var LinkTargetDisplay = {
 
     XULBrowserWindow.updateStatusField();
   }
-};
-
-var ChromelessAppTabs = {
-  getPrefForSite: function(aURI) {
-    return Services.contentPrefs.getPref(aURI, this._sitePrefName);
-  },
-
-  setPrefForSite: function(aURI, value) {
-    Services.contentPrefs.setPref(aURI, this._sitePrefName, value);
-  },
-
-  togglePrefForTab: function(menu, tab) {
-    // note: value is a string, either "true" or "".
-    let value = menu.getAttribute("checked");
-    this.setPrefForSite(tab.linkedBrowser.currentURI, value);
-    XULBrowserWindow.updateToolbarVisibility();
-  },
-
-  showNavBar: function() {
-    document.documentElement.setAttribute("shownavbar", "true");
-    this._registerTemporaryListeners();
-  },
-
-  hideNavBar: function() {
-    document.documentElement.removeAttribute("shownavbar");
-    this._popupOpen = false;
-    this._unregisterTemporaryListeners();
-  },
-
-  shouldHideToolbars: function() {
-    return gBrowser.selectedTab.pinned &&
-           this.enabled &&
-           !this.isBlacklisted(gBrowser.contentDocument.documentURI) &&
-           this.getPrefForSite(gBrowser.currentURI) != "true";
-
-  },
-
-  handleEvent: function(event) {
-    let navBar = document.getElementById("nav-bar");
-
-    switch (event.type) {
-      case "blur":
-        setTimeout(function() {
-          try
-          {
-            let focused = document.commandDispatcher.focusedElement;
-            let isDescendant = !focused || navBar.compareDocumentPosition(focused) & 
-                               Node.DOCUMENT_POSITION_CONTAINED_BY;
-
-            if (!isDescendant && focused != navBar && !ChromelessAppTabs.popupOpen)
-              ChromelessAppTabs.hideNavBar();
-          } catch (e) { }
-        }, 0);
-        break;
-
-      case "click":
-        let focused = event.target;
-        try
-        {
-          let isDescendant = !focused || navBar.compareDocumentPosition(focused) & 
-                             Node.DOCUMENT_POSITION_CONTAINED_BY;
-
-          if (!isDescendant && focused != navBar)
-            ChromelessAppTabs.hideNavBar();
-        } catch (e) { }
-        break;
-
-      case "keypress":
-        if (event.keyCode == event.DOM_VK_ESCAPE)
-          ChromelessAppTabs.hideNavBar();
-        break;
-
-      case "TabSelect":
-        ChromelessAppTabs.hideNavBar();
-        break;
-
-      case "TabPinned":
-      case "TabUnpinned":
-        if (event.target.selected)
-          XULBrowserWindow.updateToolbarVisibility();
-        break;
-
-      case "popupshown":
-        ChromelessAppTabs.popupOpen = true;
-        break;
-
-      case "popuphidden":
-        ChromelessAppTabs.popupOpen = false;
-        break;
-    }
-  },
-
-  get enabled() {
-    delete this.enabled;
-    this.enabled = Services.prefs.getBoolPref(this._globalPrefName);
-    return this.enabled;
-  },
-
-  get popupOpen() {
-    return this._popupOpen;
-  },
-
-  set popupOpen(open) {
-    this._popupOpen = open;
-  },
-
-  isBlacklisted: function(aURI) {
-    return this._blacklist.some(function(re) re.test(aURI));
-  },
-
-  init: function() {
-    document.addEventListener("TabPinned", this, false);
-    document.addEventListener("TabUnpinned", this, false);
-  },
-
-  uinit: function() {
-    document.removeEventListener("TabPinned", this, false);
-    document.removeEventListener("TabUnpinned", this, false);
-  },
-
-  _globalPrefName: "browser.tabs.chromelessAppTabs",
-  _sitePrefName: "browser.apptabs.show-toolbars",
-
-  _popupOpen: false,
-
-  _registerTemporaryListeners: function() {
-    window.addEventListener("blur", this, true);
-    window.addEventListener("click", this, false);
-    window.addEventListener("keypress", this, false);
-    window.addEventListener("TabSelect", this, false);
-    window.addEventListener("popupshown", this, false);
-    window.addEventListener("popuphidden", this, false);
-  },
-
-  _unregisterTemporaryListeners: function() {
-    window.removeEventListener("blur", this, true);
-    window.removeEventListener("click", this, false);
-    window.removeEventListener("keypress", this, false);
-    window.removeEventListener("TabSelect", this, false);
-    window.removeEventListener("popupshown", this, false);
-    window.removeEventListener("popuphidden", this, false);
-  },
-
-  _blacklist: [
-    /^about:neterror\?/,
-    /^about:blocked\?/,
-    /^about:certerror\?/,
-    /^about:home$/,
-    /^about:blank$/
-  ]
 };
 
 var CombinedStopReload = {
@@ -8726,15 +8565,6 @@ var TabContextMenu = {
     // Only one of pin/unpin should be visible
     document.getElementById("context_pinTab").hidden = this.contextTab.pinned;
     document.getElementById("context_unpinTab").hidden = !this.contextTab.pinned;
-
-    // Hide chrome for app tabs
-    let alwaysShowToolbarsElm = document.getElementById("context_alwaysShowToolbars");
-    if (this.contextTab.pinned && !ChromelessAppTabs.isBlacklisted(this.contextTab.linkedBrowser.contentDocument.documentURI)) {
-      alwaysShowToolbarsElm.hidden = false;
-      alwaysShowToolbarsElm.setAttribute("checked", ChromelessAppTabs.getPrefForSite(this.contextTab.linkedBrowser.currentURI));
-    } else {
-      alwaysShowToolbarsElm.hidden = true;
-    }
 
     // Disable "Close other Tabs" if there is only one unpinned tab and
     // hide it when the user rightclicked on a pinned tab.
