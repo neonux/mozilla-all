@@ -1371,12 +1371,12 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
 
 @conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(ltr) {
   padding-left: 5px;
-  -moz-transition: 0 padding-left;
+  -moz-transition: 0s padding-left;
 }
 
 @conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(rtl) {
   padding-right: 5px;
-  -moz-transition: 0 padding-right;
+  -moz-transition: 0s padding-right;
 }
 
 @conditionalForwardWithUrlbar@[forwarddisabled]:hover + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box {

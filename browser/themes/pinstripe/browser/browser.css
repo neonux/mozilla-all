@@ -592,7 +592,7 @@ toolbar[mode="icons"] #forward-button {
 @conditionalForwardWithUrlbar@ > #forward-button:hover:active {
   background: -moz-linear-gradient(hsl(0,0%,74%), hsl(0,0%,61%));
   background-clip: padding-box;
-  box-shodow: inset rgba(0,0,0,.3) 0 -6px 10px,
+  box-shadow: inset rgba(0,0,0,.3) 0 -6px 10px,
               inset #000 0 1px 3px,
               inset rgba(0,0,0,.2) 0 1px 3px;
 }
@@ -622,7 +622,7 @@ toolbar[mode="icons"] #forward-button {
     background: url("chrome://browser/skin/toolbar-noise-lion.png"),
                 -moz-linear-gradient(hsl(0,0%,73%), hsl(0,0%,85%) 85%);
     background-clip: padding-box;
-    box-shodow: inset 0 1px 0 hsla(0,0%,0%,.03),
+    box-shadow: inset 0 1px 0 hsla(0,0%,0%,.03),
                 inset 0 1px 2px hsla(0,0%,0%,.2),
                 0 1px 0 hsla(0,0%,0%,.06),
                 1px 0 0 hsla(0,0%,0%,.06);
@@ -1046,12 +1046,12 @@ toolbar[mode="icons"] #zoom-in-button {
 }
 
 @conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(ltr) {
-  -moz-transition: 0 padding-left;
+  -moz-transition: 0s padding-left;
   padding-left: 9px;
 }
 
 @conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(rtl) {
-  -moz-transition: 0 padding-right;
+  -moz-transition: 0s padding-right;
   padding-right: 9px;
 }
 
