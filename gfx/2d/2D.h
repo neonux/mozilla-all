@@ -281,7 +281,7 @@ class SurfacePattern : public Pattern
 {
 public:
   SurfacePattern(SourceSurface *aSourceSurface, ExtendMode aExtendMode,
-                 Matrix &aMatrix = Matrix(), Filter aFilter = FILTER_LINEAR)
+                 const Matrix &aMatrix = Matrix(), Filter aFilter = FILTER_LINEAR)
     : mSurface(aSourceSurface)
     , mExtendMode(aExtendMode)
     , mFilter(aFilter)

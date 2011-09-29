@@ -1208,7 +1208,8 @@ gfxContext::GetPattern()
     NS_IF_ADDREF(wrapper);
     return wrapper;
   } else {
-    return CurrentState().pattern;
+    nsRefPtr<gfxPattern> pat = CurrentState().pattern;
+    return pat.forget();
   }
 }
 
