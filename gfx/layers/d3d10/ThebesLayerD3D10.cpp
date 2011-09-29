@@ -190,7 +190,7 @@ ThebesLayerD3D10::Validate(ReadbackProcessor *aReadback)
 
   SurfaceMode mode = GetSurfaceMode();
   if (mode == SURFACE_COMPONENT_ALPHA &&
-      (!Preferences::GetBool("gfx.content.azure.enabled", PR_FALSE) ||
+      (Preferences::GetBool("gfx.content.azure.enabled", PR_FALSE) ||
        !mParent || !mParent->SupportsComponentAlphaChildren())) {
     mode = SURFACE_SINGLE_CHANNEL_ALPHA;
   }
@@ -348,11 +348,13 @@ static void
 FillSurface(gfxASurface* aSurface, const nsIntRegion& aRegion,
             const nsIntPoint& aOffset, const gfxRGBA& aColor)
 {
-  nsRefPtr<gfxContext> ctx = new gfxContext(aSurface);
-  ctx->Translate(-gfxPoint(aOffset.x, aOffset.y));
-  gfxUtils::PathFromRegion(ctx, aRegion);
-  ctx->SetColor(aColor);
-  ctx->Fill();
+  if (aSurface) {
+    nsRefPtr<gfxContext> ctx = new gfxContext(aSurface);
+    ctx->Translate(-gfxPoint(aOffset.x, aOffset.y));
+    gfxUtils::PathFromRegion(ctx, aRegion);
+    ctx->SetColor(aColor);
+    ctx->Fill();
+  }
 }
 
 void

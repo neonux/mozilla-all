@@ -280,9 +280,12 @@ public:
 class SurfacePattern : public Pattern
 {
 public:
-  SurfacePattern(SourceSurface *aSourceSurface, ExtendMode aExtendMode)
+  SurfacePattern(SourceSurface *aSourceSurface, ExtendMode aExtendMode,
+                 Matrix &aMatrix = Matrix(), Filter aFilter = FILTER_LINEAR)
     : mSurface(aSourceSurface)
     , mExtendMode(aExtendMode)
+    , mFilter(aFilter)
+    , mMatrix(aMatrix)
   {}
 
   virtual PatternType GetType() const { return PATTERN_SURFACE; }
@@ -290,6 +293,7 @@ public:
   RefPtr<SourceSurface> mSurface;
   ExtendMode mExtendMode;
   Filter mFilter;
+  Matrix mMatrix;
 };
 
 /*

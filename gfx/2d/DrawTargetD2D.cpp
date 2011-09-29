@@ -1670,7 +1670,7 @@ DrawTargetD2D::CreateBrushForPattern(const Pattern &aPattern, Float aAlpha)
                            D2D1::BitmapBrushProperties(extend,
                                                        extend,
                                                        D2DFilter(pat->mFilter)),
-                           D2D1::BrushProperties(aAlpha),
+                           D2D1::BrushProperties(aAlpha, D2DMatrix(pat->mMatrix)),
                            byRef(bmBrush));
 
     return bmBrush;

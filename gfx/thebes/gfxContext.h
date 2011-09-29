@@ -185,7 +185,7 @@ public:
     /**
      * Returns the current point in the current path.
      */
-    gfxPoint CurrentPoint() const;
+    gfxPoint CurrentPoint();
 
     /**
      * Draws a line from the current point to pt.
@@ -696,17 +696,38 @@ public:
 
 private:
   struct AzureState {
+    AzureState()
+      : op(mozilla::gfx::OP_OVER)
+      , clipWasReset(false)
+      , fillRule(mozilla::gfx::FILL_WINDING)
+    {}
+
     mozilla::gfx::CompositionOp op;
     mozilla::gfx::Color color;
+    nsRefPtr<gfxPattern> pattern;
+    mozilla::RefPtr<mozilla::gfx::SourceSurface> sourceSurface;
+    mozilla::gfx::Point surfOffset;
+    mozilla::gfx::Matrix mTransform;
+    std::vector<mozilla::RefPtr<mozilla::gfx::Path>> pushedClips;
+    bool clipWasReset;
+    mozilla::gfx::FillRule fillRule;
+    mozilla::gfx::StrokeOptions strokeOptions;
+    std::vector<mozilla::RefPtr<mozilla::gfx::DrawTarget>> pushedGroups;
   };
+
+  void EnsureUserSpacePath();
+  void EnsurePathBuilder();
+  void FillAzure(mozilla::gfx::Float aOpacity);
 
   bool mPathIsRect;
   mozilla::gfx::Rect mRect;
   mozilla::RefPtr<mozilla::gfx::PathBuilder> mPathBuilder;
   mozilla::RefPtr<mozilla::gfx::Path> mPath;
+  mozilla::gfx::Matrix mTransform;
   std::vector<AzureState> mStateStack;
 
-  AzureState &CurrentState() { return mStateStack.front(); }
+  AzureState &CurrentState() { return mStateStack.back(); }
+  const AzureState &CurrentState() const { return mStateStack.back(); }
 
 
     cairo_t *mCairo;
@@ -715,6 +736,7 @@ private:
     PRInt32 mFlags;
 
     mozilla::RefPtr<mozilla::gfx::DrawTarget> mDT;
+    mozilla::RefPtr<mozilla::gfx::DrawTarget> mOriginalDT;
 };
 
 /**

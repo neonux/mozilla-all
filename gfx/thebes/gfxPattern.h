@@ -44,6 +44,7 @@
 #include "gfxMatrix.h"
 #include "nsISupportsImpl.h"
 #include "nsAutoPtr.h"
+#include "mozilla/gfx/2D.h"
 
 class gfxContext;
 class gfxASurface;
@@ -68,6 +69,8 @@ public:
 
     void SetMatrix(const gfxMatrix& matrix);
     gfxMatrix GetMatrix() const;
+
+    mozilla::gfx::Pattern *GetPattern(mozilla::gfx::DrawTarget *aTarget);
 
     enum GraphicsExtend {
         EXTEND_NONE,
@@ -120,6 +123,15 @@ public:
 
 protected:
     cairo_pattern_t *mPattern;
+
+    union {
+      mozilla::AlignedStorage2<mozilla::gfx::ColorPattern> mColorPattern;
+      mozilla::AlignedStorage2<mozilla::gfx::LinearGradientPattern> mLinearGradientPattern;
+      mozilla::AlignedStorage2<mozilla::gfx::RadialGradientPattern> mRadialGradientPattern;
+      mozilla::AlignedStorage2<mozilla::gfx::SurfacePattern> mSurfacePattern;
+    };
+
+    mozilla::RefPtr<mozilla::gfx::SourceSurface> mSourceSurface;
 };
 
 #endif /* GFX_PATTERN_H */
