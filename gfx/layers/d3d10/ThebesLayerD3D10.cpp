@@ -190,7 +190,7 @@ ThebesLayerD3D10::Validate(ReadbackProcessor *aReadback)
 
   SurfaceMode mode = GetSurfaceMode();
   if (mode == SURFACE_COMPONENT_ALPHA &&
-      (Preferences::GetBool("gfx.content.azure.enabled", PR_FALSE) ||
+      (Preferences::GetBool("gfx.content.azure.enabled", false) ||
        !mParent || !mParent->SupportsComponentAlphaChildren())) {
     mode = SURFACE_SINGLE_CHANNEL_ALPHA;
   }
@@ -439,7 +439,7 @@ ThebesLayerD3D10::CreateNewTextures(const gfxIntSize &aSize, SurfaceMode aMode)
       NS_WARNING("Failed to create shader resource view for ThebesLayerD3D10.");
     }
 
-    if (!Preferences::GetBool("gfx.content.azure.enabled", PR_FALSE)) {
+    if (!Preferences::GetBool("gfx.content.azure.enabled", false)) {
       mD2DSurface = new gfxD2DSurface(mTexture, aMode != SURFACE_SINGLE_CHANNEL_ALPHA ?
                                                 gfxASurface::CONTENT_COLOR : gfxASurface::CONTENT_COLOR_ALPHA);
 
