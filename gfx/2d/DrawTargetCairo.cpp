@@ -367,11 +367,7 @@ DrawTargetCairo::DrawSurfaceWithShadow(SourceSurface *aSurface,
   cairo_set_source_rgba(mContext, aColor.r, aColor.g, aColor.b, aColor.a);
 
   cairo_identity_matrix(mContext);
-  cairo_translate(mContext, aOffset.x, aOffset.y);
-
-  cairo_new_path(mContext);
-  cairo_rectangle(mContext, 0, 0, width, height);
-  cairo_clip(mContext);
+  cairo_translate(mContext, aDest.x, aDest.y);
 
   cairo_mask_surface(mContext, blursurf, aOffset.x, aOffset.y);
 
@@ -379,13 +375,12 @@ DrawTargetCairo::DrawSurfaceWithShadow(SourceSurface *aSurface,
 
   cairo_set_operator(mContext, GfxOpToCairoOp(aOperator));
 
-  cairo_translate(mContext, aDest.x, aDest.y);
-
   cairo_set_source(mContext, pat);
 
   cairo_new_path(mContext);
   cairo_rectangle(mContext, 0, 0, width, height);
   cairo_clip(mContext);
+
   cairo_paint(mContext);
 
   cairo_restore(mContext);
