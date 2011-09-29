@@ -76,6 +76,16 @@ ProgressMeterAccessible<Max>::NativeRole()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// ProgressMeterAccessible<Max>: Widgets
+
+template<int Max>
+bool
+ProgressMeterAccessible<Max>::IsWidget() const
+{
+  return true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // nsIAccessibleValue
 
 template<int Max>
@@ -116,7 +126,7 @@ ProgressMeterAccessible<Max>::GetMaximumValue(double* aMaximumValue)
     return rv;
 
   nsAutoString value;
-  if (mContent->GetAttr(kNameSpaceID_None, nsAccessibilityAtoms::max, value)) {
+  if (mContent->GetAttr(kNameSpaceID_None, nsGkAtoms::max, value)) {
     PRInt32 result = NS_OK;
     *aMaximumValue = value.ToDouble(&result);
     return result;
@@ -159,7 +169,7 @@ ProgressMeterAccessible<Max>::GetCurrentValue(double* aCurrentValue)
     return rv;
 
   nsAutoString attrValue;
-  mContent->GetAttr(kNameSpaceID_None, nsAccessibilityAtoms::value, attrValue);
+  mContent->GetAttr(kNameSpaceID_None, nsGkAtoms::value, attrValue);
 
   // Return zero value if there is no attribute or its value is empty.
   if (attrValue.IsEmpty())
@@ -222,3 +232,11 @@ nsRadioButtonAccessible::NativeRole()
   return nsIAccessibleRole::ROLE_RADIOBUTTON;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// nsRadioButtonAccessible: Widgets
+
+bool
+nsRadioButtonAccessible::IsWidget() const
+{
+  return true;
+}

@@ -76,7 +76,7 @@ AccIterator::Next()
       continue;
     }
 
-    PRBool isComplying = mFilterFunc(child);
+    bool isComplying = mFilterFunc(child);
     if (isComplying)
       return child;
 
@@ -111,7 +111,7 @@ RelatedAccIterator::
 {
   mBindingParent = aDependentContent->GetBindingParent();
   nsIAtom* IDAttr = mBindingParent ?
-    nsAccessibilityAtoms::anonid : aDependentContent->GetIDAttributeName();
+    nsGkAtoms::anonid : aDependentContent->GetIDAttributeName();
 
   nsAutoString id;
   if (aDependentContent->GetAttr(kNameSpaceID_None, IDAttr, id))
@@ -152,10 +152,10 @@ RelatedAccIterator::Next()
 ////////////////////////////////////////////////////////////////////////////////
 
 HTMLLabelIterator::
-  HTMLLabelIterator(nsDocAccessible* aDocument, nsIContent* aElement,
+  HTMLLabelIterator(nsDocAccessible* aDocument, const nsAccessible* aAccessible,
                     LabelFilter aFilter) :
-  mRelIter(aDocument, aElement, nsAccessibilityAtoms::_for),
-  mElement(aElement), mLabelFilter(aFilter)
+  mRelIter(aDocument, aAccessible->GetContent(), nsGkAtoms::_for),
+  mAcc(aAccessible), mLabelFilter(aFilter)
 {
 }
 
@@ -166,24 +166,29 @@ HTMLLabelIterator::Next()
   // element, or <label> ancestor which implicitly point to it.
   nsAccessible* label = nsnull;
   while ((label = mRelIter.Next())) {
-    if (label->GetContent()->Tag() == nsAccessibilityAtoms::label)
+    if (label->GetContent()->Tag() == nsGkAtoms::label)
       return label;
   }
 
-  if (mLabelFilter == eSkipAncestorLabel)
+  // Ignore ancestor label on not widget accessible.
+  if (mLabelFilter == eSkipAncestorLabel || !mAcc->IsWidget())
     return nsnull;
 
-  // Go up tree get name of ancestor label if there is one (an ancestor <label>
-  // implicitly points to us). Don't go up farther than form or body element.
-  nsIContent* walkUpContent = mElement;
-  while ((walkUpContent = walkUpContent->GetParent()) &&
-         walkUpContent->Tag() != nsAccessibilityAtoms::form &&
-         walkUpContent->Tag() != nsAccessibilityAtoms::body) {
-    if (walkUpContent->Tag() == nsAccessibilityAtoms::label) {
-      // Prevent infinite loop.
-      mLabelFilter = eSkipAncestorLabel;
-      return GetAccService()->GetAccessible(walkUpContent);
+  // Go up tree to get a name of ancestor label if there is one (an ancestor
+  // <label> implicitly points to us). Don't go up farther than form or
+  // document.
+  nsAccessible* walkUp = mAcc->Parent();
+  while (walkUp && !walkUp->IsDoc()) {
+    nsIContent* walkUpElm = walkUp->GetContent();
+    if (walkUpElm->Tag() == nsGkAtoms::label) {
+      mLabelFilter = eSkipAncestorLabel; // prevent infinite loop
+      return walkUp;
     }
+
+    if (walkUpElm->Tag() == nsGkAtoms::form)
+      break;
+
+    walkUp = walkUp->Parent();
   }
 
   return nsnull;
@@ -196,7 +201,7 @@ HTMLLabelIterator::Next()
 
 HTMLOutputIterator::
 HTMLOutputIterator(nsDocAccessible* aDocument, nsIContent* aElement) :
-  mRelIter(aDocument, aElement, nsAccessibilityAtoms::_for)
+  mRelIter(aDocument, aElement, nsGkAtoms::_for)
 {
 }
 
@@ -205,7 +210,7 @@ HTMLOutputIterator::Next()
 {
   nsAccessible* output = nsnull;
   while ((output = mRelIter.Next())) {
-    if (output->GetContent()->Tag() == nsAccessibilityAtoms::output)
+    if (output->GetContent()->Tag() == nsGkAtoms::output)
       return output;
   }
 
@@ -219,7 +224,7 @@ HTMLOutputIterator::Next()
 
 XULLabelIterator::
   XULLabelIterator(nsDocAccessible* aDocument, nsIContent* aElement) :
-  mRelIter(aDocument, aElement, nsAccessibilityAtoms::control)
+  mRelIter(aDocument, aElement, nsGkAtoms::control)
 {
 }
 
@@ -228,7 +233,7 @@ XULLabelIterator::Next()
 {
   nsAccessible* label = nsnull;
   while ((label = mRelIter.Next())) {
-    if (label->GetContent()->Tag() == nsAccessibilityAtoms::label)
+    if (label->GetContent()->Tag() == nsGkAtoms::label)
       return label;
   }
 
@@ -242,7 +247,7 @@ XULLabelIterator::Next()
 
 XULDescriptionIterator::
   XULDescriptionIterator(nsDocAccessible* aDocument, nsIContent* aElement) :
-  mRelIter(aDocument, aElement, nsAccessibilityAtoms::control)
+  mRelIter(aDocument, aElement, nsGkAtoms::control)
 {
 }
 
@@ -251,7 +256,7 @@ XULDescriptionIterator::Next()
 {
   nsAccessible* descr = nsnull;
   while ((descr = mRelIter.Next())) {
-    if (descr->GetContent()->Tag() == nsAccessibilityAtoms::description)
+    if (descr->GetContent()->Tag() == nsGkAtoms::description)
       return descr;
   }
 

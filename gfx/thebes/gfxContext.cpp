@@ -427,7 +427,7 @@ gfxContext::Line(const gfxPoint& start, const gfxPoint& end)
 // For odd-width stroked rectangles, we need to offset x/y by
 // 0.5...
 void
-gfxContext::Rectangle(const gfxRect& rect, PRBool snapToPixels)
+gfxContext::Rectangle(const gfxRect& rect, bool snapToPixels)
 {
   if (mCairo) {
     if (snapToPixels) {
@@ -691,8 +691,8 @@ gfxContext::UserToDevice(const gfxRect& rect) const
   }
 }
 
-PRBool
-gfxContext::UserToDevicePixelSnapped(gfxRect& rect, PRBool ignoreScale) const
+bool
+gfxContext::UserToDevicePixelSnapped(gfxRect& rect, bool ignoreScale) const
 {
   if (mCairo) {
     if (GetFlags() & FLAG_DISABLE_SNAPPING)
@@ -737,8 +737,8 @@ gfxContext::UserToDevicePixelSnapped(gfxRect& rect, PRBool ignoreScale) const
   }
 }
 
-PRBool
-gfxContext::UserToDevicePixelSnapped(gfxPoint& pt, PRBool ignoreScale) const
+bool
+gfxContext::UserToDevicePixelSnapped(gfxPoint& pt, bool ignoreScale) const
 {
   if (mCairo) {
     if (GetFlags() & FLAG_DISABLE_SNAPPING)
@@ -1080,14 +1080,14 @@ gfxContext::GetClipExtents()
   }
 }
 
-PRBool
+bool
 gfxContext::ClipContainsRect(const gfxRect& aRect)
 {
   if (mCairo) {
     cairo_rectangle_list_t *clip =
         cairo_copy_clip_rectangle_list(mCairo);
 
-    PRBool result = PR_FALSE;
+    bool result = false;
 
     if (clip->status == CAIRO_STATUS_SUCCESS) {
         for (int i = 0; i < clip->num_rectangles; i++) {
@@ -1152,7 +1152,7 @@ gfxContext::SetDeviceColor(const gfxRGBA& c)
   }
 }
 
-PRBool
+bool
 gfxContext::GetDeviceColor(gfxRGBA& c)
 {
   if (mCairo) {
@@ -1363,7 +1363,7 @@ gfxContext::PopGroupToSource()
   }
 }
 
-PRBool
+bool
 gfxContext::PointInFill(const gfxPoint& pt)
 {
   if (mCairo) {
@@ -1373,7 +1373,7 @@ gfxContext::PointInFill(const gfxPoint& pt)
   }
 }
 
-PRBool
+bool
 gfxContext::PointInStroke(const gfxPoint& pt)
 {
   if (mCairo) {
@@ -1432,7 +1432,7 @@ gfxContext::GetFlattenedPath()
   }
 }
 
-PRBool
+bool
 gfxContext::HasError()
 {
   if (mCairo) {
@@ -1445,7 +1445,7 @@ gfxContext::HasError()
 void
 gfxContext::RoundedRectangle(const gfxRect& rect,
                              const gfxCornerSizes& corners,
-                             PRBool draw_clockwise)
+                             bool draw_clockwise)
 {
     //
     // For CW drawing, this looks like:

@@ -171,7 +171,7 @@ LayerManagerOGL::CreateContext()
   return context.forget();
 }
 
-PRBool
+bool
 LayerManagerOGL::Initialize(nsRefPtr<GLContext> aContext)
 {
   ScopedGfxFeatureReporter reporter("GL Layers");
@@ -404,7 +404,8 @@ LayerManagerOGL::EndEmptyTransaction()
 
 void
 LayerManagerOGL::EndTransaction(DrawThebesLayerCallback aCallback,
-                                void* aCallbackData)
+                                void* aCallbackData,
+                                EndTransactionFlags aFlags)
 {
 #ifdef MOZ_LAYERS_HAVE_LOG
   MOZ_LAYERS_LOG(("  ----- (beginning paint)"));
@@ -416,7 +417,7 @@ LayerManagerOGL::EndTransaction(DrawThebesLayerCallback aCallback,
     return;
   }
 
-  if (mRoot) {
+  if (mRoot && !(aFlags & END_NO_IMMEDIATE_REDRAW)) {
     // The results of our drawing always go directly into a pixel buffer,
     // so we don't need to pass any global transform here.
     mRoot->ComputeEffectiveTransforms(gfx3DMatrix());
@@ -542,7 +543,7 @@ LayerManagerOGL::RootLayer() const
   return static_cast<LayerOGL*>(mRoot->ImplData());
 }
 
-PRBool LayerManagerOGL::sDrawFPS = PR_FALSE;
+bool LayerManagerOGL::sDrawFPS = false;
 
 /* This function tries to stick to portable C89 as much as possible
  * so that it can be easily copied into other applications */

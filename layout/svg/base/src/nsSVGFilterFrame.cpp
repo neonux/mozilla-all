@@ -167,7 +167,7 @@ nsAutoFilterInstance::nsAutoFilterInstance(nsIFrame *aTarget,
     filterRegion.Scale(1.0 / filterResX, 1.0 / filterResY);
     // We don't care if this overflows, because we can handle upscaling/
     // downscaling to filterRes
-    PRBool overflow;
+    bool overflow;
     filterRes =
       nsSVGUtils::ConvertToSurfaceSize(gfxSize(filterResX, filterResY),
                                        &overflow);
@@ -182,7 +182,7 @@ nsAutoFilterInstance::nsAutoFilterInstance(nsIFrame *aTarget,
     filterRegion.RoundOut();
     // We don't care if this overflows, because we can handle upscaling/
     // downscaling to filterRes
-    PRBool overflow;
+    bool overflow;
     filterRes = nsSVGUtils::ConvertToSurfaceSize(filterRegion.Size(),
                                                  &overflow);
     filterRegion.Scale(1.0 / scale);
@@ -206,11 +206,19 @@ nsAutoFilterInstance::nsAutoFilterInstance(nsIFrame *aTarget,
     MapDeviceRectToFilterSpace(deviceToFilterSpace, filterRes, aDirtyOutputRect);
   nsIntRect dirtyInputRect =
     MapDeviceRectToFilterSpace(deviceToFilterSpace, filterRes, aDirtyInputRect);
+  nsIntRect targetBoundsDeviceSpace;
+  nsISVGChildFrame* svgTarget = do_QueryFrame(aTarget);
+  if (svgTarget) {
+    targetBoundsDeviceSpace.UnionRect(targetBoundsDeviceSpace,
+      svgTarget->GetCoveredRegion().ToOutsidePixels(aTarget->PresContext()->AppUnitsPerDevPixel()));
+  }
+  nsIntRect targetBoundsFilterSpace =
+    MapDeviceRectToFilterSpace(deviceToFilterSpace, filterRes, &targetBoundsDeviceSpace);
 
   // Setup instance data
   mInstance = new nsSVGFilterInstance(aTarget, aPaint, filter, bbox, filterRegion,
                                       nsIntSize(filterRes.width, filterRes.height),
-                                      filterToDeviceSpace,
+                                      filterToDeviceSpace, targetBoundsFilterSpace,
                                       dirtyOutputRect, dirtyInputRect,
                                       primitiveUnits);
 }

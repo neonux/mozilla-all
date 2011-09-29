@@ -85,7 +85,7 @@ nsTextStore::~nsTextStore()
   SaveTextEvent(nsnull);
 }
 
-PRBool
+bool
 nsTextStore::Create(nsWindow* aWindow,
                     PRUint32 aIMEState)
 {
@@ -114,7 +114,7 @@ nsTextStore::Create(nsWindow* aWindow,
   return PR_FALSE;
 }
 
-PRBool
+bool
 nsTextStore::Destroy(void)
 {
   if (mWindow) {
@@ -566,7 +566,7 @@ nsTextStore::SaveTextEvent(const nsTextEvent* aEvent)
   return S_OK;
 }
 
-static PRBool
+static bool
 IsSameTextEvent(const nsTextEvent* aEvent1, const nsTextEvent* aEvent2)
 {
   NS_PRECONDITION(aEvent1 || aEvent2, "both events are null");
@@ -622,7 +622,7 @@ nsTextStore::UpdateCompositionExtent(ITfRange* aRangeNew)
   return S_OK;
 }
 
-static PRBool
+static bool
 GetColor(const TF_DA_COLOR &aTSFColor, nscolor &aResult)
 {
   switch (aTSFColor.type) {
@@ -642,7 +642,7 @@ GetColor(const TF_DA_COLOR &aTSFColor, nscolor &aResult)
   }
 }
 
-static PRBool
+static bool
 GetLineStyle(TF_DA_LINESTYLE aTSFLineStyle, PRUint8 &aTextRangeLineStyle)
 {
   switch (aTSFLineStyle) {
@@ -803,15 +803,29 @@ nsTextStore::SendTextEventForCompositionString()
     return S_OK;
   }
 
-  mWindow->DispatchWindowEvent(&event);
-  PR_LOG(sTextStoreLog, PR_LOG_ALWAYS,
-         ("TSF: SendTextEventForCompositionString DISPATCHED\n"));
+  if (mCompositionString != mLastDispatchedCompositionString) {
+    nsCompositionEvent compositionUpdate(PR_TRUE, NS_COMPOSITION_UPDATE,
+                                         mWindow);
+    mWindow->InitEvent(compositionUpdate);
+    compositionUpdate.data = mCompositionString;
+    mLastDispatchedCompositionString = mCompositionString;
+    mWindow->DispatchWindowEvent(&compositionUpdate);
+    PR_LOG(sTextStoreLog, PR_LOG_ALWAYS,
+           ("TSF: SendTextEventForCompositionString compositionupdate "
+            "DISPATCHED\n"));
+  }
+
+  if (mWindow && !mWindow->Destroyed()) {
+    mWindow->DispatchWindowEvent(&event);
+    PR_LOG(sTextStoreLog, PR_LOG_ALWAYS,
+           ("TSF: SendTextEventForCompositionString text event DISPATCHED\n"));
+  }
   return SaveTextEvent(&event);
 }
 
 HRESULT
 nsTextStore::SetSelectionInternal(const TS_SELECTION_ACP* pSelection,
-                                  PRBool aDispatchTextEvent)
+                                  bool aDispatchTextEvent)
 {
   PR_LOG(sTextStoreLog, PR_LOG_ALWAYS,
          ("TSF: SetSelection, sel=%ld-%ld\n",
@@ -1244,19 +1258,30 @@ nsTextStore::InsertTextAtSelection(DWORD dwFlags,
       nsCompositionEvent compEvent(PR_TRUE, NS_COMPOSITION_START, mWindow);
       mWindow->InitEvent(compEvent);
       mWindow->DispatchWindowEvent(&compEvent);
-      nsTextEvent event(PR_TRUE, NS_TEXT_TEXT, mWindow);
-      mWindow->InitEvent(event);
-      if (!cch) {
-        // XXX See OnEndComposition comment on inserting empty strings
-        event.theText = NS_LITERAL_STRING(" ");
-        mWindow->DispatchWindowEvent(&event);
+      if (mWindow && !mWindow->Destroyed()) {
+        compEvent.message = NS_COMPOSITION_UPDATE;
+        compEvent.data.Assign(pchText, cch);
+        mWindow->DispatchWindowEvent(&compEvent);
+        if (mWindow && !mWindow->Destroyed()) {
+          nsTextEvent event(PR_TRUE, NS_TEXT_TEXT, mWindow);
+          mWindow->InitEvent(event);
+          if (!cch) {
+            // XXX See OnEndComposition comment on inserting empty strings
+            event.theText = NS_LITERAL_STRING(" ");
+            mWindow->DispatchWindowEvent(&event);
+          }
+          if (mWindow && !mWindow->Destroyed()) {
+            event.theText.Assign(pchText, cch);
+            event.theText.ReplaceSubstring(NS_LITERAL_STRING("\r\n"),
+                                           NS_LITERAL_STRING("\n"));
+            mWindow->DispatchWindowEvent(&event);
+            if (mWindow && !mWindow->Destroyed()) {
+              compEvent.message = NS_COMPOSITION_END;
+              mWindow->DispatchWindowEvent(&compEvent);
+            }
+          }
+        }
       }
-      event.theText.Assign(pchText, cch);
-      event.theText.ReplaceSubstring(NS_LITERAL_STRING("\r\n"),
-                                     NS_LITERAL_STRING("\n"));
-      mWindow->DispatchWindowEvent(&event);
-      compEvent.message = NS_COMPOSITION_END;
-      mWindow->DispatchWindowEvent(&compEvent);
     }
     pChange->acpStart = sel.acpStart;
     pChange->acpOldEnd = sel.acpEnd;
@@ -1288,7 +1313,7 @@ nsTextStore::InsertEmbeddedAtSelection(DWORD dwFlags,
 HRESULT
 nsTextStore::OnStartCompositionInternal(ITfCompositionView* pComposition,
                                         ITfRange* aRange,
-                                        PRBool aPreserveSelection)
+                                        bool aPreserveSelection)
 {
   mCompositionView = pComposition;
   HRESULT hr = GetRangeExtent(aRange, &mCompositionStart, &mCompositionLength);
@@ -1398,6 +1423,20 @@ nsTextStore::OnEndComposition(ITfCompositionView* pComposition)
     mCompositionTimer = nsnull;
   }
 
+  if (mCompositionString != mLastDispatchedCompositionString) {
+    nsCompositionEvent compositionUpdate(PR_TRUE, NS_COMPOSITION_UPDATE,
+                                         mWindow);
+    mWindow->InitEvent(compositionUpdate);
+    compositionUpdate.data = mCompositionString;
+    mLastDispatchedCompositionString = mCompositionString;
+    mWindow->DispatchWindowEvent(&compositionUpdate);
+    if (!mWindow || mWindow->Destroyed()) {
+      PR_LOG(sTextStoreLog, PR_LOG_ALWAYS,
+             ("TSF: CompositionUpdate caused aborting compositionend\n"));
+      return S_OK;
+    }
+  }
+
   // Use NS_TEXT_TEXT to commit composition string
   nsTextEvent textEvent(PR_TRUE, NS_TEXT_TEXT, mWindow);
   mWindow->InitEvent(textEvent);
@@ -1415,19 +1454,28 @@ nsTextStore::OnEndComposition(ITfCompositionView* pComposition)
                                      NS_LITERAL_STRING("\n"));
   mWindow->DispatchWindowEvent(&textEvent);
 
+  if (!mWindow || mWindow->Destroyed()) {
+    PR_LOG(sTextStoreLog, PR_LOG_ALWAYS,
+           ("TSF: Text event caused aborting compositionend\n"));
+    return S_OK;
+  }
+
   nsCompositionEvent event(PR_TRUE, NS_COMPOSITION_END, mWindow);
+  event.data = mLastDispatchedCompositionString;
   mWindow->InitEvent(event);
   mWindow->DispatchWindowEvent(&event);
 
   mCompositionView = NULL;
   mCompositionString.Truncate(0);
+  mLastDispatchedCompositionString.Truncate();
+
   // Maintain selection
   SetSelectionInternal(&mCompositionSelection);
   return S_OK;
 }
 
 nsresult
-nsTextStore::OnFocusChange(PRBool aFocus,
+nsTextStore::OnFocusChange(bool aFocus,
                            nsWindow* aWindow,
                            PRUint32 aIMEEnabled)
 {
@@ -1436,7 +1484,7 @@ nsTextStore::OnFocusChange(PRBool aFocus,
     return NS_ERROR_NOT_AVAILABLE;
 
   if (aFocus) {
-    PRBool bRet = sTsfTextStore->Create(aWindow, aIMEEnabled);
+    bool bRet = sTsfTextStore->Create(aWindow, aIMEEnabled);
     NS_ENSURE_TRUE(bRet, NS_ERROR_FAILURE);
     NS_ENSURE_TRUE(sTsfTextStore->mDocumentMgr, NS_ERROR_FAILURE);
     HRESULT hr = sTsfThreadMgr->SetFocus(sTsfTextStore->mDocumentMgr);
@@ -1499,7 +1547,7 @@ nsTextStore::OnCompositionTimer()
 }
 
 void
-nsTextStore::CommitCompositionInternal(PRBool aDiscard)
+nsTextStore::CommitCompositionInternal(bool aDiscard)
 {
   if (mCompositionView && aDiscard) {
     mCompositionString.Truncate(0);
@@ -1530,7 +1578,7 @@ nsTextStore::CommitCompositionInternal(PRBool aDiscard)
 }
 
 static
-PRBool
+bool
 GetCompartment(IUnknown* pUnk,
                const GUID& aID,
                ITfCompartment** aCompartment)
@@ -1546,7 +1594,7 @@ GetCompartment(IUnknown* pUnk,
 }
 
 void
-nsTextStore::SetIMEOpenState(PRBool aState)
+nsTextStore::SetIMEOpenState(bool aState)
 {
   PR_LOG(sTextStoreLog, PR_LOG_ALWAYS,
          ("TSF: SetIMEOpenState, state=%lu\n", aState));
@@ -1563,7 +1611,7 @@ nsTextStore::SetIMEOpenState(PRBool aState)
   comp->SetValue(sTsfClientId, &variant);
 }
 
-PRBool
+bool
 nsTextStore::GetIMEOpenState(void)
 {
   nsRefPtr<ITfCompartment> comp;
@@ -1615,8 +1663,8 @@ nsTextStore::Initialize(void)
     sTextStoreLog = PR_NewLogModule("nsTextStoreWidgets");
 #endif
   if (!sTsfThreadMgr) {
-    PRBool enableTsf =
-      Preferences::GetBool("intl.enable_tsf_support", PR_FALSE);
+    bool enableTsf =
+      Preferences::GetBool("intl.enable_tsf_support", false);
     if (enableTsf) {
       if (SUCCEEDED(CoCreateInstance(CLSID_TF_ThreadMgr, NULL,
             CLSCTX_INPROC_SERVER, IID_ITfThreadMgr,

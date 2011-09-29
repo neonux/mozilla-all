@@ -38,7 +38,6 @@
 
 #include "nsAccessibleWrap.h"
 
-#include "nsAccessibilityAtoms.h"
 #include "nsAccUtils.h"
 #include "nsCoreUtils.h"
 #include "nsWinUtils.h"
@@ -408,7 +407,7 @@ __try {
   if (content->IsElement()) {
     nsAutoString roleString;
     if (msaaRole != ROLE_SYSTEM_CLIENT &&
-        !content->GetAttr(kNameSpaceID_None, nsAccessibilityAtoms::role, roleString)) {
+        !content->GetAttr(kNameSpaceID_None, nsGkAtoms::role, roleString)) {
       nsIDocument * document = content->GetCurrentDoc();
       if (!document)
         return E_FAIL;
@@ -1618,7 +1617,7 @@ nsAccessibleWrap::GetHWNDFor(nsAccessible *aAccessible)
     nsIFrame* frame = aAccessible->GetFrame();
     if (frame) {
       nsIWidget* widget = frame->GetNearestWidget();
-      PRBool isVisible = PR_FALSE;
+      bool isVisible = false;
       widget->IsVisible(isVisible);
       if (isVisible) {
         nsCOMPtr<nsIPresShell> shell(aAccessible->GetPresShell());
@@ -1663,7 +1662,7 @@ nsAccessibleWrap::ConvertToIA2Attributes(nsIPersistentProperties *aAttributes,
 
   const char kCharsToEscape[] = ":;=,\\";
 
-  PRBool hasMore = PR_FALSE;
+  bool hasMore = false;
   while (NS_SUCCEEDED(propEnum->HasMoreElements(&hasMore)) && hasMore) {
     nsCOMPtr<nsISupports> propSupports;
     propEnum->GetNext(getter_AddRefs(propSupports));

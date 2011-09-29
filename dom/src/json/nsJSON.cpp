@@ -139,7 +139,7 @@ static nsresult CheckCharset(const char* aCharset)
 NS_IMETHODIMP
 nsJSON::EncodeToStream(nsIOutputStream *aStream,
                        const char* aCharset,
-                       const PRBool aWriteBOM)
+                       const bool aWriteBOM)
 {
   // This function should only be called from JS.
   NS_ENSURE_ARG(aStream);
@@ -399,7 +399,7 @@ nsJSONWriter::Write(const PRUnichar *aBuffer, PRUint32 aLength)
   return NS_OK;
 }
 
-PRBool nsJSONWriter::DidWrite()
+bool nsJSONWriter::DidWrite()
 {
   return mDidWrite;
 }
@@ -480,7 +480,7 @@ nsJSON::DecodeToJSVal(const nsAString &str, JSContext *cx, jsval *result)
 nsresult
 nsJSON::DecodeInternal(nsIInputStream *aStream,
                        PRInt32 aContentLength,
-                       PRBool aNeedsConverter,
+                       bool aNeedsConverter,
                        DecodingMode mode /* = STRICT */)
 {
   nsresult rv;
@@ -594,7 +594,7 @@ nsJSON::LegacyDecodeToJSVal(const nsAString &str, JSContext *cx, jsval *result)
 
   if (!js::ParseJSONWithReviver(cx, (jschar*)PromiseFlatString(str).get(),
                                 (uint32)str.Length(), js::NullValue(),
-                                js::Valueify(result), LEGACY)) {
+                                result, LEGACY)) {
     return NS_ERROR_UNEXPECTED;
   }
 
@@ -615,7 +615,7 @@ NS_NewJSON(nsISupports* aOuter, REFNSIID aIID, void** aResult)
 }
 
 nsJSONListener::nsJSONListener(JSContext *cx, jsval *rootVal,
-                               PRBool needsConverter,
+                               bool needsConverter,
                                DecodingMode mode /* = STRICT */)
   : mNeedsConverter(needsConverter), 
     mCx(cx),
@@ -662,7 +662,7 @@ nsJSONListener::OnStopRequest(nsIRequest *aRequest, nsISupports *aContext,
   const jschar* chars = reinterpret_cast<const jschar*>(mBufferedChars.Elements());
   JSBool ok = js::ParseJSONWithReviver(mCx, chars,
                                        (uint32) mBufferedChars.Length(),
-                                       js::NullValue(), js::Valueify(mRootVal),
+                                       js::NullValue(), mRootVal,
                                        mDecodingMode);
   mBufferedChars.TruncateLength(0);
   return ok ? NS_OK : NS_ERROR_FAILURE;

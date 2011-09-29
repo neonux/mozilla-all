@@ -44,11 +44,14 @@
 #include "nsAccessibilityService.h"
 #include "nsAccUtils.h"
 
-#include "nsIDOMXULPopupElement.h"
-#include "nsIDOMXULMultSelectCntrlEl.h"
-#include "nsIDOMXULSelectCntrlItemEl.h"
-#include "nsIDOMNodeList.h"
 #include "nsComponentManagerUtils.h"
+#include "nsIAutoCompleteInput.h"
+#include "nsIAutoCompletePopup.h"
+#include "nsIDOMXULMenuListElement.h"
+#include "nsIDOMXULMultSelectCntrlEl.h"
+#include "nsIDOMNodeList.h"
+#include "nsIDOMXULPopupElement.h"
+#include "nsIDOMXULSelectCntrlItemEl.h"
 
 using namespace mozilla::a11y;
 
@@ -131,6 +134,13 @@ nsXULListboxAccessible::
   nsXULListboxAccessible(nsIContent *aContent, nsIWeakReference *aShell) :
   nsXULSelectableAccessible(aContent, aShell)
 {
+  nsIContent* parentContent = mContent->GetParent();
+  if (parentContent) {
+    nsCOMPtr<nsIAutoCompletePopup> autoCompletePopupElm =
+      do_QueryInterface(parentContent);
+    if (autoCompletePopupElm)
+      mFlags |= eAutoCompletePopupAccessible;
+  }
 }
 
 NS_IMPL_ADDREF_INHERITED(nsXULListboxAccessible, nsXULSelectableAccessible)
@@ -152,7 +162,7 @@ nsXULListboxAccessible::QueryInterface(REFNSIID aIID, void** aInstancePtr)
   return NS_ERROR_NO_INTERFACE;
 }
 
-PRBool
+bool
 nsXULListboxAccessible::IsMulticolumn()
 {
   PRInt32 numColumns = 0;
@@ -177,8 +187,8 @@ nsXULListboxAccessible::NativeState()
 
   // see if we are multiple select if so set ourselves as such
 
-  if (mContent->AttrValueIs(kNameSpaceID_None, nsAccessibilityAtoms::seltype,
-                            nsAccessibilityAtoms::multiple, eCaseMatters)) {
+  if (mContent->AttrValueIs(kNameSpaceID_None, nsGkAtoms::seltype,
+                            nsGkAtoms::multiple, eCaseMatters)) {
       states |= states::MULTISELECTABLE | states::EXTSELECTABLE;
   }
 
@@ -250,7 +260,7 @@ nsXULListboxAccessible::GetColumnCount(PRInt32 *aColumnsCout)
   PRUint32 count = mContent->GetChildCount();
   for (PRUint32 index = 0; index < count; ++index) {
     nsIContent* childContent = mContent->GetChildAt(index);
-    if (childContent->NodeInfo()->Equals(nsAccessibilityAtoms::listcols,
+    if (childContent->NodeInfo()->Equals(nsGkAtoms::listcols,
                                          kNameSpaceID_XUL)) {
       headContent = childContent;
     }
@@ -264,7 +274,7 @@ nsXULListboxAccessible::GetColumnCount(PRInt32 *aColumnsCout)
   count = headContent->GetChildCount();
   for (PRUint32 index = 0; index < count; ++index) {
     nsIContent* childContent = headContent->GetChildAt(index);
-    if (childContent->NodeInfo()->Equals(nsAccessibilityAtoms::listcol,
+    if (childContent->NodeInfo()->Equals(nsGkAtoms::listcol,
                                          kNameSpaceID_XUL)) {
       columnCount++;
     }
@@ -430,7 +440,7 @@ nsXULListboxAccessible::GetRowDescription(PRInt32 aRow, nsAString& aDescription)
 }
 
 NS_IMETHODIMP
-nsXULListboxAccessible::IsColumnSelected(PRInt32 aColumn, PRBool *aIsSelected)
+nsXULListboxAccessible::IsColumnSelected(PRInt32 aColumn, bool *aIsSelected)
 {
   NS_ENSURE_ARG_POINTER(aIsSelected);
   *aIsSelected = PR_FALSE;
@@ -456,7 +466,7 @@ nsXULListboxAccessible::IsColumnSelected(PRInt32 aColumn, PRBool *aIsSelected)
 }
 
 NS_IMETHODIMP
-nsXULListboxAccessible::IsRowSelected(PRInt32 aRow, PRBool *aIsSelected)
+nsXULListboxAccessible::IsRowSelected(PRInt32 aRow, bool *aIsSelected)
 {
   NS_ENSURE_ARG_POINTER(aIsSelected);
   *aIsSelected = PR_FALSE;
@@ -478,7 +488,7 @@ nsXULListboxAccessible::IsRowSelected(PRInt32 aRow, PRBool *aIsSelected)
 
 NS_IMETHODIMP
 nsXULListboxAccessible::IsCellSelected(PRInt32 aRowIndex, PRInt32 aColumnIndex,
-                                       PRBool *aIsSelected)
+                                       bool *aIsSelected)
 {
   return IsRowSelected(aRowIndex, aIsSelected);
 }
@@ -817,12 +827,78 @@ nsXULListboxAccessible::UnselectColumn(PRInt32 aColumn)
 }
 
 NS_IMETHODIMP
-nsXULListboxAccessible::IsProbablyForLayout(PRBool *aIsProbablyForLayout)
+nsXULListboxAccessible::IsProbablyForLayout(bool *aIsProbablyForLayout)
 {
   NS_ENSURE_ARG_POINTER(aIsProbablyForLayout);
   *aIsProbablyForLayout = PR_FALSE;
 
   return NS_OK;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// nsXULListboxAccessible: Widgets
+
+bool
+nsXULListboxAccessible::IsWidget() const
+{
+  return true;
+}
+
+bool
+nsXULListboxAccessible::IsActiveWidget() const
+{
+  if (IsAutoCompletePopup()) {
+    nsCOMPtr<nsIAutoCompletePopup> autoCompletePopupElm =
+      do_QueryInterface(mContent->GetParent());
+
+    if (autoCompletePopupElm) {
+      bool isOpen = false;
+      autoCompletePopupElm->GetPopupOpen(&isOpen);
+      return isOpen;
+    }
+  }
+  return FocusMgr()->HasDOMFocus(mContent);
+}
+
+bool
+nsXULListboxAccessible::AreItemsOperable() const
+{
+  if (IsAutoCompletePopup()) {
+    nsCOMPtr<nsIAutoCompletePopup> autoCompletePopupElm =
+      do_QueryInterface(mContent->GetParent());
+
+    if (autoCompletePopupElm) {
+      bool isOpen = false;
+      autoCompletePopupElm->GetPopupOpen(&isOpen);
+      return isOpen;
+    }
+  }
+  return true;
+}
+
+nsAccessible*
+nsXULListboxAccessible::ContainerWidget() const
+{
+  if (IsAutoCompletePopup()) {
+    // This works for XUL autocompletes. It doesn't work for HTML forms
+    // autocomplete because of potential crossprocess calls (when autocomplete
+    // lives in content process while popup lives in chrome process). If that's
+    // a problem then rethink Widgets interface.
+    nsCOMPtr<nsIDOMXULMenuListElement> menuListElm =
+      do_QueryInterface(mContent->GetParent());
+    if (menuListElm) {
+      nsCOMPtr<nsIDOMNode> inputElm;
+      menuListElm->GetInputField(getter_AddRefs(inputElm));
+      if (inputElm) {
+        nsCOMPtr<nsINode> inputNode = do_QueryInterface(inputElm);
+        if (inputNode) {
+          nsAccessible* input = GetAccService()->GetAccessible(inputNode);
+          return input ? input->ContainerWidget() : nsnull;
+        }
+      }
+    }
+  }
+  return nsnull;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -834,8 +910,8 @@ nsXULListitemAccessible::
   nsXULMenuitemAccessible(aContent, aShell)
 {
   mIsCheckbox = mContent->AttrValueIs(kNameSpaceID_None,
-                                      nsAccessibilityAtoms::type,
-                                      nsAccessibilityAtoms::checkbox,
+                                      nsGkAtoms::type,
+                                      nsGkAtoms::checkbox,
                                       eCaseMatters);
 }
 
@@ -883,9 +959,9 @@ nsXULListitemAccessible::GetNameInternal(nsAString& aName)
 {
   nsIContent* child = mContent->GetChildAt(0);
   if (child) {
-    if (child->NodeInfo()->Equals(nsAccessibilityAtoms::listcell,
+    if (child->NodeInfo()->Equals(nsGkAtoms::listcell,
                                   kNameSpaceID_XUL)) {
-      child->GetAttr(kNameSpaceID_None, nsAccessibilityAtoms::label, aName);
+      child->GetAttr(kNameSpaceID_None, nsGkAtoms::label, aName);
       return NS_OK;
     }
   }
@@ -925,14 +1001,13 @@ nsXULListitemAccessible::NativeState()
     do_QueryInterface(mContent);
 
   if (listItem) {
-    PRBool isSelected;
+    bool isSelected;
     listItem->GetSelected(&isSelected);
     if (isSelected)
       states |= states::SELECTED;
 
-    if (gLastFocusedNode == mContent)
+    if (FocusMgr()->IsFocused(this))
       states |= states::FOCUSED;
-
   }
 
   return states;
@@ -954,7 +1029,7 @@ NS_IMETHODIMP nsXULListitemAccessible::GetActionName(PRUint8 aIndex, nsAString& 
   return NS_ERROR_INVALID_ARG;
 }
 
-PRBool
+bool
 nsXULListitemAccessible::GetAllowsAnonChildAccessibles()
 {
   // That indicates we should walk anonymous children for listitems
@@ -967,6 +1042,15 @@ nsXULListitemAccessible::GetPositionAndSizeInternal(PRInt32 *aPosInSet,
 {
   nsAccUtils::GetPositionAndSizeForXULSelectControlItem(mContent, aPosInSet,
                                                         aSetSize);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// nsXULListitemAccessible: Widgets
+
+nsAccessible*
+nsXULListitemAccessible::ContainerWidget() const
+{
+  return Parent();
 }
 
 
@@ -1164,7 +1248,7 @@ nsXULListCellAccessible::GetRowHeaderCells(nsIArray **aHeaderCells)
 }
 
 NS_IMETHODIMP
-nsXULListCellAccessible::IsSelected(PRBool *aIsSelected)
+nsXULListCellAccessible::IsSelected(bool *aIsSelected)
 {
   NS_ENSURE_ARG_POINTER(aIsSelected);
   *aIsSelected = PR_FALSE;
@@ -1214,7 +1298,7 @@ nsXULListCellAccessible::GetAttributesInternal(nsIPersistentProperties *aAttribu
 
   nsAutoString stringIdx;
   stringIdx.AppendInt(cellIdx);
-  nsAccUtils::SetAccAttr(aAttributes, nsAccessibilityAtoms::tableCellIndex,
+  nsAccUtils::SetAccAttr(aAttributes, nsGkAtoms::tableCellIndex,
                          stringIdx);
 
   return NS_OK;

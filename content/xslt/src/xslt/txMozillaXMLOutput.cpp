@@ -51,7 +51,7 @@
 #include "nsContentCID.h"
 #include "nsNetUtil.h"
 #include "nsUnicharUtils.h"
-#include "txAtoms.h"
+#include "nsGkAtoms.h"
 #include "txLog.h"
 #include "nsIConsoleService.h"
 #include "nsIDOMDocumentFragment.h"
@@ -103,7 +103,7 @@ txMozillaXMLOutput::txMozillaXMLOutput(txOutputFormat* aFormat,
 
 txMozillaXMLOutput::txMozillaXMLOutput(txOutputFormat* aFormat,
                                        nsIDOMDocumentFragment* aFragment,
-                                       PRBool aNoFixup)
+                                       bool aNoFixup)
     : mTreeDepth(0),
       mBadChildLevel(0),
       mTableState(NORMAL),
@@ -204,7 +204,7 @@ txMozillaXMLOutput::attributeInternal(nsIAtom* aPrefix,
 }
 
 nsresult
-txMozillaXMLOutput::characters(const nsSubstring& aData, PRBool aDOE)
+txMozillaXMLOutput::characters(const nsSubstring& aData, bool aDOE)
 {
     nsresult rv = closePrevious(PR_FALSE);
     NS_ENSURE_SUCCESS(rv, rv);
@@ -355,8 +355,8 @@ txMozillaXMLOutput::endElement()
             do_QueryInterface(mCurrentNode);
         if (ssle) {
             ssle->SetEnableUpdates(PR_TRUE);
-            PRBool willNotify;
-            PRBool isAlternate;
+            bool willNotify;
+            bool isAlternate;
             nsresult rv = ssle->UpdateStyleSheet(mNotifier, &willNotify,
                                                  &isAlternate);
             if (mNotifier && NS_SUCCEEDED(rv) && willNotify && !isAlternate) {
@@ -435,8 +435,8 @@ txMozillaXMLOutput::processingInstruction(const nsString& aTarget, const nsStrin
 
     if (ssle) {
         ssle->SetEnableUpdates(PR_TRUE);
-        PRBool willNotify;
-        PRBool isAlternate;
+        bool willNotify;
+        bool isAlternate;
         rv = ssle->UpdateStyleSheet(mNotifier, &willNotify, &isAlternate);
         if (mNotifier && NS_SUCCEEDED(rv) && willNotify && !isAlternate) {
             mNotifier->AddPendingStylesheet();
@@ -594,13 +594,13 @@ txMozillaXMLOutput::startElementInternal(nsIAtom* aPrefix,
 }
 
 nsresult
-txMozillaXMLOutput::closePrevious(PRBool aFlushText)
+txMozillaXMLOutput::closePrevious(bool aFlushText)
 {
     TX_ENSURE_CURRENTNODE;
 
     nsresult rv;
     if (mOpenedElement) {
-        PRBool currentIsDoc = mCurrentNode == mDocument;
+        bool currentIsDoc = mCurrentNode == mDocument;
         if (currentIsDoc && mRootContentCreated) {
             // We already have a document element, but the XSLT spec allows this.
             // As a workaround, create a wrapper object and use that as the
@@ -711,12 +711,12 @@ txMozillaXMLOutput::createTxWrapper()
 }
 
 nsresult
-txMozillaXMLOutput::startHTMLElement(nsIContent* aElement, PRBool aIsHTML)
+txMozillaXMLOutput::startHTMLElement(nsIContent* aElement, bool aIsHTML)
 {
     nsresult rv = NS_OK;
     nsIAtom *atom = aElement->Tag();
 
-    if ((atom != txHTMLAtoms::tr || !aIsHTML) &&
+    if ((atom != nsGkAtoms::tr || !aIsHTML) &&
         NS_PTR_TO_INT32(mTableStateStack.peek()) == ADDED_TBODY) {
         PRUint32 last = mCurrentNodeStack.Count() - 1;
         NS_ASSERTION(last != (PRUint32)-1, "empty stack");
@@ -726,10 +726,10 @@ txMozillaXMLOutput::startHTMLElement(nsIContent* aElement, PRBool aIsHTML)
         mTableStateStack.pop();
     }
 
-    if (atom == txHTMLAtoms::table && aIsHTML) {
+    if (atom == nsGkAtoms::table && aIsHTML) {
         mTableState = TABLE;
     }
-    else if (atom == txHTMLAtoms::tr && aIsHTML &&
+    else if (atom == nsGkAtoms::tr && aIsHTML &&
              NS_PTR_TO_INT32(mTableStateStack.peek()) == TABLE) {
         nsCOMPtr<nsIContent> tbody;
         rv = createHTMLElement(nsGkAtoms::tbody, getter_AddRefs(tbody));
@@ -747,7 +747,7 @@ txMozillaXMLOutput::startHTMLElement(nsIContent* aElement, PRBool aIsHTML)
 
         mCurrentNode = tbody;
     }
-    else if (atom == txHTMLAtoms::head &&
+    else if (atom == nsGkAtoms::head &&
              mOutputFormat.mMethod == eHTMLOutput) {
         // Insert META tag, according to spec, 16.2, like
         // <META http-equiv="Content-Type" content="text/html; charset=EUC-JP">
@@ -782,7 +782,7 @@ txMozillaXMLOutput::endHTMLElement(nsIContent* aElement)
     nsIAtom *atom = aElement->Tag();
 
     if (mTableState == ADDED_TBODY) {
-        NS_ASSERTION(atom == txHTMLAtoms::tbody,
+        NS_ASSERTION(atom == nsGkAtoms::tbody,
                      "Element flagged as added tbody isn't a tbody");
         PRUint32 last = mCurrentNodeStack.Count() - 1;
         NS_ASSERTION(last != (PRUint32)-1, "empty stack");
@@ -794,13 +794,13 @@ txMozillaXMLOutput::endHTMLElement(nsIContent* aElement)
 
         return NS_OK;
     }
-    else if (mCreatingNewDocument && atom == txHTMLAtoms::meta) {
+    else if (mCreatingNewDocument && atom == nsGkAtoms::meta) {
         // handle HTTP-EQUIV data
         nsAutoString httpEquiv;
-        aElement->GetAttr(kNameSpaceID_None, txHTMLAtoms::httpEquiv, httpEquiv);
+        aElement->GetAttr(kNameSpaceID_None, nsGkAtoms::httpEquiv, httpEquiv);
         if (!httpEquiv.IsEmpty()) {
             nsAutoString value;
-            aElement->GetAttr(kNameSpaceID_None, txHTMLAtoms::content, value);
+            aElement->GetAttr(kNameSpaceID_None, nsGkAtoms::content, value);
             if (!value.IsEmpty()) {
                 ToLowerCase(httpEquiv);
                 nsCOMPtr<nsIAtom> header = do_GetAtom(httpEquiv);
@@ -816,7 +816,7 @@ void txMozillaXMLOutput::processHTTPEquiv(nsIAtom* aHeader, const nsString& aVal
 {
     // For now we only handle "refresh". There's a longer list in
     // HTMLContentSink::ProcessHeaderData
-    if (aHeader == txHTMLAtoms::refresh)
+    if (aHeader == nsGkAtoms::refresh)
         LossyCopyUTF16toASCII(aValue, mRefreshString);
 }
 
@@ -841,7 +841,7 @@ txMozillaXMLOutput::createResultDocument(const nsSubstring& aName, PRInt32 aNsID
     mDocument->SetReadyStateInternal(nsIDocument::READYSTATE_LOADING);
     nsCOMPtr<nsIDocument> source = do_QueryInterface(aSourceDocument);
     NS_ENSURE_STATE(source);
-    PRBool hasHadScriptObject = PR_FALSE;
+    bool hasHadScriptObject = false;
     nsIScriptGlobalObject* sgo =
       source->GetScriptHandlingObject(hasHadScriptObject);
     NS_ENSURE_STATE(sgo || !hasHadScriptObject);
@@ -943,7 +943,7 @@ txMozillaXMLOutput::createResultDocument(const nsSubstring& aName, PRInt32 aNsID
             nsAutoString voidString;
             voidString.SetIsVoid(PR_TRUE);
             rv = NS_NewDOMDocumentType(getter_AddRefs(documentType),
-                                       mNodeInfoManager, nsnull,
+                                       mNodeInfoManager,
                                        doctypeName,
                                        mOutputFormat.mPublicId,
                                        mOutputFormat.mSystemId,
@@ -992,7 +992,7 @@ NS_IMPL_ISUPPORTS2(txTransformNotifier,
 NS_IMETHODIMP
 txTransformNotifier::ScriptAvailable(nsresult aResult, 
                                      nsIScriptElement *aElement, 
-                                     PRBool aIsInline,
+                                     bool aIsInline,
                                      nsIURI *aURI, 
                                      PRInt32 aLineNo)
 {
@@ -1007,7 +1007,7 @@ txTransformNotifier::ScriptAvailable(nsresult aResult,
 NS_IMETHODIMP 
 txTransformNotifier::ScriptEvaluated(nsresult aResult, 
                                      nsIScriptElement *aElement,
-                                     PRBool aIsInline)
+                                     bool aIsInline)
 {
     if (mScriptElements.RemoveObject(aElement)) {
         SignalTransformEnd();
@@ -1018,7 +1018,7 @@ txTransformNotifier::ScriptEvaluated(nsresult aResult,
 
 NS_IMETHODIMP 
 txTransformNotifier::StyleSheetLoaded(nsCSSStyleSheet* aSheet,
-                                      PRBool aWasAlternate,
+                                      bool aWasAlternate,
                                       nsresult aStatus)
 {
     if (mPendingStylesheetCount == 0) {

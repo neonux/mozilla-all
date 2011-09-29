@@ -160,10 +160,8 @@ nsHTMLAreaAccessible::GetNameInternal(nsAString & aName)
   if (!aName.IsEmpty())
     return NS_OK;
 
-  if (!mContent->GetAttr(kNameSpaceID_None, nsAccessibilityAtoms::alt,
-                         aName)) {
+  if (!mContent->GetAttr(kNameSpaceID_None, nsGkAtoms::alt, aName))
     return GetValue(aName);
-  }
 
   return NS_OK;
 }
@@ -203,7 +201,7 @@ nsHTMLAreaAccessible::GetBounds(PRInt32 *aX, PRInt32 *aY,
   NS_ENSURE_TRUE(frame, NS_ERROR_FAILURE);
   nsImageFrame *imageFrame = do_QueryFrame(frame);
 
-  nsImageMap* map = imageFrame->GetImageMap(presContext);
+  nsImageMap* map = imageFrame->GetImageMap();
   NS_ENSURE_TRUE(map, NS_ERROR_FAILURE);
 
   nsRect rect;

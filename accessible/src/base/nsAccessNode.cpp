@@ -41,7 +41,6 @@
 #include "nsIAccessible.h"
 
 #include "nsAccCache.h"
-#include "nsAccessibilityAtoms.h"
 #include "nsAccUtils.h"
 #include "nsCoreUtils.h"
 
@@ -76,9 +75,8 @@
  */
 
 nsIStringBundle *nsAccessNode::gStringBundle = 0;
-nsINode *nsAccessNode::gLastFocusedNode = nsnull;
 
-PRBool nsAccessNode::gIsFormFillEnabled = PR_FALSE;
+bool nsAccessNode::gIsFormFillEnabled = false;
 
 nsApplicationAccessible *nsAccessNode::gApplicationAccessible = nsnull;
 
@@ -137,7 +135,7 @@ nsAccessNode::IsDefunct() const
   return !mContent;
 }
 
-PRBool
+bool
 nsAccessNode::Init()
 {
   return PR_TRUE;
@@ -198,8 +196,6 @@ void nsAccessNode::InitXPAccessibility()
                                       &gStringBundle);
   }
 
-  nsAccessibilityAtoms::AddRefAtoms();
-
   nsCOMPtr<nsIPrefBranch> prefBranch(do_GetService(NS_PREFSERVICE_CONTRACTID));
   if (prefBranch) {
     prefBranch->GetBoolPref("browser.formfill.enable", &gIsFormFillEnabled);
@@ -209,7 +205,7 @@ void nsAccessNode::InitXPAccessibility()
 }
 
 // nsAccessNode protected static
-void nsAccessNode::NotifyA11yInitOrShutdown(PRBool aIsInit)
+void nsAccessNode::NotifyA11yInitOrShutdown(bool aIsInit)
 {
   nsCOMPtr<nsIObserverService> obsService =
     mozilla::services::GetObserverService();
@@ -230,7 +226,6 @@ void nsAccessNode::ShutdownXPAccessibility()
   // at exit of program
 
   NS_IF_RELEASE(gStringBundle);
-  NS_IF_RELEASE(gLastFocusedNode);
 
   // Release gApplicationAccessible after everything else is shutdown
   // so we don't accidently create it again while tearing down root accessibles
@@ -472,7 +467,7 @@ nsAccessNode::GetLanguage(nsAString& aLanguage)
   if (aLanguage.IsEmpty()) { // Nothing found, so use document's language
     nsIDocument *doc = mContent->GetOwnerDoc();
     if (doc) {
-      doc->GetHeaderData(nsAccessibilityAtoms::headerContentLanguage, aLanguage);
+      doc->GetHeaderData(nsGkAtoms::headerContentLanguage, aLanguage);
     }
   }
  

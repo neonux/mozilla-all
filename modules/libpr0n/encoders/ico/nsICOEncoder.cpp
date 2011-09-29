@@ -178,8 +178,8 @@ nsICOEncoder::AddImageFrame(const PRUint8* aData,
                                          aStride, aInputFormat, params);
     NS_ENSURE_SUCCESS(rv, rv);
 
-    PRUint32 andMaskSize = ((mICODirEntry.mWidth + 31) / 32) * 4 * // row AND mask
-                           mICODirEntry.mHeight; // num rows
+    PRUint32 andMaskSize = ((GetRealWidth() + 31) / 32) * 4 * // row AND mask
+                           GetRealHeight(); // num rows
 
     PRUint32 imageBufferSize;
     mContainedEncoder->GetImageBufferSize(&imageBufferSize);
@@ -204,15 +204,15 @@ nsICOEncoder::AddImageFrame(const PRUint8* aData,
     memcpy(mImageBufferCurr, imageBuffer + BFH_LENGTH, 
            imageBufferSize - BFH_LENGTH);
     // We need to fix the BMP height to be *2 for the AND mask
-    PRUint32 fixedHeight = mICODirEntry.mHeight * 2;
+    PRUint32 fixedHeight = GetRealHeight() * 2;
     fixedHeight = NATIVE32_TO_LITTLE(fixedHeight);
     // The height is stored at an offset of 8 from the DIB header
     memcpy(mImageBufferCurr + 8, &fixedHeight, sizeof(fixedHeight));
     mImageBufferCurr += imageBufferSize - BFH_LENGTH;
 
     // Calculate rowsize in DWORD's
-    PRUint32 rowSize = ((mICODirEntry.mWidth + 31) / 32) * 4; // + 31 to round up
-    PRInt32 currentLine = mICODirEntry.mHeight;
+    PRUint32 rowSize = ((GetRealWidth() + 31) / 32) * 4; // + 31 to round up
+    PRInt32 currentLine = GetRealHeight();
     
     // Write out the AND mask
     while (currentLine > 0) {
@@ -250,20 +250,22 @@ NS_IMETHODIMP nsICOEncoder::StartImageEncode(PRUint32 aWidth,
   }
 
   // Icons are only 1 byte, so make sure our bitmap is in range
-  if (aWidth > 255 || aHeight > 255) {
+  if (aWidth > 256 || aHeight > 256) {
     return NS_ERROR_INVALID_ARG;
   }
 
   // parse and check any provided output options
   PRUint32 bpp = 24;
-  PRBool usePNG = PR_TRUE;
+  bool usePNG = true;
   nsresult rv = ParseOptions(aOutputOptions, &bpp, &usePNG);
   NS_ENSURE_SUCCESS(rv, rv);
 
   mUsePNG = usePNG;
 
   InitFileHeader();
-  InitInfoHeader(bpp, (PRUint8)aWidth, (PRUint8)aHeight); // range checks above
+  // The width and height are stored as 0 when we have a value of 256
+  InitInfoHeader(bpp, aWidth == 256 ? 0 : (PRUint8)aWidth, 
+                 aHeight == 256 ? 0 : (PRUint8)aHeight);
 
   return NS_OK;
 }
@@ -290,7 +292,7 @@ NS_IMETHODIMP nsICOEncoder::EndImageEncode()
 // See InitFromData for a description of the parse options
 nsresult
 nsICOEncoder::ParseOptions(const nsAString& aOptions, PRUint32* bpp, 
-                           PRBool *usePNG)
+                           bool *usePNG)
 {
   // If no parsing options just use the default of 24BPP and PNG yes
   if (aOptions.Length() == 0) {
@@ -411,7 +413,7 @@ NS_IMETHODIMP nsICOEncoder::ReadSegments(nsWriteSegmentFun aWriter,
 }
 
 NS_IMETHODIMP 
-nsICOEncoder::IsNonBlocking(PRBool *_retval)
+nsICOEncoder::IsNonBlocking(bool *_retval)
 {
   *_retval = PR_TRUE;
   return NS_OK;

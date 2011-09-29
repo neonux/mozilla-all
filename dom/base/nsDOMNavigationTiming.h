@@ -45,7 +45,7 @@
 #include "nscore.h"
 #include "nsCOMPtr.h"
 #include "nsCOMArray.h"
-#include "TimeStamp.h"
+#include "mozilla/TimeStamp.h"
 #include "nsIURI.h"
 
 class nsDOMNavigationTimingClock;
@@ -100,7 +100,7 @@ private:
   ~nsDOMNavigationTiming();
 
   void Clear();
-  PRBool ReportRedirects();
+  bool ReportRedirects();
 
   nsCOMPtr<nsIURI> mUnloadedURI;
   nsCOMPtr<nsIURI> mLoadedURI;

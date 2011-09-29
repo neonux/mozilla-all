@@ -157,7 +157,7 @@ LoopState::init(jsbytecode *head, Jump entry, jsbytecode *entryTarget)
     RegisterAllocation *&alloc = outerAnalysis->getAllocation(head);
     JS_ASSERT(!alloc);
 
-    alloc = ArenaNew<RegisterAllocation>(cx->compartment->pool, true);
+    alloc = cx->typeLifoAlloc().new_<RegisterAllocation>(true);
     if (!alloc)
         return false;
 
@@ -195,7 +195,7 @@ LoopState::addJoin(unsigned index, bool script)
 }
 
 void
-LoopState::addInvariantCall(Jump jump, Label label, bool ool, bool entry, unsigned patchIndex)
+LoopState::addInvariantCall(Jump jump, Label label, bool ool, bool entry, unsigned patchIndex, Uses uses)
 {
     RestoreInvariantCall call;
     call.jump = jump;
@@ -203,7 +203,7 @@ LoopState::addInvariantCall(Jump jump, Label label, bool ool, bool entry, unsign
     call.ool = ool;
     call.entry = entry;
     call.patchIndex = patchIndex;
-    call.temporaryCopies = frame.getTemporaryCopies();
+    call.temporaryCopies = frame.getTemporaryCopies(uses);
 
     restoreInvariantCalls.append(call);
 }
@@ -1820,7 +1820,6 @@ LoopState::analyzeLoopBody(unsigned frame)
             skipAnalysis = true;
             break;
 
-          case JSOP_SETHOLE:
           case JSOP_SETELEM: {
             SSAValue objValue = analysis->poppedValue(pc, 2);
             SSAValue elemValue = analysis->poppedValue(pc, 1);
@@ -1844,7 +1843,7 @@ LoopState::analyzeLoopBody(unsigned frame)
                     continue;
                 if (!addModifiedProperty(object, JSID_VOID))
                     return;
-                if (op == JSOP_SETHOLE && !addGrowArray(object))
+                if (analysis->getCode(pc).arrayWriteHole && !addGrowArray(object))
                     return;
             }
 

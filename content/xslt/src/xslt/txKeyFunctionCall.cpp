@@ -37,7 +37,7 @@
  * ***** END LICENSE BLOCK ***** */
 
 #include "txExecutionState.h"
-#include "txAtoms.h"
+#include "nsGkAtoms.h"
 #include "txSingleNodeContext.h"
 #include "txXSLTFunctions.h"
 #include "nsReadableUtils.h"
@@ -132,7 +132,7 @@ txKeyFunctionCall::getReturnType()
     return NODESET_RESULT;
 }
 
-PRBool
+bool
 txKeyFunctionCall::isSensitiveTo(ContextSensitivity aContext)
 {
     return (aContext & NODE_CONTEXT) || argsSensitiveTo(aContext);
@@ -142,7 +142,7 @@ txKeyFunctionCall::isSensitiveTo(ContextSensitivity aContext)
 nsresult
 txKeyFunctionCall::getNameAtom(nsIAtom** aAtom)
 {
-    *aAtom = txXSLTAtoms::key;
+    *aAtom = nsGkAtoms::key;
     NS_ADDREF(*aAtom);
     return NS_OK;
 }
@@ -155,7 +155,7 @@ txKeyFunctionCall::getNameAtom(nsIAtom** aAtom)
 DHASH_WRAPPER(txKeyValueHash, txKeyValueHashEntry, txKeyValueHashKey&)
 DHASH_WRAPPER(txIndexedKeyHash, txIndexedKeyHashEntry, txIndexedKeyHashKey&)
 
-PRBool
+bool
 txKeyValueHashEntry::MatchEntry(const void* aKey) const
 {
     const txKeyValueHashKey* key =
@@ -178,7 +178,7 @@ txKeyValueHashEntry::HashKey(const void* aKey)
            HashString(key->mKeyValue);
 }
 
-PRBool
+bool
 txIndexedKeyHashEntry::MatchEntry(const void* aKey) const
 {
     const txIndexedKeyHashKey* key =
@@ -207,7 +207,7 @@ nsresult
 txKeyHash::getKeyNodes(const txExpandedName& aKeyName,
                        const txXPathNode& aRoot,
                        const nsAString& aKeyValue,
-                       PRBool aIndexIfNotFound,
+                       bool aIndexIfNotFound,
                        txExecutionState& aEs,
                        txNodeSet** aResult)
 {
@@ -301,7 +301,7 @@ txKeyHash::init()
  * @param aUse    use-expression
  * @return PR_FALSE if an error occurred, PR_TRUE otherwise
  */
-PRBool txXSLKey::addKey(nsAutoPtr<txPattern> aMatch, nsAutoPtr<Expr> aUse)
+bool txXSLKey::addKey(nsAutoPtr<txPattern> aMatch, nsAutoPtr<Expr> aUse)
 {
     if (!aMatch || !aUse)
         return PR_FALSE;

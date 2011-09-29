@@ -40,7 +40,6 @@
 #include "nsHyperTextAccessible.h"
 
 #include "States.h"
-#include "nsAccessibilityAtoms.h"
 #include "nsAccessibilityService.h"
 #include "nsAccUtils.h"
 #include "nsTextAttrs.h"
@@ -129,39 +128,39 @@ nsHyperTextAccessible::NativeRole()
 {
   nsIAtom *tag = mContent->Tag();
 
-  if (tag == nsAccessibilityAtoms::form)
+  if (tag == nsGkAtoms::form)
     return nsIAccessibleRole::ROLE_FORM;
 
-  if (tag == nsAccessibilityAtoms::blockquote ||
-      tag == nsAccessibilityAtoms::div ||
-      tag == nsAccessibilityAtoms::nav)
+  if (tag == nsGkAtoms::blockquote ||
+      tag == nsGkAtoms::div ||
+      tag == nsGkAtoms::nav)
     return nsIAccessibleRole::ROLE_SECTION;
 
-  if (tag == nsAccessibilityAtoms::h1 ||
-      tag == nsAccessibilityAtoms::h2 ||
-      tag == nsAccessibilityAtoms::h3 ||
-      tag == nsAccessibilityAtoms::h4 ||
-      tag == nsAccessibilityAtoms::h5 ||
-      tag == nsAccessibilityAtoms::h6)
+  if (tag == nsGkAtoms::h1 ||
+      tag == nsGkAtoms::h2 ||
+      tag == nsGkAtoms::h3 ||
+      tag == nsGkAtoms::h4 ||
+      tag == nsGkAtoms::h5 ||
+      tag == nsGkAtoms::h6)
     return nsIAccessibleRole::ROLE_HEADING;
 
-  if (tag == nsAccessibilityAtoms::article)
+  if (tag == nsGkAtoms::article)
     return nsIAccessibleRole::ROLE_DOCUMENT;
         
   // Deal with html landmark elements
-  if (tag == nsAccessibilityAtoms::header)
+  if (tag == nsGkAtoms::header)
     return nsIAccessibleRole::ROLE_HEADER;
 
-  if (tag == nsAccessibilityAtoms::footer)
+  if (tag == nsGkAtoms::footer)
     return nsIAccessibleRole::ROLE_FOOTER;
 
-  if (tag == nsAccessibilityAtoms::aside)
+  if (tag == nsGkAtoms::aside)
     return nsIAccessibleRole::ROLE_NOTE;
 
   // Treat block frames as paragraphs
   nsIFrame *frame = GetFrame();
-  if (frame && frame->GetType() == nsAccessibilityAtoms::blockFrame &&
-      frame->GetContent()->Tag() != nsAccessibilityAtoms::input) {
+  if (frame && frame->GetType() == nsGkAtoms::blockFrame &&
+      frame->GetContent()->Tag() != nsGkAtoms::input) {
     // An html:input @type="file" is the only input that is exposed as a
     // blockframe. It must be exposed as ROLE_TEXT_CONTAINER for JAWS.
     return nsIAccessibleRole::ROLE_PARAGRAPH;
@@ -183,7 +182,7 @@ nsHyperTextAccessible::NativeState()
     if (0 == (flags & nsIPlaintextEditor::eEditorReadonlyMask)) {
       states |= states::EDITABLE;
     }
-  } else if (mContent->Tag() == nsAccessibilityAtoms::article) {
+  } else if (mContent->Tag() == nsGkAtoms::article) {
     // We want <article> to behave like a document in terms of readonly state.
     states |= states::READONLY;
   }
@@ -200,7 +199,7 @@ nsIntRect nsHyperTextAccessible::GetBoundsForString(nsIFrame *aFrame, PRUint32 a
 {
   nsIntRect screenRect;
   NS_ENSURE_TRUE(aFrame, screenRect);
-  if (aFrame->GetType() != nsAccessibilityAtoms::textFrame) {
+  if (aFrame->GetType() != nsGkAtoms::textFrame) {
     // XXX fallback for non-text frames, happens for bullets right now
     // but in the future bullets will have proper text frames
     return aFrame->GetScreenRectExternal();
@@ -288,7 +287,7 @@ nsHyperTextAccessible::GetPosAndText(PRInt32& aStartOffset, PRInt32& aEndOffset,
   PRInt32 startOffset = aStartOffset;
   PRInt32 endOffset = aEndOffset;
   // XXX this prevents text interface usage on <input type="password">
-  PRBool isPassword = (Role() == nsIAccessibleRole::ROLE_PASSWORD_TEXT);
+  bool isPassword = (Role() == nsIAccessibleRole::ROLE_PASSWORD_TEXT);
 
   // Clear out parameters and set up loop
   if (aText) {
@@ -338,7 +337,7 @@ nsHyperTextAccessible::GetPosAndText(PRInt32& aStartOffset, PRInt32& aEndOffset,
       PRInt32 substringEndOffset = -1;
       PRUint32 ourRenderedStart = 0;
       PRInt32 ourContentStart = 0;
-      if (frame->GetType() == nsAccessibilityAtoms::textFrame) {
+      if (frame->GetType() == nsGkAtoms::textFrame) {
         nsresult rv = frame->GetRenderedText(nsnull, &skipChars, &iter);
         if (NS_SUCCEEDED(rv)) {
           ourRenderedStart = iter.GetSkippedOffset();
@@ -360,7 +359,7 @@ nsHyperTextAccessible::GetPosAndText(PRInt32& aStartOffset, PRInt32& aEndOffset,
           // Get out the continuing text frame with this offset
           PRInt32 outStartLineUnused;
           PRInt32 contentOffset;
-          if (frame->GetType() == nsAccessibilityAtoms::textFrame) {
+          if (frame->GetType() == nsGkAtoms::textFrame) {
             contentOffset = iter.ConvertSkippedToOriginal(startOffset) +
                             ourRenderedStart - ourContentStart;
           }
@@ -423,7 +422,7 @@ nsHyperTextAccessible::GetPosAndText(PRInt32& aStartOffset, PRInt32& aEndOffset,
         if (endOffset > 0) {
           if (aText) {
             // XXX: should use nsIAccessible::AppendTextTo.
-            if (frame->GetType() == nsAccessibilityAtoms::brFrame) {
+            if (frame->GetType() == nsGkAtoms::brFrame) {
               *aText += kForcedNewLineChar;
             } else if (nsAccUtils::MustPrune(this)) {
               *aText += kImaginaryEmbeddedObjectChar;
@@ -553,7 +552,7 @@ nsAccessible*
 nsHyperTextAccessible::DOMPointToHypertextOffset(nsINode *aNode,
                                                  PRInt32 aNodeOffset,
                                                  PRInt32 *aHyperTextOffset,
-                                                 PRBool aIsEndOffset)
+                                                 bool aIsEndOffset)
 {
   if (!aHyperTextOffset)
     return nsnull;
@@ -609,10 +608,10 @@ nsHyperTextAccessible::DOMPointToHypertextOffset(nsINode *aNode,
   if (findNode) {
     nsCOMPtr<nsIContent> findContent(do_QueryInterface(findNode));
     if (findContent && findContent->IsHTML() &&
-        findContent->NodeInfo()->Equals(nsAccessibilityAtoms::br) &&
+        findContent->NodeInfo()->Equals(nsGkAtoms::br) &&
         findContent->AttrValueIs(kNameSpaceID_None,
-                                 nsAccessibilityAtoms::mozeditorbogusnode,
-                                 nsAccessibilityAtoms::_true,
+                                 nsGkAtoms::mozeditorbogusnode,
+                                 nsGkAtoms::_true,
                                  eIgnoreCase)) {
       // This <br> is the hacky "bogus node" used when there is no text in a control
       *aHyperTextOffset = 0;
@@ -722,7 +721,7 @@ nsHyperTextAccessible::HypertextOffsetsToDOMRange(PRInt32 aStartHTOffset,
     nsCOMPtr<nsIEditor> editor;
     GetAssociatedEditor(getter_AddRefs(editor));
     if (editor) {
-      PRBool isEmpty = PR_FALSE;
+      bool isEmpty = false;
       editor->GetDocumentIsEmpty(&isEmpty);
       if (isEmpty) {
         nsCOMPtr<nsIDOMElement> editorRootElm;
@@ -780,12 +779,12 @@ nsHyperTextAccessible::GetRelativeOffset(nsIPresShell *aPresShell,
                                          nsAccessible *aFromAccessible,
                                          nsSelectionAmount aAmount,
                                          nsDirection aDirection,
-                                         PRBool aNeedsStart)
+                                         bool aNeedsStart)
 {
-  const PRBool kIsJumpLinesOk = PR_TRUE;          // okay to jump lines
-  const PRBool kIsScrollViewAStop = PR_FALSE;     // do not stop at scroll views
-  const PRBool kIsKeyboardSelect = PR_TRUE;       // is keyboard selection
-  const PRBool kIsVisualBidi = PR_FALSE;          // use visual order for bidi text
+  const bool kIsJumpLinesOk = true;          // okay to jump lines
+  const bool kIsScrollViewAStop = false;     // do not stop at scroll views
+  const bool kIsKeyboardSelect = true;       // is keyboard selection
+  const bool kIsVisualBidi = false;          // use visual order for bidi text
 
   EWordMovementType wordMovementType = aNeedsStart ? eStartWord : eEndWord;
   if (aAmount == eSelectLine) {
@@ -801,7 +800,7 @@ nsHyperTextAccessible::GetRelativeOffset(nsIPresShell *aPresShell,
     nsIFrame *frame = aFromAccessible->GetFrame();
     NS_ENSURE_TRUE(frame, -1);
 
-    if (frame->GetType() == nsAccessibilityAtoms::textFrame) {
+    if (frame->GetType() == nsGkAtoms::textFrame) {
       rv = RenderedToContentOffset(frame, aFromOffset, &contentOffset);
       NS_ENSURE_SUCCESS(rv, -1);
     }
@@ -929,7 +928,7 @@ nsresult nsHyperTextAccessible::GetTextHelper(EGetTextType aType, nsAccessibleTe
   }
 
   nsSelectionAmount amount;
-  PRBool needsStart = PR_FALSE;
+  bool needsStart = false;
   switch (aBoundaryType) {
     case BOUNDARY_CHAR:
       amount = eSelectCluster;
@@ -1109,7 +1108,7 @@ NS_IMETHODIMP nsHyperTextAccessible::GetTextAfterOffset(PRInt32 aOffset, nsAcces
 //                                      out long rangeStartOffset,
 //                                      out long rangeEndOffset);
 NS_IMETHODIMP
-nsHyperTextAccessible::GetTextAttributes(PRBool aIncludeDefAttrs,
+nsHyperTextAccessible::GetTextAttributes(bool aIncludeDefAttrs,
                                          PRInt32 aOffset,
                                          PRInt32 *aStartOffset,
                                          PRInt32 *aEndOffset,
@@ -1166,7 +1165,7 @@ nsHyperTextAccessible::GetTextAttributes(PRBool aIncludeDefAttrs,
 
   // Compute spelling attributes on text accessible only.
   nsIFrame *offsetFrame = accAtOffset->GetFrame();
-  if (offsetFrame && offsetFrame->GetType() == nsAccessibilityAtoms::textFrame) {
+  if (offsetFrame && offsetFrame->GetType() == nsGkAtoms::textFrame) {
     nsCOMPtr<nsIDOMNode> node = accAtOffset->GetDOMNode();
 
     PRInt32 nodeOffset = 0;
@@ -1210,17 +1209,17 @@ PRInt32
 nsHyperTextAccessible::GetLevelInternal()
 {
   nsIAtom *tag = mContent->Tag();
-  if (tag == nsAccessibilityAtoms::h1)
+  if (tag == nsGkAtoms::h1)
     return 1;
-  if (tag == nsAccessibilityAtoms::h2)
+  if (tag == nsGkAtoms::h2)
     return 2;
-  if (tag == nsAccessibilityAtoms::h3)
+  if (tag == nsGkAtoms::h3)
     return 3;
-  if (tag == nsAccessibilityAtoms::h4)
+  if (tag == nsGkAtoms::h4)
     return 4;
-  if (tag == nsAccessibilityAtoms::h5)
+  if (tag == nsGkAtoms::h5)
     return 5;
-  if (tag == nsAccessibilityAtoms::h6)
+  if (tag == nsGkAtoms::h6)
     return 6;
 
   return nsAccessibleWrap::GetLevelInternal();
@@ -1237,18 +1236,18 @@ nsHyperTextAccessible::GetAttributesInternal(nsIPersistentProperties *aAttribute
   // XXX: 'formatting' attribute is deprecated and will be removed in Mozilla2,
   // use 'display' attribute instead.
   nsIFrame *frame = GetFrame();
-  if (frame && frame->GetType() == nsAccessibilityAtoms::blockFrame) {
+  if (frame && frame->GetType() == nsGkAtoms::blockFrame) {
     nsAutoString oldValueUnused;
     aAttributes->SetStringProperty(NS_LITERAL_CSTRING("formatting"), NS_LITERAL_STRING("block"),
                                    oldValueUnused);
   }
 
-  if (gLastFocusedNode == GetNode()) {
+  if (FocusMgr()->IsFocused(this)) {
     PRInt32 lineNumber = GetCaretLineNumber();
     if (lineNumber >= 1) {
       nsAutoString strLineNumber;
       strLineNumber.AppendInt(lineNumber);
-      nsAccUtils::SetAccAttr(aAttributes, nsAccessibilityAtoms::lineNumber,
+      nsAccUtils::SetAccAttr(aAttributes, nsGkAtoms::lineNumber,
                              strLineNumber);
     }
   }
@@ -1257,14 +1256,14 @@ nsHyperTextAccessible::GetAttributesInternal(nsIPersistentProperties *aAttribute
   // make AT navigation schemes "just work". Note html:header is redundant as
   // a landmark since it usually contains headings. We're not yet sure how the
   // web will use html:footer but our best bet right now is as contentinfo.
-  if (mContent->Tag() == nsAccessibilityAtoms::nav)
-    nsAccUtils::SetAccAttr(aAttributes, nsAccessibilityAtoms::xmlroles,
+  if (mContent->Tag() == nsGkAtoms::nav)
+    nsAccUtils::SetAccAttr(aAttributes, nsGkAtoms::xmlroles,
                            NS_LITERAL_STRING("navigation"));
-  else if (mContent->Tag() == nsAccessibilityAtoms::footer) 
-    nsAccUtils::SetAccAttr(aAttributes, nsAccessibilityAtoms::xmlroles,
+  else if (mContent->Tag() == nsGkAtoms::footer) 
+    nsAccUtils::SetAccAttr(aAttributes, nsGkAtoms::xmlroles,
                            NS_LITERAL_STRING("contentinfo"));
-  else if (mContent->Tag() == nsAccessibilityAtoms::aside) 
-    nsAccUtils::SetAccAttr(aAttributes, nsAccessibilityAtoms::xmlroles,
+  else if (mContent->Tag() == nsGkAtoms::aside) 
+    nsAccUtils::SetAccAttr(aAttributes, nsGkAtoms::xmlroles,
                            NS_LITERAL_STRING("complementary"));
 
   return  NS_OK;
@@ -1360,7 +1359,7 @@ nsHyperTextAccessible::GetOffsetAtPoint(PRInt32 aX, PRInt32 aY,
       nsSize frameSize = frame->GetSize();
       if (pointInFrame.x < frameSize.width && pointInFrame.y < frameSize.height) {
         // Finished
-        if (frame->GetType() == nsAccessibilityAtoms::textFrame) {
+        if (frame->GetType() == nsGkAtoms::textFrame) {
           nsIFrame::ContentOffsets contentOffsets = frame->GetContentOffsetsFromPointExternal(pointInFrame, PR_TRUE);
           if (contentOffsets.IsNull() || contentOffsets.content != content) {
             return NS_OK; // Not found, will return -1
@@ -1629,13 +1628,9 @@ nsHyperTextAccessible::GetCaretOffset(PRInt32 *aCaretOffset)
 
   // No caret if the focused node is not inside this DOM node and this DOM node
   // is not inside of focused node.
-
-  nsINode* thisNode = GetNode();
-  PRBool isInsideOfFocusedNode =
-    nsCoreUtils::IsAncestorOf(gLastFocusedNode, thisNode);
-
-  if (!isInsideOfFocusedNode && thisNode != gLastFocusedNode &&
-      !nsCoreUtils::IsAncestorOf(thisNode, gLastFocusedNode))
+  FocusManager::FocusDisposition focusDisp =
+    FocusMgr()->IsInOrContainsFocus(this);
+  if (focusDisp == FocusManager::eNone)
     return NS_OK;
 
   // Turn the focus node and offset of the selection into caret hypretext
@@ -1656,10 +1651,11 @@ nsHyperTextAccessible::GetCaretOffset(PRInt32 *aCaretOffset)
   // No caret if this DOM node is inside of focused node but the selection's
   // focus point is not inside of this DOM node.
   nsCOMPtr<nsINode> focusNode(do_QueryInterface(focusDOMNode));
-  if (isInsideOfFocusedNode) {
+  if (focusDisp == FocusManager::eContainedByFocus) {
     nsINode *resultNode =
       nsCoreUtils::GetDOMNodeFromDOMPoint(focusNode, focusOffset);
 
+    nsINode* thisNode = GetNode();
     if (resultNode != thisNode &&
         !nsCoreUtils::IsAncestorOf(thisNode, resultNode))
       return NS_OK;
@@ -1809,7 +1805,7 @@ nsHyperTextAccessible::GetSelections(PRInt16 aType,
     // Remove collapsed ranges
     PRInt32 numRanges = aRanges->Count();
     for (PRInt32 count = 0; count < numRanges; count ++) {
-      PRBool isCollapsed;
+      bool isCollapsed;
       (*aRanges)[count]->GetCollapsed(&isCollapsed);
       if (isCollapsed) {
         aRanges->RemoveObjectAt(count);
@@ -1908,7 +1904,7 @@ nsHyperTextAccessible::SetSelectionBounds(PRInt32 aSelectionNum,
   NS_ENSURE_SUCCESS(rv, rv);
 
   // Caret is a collapsed selection
-  PRBool isOnlyCaret = (aStartOffset == aEndOffset);
+  bool isOnlyCaret = (aStartOffset == aEndOffset);
 
   PRInt32 rangeCount;
   domSel->GetRangeCount(&rangeCount);
@@ -2032,7 +2028,7 @@ nsHyperTextAccessible::ScrollSubstringToPoint(PRInt32 aStartIndex,
 
   nsPresContext *presContext = frame->PresContext();
 
-  PRBool initialScrolled = PR_FALSE;
+  bool initialScrolled = false;
   nsIFrame *parentFrame = frame;
   while ((parentFrame = parentFrame->GetParent())) {
     nsIScrollableFrame *scrollableFrame = do_QueryFrame(parentFrame);
@@ -2087,7 +2083,7 @@ nsHyperTextAccessible::InvalidateChildren()
   nsAccessibleWrap::InvalidateChildren();
 }
 
-PRBool
+bool
 nsHyperTextAccessible::RemoveChild(nsAccessible* aAccessible)
 {
   PRInt32 childIndex = aAccessible->IndexInParent();
@@ -2110,7 +2106,7 @@ nsresult nsHyperTextAccessible::ContentToRenderedOffset(nsIFrame *aFrame, PRInt3
     *aRenderedOffset = 0;
     return NS_OK;
   }
-  NS_ASSERTION(aFrame->GetType() == nsAccessibilityAtoms::textFrame,
+  NS_ASSERTION(aFrame->GetType() == nsGkAtoms::textFrame,
                "Need text frame for offset conversion");
   NS_ASSERTION(aFrame->GetPrevContinuation() == nsnull,
                "Call on primary frame only");
@@ -2136,7 +2132,7 @@ nsresult nsHyperTextAccessible::RenderedToContentOffset(nsIFrame *aFrame, PRUint
   *aContentOffset = 0;
   NS_ENSURE_TRUE(aFrame, NS_ERROR_FAILURE);
 
-  NS_ASSERTION(aFrame->GetType() == nsAccessibilityAtoms::textFrame,
+  NS_ASSERTION(aFrame->GetType() == nsGkAtoms::textFrame,
                "Need text frame for offset conversion");
   NS_ASSERTION(aFrame->GetPrevContinuation() == nsnull,
                "Call on primary frame only");
@@ -2183,7 +2179,7 @@ nsHyperTextAccessible::GetCharAt(PRInt32 aOffset, EGetTextType aShift,
 
 PRInt32
 nsHyperTextAccessible::GetChildOffset(PRUint32 aChildIndex,
-                                      PRBool aInvalidateAfter)
+                                      bool aInvalidateAfter)
 {
   if (aChildIndex == 0) {
     if (aInvalidateAfter)
@@ -2283,7 +2279,7 @@ nsHyperTextAccessible::GetDOMPointByFrameOffset(nsIFrame *aFrame,
     *aNodeOffset = parent->IndexOf(content) + 1;
     node = do_QueryInterface(parent);
 
-  } else if (aFrame->GetType() == nsAccessibilityAtoms::textFrame) {
+  } else if (aFrame->GetType() == nsGkAtoms::textFrame) {
     nsCOMPtr<nsIContent> content(aFrame->GetContent());
     NS_ENSURE_STATE(content);
 
@@ -2311,8 +2307,8 @@ nsHyperTextAccessible::GetDOMPointByFrameOffset(nsIFrame *aFrame,
 // nsHyperTextAccessible
 nsresult
 nsHyperTextAccessible::DOMRangeBoundToHypertextOffset(nsIDOMRange *aRange,
-                                                      PRBool aIsStartBound,
-                                                      PRBool aIsStartHTOffset,
+                                                      bool aIsStartBound,
+                                                      bool aIsStartHTOffset,
                                                       PRInt32 *aHTOffset)
 {
   nsCOMPtr<nsIDOMNode> DOMNode;
@@ -2418,7 +2414,7 @@ nsHyperTextAccessible::GetSpellTextAttribute(nsIDOMNode *aNode,
         *aHTEndOffset = endHTOffset;
 
       if (aAttributes) {
-        nsAccUtils::SetAccAttr(aAttributes, nsAccessibilityAtoms::invalid,
+        nsAccUtils::SetAccAttr(aAttributes, nsGkAtoms::invalid,
                                NS_LITERAL_STRING("spelling"));
       }
 

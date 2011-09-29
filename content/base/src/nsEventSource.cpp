@@ -59,6 +59,7 @@
 #include "nsIContentSecurityPolicy.h"
 #include "nsContentUtils.h"
 #include "mozilla/Preferences.h"
+#include "xpcpublic.h"
 
 using namespace mozilla;
 
@@ -113,17 +114,11 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(nsEventSource,
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mChannelEventSink)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mHttpChannel)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mTimer)
-  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mOnOpenListener)
-  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mOnMessageListener)
-  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mOnErrorListener)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mUnicodeDecoder)
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(nsEventSource, nsDOMEventTargetWrapperCache)
   tmp->Close();
-  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mOnOpenListener)
-  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mOnMessageListener)
-  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mOnErrorListener)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 
 DOMCI_DATA(EventSource, nsEventSource)
@@ -162,23 +157,9 @@ nsEventSource::GetReadyState(PRInt32 *aReadyState)
   return NS_OK;
 }
 
-#define NS_EVENTSRC_IMPL_DOMEVENTLISTENER(_eventlistenername, _eventlistener)  \
-  NS_IMETHODIMP                                                                \
-  nsEventSource::GetOn##_eventlistenername(nsIDOMEventListener * *aListener)   \
-  {                                                                            \
-    return GetInnerEventListener(_eventlistener, aListener);                   \
-  }                                                                            \
-                                                                               \
-  NS_IMETHODIMP                                                                \
-  nsEventSource::SetOn##_eventlistenername(nsIDOMEventListener * aListener)    \
-  {                                                                            \
-    return RemoveAddEventListener(NS_LITERAL_STRING(#_eventlistenername),      \
-                                  _eventlistener, aListener);                  \
-  }
-
-NS_EVENTSRC_IMPL_DOMEVENTLISTENER(open, mOnOpenListener)
-NS_EVENTSRC_IMPL_DOMEVENTLISTENER(error, mOnErrorListener)
-NS_EVENTSRC_IMPL_DOMEVENTLISTENER(message, mOnMessageListener)
+NS_IMPL_EVENT_HANDLER(nsEventSource, open)
+NS_IMPL_EVENT_HANDLER(nsEventSource, error)
+NS_IMPL_EVENT_HANDLER(nsEventSource, message)
 
 NS_IMETHODIMP
 nsEventSource::Close()
@@ -422,7 +403,7 @@ nsEventSource::OnStartRequest(nsIRequest *aRequest,
   nsCOMPtr<nsIHttpChannel> httpChannel = do_QueryInterface(aRequest, &rv);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  PRBool requestSucceeded;
+  bool requestSucceeded;
   rv = httpChannel->GetRequestSucceeded(&requestSucceeded);
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -776,10 +757,10 @@ nsEventSource::GetInterface(const nsIID & aIID,
 }
 
 // static
-PRBool
+bool
 nsEventSource::PrefEnabled()
 {
-  return Preferences::GetBool("dom.server-events.enabled", PR_FALSE);
+  return Preferences::GetBool("dom.server-events.enabled", false);
 }
 
 nsresult
@@ -1163,17 +1144,17 @@ nsEventSource::FailConnection()
   }
 }
 
-PRBool
+bool
 nsEventSource::CheckCanRequestSrc(nsIURI* aSrc)
 {
   if (mReadyState == nsIEventSource::CLOSED) {
     return PR_FALSE;
   }
 
-  PRBool isSameOrigin = PR_FALSE;
-  PRBool isValidURI = PR_FALSE;
-  PRBool isValidContentLoadPolicy = PR_FALSE;
-  PRBool isValidProtocol = PR_FALSE;
+  bool isSameOrigin = false;
+  bool isValidURI = false;
+  bool isValidContentLoadPolicy = false;
+  bool isValidProtocol = false;
 
   nsCOMPtr<nsIURI> srcToTest = aSrc ? aSrc : mSrc.get();
   NS_ENSURE_TRUE(srcToTest, PR_FALSE);
@@ -1350,7 +1331,7 @@ nsEventSource::DispatchAllMessageEvents()
   nsIScriptContext* scriptContext = sgo->GetContext();
   NS_ENSURE_TRUE(scriptContext,);
 
-  JSContext* cx = (JSContext*)scriptContext->GetNativeContext();
+  JSContext* cx = scriptContext->GetNativeContext();
   NS_ENSURE_TRUE(cx,);
 
   while (mMessagesToDispatch.GetSize() > 0) {
@@ -1457,7 +1438,7 @@ nsEventSource::SetFieldAndClear()
       if (mLastFieldName.EqualsLiteral("retry")) {
         PRUint32 newValue=0;
         PRUint32 i = 0;  // we must ensure that there are only digits
-        PRBool assign = PR_TRUE;
+        bool assign = true;
         for (i = 0; i < mLastFieldValue.Length(); ++i) {
           if (mLastFieldValue.CharAt(i) < (PRUnichar)'0' ||
               mLastFieldValue.CharAt(i) > (PRUnichar)'9') {

@@ -290,7 +290,7 @@ public:
       delete mData[i];
   }
 
-  PRBool ConditionallyConnect(nsCString &aStr, WebSocketChannel *ws)
+  bool ConditionallyConnect(nsCString &aStr, WebSocketChannel *ws)
   {
     NS_ABORT_IF_FALSE(NS_IsMainThread(), "not main thread");
 
@@ -302,7 +302,7 @@ public:
     // we could hash this, but the dataset is expected to be
     // small
 
-    PRBool found = (IndexOf(aStr) >= 0);
+    bool found = (IndexOf(aStr) >= 0);
     nsOpenConn *newdata = new nsOpenConn(aStr, ws);
     mData.AppendElement(newdata);
 
@@ -319,7 +319,7 @@ public:
     return !found;
   }
 
-  PRBool Complete(WebSocketChannel *aChannel)
+  bool Complete(WebSocketChannel *aChannel)
   {
     NS_ABORT_IF_FALSE(NS_IsMainThread(), "not main thread");
     NS_ABORT_IF_FALSE(!aChannel->mOpenBlocked,
@@ -341,7 +341,7 @@ public:
     return ConnectNext(aChannel->mAddress);
   }
 
-  PRBool Cancel(WebSocketChannel *aChannel)
+  bool Cancel(WebSocketChannel *aChannel)
   {
     NS_ABORT_IF_FALSE(NS_IsMainThread(), "not main thread");
     PRInt32 index = IndexOf(aChannel);
@@ -363,7 +363,7 @@ public:
     return PR_FALSE;
   }
 
-  PRBool ConnectNext(nsCString &hostName)
+  bool ConnectNext(nsCString &hostName)
   {
     PRInt32 index = IndexOf(hostName);
     if (index >= 0) {
@@ -464,7 +464,7 @@ public:
       deflateEnd(&mZlib);
   }
 
-  PRBool Active()
+  bool Active()
   {
     return mActive;
   }
@@ -533,7 +533,7 @@ private:
     return NS_OK;
   }
 
-  PRBool                          mActive;
+  bool                            mActive;
   z_stream                        mZlib;
   nsCOMPtr<nsIStringInputStream>  mStream;
 
@@ -691,7 +691,7 @@ WebSocketChannel::BeginOpen()
   return rv;
 }
 
-PRBool
+bool
 WebSocketChannel::IsPersistentFramePtr()
 {
   return (mFramePtr >= mBuffer && mFramePtr < mBuffer + mBufferSize);
@@ -929,7 +929,7 @@ WebSocketChannel::ProcessInput(PRUint8 *buffer, PRUint32 count)
         // (which are non-conformant to send) with u+fffd,
         // but secteam feels that silently rewriting messages is
         // inappropriate - so we will fail the connection instead.
-        if (!IsUTF8(utf8Data)) {
+        if (!IsUTF8(utf8Data, PR_FALSE)) {
           LOG(("WebSocketChannel:: text frame invalid utf-8\n"));
           AbortSession(NS_ERROR_ILLEGAL_VALUE);
           return NS_ERROR_ILLEGAL_VALUE;
@@ -966,7 +966,7 @@ WebSocketChannel::ProcessInput(PRUint8 *buffer, PRUint32 count)
             // (which are non-conformant to send) with u+fffd,
             // but secteam feels that silently rewriting messages is
             // inappropriate - so we will fail the connection instead.
-            if (!IsUTF8(mServerCloseReason)) {
+            if (!IsUTF8(mServerCloseReason, PR_FALSE)) {
               LOG(("WebSocketChannel:: close frame invalid utf-8\n"));
               AbortSession(NS_ERROR_ILLEGAL_VALUE);
               return NS_ERROR_ILLEGAL_VALUE;
@@ -1169,8 +1169,8 @@ WebSocketChannel::PrimeNewOutgoingMessage()
   NS_ABORT_IF_FALSE(PR_GetCurrentThread() == gSocketThread, "not socket thread");
   NS_ABORT_IF_FALSE(!mCurrentOut, "Current message in progress");
 
-  PRBool isPong = PR_FALSE;
-  PRBool isPing = PR_FALSE;
+  bool isPong = false;
+  bool isPing = false;
 
   mCurrentOut = (OutboundMessage *)mOutgoingPongMessages.PopFront();
   if (mCurrentOut) {
@@ -1263,7 +1263,7 @@ WebSocketChannel::PrimeNewOutgoingMessage()
     if (mCurrentOut->Length() < 126) {
       mOutHeader[1] = mCurrentOut->Length() | kMaskBit;
       mHdrOutToSend = 6;
-    } else if (mCurrentOut->Length() < 0xffff) {
+    } else if (mCurrentOut->Length() <= 0xffff) {
       mOutHeader[1] = 126 | kMaskBit;
       ((PRUint16 *)mOutHeader)[1] =
         PR_htons(mCurrentOut->Length());
@@ -1810,7 +1810,7 @@ WebSocketChannel::AsyncOnChannelRedirect(
     return NS_OK;
   }
 
-  PRBool isHttps = PR_FALSE;
+  bool isHttps = false;
   rv = newuri->SchemeIs("https", &isHttps);
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -1987,7 +1987,7 @@ WebSocketChannel::AsyncOpen(nsIURI *aURI,
 
   if (prefService) {
     PRInt32 intpref;
-    PRBool boolpref;
+    bool boolpref;
     rv = prefService->GetIntPref("network.websocket.max-message-size", 
                                  &intpref);
     if (NS_SUCCEEDED(rv)) {

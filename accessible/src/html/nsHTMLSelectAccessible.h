@@ -39,7 +39,6 @@
 #ifndef __nsHTMLSelectAccessible_h__
 #define __nsHTMLSelectAccessible_h__
 
-#include "nsAccessibilityAtoms.h"
 #include "nsHTMLFormControlAccessible.h"
 #include "nsIDOMHTMLOptionsCollection.h"
 #include "nsIDOMHTMLOptionElement.h"
@@ -81,6 +80,12 @@ public:
   virtual bool SelectAll();
   virtual bool UnselectAll();
 
+  // Widgets
+  virtual bool IsWidget() const;
+  virtual bool IsActiveWidget() const;
+  virtual bool AreItemsOperable() const;
+  virtual nsAccessible* CurrentItem();
+
 protected:
 
   // nsAccessible
@@ -108,7 +113,7 @@ public:
   // nsIAccessible
   NS_IMETHOD DoAction(PRUint8 index);
   NS_IMETHOD GetActionName(PRUint8 aIndex, nsAString& aName);
-  NS_IMETHOD SetSelected(PRBool aSelect);
+  NS_IMETHOD SetSelected(bool aSelect);
 
   // nsAccessible
   virtual nsresult GetNameInternal(nsAString& aName);
@@ -122,10 +127,8 @@ public:
   // ActionAccessible
   virtual PRUint8 ActionCount();
 
-  /**
-   * Return focused option if any.
-   */
-  static already_AddRefed<nsIContent> GetFocusedOption(nsIContent *aListNode);
+  // Widgets
+  virtual nsAccessible* ContainerWidget() const;
 
   static void SelectionChangedIfOption(nsIContent *aPossibleOption);
 
@@ -203,16 +206,20 @@ public:
   // ActionAccessible
   virtual PRUint8 ActionCount();
 
+  // Widgets
+  virtual bool IsWidget() const;
+  virtual bool IsActiveWidget() const;
+  virtual bool AreItemsOperable() const;
+  virtual nsAccessible* CurrentItem();
+
 protected:
   // nsAccessible
   virtual void CacheChildren();
 
-  // nsHTMLComboboxAccessible
-
   /**
-   * Return focused option accessible.
+   * Return selected option.
    */
-  nsAccessible *GetFocusedOptionAccessible();
+  nsAccessible* SelectedOption(bool aIgnoreIfCollapsed = false) const;
 
 private:
   nsRefPtr<nsHTMLComboboxListAccessible> mListAccessible;

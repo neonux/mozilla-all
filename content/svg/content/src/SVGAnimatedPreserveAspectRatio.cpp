@@ -228,7 +228,7 @@ nsresult
 SVGAnimatedPreserveAspectRatio::SetBaseValueString(
   const nsAString &aValueAsString,
   nsSVGElement *aSVGElement,
-  PRBool aDoSetAttr)
+  bool aDoSetAttr)
 {
   SVGPreserveAspectRatio val;
   nsresult res = ToPreserveAspectRatio(aValueAsString, &val);
@@ -247,9 +247,7 @@ SVGAnimatedPreserveAspectRatio::SetBaseValueString(
   }
 #endif
 
-  // We don't need to call DidChange* here - we're only called by
-  // nsSVGElement::ParseAttribute under nsGenericElement::SetAttr,
-  // which takes care of notifying.
+  aSVGElement->DidChangePreserveAspectRatio(aDoSetAttr);
   return NS_OK;
 }
 
@@ -365,7 +363,7 @@ nsresult
 SMILPreserveAspectRatio::ValueFromString(const nsAString& aStr,
                                          const nsISMILAnimationElement* /*aSrcElement*/,
                                          nsSMILValue& aValue,
-                                         PRBool& aPreventCachingOfSandwich) const
+                                         bool& aPreventCachingOfSandwich) const
 {
   SVGPreserveAspectRatio par;
   nsresult res = ToPreserveAspectRatio(aStr, &par);

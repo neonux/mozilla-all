@@ -143,7 +143,6 @@ struct nsTArray_SafeElementAtHelper<E*, Derived>
   }
 };
 
-
 //
 // This class serves as a base class for nsTArray.  It shouldn't be used
 // directly.  It holds common implementation code that does not depend on the
@@ -171,7 +170,7 @@ public:
   }
 
   // @return True if the array is empty or false otherwise.
-  PRBool IsEmpty() const {
+  bool IsEmpty() const {
     return Length() == 0;
   }
 
@@ -197,7 +196,7 @@ protected:
   // @param capacity     The requested number of array elements.
   // @param elemSize     The size of an array element.
   // @return False if insufficient memory is available; true otherwise.
-  PRBool EnsureCapacity(size_type capacity, size_type elemSize);
+  bool EnsureCapacity(size_type capacity, size_type elemSize);
 
   // Resize the storage to the minimum required amount.
   // @param elemSize     The size of an array element.
@@ -227,22 +226,31 @@ protected:
   //              greater than the current length of the array.
   // @param count the number of slots to insert
   // @param elementSize the size of an array element.
-  PRBool InsertSlotsAt(index_type index, size_type count,
+  bool InsertSlotsAt(index_type index, size_type count,
                        size_type elementSize);
 
 protected:
-  // NOTE: This method isn't heavily optimized if either array is an
-  // nsAutoTArray.
   template<class Allocator>
-  PRBool SwapArrayElements(nsTArray_base<Allocator>& other,
+  bool SwapArrayElements(nsTArray_base<Allocator>& other,
                            size_type elemSize);
+
+  // This is an RAII class used in SwapArrayElements.
+  class IsAutoArrayRestorer {
+    public:
+      IsAutoArrayRestorer(nsTArray_base<Alloc> &array);
+      ~IsAutoArrayRestorer();
+
+    private:
+      nsTArray_base<Alloc> &mArray;
+      bool mIsAuto;
+  };
 
   // Helper function for SwapArrayElements. Ensures that if the array
   // is an nsAutoTArray that it doesn't use the built-in buffer.
-  PRBool EnsureNotUsingAutoArrayBuffer(size_type elemSize);
+  bool EnsureNotUsingAutoArrayBuffer(size_type elemSize);
 
   // Returns true if this nsTArray is an nsAutoTArray with a built-in buffer.
-  PRBool IsAutoArray() {
+  bool IsAutoArray() {
     return mHdr->mIsAutoArray;
   }
 
@@ -256,13 +264,18 @@ protected:
   // Returns a Header for the built-in buffer of this nsAutoTArray.
   Header* GetAutoArrayBuffer() {
     NS_ASSERTION(IsAutoArray(), "Should be an auto array to call this");
+    return GetAutoArrayBufferUnsafe();
+  }
 
+  // Returns a Header for the built-in buffer of this nsAutoTArray, but doesn't
+  // assert that we are an nsAutoTArray.
+  Header* GetAutoArrayBufferUnsafe() {
     return reinterpret_cast<Header*>(&(reinterpret_cast<AutoArray*>(&mHdr))->aligned);
   }
 
   // Returns true if this is an nsAutoTArray and it currently uses the
   // built-in buffer to store its elements.
-  PRBool UsesAutoArrayBuffer() {
+  bool UsesAutoArrayBuffer() {
     return mHdr->mIsAutoArray && mHdr == GetAutoArrayBuffer();
   }
 
@@ -334,10 +347,10 @@ template<class A, class B>
 class nsDefaultComparator
 {
 public:
-  PRBool Equals(const A& a, const B& b) const {
+  bool Equals(const A& a, const B& b) const {
     return a == b;
   }
-  PRBool LessThan(const A& a, const B& b) const {
+  bool LessThan(const A& a, const B& b) const {
     return a < b;
   }
 };
@@ -361,10 +374,10 @@ public:
 //   class Comparator {
 //     public:
 //       /** @return True if the elements are equals; false otherwise. */
-//       PRBool Equals(const elem_type& a, const elem_type& b) const;
+//       bool Equals(const elem_type& a, const elem_type& b) const;
 //
 //       /** @return True if (a < b); false otherwise. */
-//       PRBool LessThan(const elem_type& a, const elem_type& b) const;
+//       bool LessThan(const elem_type& a, const elem_type& b) const;
 //   };
 //
 // The Equals method is used for searching, and the LessThan method is used
@@ -544,7 +557,7 @@ public:
   // @param comp   The Comparator used to determine element equality.
   // @return       PR_TRUE if the element was found.
   template<class Item, class Comparator>
-  PRBool Contains(const Item& item, const Comparator& comp) const {
+  bool Contains(const Item& item, const Comparator& comp) const {
     return IndexOf(item, 0, comp) != NoIndex;
   }
 
@@ -554,7 +567,7 @@ public:
   // @param item   The item to search for.
   // @return       PR_TRUE if the element was found.
   template<class Item>
-  PRBool Contains(const Item& item) const {
+  bool Contains(const Item& item) const {
     return IndexOf(item) != NoIndex;
   }
 
@@ -688,7 +701,13 @@ public:
                                const Item& item) {
     return ReplaceElementsAt(start, count, &item, 1);
   }
-    
+
+  // A variation on the ReplaceElementsAt method defined above.
+  template<class Item>
+  elem_type *ReplaceElementAt(index_type index, const Item& item) {
+    return ReplaceElementsAt(index, 1, item, 1);
+  }
+
   // A variation on the ReplaceElementsAt method defined above.
   template<class Item>
   elem_type *InsertElementsAt(index_type index, const Item* array,
@@ -731,7 +750,7 @@ public:
   // @return       True iff |item == array[*idx]|.
   // @precondition The array is sorted
   template<class Item, class Comparator>
-  PRBool
+  bool
   GreatestIndexLtEq(const Item& item,
                     const Comparator& comp,
                     index_type* idx NS_OUTPARAM) const {
@@ -770,7 +789,7 @@ public:
 
   // A variation on the GreatestIndexLtEq method defined above.
   template<class Item, class Comparator>
-  PRBool
+  bool
   GreatestIndexLtEq(const Item& item,
                     index_type& idx,
                     const Comparator& comp) const {
@@ -779,7 +798,7 @@ public:
 
   // A variation on the GreatestIndexLtEq method defined above.
   template<class Item>
-  PRBool
+  bool
   GreatestIndexLtEq(const Item& item,
                     index_type& idx) const {
     return GreatestIndexLtEq(item, nsDefaultComparator<elem_type, Item>(), &idx);
@@ -892,7 +911,7 @@ public:
   // @param comp  The Comparator used to determine element equality.
   // @return PR_TRUE if the element was found
   template<class Item, class Comparator>
-  PRBool RemoveElement(const Item& item, const Comparator& comp) {
+  bool RemoveElement(const Item& item, const Comparator& comp) {
     index_type i = IndexOf(item, 0, comp);
     if (i == NoIndex)
       return PR_FALSE;
@@ -904,7 +923,7 @@ public:
   // A variation on the RemoveElement method defined above that assumes
   // that 'operator==' is defined for elem_type.
   template<class Item>
-  PRBool RemoveElement(const Item& item) {
+  bool RemoveElement(const Item& item) {
     return RemoveElement(item, nsDefaultComparator<elem_type, Item>());
   }
 
@@ -915,9 +934,9 @@ public:
   // @param comp  The Comparator used to determine element equality.
   // @return PR_TRUE if the element was found
   template<class Item, class Comparator>
-  PRBool RemoveElementSorted(const Item& item, const Comparator& comp) {
+  bool RemoveElementSorted(const Item& item, const Comparator& comp) {
     index_type index;
-    PRBool found = GreatestIndexLtEq(item, comp, &index);
+    bool found = GreatestIndexLtEq(item, comp, &index);
     if (found)
       RemoveElementAt(index);
     return found;
@@ -925,16 +944,14 @@ public:
 
   // A variation on the RemoveElementSorted method defined above.
   template<class Item>
-  PRBool RemoveElementSorted(const Item& item) {
+  bool RemoveElementSorted(const Item& item) {
     return RemoveElementSorted(item, nsDefaultComparator<elem_type, Item>());
   }
 
   // This method causes the elements contained in this array and the given
   // array to be swapped.
-  // NOTE: This method isn't heavily optimized if either array is an
-  // nsAutoTArray.
   template<class Allocator>
-  PRBool SwapElements(nsTArray<E, Allocator>& other) {
+  bool SwapElements(nsTArray<E, Allocator>& other) {
     return this->SwapArrayElements(other, sizeof(elem_type));
   }
 
@@ -948,7 +965,7 @@ public:
   // will not reduce the number of elements in this array.
   // @param capacity  The desired capacity of this array.
   // @return True if the operation succeeded; false if we ran out of memory
-  PRBool SetCapacity(size_type capacity) {
+  bool SetCapacity(size_type capacity) {
     return this->EnsureCapacity(capacity, sizeof(elem_type));
   }
 
@@ -960,7 +977,7 @@ public:
   // @return        True if the operation succeeded; false otherwise.
   // See also TruncateLength if the new length is guaranteed to be
   // smaller than the old.
-  PRBool SetLength(size_type newLen) {
+  bool SetLength(size_type newLen) {
     size_type oldLen = Length();
     if (newLen > oldLen) {
       return InsertElementsAt(oldLen, newLen - oldLen) != nsnull;
@@ -989,7 +1006,7 @@ public:
   // constructor.
   // @param minLen  The desired minimum length of this array.
   // @return        True if the operation succeeded; false otherwise.
-  PRBool EnsureLengthAtLeast(size_type minLen) {
+  bool EnsureLengthAtLeast(size_type minLen) {
     size_type oldLen = Length();
     if (minLen > oldLen) {
       return InsertElementsAt(oldLen, minLen - oldLen) != nsnull;
@@ -1230,7 +1247,22 @@ public:
   typedef typename base_type::Header Header;
   typedef typename base_type::elem_type elem_type;
 
+protected:
   nsAutoArrayBase() {
+    Init();
+  }
+
+  // We need this constructor because nsAutoTArray and friends all have
+  // implicit copy-constructors.  If we don't have this method, those
+  // copy-constructors will call nsAutoArrayBase's implicit copy-constructor,
+  // which won't call Init() and set up the auto buffer!
+  nsAutoArrayBase(const TArrayBase &aOther) {
+    Init();
+    AppendElements(aOther);
+  }
+
+private:
+  void Init() {
     *base_type::PtrToHdr() = reinterpret_cast<Header*>(&mAutoBuf);
     base_type::Hdr()->mLength = 0;
     base_type::Hdr()->mCapacity = N;
@@ -1241,7 +1273,6 @@ public:
                  "GetAutoArrayBuffer needs to be fixed");
   }
 
-protected:
   union {
     char mAutoBuf[sizeof(Header) + N * sizeof(elem_type)];
     PRUint64 dummy;

@@ -66,7 +66,7 @@
 
 using namespace mozilla;
 
-static PRBool BaseTypeAndSizeFromUniformType(WebGLenum uType, WebGLenum *baseType, WebGLint *unitSize);
+static bool BaseTypeAndSizeFromUniformType(WebGLenum uType, WebGLenum *baseType, WebGLint *unitSize);
 static WebGLenum InternalFormatForFormatAndType(WebGLenum format, WebGLenum type, bool isGLES2);
 
 /* Helper macros for when we're just wrapping a gl method, so that
@@ -201,8 +201,8 @@ WebGLContext::BindBuffer(WebGLenum target, nsIWebGLBuffer *bobj)
 {
     WebGLuint bufname;
     WebGLBuffer* buf;
-    PRBool isNull; // allow null objects
-    PRBool isDeleted; // allow deleted objects
+    bool isNull; // allow null objects
+    bool isDeleted; // allow deleted objects
     if (!GetConcreteObjectAndGLName("bindBuffer", bobj, &buf, &bufname, &isNull, &isDeleted))
         return NS_OK;
 
@@ -242,8 +242,8 @@ NS_IMETHODIMP
 WebGLContext::BindFramebuffer(WebGLenum target, nsIWebGLFramebuffer *fbobj)
 {
     WebGLuint framebuffername;
-    PRBool isNull; // allow null objects
-    PRBool isDeleted; // allow deleted objects
+    bool isNull; // allow null objects
+    bool isDeleted; // allow deleted objects
     WebGLFramebuffer *wfb;
 
     if (target != LOCAL_GL_FRAMEBUFFER)
@@ -274,8 +274,8 @@ NS_IMETHODIMP
 WebGLContext::BindRenderbuffer(WebGLenum target, nsIWebGLRenderbuffer *rbobj)
 {
     WebGLuint renderbuffername;
-    PRBool isNull; // allow null objects
-    PRBool isDeleted; // allow deleted objects
+    bool isNull; // allow null objects
+    bool isDeleted; // allow deleted objects
     WebGLRenderbuffer *wrb;
 
     if (target != LOCAL_GL_RENDERBUFFER)
@@ -305,8 +305,8 @@ WebGLContext::BindTexture(WebGLenum target, nsIWebGLTexture *tobj)
 {
     WebGLuint texturename;
     WebGLTexture *tex;
-    PRBool isNull; // allow null objects
-    PRBool isDeleted; // allow deleted objects
+    bool isNull; // allow null objects
+    bool isDeleted; // allow deleted objects
     if (!GetConcreteObjectAndGLName("bindTexture", tobj, &tex, &texturename, &isNull, &isDeleted))
         return NS_OK;
 
@@ -657,7 +657,7 @@ WebGLContext::Clear(PRUint32 mask)
     if (mask != m)
         return ErrorInvalidValue("clear: invalid mask bits");
 
-    PRBool needClearCallHere = PR_TRUE;
+    bool needClearCallHere = true;
 
     if (mBoundFramebuffer) {
         if (!mBoundFramebuffer->CheckAndInitializeRenderbuffers())
@@ -665,7 +665,7 @@ WebGLContext::Clear(PRUint32 mask)
     } else {
         // no FBO is bound, so we are clearing the backbuffer here
         EnsureBackbufferClearedAsNeeded();
-        PRBool valuesAreDefault = mColorClearValue[0] == 0.0f &&
+        bool valuesAreDefault = mColorClearValue[0] == 0.0f &&
                                   mColorClearValue[1] == 0.0f &&
                                   mColorClearValue[2] == 0.0f &&
                                   mColorClearValue[3] == 0.0f &&
@@ -873,11 +873,11 @@ WebGLContext::CopyTexImage2D(WebGLenum target,
             return ErrorInvalidValue("copyTexImage2D: with level > 0, width and height must be powers of two");
     }
 
-    PRBool texFormatRequiresAlpha = internalformat == LOCAL_GL_RGBA ||
+    bool texFormatRequiresAlpha = internalformat == LOCAL_GL_RGBA ||
                                     internalformat == LOCAL_GL_ALPHA ||
                                     internalformat == LOCAL_GL_LUMINANCE_ALPHA;
-    PRBool fboFormatHasAlpha = mBoundFramebuffer ? mBoundFramebuffer->ColorAttachment().HasAlpha()
-                                                 : PRBool(gl->ActualFormat().alpha > 0);
+    bool fboFormatHasAlpha = mBoundFramebuffer ? mBoundFramebuffer->ColorAttachment().HasAlpha()
+                                                 : bool(gl->ActualFormat().alpha > 0);
     if (texFormatRequiresAlpha && !fboFormatHasAlpha)
         return ErrorInvalidOperation("copyTexImage2D: texture format requires an alpha channel "
                                      "but the framebuffer doesn't have one");
@@ -889,15 +889,20 @@ WebGLContext::CopyTexImage2D(WebGLenum target,
     if (!tex)
         return ErrorInvalidOperation("copyTexImage2D: no texture bound to this target");
 
-    const WebGLTexture::ImageInfo& imageInfo = tex->ImageInfoAt(level, WebGLTexture::FaceForTarget(target));
-
     // copyTexImage2D only generates textures with type = UNSIGNED_BYTE
     GLenum type = LOCAL_GL_UNSIGNED_BYTE;
 
-    bool sizeMayChange = width != imageInfo.mWidth ||
-                         height != imageInfo.mHeight ||
-                         internalformat != imageInfo.mFormat ||
-                         type != imageInfo.mType;
+    // check if the memory size of this texture may change with this call
+    bool sizeMayChange = true;
+    size_t face = WebGLTexture::FaceForTarget(target);
+    if (tex->HasImageInfoAt(level, face)) {
+        const WebGLTexture::ImageInfo& imageInfo = tex->ImageInfoAt(level, face);
+
+        sizeMayChange = width != imageInfo.mWidth ||
+                        height != imageInfo.mHeight ||
+                        internalformat != imageInfo.mFormat ||
+                        type != imageInfo.mType;
+    }
 
     if (sizeMayChange) {
         UpdateWebGLErrorAndClearGLError();
@@ -958,7 +963,7 @@ WebGLContext::CopyTexSubImage2D(WebGLenum target,
 
     WebGLint face = WebGLTexture::FaceForTarget(target);
     if (!tex->HasImageInfoAt(level, face))
-        return ErrorInvalidOperation("copyTexSubImage2D: to texture image previously defined for this level and face");
+        return ErrorInvalidOperation("copyTexSubImage2D: no texture image previously defined for this level and face");
 
     WebGLsizei texWidth = tex->ImageInfoAt(level, face).mWidth;
     WebGLsizei texHeight = tex->ImageInfoAt(level, face).mHeight;
@@ -970,11 +975,11 @@ WebGLContext::CopyTexSubImage2D(WebGLenum target,
       return ErrorInvalidValue("copyTexSubImage2D: yoffset+height is too large");
 
     WebGLenum format = tex->ImageInfoAt(level, face).mFormat;
-    PRBool texFormatRequiresAlpha = format == LOCAL_GL_RGBA ||
+    bool texFormatRequiresAlpha = format == LOCAL_GL_RGBA ||
                                     format == LOCAL_GL_ALPHA ||
                                     format == LOCAL_GL_LUMINANCE_ALPHA;
-    PRBool fboFormatHasAlpha = mBoundFramebuffer ? mBoundFramebuffer->ColorAttachment().HasAlpha()
-                                                 : PRBool(gl->ActualFormat().alpha > 0);
+    bool fboFormatHasAlpha = mBoundFramebuffer ? mBoundFramebuffer->ColorAttachment().HasAlpha()
+                                                 : bool(gl->ActualFormat().alpha > 0);
 
     if (texFormatRequiresAlpha && !fboFormatHasAlpha)
         return ErrorInvalidOperation("copyTexSubImage2D: texture format requires an alpha channel "
@@ -1041,7 +1046,7 @@ WebGLContext::DeleteBuffer(nsIWebGLBuffer *bobj)
 {
     WebGLuint bufname;
     WebGLBuffer *buf;
-    PRBool isNull, isDeleted;
+    bool isNull, isDeleted;
     if (!GetConcreteObjectAndGLName("deleteBuffer", bobj, &buf, &bufname, &isNull, &isDeleted))
         return NS_OK;
 
@@ -1062,7 +1067,7 @@ WebGLContext::DeleteFramebuffer(nsIWebGLFramebuffer *fbobj)
 {
     WebGLuint fbufname;
     WebGLFramebuffer *fbuf;
-    PRBool isNull, isDeleted;
+    bool isNull, isDeleted;
     if (!GetConcreteObjectAndGLName("deleteFramebuffer", fbobj, &fbuf, &fbufname, &isNull, &isDeleted))
         return NS_OK;
 
@@ -1086,7 +1091,7 @@ WebGLContext::DeleteRenderbuffer(nsIWebGLRenderbuffer *rbobj)
 {
     WebGLuint rbufname;
     WebGLRenderbuffer *rbuf;
-    PRBool isNull, isDeleted;
+    bool isNull, isDeleted;
     if (!GetConcreteObjectAndGLName("deleteRenderbuffer", rbobj, &rbuf, &rbufname, &isNull, &isDeleted))
         return NS_OK;
 
@@ -1122,7 +1127,7 @@ WebGLContext::DeleteTexture(nsIWebGLTexture *tobj)
 {
     WebGLuint texname;
     WebGLTexture *tex;
-    PRBool isNull, isDeleted;
+    bool isNull, isDeleted;
     if (!GetConcreteObjectAndGLName("deleteTexture", tobj, &tex, &texname, &isNull, &isDeleted))
         return NS_OK;
 
@@ -1143,7 +1148,7 @@ WebGLContext::DeleteProgram(nsIWebGLProgram *pobj)
 {
     WebGLuint progname;
     WebGLProgram *prog;
-    PRBool isNull, isDeleted;
+    bool isNull, isDeleted;
     if (!GetConcreteObjectAndGLName("deleteProgram", pobj, &prog, &progname, &isNull, &isDeleted))
         return NS_OK;
 
@@ -1171,7 +1176,7 @@ WebGLContext::DeleteShader(nsIWebGLShader *sobj)
 {
     WebGLuint shadername;
     WebGLShader *shader;
-    PRBool isNull, isDeleted;
+    bool isNull, isDeleted;
     if (!GetConcreteObjectAndGLName("deleteShader", sobj, &shader, &shadername, &isNull, &isDeleted))
         return NS_OK;
 
@@ -1193,7 +1198,7 @@ WebGLContext::DetachShader(nsIWebGLProgram *pobj, nsIWebGLShader *shobj)
     WebGLuint progname, shadername;
     WebGLProgram *program;
     WebGLShader *shader;
-    PRBool shaderDeleted;
+    bool shaderDeleted;
     if (!GetConcreteObjectAndGLName("detachShader: program", pobj, &program, &progname) ||
         !GetConcreteObjectAndGLName("detachShader: shader", shobj, &shader, &shadername, nsnull, &shaderDeleted))
         return NS_OK;
@@ -1274,15 +1279,23 @@ WebGLContext::WhatDoesVertexAttrib0Need()
                                                         : VertexAttrib0Status::EmulatedUninitializedArray;
 }
 
-void
+bool
 WebGLContext::DoFakeVertexAttrib0(WebGLuint vertexCount)
 {
     int whatDoesAttrib0Need = WhatDoesVertexAttrib0Need();
 
     if (whatDoesAttrib0Need == VertexAttrib0Status::Default)
-        return;
+        return true;
 
-    WebGLuint dataSize = sizeof(WebGLfloat) * 4 * vertexCount;
+    CheckedUint32 checked_dataSize = CheckedUint32(vertexCount) * 4 * sizeof(WebGLfloat);
+    
+    if (!checked_dataSize.valid()) {
+        ErrorOutOfMemory("Integer overflow trying to construct a fake vertex attrib 0 array for a draw-operation "
+                         "with %d vertices. Try reducing the number of vertices.", vertexCount);
+        return false;
+    }
+    
+    WebGLuint dataSize = checked_dataSize.value();
 
     if (!mFakeVertexAttrib0BufferObject) {
         gl->fGenBuffers(1, &mFakeVertexAttrib0BufferObject);
@@ -1290,7 +1303,7 @@ WebGLContext::DoFakeVertexAttrib0(WebGLuint vertexCount)
 
     // if the VBO status is already exactly what we need, or if the only difference is that it's initialized and
     // we don't need it to be, then consider it OK
-    PRBool vertexAttrib0BufferStatusOK =
+    bool vertexAttrib0BufferStatusOK =
         mFakeVertexAttrib0BufferStatus == whatDoesAttrib0Need ||
         (mFakeVertexAttrib0BufferStatus == VertexAttrib0Status::EmulatedInitializedArray &&
          whatDoesAttrib0Need == VertexAttrib0Status::EmulatedUninitializedArray);
@@ -1311,7 +1324,8 @@ WebGLContext::DoFakeVertexAttrib0(WebGLuint vertexCount)
 
         gl->fBindBuffer(LOCAL_GL_ARRAY_BUFFER, mFakeVertexAttrib0BufferObject);
 
-        WebGLuint dataSize = sizeof(WebGLfloat) * 4 * vertexCount;
+        GLenum error = LOCAL_GL_NO_ERROR;
+        UpdateWebGLErrorAndClearGLError();
 
         if (mFakeVertexAttrib0BufferStatus == VertexAttrib0Status::EmulatedInitializedArray) {
             nsAutoArrayPtr<WebGLfloat> array(new WebGLfloat[4 * vertexCount]);
@@ -1325,12 +1339,22 @@ WebGLContext::DoFakeVertexAttrib0(WebGLuint vertexCount)
         } else {
             gl->fBufferData(LOCAL_GL_ARRAY_BUFFER, dataSize, nsnull, LOCAL_GL_DYNAMIC_DRAW);
         }
-
+        UpdateWebGLErrorAndClearGLError(&error);
+        
         gl->fBindBuffer(LOCAL_GL_ARRAY_BUFFER, mBoundArrayBuffer ? mBoundArrayBuffer->GLName() : 0);
+
+        // note that we do this error checking and early return AFTER having restored the buffer binding above
+        if (error) {
+            ErrorOutOfMemory("Ran out of memory trying to construct a fake vertex attrib 0 array for a draw-operation "
+                             "with %d vertices. Try reducing the number of vertices.", vertexCount);
+            return false;
+        }
     }
 
     gl->fBindBuffer(LOCAL_GL_ARRAY_BUFFER, mFakeVertexAttrib0BufferObject);
     gl->fVertexAttribPointer(0, 4, LOCAL_GL_FLOAT, LOCAL_GL_FALSE, 0, 0);
+    
+    return true;
 }
 
 void
@@ -1352,7 +1376,7 @@ WebGLContext::UndoFakeVertexAttrib0()
     gl->fBindBuffer(LOCAL_GL_ARRAY_BUFFER, mBoundArrayBuffer ? mBoundArrayBuffer->GLName() : 0);
 }
 
-PRBool
+bool
 WebGLContext::NeedFakeBlack()
 {
     // handle this case first, it's the generic case
@@ -1483,7 +1507,8 @@ WebGLContext::DrawArrays(GLenum mode, WebGLint first, WebGLsizei count)
     }
 
     BindFakeBlackTextures();
-    DoFakeVertexAttrib0(checked_firstPlusCount.value());
+    if (!DoFakeVertexAttrib0(checked_firstPlusCount.value()))
+        return NS_OK;
 
     gl->fDrawArrays(mode, first, count);
 
@@ -1589,7 +1614,8 @@ WebGLContext::DrawElements(WebGLenum mode, WebGLsizei count, WebGLenum type, Web
     }
 
     BindFakeBlackTextures();
-    DoFakeVertexAttrib0(checked_maxIndexPlusOne.value());
+    if (!DoFakeVertexAttrib0(checked_maxIndexPlusOne.value()))
+        return NS_OK;
 
     gl->fDrawElements(mode, count, type, (GLvoid*) (byteOffset));
 
@@ -1751,28 +1777,7 @@ WebGLContext::GenerateMipmap(WebGLenum target)
     tex->SetGeneratedMipmap();
 
     MakeContextCurrent();
-
-#ifdef XP_MACOSX
-    // On Mac, glGenerateMipmap on a texture whose minification filter does NOT require a mipmap at the time of the call,
-    // will happily grab random video memory into certain mipmap levels. See bug 684882. Also, this is Apple bug 9129398.
-    // Thanks to Kenneth Russell / Google for figuring this out.
-    // So we temporarily spoof the minification filter, call glGenerateMipmap,
-    // and restore it. If that turned out to not be enough, we would have to avoid calling glGenerateMipmap altogether and
-    // emulate it.
-    if (tex->DoesMinFilterRequireMipmap()) {
-        gl->fGenerateMipmap(target);
-    } else {
-        // spoof the min filter as something that requires a mipmap. The particular choice of a filter doesn't matter as
-        // we're not rendering anything here. Since LINEAR_MIPMAP_LINEAR is by far the most common use case, and we're trying
-        // to work around a bug triggered by "unexpected" min filters, it seems to be the safest choice.
-        gl->fTexParameteri(target, LOCAL_GL_TEXTURE_MIN_FILTER, LOCAL_GL_LINEAR_MIPMAP_LINEAR);
-        gl->fGenerateMipmap(target);
-        gl->fTexParameteri(target, LOCAL_GL_TEXTURE_MIN_FILTER, tex->MinFilter());
-    }
-#else
     gl->fGenerateMipmap(target);
-#endif
-    
     return NS_OK;
 }
 
@@ -1835,7 +1840,7 @@ WebGLContext::GetAttachedShaders(nsIWebGLProgram *pobj, nsIVariant **retval)
     *retval = nsnull;
 
     WebGLProgram *prog;
-    PRBool isNull;
+    bool isNull;
     if (!GetConcreteObject("getAttachedShaders", pobj, &prog, &isNull)) 
         return NS_OK;
 
@@ -2026,7 +2031,7 @@ WebGLContext::GetParameter(PRUint32 pname, nsIVariant **retval)
         {
             realGLboolean b = 0;
             gl->fGetBooleanv(pname, &b);
-            wrval->SetAsBool(PRBool(b));
+            wrval->SetAsBool(bool(b));
         }
             break;
 
@@ -2090,7 +2095,7 @@ WebGLContext::GetParameter(PRUint32 pname, nsIVariant **retval)
         {
             realGLboolean gl_bv[4] = { 0 };
             gl->fGetBooleanv(pname, gl_bv);
-            PRBool pr_bv[4] = { gl_bv[0], gl_bv[1], gl_bv[2], gl_bv[3] };
+            bool pr_bv[4] = { (bool)gl_bv[0], (bool)gl_bv[1], (bool)gl_bv[2], (bool)gl_bv[3] };
             wrval->SetAsArray(nsIDataType::VTYPE_BOOL, nsnull,
                               4, static_cast<void*>(pr_bv));
         }
@@ -2345,7 +2350,7 @@ WebGLContext::GetProgramParameter(nsIWebGLProgram *pobj, PRUint32 pname, nsIVari
     *retval = nsnull;
 
     WebGLuint progname;
-    PRBool isDeleted;
+    bool isDeleted;
     if (!GetGLName<WebGLProgram>("getProgramParameter: program", pobj, &progname, nsnull, &isDeleted))
         return NS_OK;
 
@@ -2379,7 +2384,7 @@ WebGLContext::GetProgramParameter(nsIWebGLProgram *pobj, PRUint32 pname, nsIVari
 #else
             gl->fGetProgramiv(progname, pname, &i);
 #endif
-            wrval->SetAsBool(PRBool(i));
+            wrval->SetAsBool(bool(i));
         }
             break;
 
@@ -2441,7 +2446,7 @@ nsresult WebGLContext::TexParameter_base(WebGLenum target, WebGLenum pname,
     if (!tex)
         return ErrorInvalidOperation("texParameter: no texture is bound to this target");
 
-    PRBool pnameAndParamAreIncompatible = PR_FALSE;
+    bool pnameAndParamAreIncompatible = false;
 
     switch (pname) {
         case LOCAL_GL_TEXTURE_MIN_FILTER:
@@ -2668,7 +2673,7 @@ WebGLContext::GetUniform(nsIWebGLProgram *pobj, nsIWebGLUniformLocation *ploc, n
         if (unitSize == 1) {
             wrval->SetAsBool(iv[0] ? PR_TRUE : PR_FALSE);
         } else {
-            PRBool uv[16] = { 0 };
+            bool uv[16] = { 0 };
             for (int k = 0; k < unitSize; k++)
                 uv[k] = iv[k] ? PR_TRUE : PR_FALSE;
             wrval->SetAsArray(nsIDataType::VTYPE_BOOL, nsnull,
@@ -2755,7 +2760,7 @@ WebGLContext::GetVertexAttrib(WebGLuint index, WebGLenum pname, nsIVariant **ret
         {
             GLint i = 0;
             gl->fGetVertexAttribiv(index, pname, &i);
-            wrval->SetAsBool(PRBool(i));
+            wrval->SetAsBool(bool(i));
         }
             break;
 
@@ -2797,10 +2802,10 @@ WebGLContext::Hint(WebGLenum, WebGLenum)
 NS_IMETHODIMP
 WebGLContext::IsBuffer(nsIWebGLBuffer *bobj, WebGLboolean *retval)
 {
-    PRBool isDeleted;
+    bool isDeleted;
     WebGLuint buffername;
     WebGLBuffer *buffer;
-    PRBool ok = GetConcreteObjectAndGLName("isBuffer", bobj, &buffer, &buffername, nsnull, &isDeleted) && 
+    bool ok = GetConcreteObjectAndGLName("isBuffer", bobj, &buffer, &buffername, nsnull, &isDeleted) && 
                 !isDeleted &&
                 buffer->HasEverBeenBound();
     if (ok) {
@@ -2815,10 +2820,10 @@ WebGLContext::IsBuffer(nsIWebGLBuffer *bobj, WebGLboolean *retval)
 NS_IMETHODIMP
 WebGLContext::IsFramebuffer(nsIWebGLFramebuffer *fbobj, WebGLboolean *retval)
 {
-    PRBool isDeleted;
+    bool isDeleted;
     WebGLuint fbname;
     WebGLFramebuffer *fb;
-    PRBool ok = GetConcreteObjectAndGLName("isFramebuffer", fbobj, &fb, &fbname, nsnull, &isDeleted) &&
+    bool ok = GetConcreteObjectAndGLName("isFramebuffer", fbobj, &fb, &fbname, nsnull, &isDeleted) &&
                 !isDeleted &&
                 fb->HasEverBeenBound();
     if (ok) {
@@ -2833,9 +2838,9 @@ WebGLContext::IsFramebuffer(nsIWebGLFramebuffer *fbobj, WebGLboolean *retval)
 NS_IMETHODIMP
 WebGLContext::IsProgram(nsIWebGLProgram *pobj, WebGLboolean *retval)
 {
-    PRBool isDeleted;
+    bool isDeleted;
     WebGLProgram *prog = nsnull;
-    PRBool ok = GetConcreteObject("isProgram", pobj, &prog, nsnull, &isDeleted, PR_FALSE) &&
+    bool ok = GetConcreteObject("isProgram", pobj, &prog, nsnull, &isDeleted, false) &&
                 !isDeleted;
 
     *retval = ok;
@@ -2845,10 +2850,10 @@ WebGLContext::IsProgram(nsIWebGLProgram *pobj, WebGLboolean *retval)
 NS_IMETHODIMP
 WebGLContext::IsRenderbuffer(nsIWebGLRenderbuffer *rbobj, WebGLboolean *retval)
 {
-    PRBool isDeleted;
+    bool isDeleted;
     WebGLuint rbname;
     WebGLRenderbuffer *rb;
-    PRBool ok = GetConcreteObjectAndGLName("isRenderBuffer", rbobj, &rb, &rbname, nsnull, &isDeleted) &&
+    bool ok = GetConcreteObjectAndGLName("isRenderBuffer", rbobj, &rb, &rbname, nsnull, &isDeleted) &&
                 !isDeleted &&
                 rb->HasEverBeenBound();
     if (ok) {
@@ -2863,9 +2868,9 @@ WebGLContext::IsRenderbuffer(nsIWebGLRenderbuffer *rbobj, WebGLboolean *retval)
 NS_IMETHODIMP
 WebGLContext::IsShader(nsIWebGLShader *sobj, WebGLboolean *retval)
 {
-    PRBool isDeleted;
+    bool isDeleted;
     WebGLShader *shader = nsnull;
-    PRBool ok = GetConcreteObject("isShader", sobj, &shader, nsnull, &isDeleted, PR_FALSE) &&
+    bool ok = GetConcreteObject("isShader", sobj, &shader, nsnull, &isDeleted, false) &&
                 !isDeleted;
 
     *retval = ok;
@@ -2875,10 +2880,10 @@ WebGLContext::IsShader(nsIWebGLShader *sobj, WebGLboolean *retval)
 NS_IMETHODIMP
 WebGLContext::IsTexture(nsIWebGLTexture *tobj, WebGLboolean *retval)
 {
-    PRBool isDeleted;
+    bool isDeleted;
     WebGLuint texname;
     WebGLTexture *tex;
-    PRBool ok = GetConcreteObjectAndGLName("isTexture", tobj, &tex, &texname, nsnull, &isDeleted) &&
+    bool ok = GetConcreteObjectAndGLName("isTexture", tobj, &tex, &texname, nsnull, &isDeleted) &&
                 !isDeleted &&
                 tex->HasEverBeenBound();
     if (ok) {
@@ -3122,7 +3127,7 @@ WebGLContext::ReadPixels_base(WebGLint x, WebGLint y, WebGLsizei width, WebGLsiz
     if (format == LOCAL_GL_ALPHA ||
         format == LOCAL_GL_RGBA)
     {
-        PRBool needAlphaFixup;
+        bool needAlphaFixup;
         if (mBoundFramebuffer) {
             needAlphaFixup = !mBoundFramebuffer->ColorAttachment().HasAlpha();
         } else {
@@ -3382,7 +3387,7 @@ WebGLContext::StencilOpSeparate(WebGLenum face, WebGLenum sfail, WebGLenum dpfai
 
 struct WebGLImageConverter
 {
-    PRBool flip;
+    bool flip;
     size_t width, height, srcStride, dstStride, srcTexelSize, dstTexelSize;
     const PRUint8 *src;
     PRUint8 *dst;
@@ -3419,8 +3424,8 @@ struct WebGLImageConverter
 void
 WebGLContext::ConvertImage(size_t width, size_t height, size_t srcStride, size_t dstStride,
                            const PRUint8*src, PRUint8 *dst,
-                           int srcFormat, PRBool srcPremultiplied,
-                           int dstFormat, PRBool dstPremultiplied,
+                           int srcFormat, bool srcPremultiplied,
+                           int dstFormat, bool dstPremultiplied,
                            size_t dstTexelSize)
 {
     if (width <= 0 || height <= 0)
@@ -3604,10 +3609,8 @@ WebGLContext::DOMElementToImageSurface(nsIDOMElement *imageOrCanvas,
 
     // part 1: check that the DOM element is same-origin, or has otherwise been
     // validated for cross-domain use.
-    // if res.mPrincipal == null, no need for the origin check. See DoDrawImageSecurityCheck.
-    // this case happens in the mochitest for images served from mochi.test:8888
-    if (res.mPrincipal && !res.mCORSUsed) {
-        PRBool subsumes;
+    if (!res.mCORSUsed) {
+        bool subsumes;
         nsresult rv = HTMLCanvasElement()->NodePrincipal()->Subsumes(res.mPrincipal, &subsumes);
         if (NS_FAILED(rv) || !subsumes) {
             LogMessageIfVerbose("It is forbidden to load a WebGL texture from a cross-domain element that has not been validated with CORS. "
@@ -3662,7 +3665,7 @@ WebGLContext::DOMElementToImageSurface(nsIDOMElement *imageOrCanvas,
 
 #define OBTAIN_UNIFORM_LOCATION(info)                                   \
     WebGLUniformLocation *location_object;                              \
-    PRBool isNull;                                                      \
+    bool isNull;                                                      \
     if (!GetConcreteObject(info, ploc, &location_object, &isNull))      \
         return NS_OK;                                                   \
     if (isNull)                                                         \
@@ -3876,7 +3879,7 @@ WebGLContext::UseProgram(nsIWebGLProgram *pobj)
 {
     WebGLProgram *prog;
     WebGLuint progname;
-    PRBool isNull;
+    bool isNull;
     if (!GetConcreteObjectAndGLName("useProgram", pobj, &prog, &progname, &isNull))
         return NS_OK;
 
@@ -4094,7 +4097,7 @@ WebGLContext::GetShaderParameter(nsIWebGLShader *sobj, WebGLenum pname, nsIVaria
         {
             GLint i = 0;
             gl->fGetShaderiv(shadername, pname, &i);
-            wrval->SetAsBool(PRBool(i));
+            wrval->SetAsBool(bool(i));
         }
             break;
 
@@ -4274,11 +4277,18 @@ GLenum WebGLContext::CheckedTexImage2D(GLenum target,
 {
     WebGLTexture *tex = activeBoundTextureForTarget(target);
     NS_ABORT_IF_FALSE(tex != nsnull, "no texture bound");
-    const WebGLTexture::ImageInfo& imageInfo = tex->ImageInfoAt(level, WebGLTexture::FaceForTarget(target));
-    bool sizeMayChange = width != imageInfo.mWidth ||
-                         height != imageInfo.mHeight ||
-                         format != imageInfo.mFormat ||
-                         type != imageInfo.mType;
+
+    bool sizeMayChange = true;
+    size_t face = WebGLTexture::FaceForTarget(target);
+    
+    if (tex->HasImageInfoAt(level, face)) {
+        const WebGLTexture::ImageInfo& imageInfo = tex->ImageInfoAt(level, face);
+        sizeMayChange = width != imageInfo.mWidth ||
+                        height != imageInfo.mHeight ||
+                        format != imageInfo.mFormat ||
+                        type != imageInfo.mType;
+    }
+    
     if (sizeMayChange) {
         UpdateWebGLErrorAndClearGLError();
         gl->fTexImage2D(target, level, internalFormat, width, height, border, format, type, data);
@@ -4298,7 +4308,7 @@ WebGLContext::TexImage2D_base(WebGLenum target, WebGLint level, WebGLenum intern
                               WebGLenum format, WebGLenum type,
                               void *data, PRUint32 byteLength,
                               int jsArrayType, // a TypedArray format enum, or -1 if not relevant
-                              int srcFormat, PRBool srcPremultiplied)
+                              int srcFormat, bool srcPremultiplied)
 {
     switch (target) {
         case LOCAL_GL_TEXTURE_2D:
@@ -4512,7 +4522,7 @@ WebGLContext::TexSubImage2D_base(WebGLenum target, WebGLint level,
                                  WebGLenum format, WebGLenum type,
                                  void *pixels, PRUint32 byteLength,
                                  int jsArrayType,
-                                 int srcFormat, PRBool srcPremultiplied)
+                                 int srcFormat, bool srcPremultiplied)
 {
     switch (target) {
         case LOCAL_GL_TEXTURE_2D:
@@ -4576,6 +4586,10 @@ WebGLContext::TexSubImage2D_base(WebGLenum target, WebGLint level,
         return ErrorInvalidOperation("texSubImage2D: no texture is bound to this target");
 
     size_t face = WebGLTexture::FaceForTarget(target);
+    
+    if (!tex->HasImageInfoAt(level, face))
+        return ErrorInvalidOperation("texSubImage2D: no texture image previously defined for this level and face");
+    
     const WebGLTexture::ImageInfo &imageInfo = tex->ImageInfoAt(level, face);
     if (!CanvasUtils::CheckSaneSubrectSize(xoffset, yoffset, width, height, imageInfo.mWidth, imageInfo.mHeight))
         return ErrorInvalidValue("texSubImage2D: subtexture rectangle out of bounds");
@@ -4691,7 +4705,7 @@ WebGLContext::TexSubImage2D_dom(WebGLenum target, WebGLint level,
                               srcFormat, PR_TRUE);
 }
 
-PRBool
+bool
 BaseTypeAndSizeFromUniformType(WebGLenum uType, WebGLenum *baseType, WebGLint *unitSize)
 {
     switch (uType) {

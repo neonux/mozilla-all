@@ -100,18 +100,24 @@ HISTOGRAM(IMAGE_DECODE_TIME,    50, 50000000, 100, EXPONENTIAL, "Time spent deco
 HISTOGRAM(IMAGE_DECODE_ON_DRAW_LATENCY,  50, 50000000, 100, EXPONENTIAL, "Time from starting a decode to it showing up on the screen (us)")
 HISTOGRAM(IMAGE_DECODE_CHUNKS, 1,  500, 50, EXPONENTIAL, "Number of chunks per decode attempt")
 HISTOGRAM(IMAGE_DECODE_COUNT, 1,  500, 50, EXPONENTIAL, "Decode count")
+HISTOGRAM(IMAGE_DECODE_SPEED_JPEG, 500, 50000000,  50, EXPONENTIAL, "JPEG image decode speed (Kbytes/sec)")
+HISTOGRAM(IMAGE_DECODE_SPEED_GIF,  500, 50000000,  50, EXPONENTIAL, "GIF image decode speed (Kbytes/sec)")
+HISTOGRAM(IMAGE_DECODE_SPEED_PNG,  500, 50000000,  50, EXPONENTIAL, "PNG image decode speed (Kbytes/sec)")
+
+HISTOGRAM(CANVAS_2D_USED, 0, 1, 2, BOOLEAN, "2D canvas used")
+HISTOGRAM(CANVAS_WEBGL_USED, 0, 1, 2, BOOLEAN, "WebGL canvas used")
 
 /**
  * Networking telemetry
  */
-HISTOGRAM(TOTAL_CONTENT_PAGE_LOAD_TIME, 100, 10000, 100, EXPONENTIAL, "HTTP: Total page load time (ms)")
+HISTOGRAM(TOTAL_CONTENT_PAGE_LOAD_TIME, 100, 30000, 100, EXPONENTIAL, "HTTP: Total page load time (ms)")
 HISTOGRAM(HTTP_SUBITEM_OPEN_LATENCY_TIME, 1, 30000, 50, EXPONENTIAL, "HTTP subitem: Page start -> subitem open() (ms)")
 HISTOGRAM(HTTP_SUBITEM_FIRST_BYTE_LATENCY_TIME, 1, 30000, 50, EXPONENTIAL, "HTTP subitem: Page start -> first byte received for subitem reply (ms)")
 HISTOGRAM(HTTP_REQUEST_PER_PAGE, 1, 1000, 50, EXPONENTIAL, "HTTP: Requests per page (count)")
 HISTOGRAM(HTTP_REQUEST_PER_PAGE_FROM_CACHE, 1, 101, 102, LINEAR, "HTTP: Requests serviced from cache (%)")
 
 #define _HTTP_HIST(name, label) \
-  HISTOGRAM(name, 1, 10000, 50, EXPONENTIAL, "HTTP " label) \
+  HISTOGRAM(name, 1, 30000, 50, EXPONENTIAL, "HTTP " label) \
 
 #define HTTP_HISTOGRAMS(prefix, labelprefix) \
   _HTTP_HIST(HTTP_##prefix##_DNS_ISSUE_TIME, labelprefix "open() -> DNS request issued (ms)") \
@@ -132,6 +138,9 @@ HTTP_HISTOGRAMS(SUB, "subitem: ")
 
 #undef _HTTP_HIST
 #undef HTTP_HISTOGRAMS
+
+HISTOGRAM(HTTP_CACHE_DISPOSITION, 1, 5, 5, LINEAR, "HTTP Cache Hit, Reval, Failed-Reval, Miss")
+
 HISTOGRAM(FIND_PLUGINS, 1, 3000, 10, EXPONENTIAL, "Time spent scanning filesystem for plugins (ms)")
 HISTOGRAM(CHECK_JAVA_ENABLED, 1, 3000, 10, EXPONENTIAL, "Time spent checking if Java is enabled (ms)")
 
@@ -165,7 +174,7 @@ HISTOGRAM(MOZ_SQLITE_PLACES_WRITE_B, 1, 32768, 3, LINEAR, "SQLite write (bytes)"
 HISTOGRAM(MOZ_SQLITE_COOKIES_WRITE_B, 1, 32768, 3, LINEAR, "SQLite write (bytes)")
 HISTOGRAM(MOZ_SQLITE_URLCLASSIFIER_WRITE_B, 1, 32768, 3, LINEAR, "SQLite write (bytes)")
 HISTOGRAM(MOZ_SQLITE_OTHER_WRITE_B, 1, 32768, 3, LINEAR, "SQLite write (bytes)")
-HISTOGRAM(STARTUP_MEASUREMENT_ERRORS, 1, 3, 4, LINEAR, "Flags errors in startup calculation()")
+HISTOGRAM(STARTUP_MEASUREMENT_ERRORS, 1, 4, 5, LINEAR, "Flags errors in startup calculation()")
 HISTOGRAM(NETWORK_DISK_CACHE_OPEN, 1, 10000, 10, EXPONENTIAL, "Time spent opening disk cache (ms)")
 HISTOGRAM(NETWORK_DISK_CACHE_TRASHRENAME, 1, 10000, 10, EXPONENTIAL, "Time spent renaming bad Cache to Cache.Trash (ms)")
 HISTOGRAM(NETWORK_DISK_CACHE_DELETEDIR, 1, 10000, 10, EXPONENTIAL, "Time spent deleting disk cache (ms)")

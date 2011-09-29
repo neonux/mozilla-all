@@ -39,7 +39,6 @@
 #include "nsHTMLImageAccessible.h"
 
 #include "States.h"
-#include "nsAccessibilityAtoms.h"
 #include "nsAccUtils.h"
 
 #include "imgIContainer.h"
@@ -91,7 +90,7 @@ nsHTMLImageAccessible::NativeState()
     imageRequest->GetImage(getter_AddRefs(imgContainer));
 
   if (imgContainer) {
-    PRBool animated;
+    bool animated;
     imgContainer->GetAnimated(&animated);
     if (animated)
       state |= states::ANIMATED;
@@ -103,8 +102,8 @@ nsHTMLImageAccessible::NativeState()
 nsresult
 nsHTMLImageAccessible::GetNameInternal(nsAString& aName)
 {
-  PRBool hasAltAttrib =
-    mContent->GetAttr(kNameSpaceID_None, nsAccessibilityAtoms::alt, aName);
+  bool hasAltAttrib =
+    mContent->GetAttr(kNameSpaceID_None, nsGkAtoms::alt, aName);
   if (!aName.IsEmpty())
     return NS_OK;
 
@@ -212,9 +211,9 @@ nsHTMLImageAccessible::GetAttributesInternal(nsIPersistentProperties *aAttribute
   NS_ENSURE_SUCCESS(rv, rv);
 
   nsAutoString src;
-  mContent->GetAttr(kNameSpaceID_None, nsAccessibilityAtoms::src, src);
+  mContent->GetAttr(kNameSpaceID_None, nsGkAtoms::src, src);
   if (!src.IsEmpty())
-    nsAccUtils::SetAccAttr(aAttributes, nsAccessibilityAtoms::src, src);
+    nsAccUtils::SetAccAttr(aAttributes, nsGkAtoms::src, src);
 
   return NS_OK;
 }
@@ -222,16 +221,16 @@ nsHTMLImageAccessible::GetAttributesInternal(nsIPersistentProperties *aAttribute
 ////////////////////////////////////////////////////////////////////////////////
 // Private methods
 
-PRBool
+bool
 nsHTMLImageAccessible::HasLongDesc()
 {
   if (IsDefunct())
     return PR_FALSE;
 
-  return mContent->HasAttr(kNameSpaceID_None, nsAccessibilityAtoms::longDesc);
+  return mContent->HasAttr(kNameSpaceID_None, nsGkAtoms::longdesc);
 }
 
-PRBool
+bool
 nsHTMLImageAccessible::IsValidLongDescIndex(PRUint8 aIndex)
 {
   if (!HasLongDesc())

@@ -362,7 +362,7 @@ nsComboboxControlFrame::CreateAccessible()
 #endif
 
 void 
-nsComboboxControlFrame::SetFocus(PRBool aOn, PRBool aRepaint)
+nsComboboxControlFrame::SetFocus(bool aOn, bool aRepaint)
 {
   nsWeakFrame weakFrame(this);
   if (aOn) {
@@ -400,7 +400,7 @@ nsComboboxControlFrame::SetFocus(PRBool aOn, PRBool aRepaint)
 }
 
 void
-nsComboboxControlFrame::ShowPopup(PRBool aShowPopup)
+nsComboboxControlFrame::ShowPopup(bool aShowPopup)
 {
   nsIView* view = mDropdownFrame->GetView();
   nsIViewManager* viewManager = view->GetViewManager();
@@ -427,8 +427,8 @@ nsComboboxControlFrame::ShowPopup(PRBool aShowPopup)
     shell->HandleDOMEventWithTarget(mContent, &event, &status);
 }
 
-PRBool
-nsComboboxControlFrame::ShowList(PRBool aShowList)
+bool
+nsComboboxControlFrame::ShowList(bool aShowList)
 {
   nsCOMPtr<nsIPresShell> shell = PresContext()->GetPresShell();
 
@@ -544,6 +544,43 @@ nsComboboxControlFrame::ReflowDropdown(nsPresContext*  aPresContext,
   return rv;
 }
 
+nsPoint
+nsComboboxControlFrame::GetCSSTransformTranslation()
+{
+  nsIFrame* frame = this;
+  bool is3DTransform = false;
+  gfxMatrix transform;
+  while (frame) {
+    nsIFrame* parent = nsnull;
+    gfx3DMatrix ctm = frame->GetTransformMatrix(&parent);
+    gfxMatrix matrix;
+    if (ctm.Is2D(&matrix)) {
+      transform = transform * matrix;
+    } else {
+      is3DTransform = PR_TRUE;
+      break;
+    }
+    frame = parent;
+  }
+  nsPoint translation;
+  if (!is3DTransform && !transform.HasNonTranslation()) {
+    nsPresContext* pc = PresContext();
+    gfxPoint pixelTranslation = transform.GetTranslation();
+    PRInt32 apd = pc->AppUnitsPerDevPixel();
+    translation.x = NSFloatPixelsToAppUnits(float(pixelTranslation.x), apd);
+    translation.y = NSFloatPixelsToAppUnits(float(pixelTranslation.y), apd);
+    // To get the translation introduced only by transforms we subtract the
+    // regular non-transform translation.
+    nsRootPresContext* rootPC = pc->GetRootPresContext();
+    if (rootPC) {
+      translation -= GetOffsetToCrossDoc(rootPC->PresShell()->GetRootFrame());
+    } else {
+      translation.x = translation.y = 0;
+    }
+  }
+  return translation;
+}
+
 void
 nsComboboxControlFrame::AbsolutelyPositionDropDown()
 {
@@ -558,6 +595,11 @@ nsComboboxControlFrame::AbsolutelyPositionDropDown()
    // The approach, taken here is to get use the absolute position of the display frame and use it's location
    // to determine if the dropdown will go offscreen.
 
+  // Normal frame geometry (eg GetOffsetTo, mRect) doesn't include transforms.
+  // In the special case that our transform is only a 2D translation we
+  // introduce this hack so that the dropdown will show up in the right place.
+  nsPoint translation = GetCSSTransformTranslation();
+
    // Use the height calculated for the area frame so it includes both
    // the display and button heights.
   nscoord dropdownYOffset = GetRect().height;
@@ -566,7 +608,7 @@ nsComboboxControlFrame::AbsolutelyPositionDropDown()
   nsRect screen = nsFormControlFrame::GetUsableScreenRect(PresContext());
 
   // Check to see if the drop-down list will go offscreen
-  if (GetScreenRectInAppUnits().YMost() + dropdownSize.height > screen.YMost()) {
+  if ((GetScreenRectInAppUnits() + translation).YMost() + dropdownSize.height > screen.YMost()) {
     // move the dropdown list up
     dropdownYOffset = - (dropdownSize.height);
   }
@@ -581,7 +623,7 @@ nsComboboxControlFrame::AbsolutelyPositionDropDown()
   }
   dropdownPosition.y = dropdownYOffset; 
 
-  mDropdownFrame->SetPosition(dropdownPosition);
+  mDropdownFrame->SetPosition(dropdownPosition + translation);
 }
 
 //----------------------------------------------------------
@@ -795,7 +837,7 @@ nsComboboxControlFrame::GetFrameName(nsAString& aResult) const
 // nsIComboboxControlFrame
 //----------------------------------------------------------------------
 void
-nsComboboxControlFrame::ShowDropDown(PRBool aDoDropDown) 
+nsComboboxControlFrame::ShowDropDown(bool aDoDropDown) 
 {
   nsEventStates eventStates = mContent->AsElement()->State();
   if (eventStates.HasState(NS_EVENT_STATE_DISABLED)) {
@@ -903,7 +945,7 @@ nsComboboxControlFrame::HandleRedisplayTextEvent()
 }
 
 void
-nsComboboxControlFrame::ActuallyDisplayText(PRBool aNotify)
+nsComboboxControlFrame::ActuallyDisplayText(bool aNotify)
 {
   if (mDisplayedOptionText.IsEmpty()) {
     // Have to use a non-breaking space for line-height calculations
@@ -925,7 +967,7 @@ nsComboboxControlFrame::GetIndexOfDisplayArea()
 // nsISelectControlFrame
 //----------------------------------------------------------------------
 NS_IMETHODIMP
-nsComboboxControlFrame::DoneAddingChildren(PRBool aIsDone)
+nsComboboxControlFrame::DoneAddingChildren(bool aIsDone)
 {
   nsISelectControlFrame* listFrame = do_QueryFrame(mDropdownFrame);
   if (!listFrame)
@@ -1128,7 +1170,7 @@ public:
   // depends on the available width.
   virtual nsIAtom* GetType() const;
 
-  virtual PRBool IsFrameOfType(PRUint32 aFlags) const
+  virtual bool IsFrameOfType(PRUint32 aFlags) const
   {
     return nsBlockFrame::IsFrameOfType(aFlags &
       ~(nsIFrame::eReplacedContainsBlock));
@@ -1477,7 +1519,7 @@ void nsComboboxControlFrame::PaintFocus(nsRenderingContext& aRenderingContext,
 // being selected or not selected
 //---------------------------------------------------------
 NS_IMETHODIMP
-nsComboboxControlFrame::OnOptionSelected(PRInt32 aIndex, PRBool aSelected)
+nsComboboxControlFrame::OnOptionSelected(PRInt32 aIndex, bool aSelected)
 {
   if (mDroppedDown) {
     nsISelectControlFrame *selectFrame = do_QueryFrame(mListControlFrame);
@@ -1552,7 +1594,7 @@ nsComboboxControlFrame::RestoreState(nsPresState* aState)
 // 
 
 /* static */
-PRBool
+bool
 nsComboboxControlFrame::ToolkitHasNativePopup()
 {
 #ifdef MOZ_USE_NATIVE_POPUP_WINDOWS

@@ -267,10 +267,23 @@ DIST_FILES = \
   components \
   defaults \
   modules \
-  hyphenation \
   res \
   lib \
   lib.id \
+  libmozalloc.so \
+  libnspr4.so \
+  libplc4.so \
+  libplds4.so \
+  libmozsqlite3.so \
+  libnssutil3.so \
+  libnss3.so \
+  libssl3.so \
+  libsmime3.so \
+  libxul.so \
+  libxpcom.so \
+  libnssckbi.so \
+  libfreebl3.so \
+  libsoftokn3.so \
   extensions \
   application.ini \
   platform.ini \
@@ -292,10 +305,14 @@ include $(topsrcdir)/ipc/app/defs.mk
 
 DIST_FILES += $(MOZ_CHILD_PROCESS_NAME)
 
+ifeq ($(CPU_ARCH),x86)
+ABI_DIR = x86
+else
 ifdef MOZ_THUMB2
 ABI_DIR = armeabi-v7a
 else
 ABI_DIR = armeabi
+endif
 endif
 
 PKG_SUFFIX      = .apk
@@ -305,10 +322,9 @@ INNER_MAKE_PACKAGE	= \
   ( cd $(STAGEPATH)$(MOZ_PKG_DIR)$(_BINPATH) && \
     rm -rf lib && \
     mkdir -p lib/$(ABI_DIR) && \
-    cp lib*.so lib && \
-    mv lib/libmozutils.so lib/$(ABI_DIR) && \
+    mv libmozutils.so lib/$(ABI_DIR) && \
     rm -f lib.id && \
-    for SOMELIB in lib/*.so ; \
+    for SOMELIB in *.so ; \
     do \
       printf "`basename $$SOMELIB`:`$(_ABS_DIST)/host/bin/file_id $$SOMELIB`\n" >> lib.id ; \
     done && \
@@ -325,7 +341,6 @@ INNER_UNMAKE_PACKAGE	= \
   cd $(MOZ_PKG_DIR) && \
   $(UNZIP) $(UNPACKAGE) && \
   mv lib/$(ABI_DIR)/*.so . && \
-  mv lib/*.so . && \
   rm -rf lib
 endif
 ifeq ($(MOZ_PKG_FORMAT),DMG)
@@ -430,7 +445,7 @@ GENERATE_CACHE = \
   rm startupCache.zip && \
   $(ZIP) -r9m omni.jar jsloader/resource/$(PRECOMPILE_RESOURCE)
 else
-GENERATE_CACHE =
+GENERATE_CACHE = true
 endif
 endif
 
@@ -695,7 +710,6 @@ ifndef PKG_SKIP_STRIP
   ifeq ($(OS_ARCH),OS2)
 		@echo "Stripping package directory..."
 		@cd $(DIST)/$(STAGEPATH)$(MOZ_PKG_DIR) && $(STRIP)
-		$(SIGN_NSS)
   else
 		@echo "Stripping package directory..."
 		@cd $(DIST)/$(STAGEPATH)$(MOZ_PKG_DIR); find . ! -type d \
@@ -721,16 +735,10 @@ ifndef PKG_SKIP_STRIP
 				! -name "*.reg" \
 				$(PLATFORM_EXCLUDE_LIST) \
 				-exec $(STRIP) $(STRIP_FLAGS) {} >/dev/null 2>&1 \;
-		$(SIGN_NSS)
   endif
-else
-ifdef UNIVERSAL_BINARY
-# universal binaries will have had their .chk files removed prior to the unify
-# step, and if they're also --disable-install-strip then they won't get
-# re-signed in the block above.
-	$(SIGN_NSS)
-endif # UNIVERSAL_BINARY
 endif # PKG_SKIP_STRIP
+# We always sign nss because we don't do it from security/manager anymore
+	$(SIGN_NSS)
 	@echo "Removing unpackaged files..."
 ifdef NO_PKG_FILES
 	cd $(DIST)/$(STAGEPATH)$(MOZ_PKG_DIR)$(_BINPATH); rm -rf $(NO_PKG_FILES)

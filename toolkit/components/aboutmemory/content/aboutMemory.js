@@ -82,6 +82,14 @@ const kTreeDescriptions = {
     "'resident' under 'Other Measurements' because the two measurements are not " +
     "taken at exactly the same time.",
 
+  'pss':
+    "This tree shows how much space in physical memory can be 'blamed' on this " +
+    "process.  For each mapping, its 'proportional set size' (PSS) is the " +
+    "mapping's resident size divided by the number of processes which use the " +
+    "mapping.  So if a mapping is private to this process, its PSS should equal " +
+    "its RSS.  But if a mapping is shared between three processes, its PSS in " +
+    "each of the processes would be 1/3 its RSS.",
+
   'vsize':
     "This tree shows how much virtual addres space each of the process's " +
     "mappings takes up (the mapping's 'vsize').  A mapping may have a large " +
@@ -100,12 +108,13 @@ const kTreeDescriptions = {
 const kTreeNames = {
   'explicit': 'Explicit Allocations',
   'resident': 'Resident Set Size (RSS) Breakdown',
+  'pss':      'Proportional Set Size (PSS) Breakdown',
   'vsize':    'Virtual Size Breakdown',
   'swap':     'Swap Usage Breakdown',
   'other':    'Other Measurements'
 };
 
-const kMapTreePaths = ['map/resident', 'map/vsize', 'map/swap'];
+const kMapTreePaths = ['map/resident', 'map/pss', 'map/vsize', 'map/swap'];
 
 function onLoad()
 {
@@ -270,13 +279,24 @@ function getReportersByProcess()
   var e = mgr.enumerateReporters();
   while (e.hasMoreElements()) {
     var rOrig = e.getNext().QueryInterface(Ci.nsIMemoryReporter);
-    addReporter(rOrig.process, rOrig.path, rOrig.kind, rOrig.units,
-                rOrig.amount, rOrig.description);
+    try {
+      addReporter(rOrig.process, rOrig.path, rOrig.kind, rOrig.units,
+                  rOrig.amount, rOrig.description);
+    }
+    catch(e) {
+      debug("An error occurred when collecting results from the memory reporter " +
+            rOrig.path + ": " + e);
+    }
   }
   var e = mgr.enumerateMultiReporters();
   while (e.hasMoreElements()) {
     var mrOrig = e.getNext().QueryInterface(Ci.nsIMemoryMultiReporter);
-    mrOrig.collectReports(addReporter, null);
+    try {
+      mrOrig.collectReports(addReporter, null);
+    }
+    catch(e) {
+      debug("An error occurred when collecting a multi-reporter's results: " + e);
+    }
   }
 
   return reportersByProcess;
@@ -409,10 +429,8 @@ function buildTree(aReporters, aTreeName)
   }
 
   if (!foundReporter) {
-    // We didn't find any reporters for this tree, so create an empty one.  Its
-    // description will be set later.
-    aReporters[aTreeName] =
-      new Reporter(aTreeName, KIND_NONHEAP, UNITS_BYTES, 0, '');
+    // We didn't find any reporters for this tree, so bail.
+    return null;
   }
 
   var t = new TreeNode("falseRoot");
@@ -598,7 +616,7 @@ function filterTree(aTotalBytes, aT)
       for ( ; i < aT._kids.length; i++) {
         aggBytes += aT._kids[i]._amount;
       }
-      aT._kids.splice(i0);
+      aT._kids.splice(i0, aT._kids.length);
       var n = i - i0;
       var rSub = new TreeNode("(" + n + " omitted)");
       rSub._amount = aggBytes;
@@ -637,8 +655,12 @@ function genProcessText(aProcess, aReporters)
   var mapTreeText = '';
   kMapTreePaths.forEach(function(t) {
     var tree = buildTree(aReporters, t);
-    filterTree(tree._amount, tree);
-    mapTreeText += genTreeText(tree, aProcess);
+
+    // |tree| will be null if we don't have any reporters for the given path.
+    if (tree) {
+      filterTree(tree._amount, tree);
+      mapTreeText += genTreeText(tree, aProcess);
+    }
   });
 
   // We have to call genOtherText after we process all the trees, because it
@@ -1062,4 +1084,3 @@ function debug(x)
   div.innerHTML = JSON.stringify(x);
   content.appendChild(div);
 }
-

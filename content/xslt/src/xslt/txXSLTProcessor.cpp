@@ -38,7 +38,7 @@
 
 #include "txXSLTProcessor.h"
 #include "txInstructions.h"
-#include "txAtoms.h"
+#include "nsGkAtoms.h"
 #include "txLog.h"
 #include "txStylesheetCompileHandlers.h"
 #include "txStylesheetCompiler.h"
@@ -56,7 +56,7 @@ txXSLTProcessor::init()
     if (!txHandlerTable::init())
         return MB_FALSE;
 
-    extern PRBool TX_InitEXSLTFunction();
+    extern bool TX_InitEXSLTFunction();
     if (!TX_InitEXSLTFunction())
         return MB_FALSE;
 

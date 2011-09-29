@@ -80,7 +80,10 @@ const char* XPCJSRuntime::mStrings[] = {
     "__proto__",            // IDX_PROTO
     "__iterator__",         // IDX_ITERATOR
     "__exposedProps__",     // IDX_EXPOSEDPROPS
-    "__scriptOnly__"        // IDX_SCRIPTONLY
+    "__scriptOnly__",       // IDX_SCRIPTONLY
+    "baseURIObject",        // IDX_BASEURIOBJECT
+    "nodePrincipal",        // IDX_NODEPRINCIPAL
+    "documentURIObject"     // IDX_DOCUMENTURIOBJECT
 };
 
 /***************************************************************************/
@@ -2331,7 +2334,7 @@ void
 XPCJSRuntime::RemoveGCCallback(JSGCCallback cb)
 {
     NS_ASSERTION(cb, "null callback");
-    PRBool found = extraGCCallbacks.RemoveElement(cb);
+    bool found = extraGCCallbacks.RemoveElement(cb);
     if (!found) {
         NS_ERROR("Removing a callback which was never added.");
     }

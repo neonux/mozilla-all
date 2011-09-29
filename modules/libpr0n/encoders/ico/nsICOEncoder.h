@@ -68,10 +68,22 @@ public:
 
   nsICOEncoder();
   ~nsICOEncoder();
+  
+  // Obtains the width of the icon directory entry
+  PRUint32 GetRealWidth() const
+  {
+    return mICODirEntry.mWidth == 0 ? 256 : mICODirEntry.mWidth; 
+  }
+
+  // Obtains the height of the icon directory entry
+  PRUint32 GetRealHeight() const
+  {
+    return mICODirEntry.mHeight == 0 ? 256 : mICODirEntry.mHeight; 
+  }
 
 protected:
   nsresult ParseOptions(const nsAString& aOptions, PRUint32* bpp, 
-                        PRBool *usePNG);
+                        bool *usePNG);
   void NotifyListener();
 
   // Initializes the icon file header mICOFileHeader
@@ -92,7 +104,9 @@ protected:
   // or if no encoding options specified will use the default (PNG)
   nsCOMPtr<imgIEncoder> mContainedEncoder;
 
-  // These headers will always contain endian independent stuff 
+  // These headers will always contain endian independent stuff.
+  // Don't trust the width and height of mICODirEntry directly,
+  // instead use the accessors GetRealWidth() and GetRealHeight().
   mozilla::imagelib::IconFileHeader mICOFileHeader;
   mozilla::imagelib::IconDirEntry mICODirEntry;
 
@@ -105,9 +119,9 @@ protected:
   // Keeps track of the number of bytes in the image buffer which are read
   PRUint32 mImageBufferReadPoint;
   // Stores PR_TRUE if the image is done being encoded  
-  PRPackedBool mFinished;
+  bool mFinished;
   // Stores PR_TRUE if the contained image is a PNG
-  PRPackedBool mUsePNG;
+  bool mUsePNG;
 
   nsCOMPtr<nsIInputStreamCallback> mCallback;
   nsCOMPtr<nsIEventTarget> mCallbackTarget;

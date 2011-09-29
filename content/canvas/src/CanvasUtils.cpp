@@ -65,9 +65,11 @@ namespace CanvasUtils {
 void
 DoDrawImageSecurityCheck(nsHTMLCanvasElement *aCanvasElement,
                          nsIPrincipal *aPrincipal,
-                         PRBool forceWriteOnly,
-                         PRBool CORSUsed)
+                         bool forceWriteOnly,
+                         bool CORSUsed)
 {
+    NS_PRECONDITION(aPrincipal, "Must have a principal here");
+
     // Callers should ensure that mCanvasElement is non-null before calling this
     if (!aCanvasElement) {
         NS_WARNING("DoDrawImageSecurityCheck called without canvas element!");
@@ -83,14 +85,11 @@ DoDrawImageSecurityCheck(nsHTMLCanvasElement *aCanvasElement,
         return;
     }
 
-    if (aPrincipal == nsnull)
-        return;
-
     // No need to do a security check if the image used CORS for the load
     if (CORSUsed)
         return;
 
-    PRBool subsumes;
+    bool subsumes;
     nsresult rv =
         aCanvasElement->NodePrincipal()->Subsumes(aPrincipal, &subsumes);
 

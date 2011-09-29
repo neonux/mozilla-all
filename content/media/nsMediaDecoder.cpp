@@ -71,7 +71,7 @@ static const PRUint32 STALL_MS = 3000;
 static const PRInt64 CAN_PLAY_THROUGH_MARGIN = 10;
 
 nsMediaDecoder::nsMediaDecoder() :
-  mElement(0),
+  mElement(nsnull),
   mRGBWidth(-1),
   mRGBHeight(-1),
   mVideoUpdateLock("nsMediaDecoder.mVideoUpdateLock"),
@@ -91,7 +91,7 @@ nsMediaDecoder::~nsMediaDecoder()
   MediaMemoryReporter::RemoveMediaDecoder(this);
 }
 
-PRBool nsMediaDecoder::Init(nsHTMLMediaElement* aElement)
+bool nsMediaDecoder::Init(nsHTMLMediaElement* aElement)
 {
   mElement = aElement;
   return PR_TRUE;
@@ -124,7 +124,7 @@ void nsMediaDecoder::Invalidate()
     return;
 
   nsIFrame* frame = mElement->GetPrimaryFrame();
-  PRBool invalidateFrame = PR_FALSE;
+  bool invalidateFrame = false;
 
   {
     MutexAutoLock lock(mVideoUpdateLock);
@@ -165,7 +165,7 @@ static void ProgressCallback(nsITimer* aTimer, void* aClosure)
   decoder->Progress(PR_TRUE);
 }
 
-void nsMediaDecoder::Progress(PRBool aTimer)
+void nsMediaDecoder::Progress(bool aTimer)
 {
   if (!mElement)
     return;
@@ -279,7 +279,7 @@ void nsMediaDecoder::UnpinForSeek()
   stream->Unpin();
 }
 
-PRBool nsMediaDecoder::CanPlayThrough()
+bool nsMediaDecoder::CanPlayThrough()
 {
   Statistics stats = GetStatistics();
   if (!stats.mDownloadRateReliable || !stats.mPlaybackRateReliable) {

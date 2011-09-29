@@ -151,7 +151,7 @@ class Builtin(object):
                             calltype != 'in' and '*' or '')
 
 builtinNames = [
-    Builtin('boolean', 'PRBool'),
+    Builtin('boolean', 'bool'),
     Builtin('void', 'void'),
     Builtin('octet', 'PRUint8'),
     Builtin('short', 'PRInt16', True, True),
@@ -417,7 +417,7 @@ class Native(object):
         'utf8string': 'nsACString',
         'cstring': 'nsACString',
         'astring': 'nsAString',
-        'jsval': 'jsval'
+        'jsval': 'JS::Value'
         }
 
     def __init__(self, name, nativename, attlist, location):
@@ -520,7 +520,7 @@ class Interface(object):
         parent.setName(self)
         if self.base is None:
             if self.name != 'nsISupports':
-                print >>sys.stderr, IDLError("interface '%s' not derived from nsISupports",
+                print >>sys.stderr, IDLError("interface '%s' not derived from nsISupports" % self.name,
                                              self.location, warning=True)
         else:
             realbase = parent.getName(self.base, self.location)

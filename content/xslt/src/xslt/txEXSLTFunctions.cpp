@@ -38,7 +38,7 @@
  * ***** END LICENSE BLOCK ***** */
 
 #include "nsIAtom.h"
-#include "txAtoms.h"
+#include "nsGkAtoms.h"
 #include "txExecutionState.h"
 #include "txExpr.h"
 #include "txIXPathContext.h"
@@ -218,22 +218,22 @@ static const char kEXSLTDatesAndTimesNS[] = "http://exslt.org/dates-and-times";
 // txEXSLTFunctionCall::eType enum
 static txEXSLTFunctionDescriptor descriptTable[] =
 {
-    { 1, 1, Expr::NODESET_RESULT, &txXSLTAtoms::nodeSet, 0, kEXSLTCommonNS }, // NODE_SET
-    { 1, 1, Expr::STRING_RESULT,  &txXSLTAtoms::objectType, 0, kEXSLTCommonNS }, // OBJECT_TYPE
-    { 2, 2, Expr::NODESET_RESULT, &txXSLTAtoms::difference, 0, kEXSLTSetsNS }, // DIFFERENCE
-    { 1, 1, Expr::NODESET_RESULT, &txXSLTAtoms::distinct, 0, kEXSLTSetsNS }, // DISTINCT
-    { 2, 2, Expr::BOOLEAN_RESULT, &txXSLTAtoms::hasSameNode, 0, kEXSLTSetsNS }, // HAS_SAME_NODE
-    { 2, 2, Expr::NODESET_RESULT, &txXSLTAtoms::intersection, 0, kEXSLTSetsNS }, // INTERSECTION
-    { 2, 2, Expr::NODESET_RESULT, &txXSLTAtoms::leading, 0, kEXSLTSetsNS }, // LEADING
-    { 2, 2, Expr::NODESET_RESULT, &txXSLTAtoms::trailing, 0, kEXSLTSetsNS }, // TRAILING
-    { 1, 1, Expr::STRING_RESULT,  &txXSLTAtoms::concat, 0, kEXSLTStringsNS }, // CONCAT
-    { 1, 2, Expr::STRING_RESULT,  &txXSLTAtoms::split, 0, kEXSLTStringsNS }, // SPLIT
-    { 1, 2, Expr::STRING_RESULT,  &txXSLTAtoms::tokenize, 0, kEXSLTStringsNS }, // TOKENIZE
-    { 1, 1, Expr::NUMBER_RESULT,  &txXSLTAtoms::max, 0, kEXSLTMathNS }, // MAX
-    { 1, 1, Expr::NUMBER_RESULT,  &txXSLTAtoms::min, 0, kEXSLTMathNS }, // MIN
-    { 1, 1, Expr::NODESET_RESULT, &txXSLTAtoms::highest, 0, kEXSLTMathNS }, // HIGHEST
-    { 1, 1, Expr::NODESET_RESULT, &txXSLTAtoms::lowest, 0, kEXSLTMathNS }, // LOWEST
-    { 0, 0, Expr::STRING_RESULT,  &txXSLTAtoms::dateTime, 0, kEXSLTDatesAndTimesNS }, // DATE_TIME
+    { 1, 1, Expr::NODESET_RESULT, &nsGkAtoms::nodeSet, 0, kEXSLTCommonNS }, // NODE_SET
+    { 1, 1, Expr::STRING_RESULT,  &nsGkAtoms::objectType, 0, kEXSLTCommonNS }, // OBJECT_TYPE
+    { 2, 2, Expr::NODESET_RESULT, &nsGkAtoms::difference, 0, kEXSLTSetsNS }, // DIFFERENCE
+    { 1, 1, Expr::NODESET_RESULT, &nsGkAtoms::distinct, 0, kEXSLTSetsNS }, // DISTINCT
+    { 2, 2, Expr::BOOLEAN_RESULT, &nsGkAtoms::hasSameNode, 0, kEXSLTSetsNS }, // HAS_SAME_NODE
+    { 2, 2, Expr::NODESET_RESULT, &nsGkAtoms::intersection, 0, kEXSLTSetsNS }, // INTERSECTION
+    { 2, 2, Expr::NODESET_RESULT, &nsGkAtoms::leading, 0, kEXSLTSetsNS }, // LEADING
+    { 2, 2, Expr::NODESET_RESULT, &nsGkAtoms::trailing, 0, kEXSLTSetsNS }, // TRAILING
+    { 1, 1, Expr::STRING_RESULT,  &nsGkAtoms::concat, 0, kEXSLTStringsNS }, // CONCAT
+    { 1, 2, Expr::STRING_RESULT,  &nsGkAtoms::split, 0, kEXSLTStringsNS }, // SPLIT
+    { 1, 2, Expr::STRING_RESULT,  &nsGkAtoms::tokenize, 0, kEXSLTStringsNS }, // TOKENIZE
+    { 1, 1, Expr::NUMBER_RESULT,  &nsGkAtoms::max, 0, kEXSLTMathNS }, // MAX
+    { 1, 1, Expr::NUMBER_RESULT,  &nsGkAtoms::min, 0, kEXSLTMathNS }, // MIN
+    { 1, 1, Expr::NODESET_RESULT, &nsGkAtoms::highest, 0, kEXSLTMathNS }, // HIGHEST
+    { 1, 1, Expr::NODESET_RESULT, &nsGkAtoms::lowest, 0, kEXSLTMathNS }, // LOWEST
+    { 0, 0, Expr::STRING_RESULT,  &nsGkAtoms::dateTime, 0, kEXSLTDatesAndTimesNS }, // DATE_TIME
 
 };
 
@@ -369,7 +369,7 @@ txEXSLTFunctionCall::evaluate(txIEvalContext *aContext,
             rv = aContext->recycler()->getNodeSet(getter_AddRefs(resultSet));
             NS_ENSURE_SUCCESS(rv, rv);
 
-            PRBool insertOnFound = mType == INTERSECTION;
+            bool insertOnFound = mType == INTERSECTION;
 
             PRInt32 searchPos = 0;
             PRInt32 i, len = nodes1->size();
@@ -436,7 +436,7 @@ txEXSLTFunctionCall::evaluate(txIEvalContext *aContext,
                                    getter_AddRefs(nodes2));
             NS_ENSURE_SUCCESS(rv, rv);
 
-            PRBool found = PR_FALSE;
+            bool found = false;
             PRInt32 i, len = nodes1->size();
             for (i = 0; i < len; ++i) {
                 if (nodes2->contains(nodes1->get(i))) {
@@ -541,7 +541,7 @@ txEXSLTFunctionCall::evaluate(txIEvalContext *aContext,
                 nsString::const_char_iterator start = string.BeginReading();
                 nsString::const_char_iterator end = string.EndReading();
                 for (; start < end; ++start) {
-                    rv = createAndAddToResult(txXSLTAtoms::token,
+                    rv = createAndAddToResult(nsGkAtoms::token,
                                               Substring(start, start + 1),
                                               resultSet, docFrag);
                     NS_ENSURE_SUCCESS(rv, rv);
@@ -557,7 +557,7 @@ txEXSLTFunctionCall::evaluate(txIEvalContext *aContext,
 
                 while (FindInReadable(pattern, start, end)) {
                     if (start != strStart) {
-                        rv = createAndAddToResult(txXSLTAtoms::token,
+                        rv = createAndAddToResult(nsGkAtoms::token,
                                                   Substring(strStart, start),
                                                   resultSet, docFrag);
                         NS_ENSURE_SUCCESS(rv, rv);
@@ -573,7 +573,7 @@ txEXSLTFunctionCall::evaluate(txIEvalContext *aContext,
                 while ((found = string.FindCharInSet(pattern, start)) !=
                        kNotFound) {
                     if (found != start) {
-                        rv = createAndAddToResult(txXSLTAtoms::token,
+                        rv = createAndAddToResult(nsGkAtoms::token,
                                                   Substring(string, start,
                                                             found - start),
                                                   resultSet, docFrag);
@@ -587,7 +587,7 @@ txEXSLTFunctionCall::evaluate(txIEvalContext *aContext,
 
             // Add tail if needed
             if (tailIndex != (PRUint32)string.Length()) {
-                rv = createAndAddToResult(txXSLTAtoms::token,
+                rv = createAndAddToResult(nsGkAtoms::token,
                                           Substring(string, tailIndex),
                                           resultSet, docFrag);
                 NS_ENSURE_SUCCESS(rv, rv);
@@ -610,7 +610,7 @@ txEXSLTFunctionCall::evaluate(txIEvalContext *aContext,
                     getNumberResult(Double::NaN, aResult);
             }
 
-            PRBool findMax = mType == MAX;
+            bool findMax = mType == MAX;
 
             double res = findMax ? txDouble::NEGATIVE_INFINITY :
                                    txDouble::POSITIVE_INFINITY;
@@ -649,7 +649,7 @@ txEXSLTFunctionCall::evaluate(txIEvalContext *aContext,
             rv = aContext->recycler()->getNodeSet(getter_AddRefs(resultSet));
             NS_ENSURE_SUCCESS(rv, rv);
 
-            PRBool findMax = mType == HIGHEST;
+            bool findMax = mType == HIGHEST;
             double res = findMax ? txDouble::NEGATIVE_INFINITY :
                                    txDouble::POSITIVE_INFINITY;
             PRInt32 i, len = nodes->size();
@@ -690,7 +690,7 @@ txEXSLTFunctionCall::evaluate(txIEvalContext *aContext,
             PRInt32 offset = (prtime.tm_params.tp_gmt_offset +
               prtime.tm_params.tp_dst_offset) / 60;
               
-            PRBool isneg = offset < 0;
+            bool isneg = offset < 0;
             if (isneg) offset = -offset;
             
             StringResult* strRes;
@@ -720,7 +720,7 @@ txEXSLTFunctionCall::getReturnType()
     return descriptTable[mType].mReturnType;
 }
 
-PRBool
+bool
 txEXSLTFunctionCall::isSensitiveTo(ContextSensitivity aContext)
 {
     if (mType == NODE_SET || mType == SPLIT || mType == TOKENIZE) {
@@ -758,7 +758,7 @@ TX_ConstructEXSLTFunction(nsIAtom *aName,
     return NS_ERROR_XPATH_UNKNOWN_FUNCTION;
 }
 
-extern PRBool
+extern bool
 TX_InitEXSLTFunction()
 {
     PRUint32 i;

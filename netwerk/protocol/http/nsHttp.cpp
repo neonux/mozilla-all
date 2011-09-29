@@ -42,7 +42,6 @@
 #include "mozilla/Mutex.h"
 #include "nsCRT.h"
 #include "prbit.h"
-#include "nsStaticAtom.h"
 
 #if defined(PR_LOGGING)
 PRLogModuleInfo *gHttpLog = nsnull;
@@ -60,23 +59,6 @@ enum {
     NUM_HTTP_ATOMS
 };
 #undef HTTP_ATOM
-
-// define all method atoms
-#define HTTP_METHOD_ATOM(name_, value_) nsIAtom* nsHttp::name_;
-#include "nsHttpAtomList.h"
-#undef HTTP_METHOD_ATOM
-
-#define HTTP_METHOD_ATOM(name_, value_) \
-    NS_STATIC_ATOM_BUFFER(name_##_buffer, value_)
-#include "nsHttpAtomList.h"
-#undef HTTP_METHOD_ATOM
-
-static const nsStaticAtom methodAtomsInfo[] = {
-#define HTTP_METHOD_ATOM(name_, value_) \
-    NS_STATIC_ATOM(name_##_buffer, &nsHttp::name_),
-#include "nsHttpAtomList.h"
-#undef HTTP_METHOD_ATOM
-};
 
 using namespace mozilla;
 
@@ -120,7 +102,7 @@ StringHash(PLDHashTable *table, const void *key)
     return h;
 }
 
-static PRBool
+static bool
 StringCompare(PLDHashTable *table, const PLDHashEntryHdr *entry,
               const void *testKey)
 {
@@ -202,12 +184,6 @@ nsHttp::DestroyAtomTable()
     }
 }
 
-void
-nsHttp::CreateMethodAtoms()
-{
-    NS_RegisterStaticAtoms(methodAtomsInfo, NS_ARRAY_LENGTH(methodAtomsInfo));
-}
-
 // this function may be called from multiple threads
 nsHttpAtom
 nsHttp::ResolveAtom(const char *str)
@@ -274,7 +250,7 @@ static const char kValidTokenMap[128] = {
     1, 1, 1, 1, 1, 1, 1, 1, // 112
     1, 1, 1, 0, 1, 0, 1, 0  // 120
 };
-PRBool
+bool
 nsHttp::IsValidToken(const char *start, const char *end)
 {
     if (start == end)
@@ -316,7 +292,7 @@ nsHttp::FindToken(const char *input, const char *token, const char *seps)
     return nsnull;
 }
 
-PRBool
+bool
 nsHttp::ParseInt64(const char *input, const char **next, PRInt64 *r)
 {
     const char *start = input;

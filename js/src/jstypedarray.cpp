@@ -237,12 +237,14 @@ ArrayBuffer::obj_trace(JSTracer *trc, JSObject *obj)
         MarkObject(trc, *delegate, "arraybuffer.delegate");
 }
 
+static JSProperty * const PROPERTY_FOUND = reinterpret_cast<JSProperty *>(1);
+
 JSBool
 ArrayBuffer::obj_lookupProperty(JSContext *cx, JSObject *obj, jsid id,
                                 JSObject **objp, JSProperty **propp)
 {
     if (JSID_IS_ATOM(id, cx->runtime->atomState.byteLengthAtom)) {
-        *propp = (JSProperty *) 1;
+        *propp = PROPERTY_FOUND;
         *objp = getArrayBuffer(obj);
         return true;
     }
@@ -281,10 +283,38 @@ JSBool
 ArrayBuffer::obj_lookupElement(JSContext *cx, JSObject *obj, uint32 index,
                                JSObject **objp, JSProperty **propp)
 {
-    jsid id;
-    if (!IndexToId(cx, index, &id))
+    JSObject *delegate = DelegateObject(cx, obj);
+    if (!delegate)
         return false;
-    return obj_lookupProperty(cx, obj, id, objp, propp);
+
+    /*
+     * If false, there was an error, so propagate it.
+     * Otherwise, if propp is non-null, the property
+     * was found. Otherwise it was not
+     * found so look in the prototype chain.
+     */
+    if (!delegate->lookupElement(cx, index, objp, propp))
+        return false;
+
+    if (*propp != NULL) {
+        if (*objp == delegate)
+            *objp = obj;
+        return true;
+    }
+
+    if (JSObject *proto = obj->getProto())
+        return proto->lookupElement(cx, index, objp, propp);
+
+    *objp = NULL;
+    *propp = NULL;
+    return true;
+}
+
+JSBool
+ArrayBuffer::obj_lookupSpecial(JSContext *cx, JSObject *obj, SpecialId sid,
+                               JSObject **objp, JSProperty **propp)
+{
+    return obj_lookupProperty(cx, obj, SPECIALID_TO_JSID(sid), objp, propp);
 }
 
 JSBool
@@ -304,14 +334,21 @@ JSBool
 ArrayBuffer::obj_defineElement(JSContext *cx, JSObject *obj, uint32 index, const Value *v,
                    PropertyOp getter, StrictPropertyOp setter, uintN attrs)
 {
-    jsid id;
-    if (!IndexToId(cx, index, &id))
+    JSObject *delegate = DelegateObject(cx, obj);
+    if (!delegate)
         return false;
-    return obj_defineProperty(cx, obj, id, v, getter, setter, attrs);
+    return js_DefineElement(cx, delegate, index, v, getter, setter, attrs);
 }
 
 JSBool
-ArrayBuffer::obj_getProperty(JSContext *cx, JSObject *obj, JSObject *receiver, jsid id, Value *vp)
+ArrayBuffer::obj_defineSpecial(JSContext *cx, JSObject *obj, SpecialId sid, const Value *v,
+                               PropertyOp getter, StrictPropertyOp setter, uintN attrs)
+{
+    return obj_defineProperty(cx, obj, SPECIALID_TO_JSID(sid), v, getter, setter, attrs);
+}
+
+JSBool
+ArrayBuffer::obj_getGeneric(JSContext *cx, JSObject *obj, JSObject *receiver, jsid id, Value *vp)
 {
     obj = getArrayBuffer(obj);
     if (JSID_IS_ATOM(id, cx->runtime->atomState.byteLengthAtom)) {
@@ -326,12 +363,25 @@ ArrayBuffer::obj_getProperty(JSContext *cx, JSObject *obj, JSObject *receiver, j
 }
 
 JSBool
+ArrayBuffer::obj_getProperty(JSContext *cx, JSObject *obj, JSObject *receiver, PropertyName *name,
+                             Value *vp)
+{
+    return obj_getGeneric(cx, obj, receiver, ATOM_TO_JSID(name), vp);
+}
+
+JSBool
 ArrayBuffer::obj_getElement(JSContext *cx, JSObject *obj, JSObject *receiver, uint32 index, Value *vp)
 {
-    jsid id;
-    if (!IndexToId(cx, index, &id))
+    JSObject *delegate = DelegateObject(cx, getArrayBuffer(obj));
+    if (!delegate)
         return false;
-    return obj_getProperty(cx, obj, receiver, id, vp);
+    return js_GetElement(cx, delegate, receiver, index, vp);
+}
+
+JSBool
+ArrayBuffer::obj_getSpecial(JSContext *cx, JSObject *obj, JSObject *receiver, SpecialId sid, Value *vp)
+{
+    return obj_getGeneric(cx, obj, receiver, SPECIALID_TO_JSID(sid), vp);
 }
 
 JSBool
@@ -391,10 +441,17 @@ ArrayBuffer::obj_setProperty(JSContext *cx, JSObject *obj, jsid id, Value *vp, J
 JSBool
 ArrayBuffer::obj_setElement(JSContext *cx, JSObject *obj, uint32 index, Value *vp, JSBool strict)
 {
-    jsid id;
-    if (!IndexToId(cx, index, &id))
+    JSObject *delegate = DelegateObject(cx, obj);
+    if (!delegate)
         return false;
-    return obj_setProperty(cx, obj, id, vp, strict);
+
+    return js_SetElementHelper(cx, delegate, index, 0, vp, strict);
+}
+
+JSBool
+ArrayBuffer::obj_setSpecial(JSContext *cx, JSObject *obj, SpecialId sid, Value *vp, JSBool strict)
+{
+    return obj_setProperty(cx, obj, SPECIALID_TO_JSID(sid), vp, strict);
 }
 
 JSBool
@@ -414,10 +471,16 @@ ArrayBuffer::obj_getAttributes(JSContext *cx, JSObject *obj, jsid id, uintN *att
 JSBool
 ArrayBuffer::obj_getElementAttributes(JSContext *cx, JSObject *obj, uint32 index, uintN *attrsp)
 {
-    jsid id;
-    if (!IndexToId(cx, index, &id))
+    JSObject *delegate = DelegateObject(cx, obj);
+    if (!delegate)
         return false;
-    return obj_getAttributes(cx, obj, id, attrsp);
+    return js_GetElementAttributes(cx, delegate, index, attrsp);
+}
+
+JSBool
+ArrayBuffer::obj_getSpecialAttributes(JSContext *cx, JSObject *obj, SpecialId sid, uintN *attrsp)
+{
+    return obj_getAttributes(cx, obj, SPECIALID_TO_JSID(sid), attrsp);
 }
 
 JSBool
@@ -438,10 +501,16 @@ ArrayBuffer::obj_setAttributes(JSContext *cx, JSObject *obj, jsid id, uintN *att
 JSBool
 ArrayBuffer::obj_setElementAttributes(JSContext *cx, JSObject *obj, uint32 index, uintN *attrsp)
 {
-    jsid id;
-    if (!IndexToId(cx, index, &id))
+    JSObject *delegate = DelegateObject(cx, obj);
+    if (!delegate)
         return false;
-    return obj_setAttributes(cx, obj, id, attrsp);
+    return js_SetElementAttributes(cx, delegate, index, attrsp);
+}
+
+JSBool
+ArrayBuffer::obj_setSpecialAttributes(JSContext *cx, JSObject *obj, SpecialId sid, uintN *attrsp)
+{
+    return obj_setAttributes(cx, obj, SPECIALID_TO_JSID(sid), attrsp);
 }
 
 JSBool
@@ -461,10 +530,16 @@ ArrayBuffer::obj_deleteProperty(JSContext *cx, JSObject *obj, jsid id, Value *rv
 JSBool
 ArrayBuffer::obj_deleteElement(JSContext *cx, JSObject *obj, uint32 index, Value *rval, JSBool strict)
 {
-    jsid id;
-    if (!IndexToId(cx, index, &id))
+    JSObject *delegate = DelegateObject(cx, obj);
+    if (!delegate)
         return false;
-    return obj_deleteElement(cx, obj, index, rval, strict);
+    return js_DeleteElement(cx, delegate, index, rval, strict);
+}
+
+JSBool
+ArrayBuffer::obj_deleteSpecial(JSContext *cx, JSObject *obj, SpecialId sid, Value *rval, JSBool strict)
+{
+    return obj_deleteProperty(cx, obj, SPECIALID_TO_JSID(sid), rval, strict);
 }
 
 JSBool
@@ -589,7 +664,7 @@ TypedArray::obj_lookupProperty(JSContext *cx, JSObject *obj, jsid id,
     JS_ASSERT(tarray);
 
     if (isArrayIndex(cx, tarray, id)) {
-        *propp = (JSProperty *) 1;  /* non-null to indicate found */
+        *propp = PROPERTY_FOUND;
         *objp = obj;
         return true;
     }
@@ -608,10 +683,28 @@ JSBool
 TypedArray::obj_lookupElement(JSContext *cx, JSObject *obj, uint32 index,
                               JSObject **objp, JSProperty **propp)
 {
-    jsid id;
-    if (!IndexToId(cx, index, &id))
-        return false;
-    return obj_lookupProperty(cx, obj, id, objp, propp);
+    JSObject *tarray = getTypedArray(obj);
+    JS_ASSERT(tarray);
+
+    if (index < getLength(tarray)) {
+        *propp = PROPERTY_FOUND;
+        *objp = obj;
+        return true;
+    }
+
+    if (JSObject *proto = obj->getProto())
+        return proto->lookupElement(cx, index, objp, propp);
+
+    *objp = NULL;
+    *propp = NULL;
+    return true;
+}
+
+JSBool
+TypedArray::obj_lookupSpecial(JSContext *cx, JSObject *obj, SpecialId sid,
+                              JSObject **objp, JSProperty **propp)
+{
+    return obj_lookupProperty(cx, obj, SPECIALID_TO_JSID(sid), objp, propp);
 }
 
 JSBool
@@ -626,27 +719,34 @@ TypedArray::obj_getAttributes(JSContext *cx, JSObject *obj, jsid id, uintN *attr
 JSBool
 TypedArray::obj_getElementAttributes(JSContext *cx, JSObject *obj, uint32 index, uintN *attrsp)
 {
-    jsid id;
-    if (!IndexToId(cx, index, &id))
-        return false;
-    return obj_getAttributes(cx, obj, id, attrsp);
+    *attrsp = JSPROP_PERMANENT | JSPROP_ENUMERATE;
+    return true;
+}
+
+JSBool
+TypedArray::obj_getSpecialAttributes(JSContext *cx, JSObject *obj, SpecialId sid, uintN *attrsp)
+{
+    return obj_getAttributes(cx, obj, SPECIALID_TO_JSID(sid), attrsp);
 }
 
 JSBool
 TypedArray::obj_setAttributes(JSContext *cx, JSObject *obj, jsid id, uintN *attrsp)
 {
-    JS_ReportErrorNumber(cx, js_GetErrorMessage, NULL,
-                         JSMSG_CANT_SET_ARRAY_ATTRS);
+    JS_ReportErrorNumber(cx, js_GetErrorMessage, NULL, JSMSG_CANT_SET_ARRAY_ATTRS);
     return false;
 }
 
 JSBool
 TypedArray::obj_setElementAttributes(JSContext *cx, JSObject *obj, uint32 index, uintN *attrsp)
 {
-    jsid id;
-    if (!IndexToId(cx, index, &id))
-        return false;
-    return obj_setAttributes(cx, obj, id, attrsp);
+    JS_ReportErrorNumber(cx, js_GetErrorMessage, NULL, JSMSG_CANT_SET_ARRAY_ATTRS);
+    return false;
+}
+
+JSBool
+TypedArray::obj_setSpecialAttributes(JSContext *cx, JSObject *obj, SpecialId sid, uintN *attrsp)
+{
+    return obj_setAttributes(cx, obj, SPECIALID_TO_JSID(sid), attrsp);
 }
 
 /* static */ int
@@ -831,7 +931,7 @@ class TypedArrayTemplate
     }
 
     static JSBool
-    obj_getProperty(JSContext *cx, JSObject *obj, JSObject *receiver, jsid id, Value *vp)
+    obj_getGeneric(JSContext *cx, JSObject *obj, JSObject *receiver, jsid id, Value *vp)
     {
         JSObject *tarray = getTypedArray(obj);
 
@@ -872,41 +972,58 @@ class TypedArrayTemplate
     }
 
     static JSBool
-    obj_getElement(JSContext *cx, JSObject *obj, JSObject *receiver, uint32 index, Value *vp)
+    obj_getProperty(JSContext *cx, JSObject *obj, JSObject *receiver, PropertyName *name,
+                    Value *vp)
     {
-        jsid id;
-        if (!IndexToId(cx, index, &id))
-            return false;
-        return obj_getProperty(cx, obj, receiver, id, vp);
+        return obj_getGeneric(cx, obj, receiver, ATOM_TO_JSID(name), vp);
     }
 
     static JSBool
-    obj_setProperty(JSContext *cx, JSObject *obj, jsid id, Value *vp, JSBool strict)
+    obj_getElement(JSContext *cx, JSObject *obj, JSObject *receiver, uint32 index, Value *vp)
     {
         JSObject *tarray = getTypedArray(obj);
-        JS_ASSERT(tarray);
 
-        if (JSID_IS_ATOM(id, cx->runtime->atomState.lengthAtom)) {
-            vp->setNumber(getLength(tarray));
+        if (index < getLength(tarray)) {
+            // this inline function is specialized for each type
+            copyIndexToValue(cx, tarray, index, vp);
             return true;
         }
 
-        jsuint index;
-        // We can't just chain to js_SetPropertyHelper, because we're not a normal object.
-        if (!isArrayIndex(cx, tarray, id, &index)) {
-#if 0
-            JS_ReportErrorNumber(cx, js_GetErrorMessage, NULL,
-                                 JSMSG_TYPED_ARRAY_BAD_INDEX);
-            return false;
-#endif
-            // Silent ignore is better than an exception here, because
-            // at some point we may want to support other properties on
-            // these objects.  This is especially true when these arrays
-            // are used to implement HTML Canvas 2D's PixelArray objects,
-            // which used to be plain old arrays.
+        JSObject *proto = obj->getProto();
+        if (!proto) {
             vp->setUndefined();
             return true;
         }
+
+        vp->setUndefined();
+
+        jsid id;
+        if (!IndexToId(cx, index, &id))
+            return false;
+
+        JSObject *obj2;
+        JSProperty *prop;
+        if (!LookupPropertyWithFlags(cx, proto, id, cx->resolveFlags, &obj2, &prop))
+            return false;
+
+        if (!prop || !obj2->isNative())
+            return true;
+
+        const Shape *shape = (Shape *) prop;
+        return js_NativeGet(cx, obj, obj2, shape, JSGET_METHOD_BARRIER, vp);
+    }
+
+    static JSBool
+    obj_getSpecial(JSContext *cx, JSObject *obj, JSObject *receiver, SpecialId sid, Value *vp)
+    {
+        return obj_getGeneric(cx, obj, receiver, SPECIALID_TO_JSID(sid), vp);
+    }
+
+    static bool
+    setElementTail(JSContext *cx, JSObject *tarray, uint32 index, Value *vp, JSBool strict)
+    {
+        JS_ASSERT(tarray);
+        JS_ASSERT(index < getLength(tarray));
 
         if (vp->isInt32()) {
             setIndex(tarray, index, NativeType(vp->toInt32()));
@@ -914,11 +1031,10 @@ class TypedArrayTemplate
         }
 
         jsdouble d;
-
         if (vp->isDouble()) {
             d = vp->toDouble();
         } else if (vp->isNull()) {
-            d = 0.0f;
+            d = 0.0;
         } else if (vp->isPrimitive()) {
             JS_ASSERT(vp->isString() || vp->isUndefined() || vp->isBoolean());
             if (vp->isString()) {
@@ -926,7 +1042,7 @@ class TypedArrayTemplate
             } else if (vp->isUndefined()) {
                 d = js_NaN;
             } else {
-                d = (double) vp->toBoolean();
+                d = double(vp->toBoolean());
             }
         } else {
             // non-primitive assignments become NaN or 0 (for float/int arrays)
@@ -958,12 +1074,54 @@ class TypedArrayTemplate
     }
 
     static JSBool
+    obj_setProperty(JSContext *cx, JSObject *obj, jsid id, Value *vp, JSBool strict)
+    {
+        JSObject *tarray = getTypedArray(obj);
+        JS_ASSERT(tarray);
+
+        if (JSID_IS_ATOM(id, cx->runtime->atomState.lengthAtom)) {
+            vp->setNumber(getLength(tarray));
+            return true;
+        }
+
+        jsuint index;
+        // We can't just chain to js_SetPropertyHelper, because we're not a normal object.
+        if (!isArrayIndex(cx, tarray, id, &index)) {
+            // Silent ignore is better than an exception here, because
+            // at some point we may want to support other properties on
+            // these objects.  This is especially true when these arrays
+            // are used to implement HTML Canvas 2D's PixelArray objects,
+            // which used to be plain old arrays.
+            vp->setUndefined();
+            return true;
+        }
+
+        return setElementTail(cx, tarray, index, vp, strict);
+    }
+
+    static JSBool
     obj_setElement(JSContext *cx, JSObject *obj, uint32 index, Value *vp, JSBool strict)
     {
-        jsid id;
-        if (!IndexToId(cx, index, &id))
-            return false;
-        return obj_setProperty(cx, obj, id, vp, strict);
+        JSObject *tarray = getTypedArray(obj);
+        JS_ASSERT(tarray);
+
+        if (index >= getLength(tarray)) {
+            // Silent ignore is better than an exception here, because
+            // at some point we may want to support other properties on
+            // these objects.  This is especially true when these arrays
+            // are used to implement HTML Canvas 2D's PixelArray objects,
+            // which used to be plain old arrays.
+            vp->setUndefined();
+            return true;
+        }
+
+        return setElementTail(cx, tarray, index, vp, strict);
+    }
+
+    static JSBool
+    obj_setSpecial(JSContext *cx, JSObject *obj, SpecialId sid, Value *vp, JSBool strict)
+    {
+        return obj_setProperty(cx, obj, SPECIALID_TO_JSID(sid), vp, strict);
     }
 
     static JSBool
@@ -981,10 +1139,15 @@ class TypedArrayTemplate
     obj_defineElement(JSContext *cx, JSObject *obj, uint32 index, const Value *v,
                        PropertyOp getter, StrictPropertyOp setter, uintN attrs)
     {
-        jsid id;
-        if (!IndexToId(cx, index, &id))
-            return false;
-        return obj_defineProperty(cx, obj, id, v, getter, setter, attrs);
+        Value tmp = *v;
+        return obj_setElement(cx, obj, index, &tmp, false);
+    }
+
+    static JSBool
+    obj_defineSpecial(JSContext *cx, JSObject *obj, SpecialId sid, const Value *v,
+                      PropertyOp getter, StrictPropertyOp setter, uintN attrs)
+    {
+        return obj_defineProperty(cx, obj, SPECIALID_TO_JSID(sid), v, getter, setter, attrs);
     }
 
     static JSBool
@@ -1010,10 +1173,22 @@ class TypedArrayTemplate
     static JSBool
     obj_deleteElement(JSContext *cx, JSObject *obj, uint32 index, Value *rval, JSBool strict)
     {
-        jsid id;
-        if (!IndexToId(cx, index, &id))
-            return false;
-        return obj_deleteProperty(cx, obj, id, rval, strict);
+        JSObject *tarray = TypedArray::getTypedArray(obj);
+        JS_ASSERT(tarray);
+
+        if (index < getLength(tarray)) {
+            rval->setBoolean(false);
+            return true;
+        }
+
+        rval->setBoolean(true);
+        return true;
+    }
+
+    static JSBool
+    obj_deleteSpecial(JSContext *cx, JSObject *obj, SpecialId sid, Value *rval, JSBool strict)
+    {
+        return obj_deleteProperty(cx, obj, SPECIALID_TO_JSID(sid), rval, strict);
     }
 
     static JSBool
@@ -1208,15 +1383,12 @@ class TypedArrayTemplate
     static JSBool
     fun_subarray(JSContext *cx, uintN argc, Value *vp)
     {
-        JSObject *obj = ToObject(cx, &vp[1]);
-        if (!obj)
-            return false;
+        CallArgs args = CallArgsFromVp(argc, vp);
 
-        if (obj->getClass() != fastClass()) {
-            // someone tried to apply this subarray() to the wrong class
-            ReportIncompatibleMethod(cx, vp, fastClass());
-            return false;
-        }
+        bool ok;
+        JSObject *obj = NonGenericMethodGuard(cx, args, fastClass(), &ok);
+        if (!obj)
+            return ok;
 
         JSObject *tarray = getTypedArray(obj);
         if (!tarray)
@@ -1226,9 +1398,8 @@ class TypedArrayTemplate
         int32_t begin = 0, end = getLength(tarray);
         int32_t length = int32(getLength(tarray));
 
-        if (argc > 0) {
-            Value *argv = JS_ARGV(cx, vp);
-            if (!ValueToInt32(cx, argv[0], &begin))
+        if (args.length() > 0) {
+            if (!ValueToInt32(cx, args[0], &begin))
                 return false;
             if (begin < 0) {
                 begin += length;
@@ -1238,8 +1409,8 @@ class TypedArrayTemplate
                 begin = length;
             }
 
-            if (argc > 1) {
-                if (!ValueToInt32(cx, argv[1], &end))
+            if (args.length() > 1) {
+                if (!ValueToInt32(cx, args[1], &end))
                     return false;
                 if (end < 0) {
                     end += length;
@@ -1257,7 +1428,7 @@ class TypedArrayTemplate
         JSObject *nobj = createSubarray(cx, tarray, begin, end);
         if (!nobj)
             return false;
-        vp->setObject(*nobj);
+        args.rval().setObject(*nobj);
         return true;
     }
 
@@ -1265,15 +1436,12 @@ class TypedArrayTemplate
     static JSBool
     fun_set(JSContext *cx, uintN argc, Value *vp)
     {
-        JSObject *obj = ToObject(cx, &vp[1]);
-        if (!obj)
-            return false;
+        CallArgs args = CallArgsFromVp(argc, vp);
 
-        if (obj->getClass() != fastClass()) {
-            // someone tried to apply this set() to the wrong class
-            ReportIncompatibleMethod(cx, vp, fastClass());
-            return false;
-        }
+        bool ok;
+        JSObject *obj = NonGenericMethodGuard(cx, args, fastClass(), &ok);
+        if (!obj)
+            return ok;
 
         JSObject *tarray = getTypedArray(obj);
         if (!tarray)
@@ -1282,9 +1450,8 @@ class TypedArrayTemplate
         // these are the default values
         int32_t off = 0;
 
-        Value *argv = JS_ARGV(cx, vp);
-        if (argc > 1) {
-            if (!ValueToInt32(cx, argv[1], &off))
+        if (args.length() > 1) {
+            if (!ValueToInt32(cx, args[1], &off))
                 return false;
 
             if (off < 0 || uint32_t(off) > getLength(tarray)) {
@@ -1298,13 +1465,13 @@ class TypedArrayTemplate
         uint32 offset(off);
 
         // first arg must be either a typed array or a JS array
-        if (argc == 0 || !argv[0].isObject()) {
+        if (args.length() == 0 || !args[0].isObject()) {
             JS_ReportErrorNumber(cx, js_GetErrorMessage, NULL,
                                  JSMSG_TYPED_ARRAY_BAD_ARGS);
             return false;
         }
 
-        JSObject *arg0 = argv[0].toObjectOrNull();
+        JSObject *arg0 = args[0].toObjectOrNull();
         if (js_IsTypedArray(arg0)) {
             JSObject *src = TypedArray::getTypedArray(arg0);
             if (!src ||
@@ -1333,7 +1500,7 @@ class TypedArrayTemplate
                 return false;
         }
 
-        vp->setUndefined();
+        args.rval().setUndefined();
         return true;
     }
 
@@ -1493,7 +1660,7 @@ class TypedArrayTemplate
             Value v;
 
             for (uintN i = 0; i < len; ++i) {
-                if (!ar->getProperty(cx, ::INT_TO_JSID(i), &v))
+                if (!ar->getElement(cx, i, &v))
                     return false;
                 *dest++ = nativeFromValue(cx, v);
             }
@@ -1815,14 +1982,14 @@ Class ArrayBuffer::slowClass = {
     JSCLASS_HAS_PRIVATE |
     JSCLASS_HAS_RESERVED_SLOTS(ARRAYBUFFER_RESERVED_SLOTS) |
     JSCLASS_HAS_CACHED_PROTO(JSProto_ArrayBuffer),
-    PropertyStub,         /* addProperty */
-    PropertyStub,         /* delProperty */
-    PropertyStub,         /* getProperty */
-    StrictPropertyStub,   /* setProperty */
-    EnumerateStub,
-    ResolveStub,
-    ConvertStub,
-    FinalizeStub
+    JS_PropertyStub,         /* addProperty */
+    JS_PropertyStub,         /* delProperty */
+    JS_PropertyStub,         /* getProperty */
+    JS_StrictPropertyStub,   /* setProperty */
+    JS_EnumerateStub,
+    JS_ResolveStub,
+    JS_ConvertStub,
+    JS_FinalizeStub
 };
 
 Class js::ArrayBufferClass = {
@@ -1831,13 +1998,13 @@ Class js::ArrayBufferClass = {
     Class::NON_NATIVE |
     JSCLASS_HAS_RESERVED_SLOTS(ARRAYBUFFER_RESERVED_SLOTS) |
     JSCLASS_HAS_CACHED_PROTO(JSProto_ArrayBuffer),
-    PropertyStub,         /* addProperty */
-    PropertyStub,         /* delProperty */
-    PropertyStub,         /* getProperty */
-    StrictPropertyStub,   /* setProperty */
-    EnumerateStub,
-    ResolveStub,
-    ConvertStub,
+    JS_PropertyStub,         /* addProperty */
+    JS_PropertyStub,         /* delProperty */
+    JS_PropertyStub,         /* getProperty */
+    JS_StrictPropertyStub,   /* setProperty */
+    JS_EnumerateStub,
+    JS_ResolveStub,
+    JS_ConvertStub,
     NULL,           /* finalize    */
     NULL,           /* reserved0   */
     NULL,           /* checkAccess */
@@ -1849,19 +2016,33 @@ Class js::ArrayBufferClass = {
     JS_NULL_CLASS_EXT,
     {
         ArrayBuffer::obj_lookupProperty,
+        ArrayBuffer::obj_lookupProperty,
         ArrayBuffer::obj_lookupElement,
+        ArrayBuffer::obj_lookupSpecial,
+        ArrayBuffer::obj_defineProperty,
         ArrayBuffer::obj_defineProperty,
         ArrayBuffer::obj_defineElement,
+        ArrayBuffer::obj_defineSpecial,
+        ArrayBuffer::obj_getGeneric,
         ArrayBuffer::obj_getProperty,
         ArrayBuffer::obj_getElement,
+        ArrayBuffer::obj_getSpecial,
+        ArrayBuffer::obj_setProperty,
         ArrayBuffer::obj_setProperty,
         ArrayBuffer::obj_setElement,
+        ArrayBuffer::obj_setSpecial,
+        ArrayBuffer::obj_getAttributes,
         ArrayBuffer::obj_getAttributes,
         ArrayBuffer::obj_getElementAttributes,
+        ArrayBuffer::obj_getSpecialAttributes,
+        ArrayBuffer::obj_setAttributes,
         ArrayBuffer::obj_setAttributes,
         ArrayBuffer::obj_setElementAttributes,
+        ArrayBuffer::obj_setSpecialAttributes,
+        ArrayBuffer::obj_deleteProperty,
         ArrayBuffer::obj_deleteProperty,
         ArrayBuffer::obj_deleteElement,
+        ArrayBuffer::obj_deleteSpecial,
         ArrayBuffer::obj_enumerate,
         ArrayBuffer::obj_typeOf,
         NULL,       /* thisObject      */
@@ -1872,7 +2053,7 @@ Class js::ArrayBufferClass = {
 JSPropertySpec ArrayBuffer::jsprops[] = {
     { "byteLength",
       -1, JSPROP_SHARED | JSPROP_PERMANENT | JSPROP_READONLY,
-      Jsvalify(ArrayBuffer::prop_getByteLength), JS_StrictPropertyStub },
+      ArrayBuffer::prop_getByteLength, JS_StrictPropertyStub },
     {0,0,0,0,0}
 };
 
@@ -1883,16 +2064,16 @@ JSPropertySpec ArrayBuffer::jsprops[] = {
 JSPropertySpec TypedArray::jsprops[] = {
     { js_length_str,
       -1, JSPROP_SHARED | JSPROP_PERMANENT | JSPROP_READONLY,
-      Jsvalify(TypedArray::prop_getLength), JS_StrictPropertyStub },
+      TypedArray::prop_getLength, JS_StrictPropertyStub },
     { "byteLength",
       -1, JSPROP_SHARED | JSPROP_PERMANENT | JSPROP_READONLY,
-      Jsvalify(TypedArray::prop_getByteLength), JS_StrictPropertyStub },
+      TypedArray::prop_getByteLength, JS_StrictPropertyStub },
     { "byteOffset",
       -1, JSPROP_SHARED | JSPROP_PERMANENT | JSPROP_READONLY,
-      Jsvalify(TypedArray::prop_getByteOffset), JS_StrictPropertyStub },
+      TypedArray::prop_getByteOffset, JS_StrictPropertyStub },
     { "buffer",
       -1, JSPROP_SHARED | JSPROP_PERMANENT | JSPROP_READONLY,
-      Jsvalify(TypedArray::prop_getBuffer), JS_StrictPropertyStub },
+      TypedArray::prop_getBuffer, JS_StrictPropertyStub },
     {0,0,0,0,0}
 };
 
@@ -1913,14 +2094,14 @@ JSFunctionSpec _typedArray::jsfuncs[] = {                                      \
     JSCLASS_HAS_RESERVED_SLOTS(TypedArray::FIELD_MAX) |                        \
     JSCLASS_HAS_PRIVATE |                                                      \
     JSCLASS_HAS_CACHED_PROTO(JSProto_##_typedArray),                           \
-    PropertyStub,         /* addProperty */                                    \
-    PropertyStub,         /* delProperty */                                    \
-    PropertyStub,         /* getProperty */                                    \
-    StrictPropertyStub,   /* setProperty */                                    \
-    EnumerateStub,                                                             \
-    ResolveStub,                                                               \
-    ConvertStub,                                                               \
-    FinalizeStub                                                               \
+    JS_PropertyStub,         /* addProperty */                                 \
+    JS_PropertyStub,         /* delProperty */                                 \
+    JS_PropertyStub,         /* getProperty */                                 \
+    JS_StrictPropertyStub,   /* setProperty */                                 \
+    JS_EnumerateStub,                                                          \
+    JS_ResolveStub,                                                            \
+    JS_ConvertStub,                                                            \
+    JS_FinalizeStub                                                            \
 }
 
 #define IMPL_TYPED_ARRAY_FAST_CLASS(_typedArray)                               \
@@ -1929,41 +2110,55 @@ JSFunctionSpec _typedArray::jsfuncs[] = {                                      \
     JSCLASS_HAS_RESERVED_SLOTS(TypedArray::FIELD_MAX) |                        \
     JSCLASS_HAS_PRIVATE |                                                      \
     Class::NON_NATIVE,                                                         \
-    PropertyStub,         /* addProperty */                                    \
-    PropertyStub,         /* delProperty */                                    \
-    PropertyStub,         /* getProperty */                                    \
-    StrictPropertyStub,   /* setProperty */                                    \
-    EnumerateStub,                                                             \
-    ResolveStub,                                                               \
-    ConvertStub,                                                               \
-    NULL,           /* finalize    */                                          \
-    NULL,           /* reserved0   */                                          \
-    NULL,           /* checkAccess */                                          \
-    NULL,           /* call        */                                          \
-    NULL,           /* construct   */                                          \
-    NULL,           /* xdrObject   */                                          \
-    NULL,           /* hasInstance */                                          \
-    _typedArray::obj_trace,           /* trace       */                                          \
+    JS_PropertyStub,         /* addProperty */                                 \
+    JS_PropertyStub,         /* delProperty */                                 \
+    JS_PropertyStub,         /* getProperty */                                 \
+    JS_StrictPropertyStub,   /* setProperty */                                 \
+    JS_EnumerateStub,                                                          \
+    JS_ResolveStub,                                                            \
+    JS_ConvertStub,                                                            \
+    NULL,                    /* finalize    */                                 \
+    NULL,                    /* reserved0   */                                 \
+    NULL,                    /* checkAccess */                                 \
+    NULL,                    /* call        */                                 \
+    NULL,                    /* construct   */                                 \
+    NULL,                    /* xdrObject   */                                 \
+    NULL,                    /* hasInstance */                                 \
+    _typedArray::obj_trace,  /* trace       */                                 \
     JS_NULL_CLASS_EXT,                                                         \
     {                                                                          \
         _typedArray::obj_lookupProperty,                                       \
+        _typedArray::obj_lookupProperty,                                       \
         _typedArray::obj_lookupElement,                                        \
+        _typedArray::obj_lookupSpecial,                                        \
+        _typedArray::obj_defineProperty,                                       \
         _typedArray::obj_defineProperty,                                       \
         _typedArray::obj_defineElement,                                        \
+        _typedArray::obj_defineSpecial,                                        \
+        _typedArray::obj_getGeneric,                                          \
         _typedArray::obj_getProperty,                                          \
         _typedArray::obj_getElement,                                           \
+        _typedArray::obj_getSpecial,                                           \
+        _typedArray::obj_setProperty,                                          \
         _typedArray::obj_setProperty,                                          \
         _typedArray::obj_setElement,                                           \
+        _typedArray::obj_setSpecial,                                           \
+        _typedArray::obj_getAttributes,                                        \
         _typedArray::obj_getAttributes,                                        \
         _typedArray::obj_getElementAttributes,                                 \
+        _typedArray::obj_getSpecialAttributes,                                 \
+        _typedArray::obj_setAttributes,                                        \
         _typedArray::obj_setAttributes,                                        \
         _typedArray::obj_setElementAttributes,                                 \
+        _typedArray::obj_setSpecialAttributes,                                 \
+        _typedArray::obj_deleteProperty,                                       \
         _typedArray::obj_deleteProperty,                                       \
         _typedArray::obj_deleteElement,                                        \
+        _typedArray::obj_deleteSpecial,                                        \
         _typedArray::obj_enumerate,                                            \
         _typedArray::obj_typeOf,                                               \
-        NULL,       /* thisObject      */                                      \
-        NULL,       /* clear           */                                      \
+        NULL,                /* thisObject  */                                 \
+        NULL,                /* clear       */                                 \
     }                                                                          \
 }
 
@@ -1986,11 +2181,11 @@ InitTypedArrayClass(JSContext *cx, GlobalObject *global)
 
     if (!ctor->defineProperty(cx, ATOM_TO_JSID(cx->runtime->atomState.BYTES_PER_ELEMENTAtom),
                               Int32Value(ArrayType::BYTES_PER_ELEMENT),
-                              PropertyStub, StrictPropertyStub,
+                              JS_PropertyStub, JS_StrictPropertyStub,
                               JSPROP_PERMANENT | JSPROP_READONLY) ||
         !proto->defineProperty(cx, ATOM_TO_JSID(cx->runtime->atomState.BYTES_PER_ELEMENTAtom),
                                Int32Value(ArrayType::BYTES_PER_ELEMENT),
-                               PropertyStub, StrictPropertyStub,
+                               JS_PropertyStub, JS_StrictPropertyStub,
                                JSPROP_PERMANENT | JSPROP_READONLY))
     {
         return NULL;

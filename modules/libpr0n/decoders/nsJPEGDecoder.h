@@ -86,17 +86,18 @@ class RasterImage;
 class nsJPEGDecoder : public Decoder
 {
 public:
-  nsJPEGDecoder();
+  nsJPEGDecoder(RasterImage *aImage, imgIDecoderObserver* aObserver);
   virtual ~nsJPEGDecoder();
 
   virtual void InitInternal();
   virtual void WriteInternal(const char* aBuffer, PRUint32 aCount);
   virtual void FinishInternal();
 
+  virtual Telemetry::ID SpeedHistogram();
   void NotifyDone();
 
 protected:
-  void OutputScanlines(PRBool* suspend);
+  void OutputScanlines(bool* suspend);
 
 public:
   PRUint8 *mImageData;
@@ -122,7 +123,7 @@ public:
   qcms_profile *mInProfile;
   qcms_transform *mTransform;
 
-  PRPackedBool mReading;
+  bool mReading;
 
   PRUint32 mCMSMode;
 };

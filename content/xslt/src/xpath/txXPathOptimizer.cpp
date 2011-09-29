@@ -39,7 +39,7 @@
 #include "txXPathOptimizer.h"
 #include "txExprResult.h"
 #include "nsIAtom.h"
-#include "txAtoms.h"
+#include "nsGkAtoms.h"
 #include "txXPathNode.h"
 #include "txExpr.h"
 #include "txIXPathContext.h"
@@ -59,7 +59,7 @@ public:
         NS_NOTREACHED("shouldn't depend on this context");
         return NS_ERROR_FAILURE;
     }
-    PRBool isStripSpaceAllowed(const txXPathNode& aNode)
+    bool isStripSpaceAllowed(const txXPathNode& aNode)
     {
         NS_NOTREACHED("shouldn't depend on this context");
         return PR_FALSE;
@@ -175,7 +175,7 @@ txXPathOptimizer::optimizeStep(Expr* aInExpr, Expr** aOutExpr)
         if (!step->getSubExprAt(0) &&
             step->getNodeTest()->getType() == txNameTest::NAME_TEST &&
             (nameTest = static_cast<txNameTest*>(step->getNodeTest()))->
-                mLocalName != txXPathAtoms::_asterix) {
+                mLocalName != nsGkAtoms::_asterix) {
 
             *aOutExpr = new txNamedAttributeStep(nameTest->mNamespace,
                                                  nameTest->mPrefix,

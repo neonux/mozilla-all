@@ -49,7 +49,28 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef __cplusplus
+
+/* The public JS engine namespace. */
+namespace JS {}
+
+/* The mozilla-shared reusable template/utility namespace. */
+namespace mozilla {}
+
+/* The private JS engine namespace. */
+namespace js {
+
+/* The private namespace is a superset of the public/shared namespaces. */
+using namespace JS;
+using namespace mozilla;
+
+}  /* namespace js */
+
+#endif  /* defined __cplusplus */
+
 JS_BEGIN_EXTERN_C
+
+#define JS_UPTRDIFF(a_, b_) (uintptr_t(a_) - uintptr_t(b_))
 
 #define JS_CRASH_UNLESS(__cond)                                                 \
     JS_BEGIN_MACRO                                                              \
@@ -484,8 +505,6 @@ JS_END_EXTERN_C
  * be used, though this is undesirable.
  */
 namespace js {
-/* Import common mfbt declarations into "js". */
-using namespace mozilla;
 
 class OffTheBooks {
 public:
@@ -823,6 +842,9 @@ class MoveRef {
 
 template<typename T>
 MoveRef<T> Move(T &t) { return MoveRef<T>(t); }
+
+template<typename T>
+MoveRef<T> Move(const T &t) { return MoveRef<T>(const_cast<T &>(t)); }
 
 } /* namespace js */
 

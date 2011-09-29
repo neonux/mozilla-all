@@ -94,7 +94,6 @@ public:
                 nsIRequest *aRequest,
                 nsIChannel *aChannel,
                 imgCacheEntry *aCacheEntry,
-                void *aCacheId,
                 void *aLoadId,
                 nsIPrincipal* aLoadingPrincipal,
                 PRInt32 aCORSMode);
@@ -103,14 +102,9 @@ public:
   nsresult AddProxy(imgRequestProxy *proxy);
 
   // aNotify==PR_FALSE still sends OnStopRequest.
-  nsresult RemoveProxy(imgRequestProxy *proxy, nsresult aStatus, PRBool aNotify);
+  nsresult RemoveProxy(imgRequestProxy *proxy, nsresult aStatus, bool aNotify);
 
   void SniffMimeType(const char *buf, PRUint32 len);
-
-  // a request is "reusable" if it has already been loaded, or it is
-  // currently being loaded on the same event queue as the new request
-  // being made...
-  PRBool IsReusable(void *aCacheId);
 
   // Cancel, but also ensure that all work done in Init() is undone. Call this
   // only when the channel has failed to open, and so calling Cancel() on it
@@ -184,11 +178,11 @@ private:
   void SetCacheEntry(imgCacheEntry *entry);
 
   // Returns whether we've got a reference to the cache entry.
-  PRBool HasCacheEntry() const;
+  bool HasCacheEntry() const;
 
   // Return true if at least one of our proxies, excluding
   // aProxyToIgnore, has an observer.  aProxyToIgnore may be null.
-  PRBool HaveProxyWithObserver(imgRequestProxy* aProxyToIgnore) const;
+  bool HaveProxyWithObserver(imgRequestProxy* aProxyToIgnore) const;
 
   // Return the priority of the underlying network request, or return
   // PRIORITY_NORMAL if it doesn't support nsISupportsPriority.
@@ -199,12 +193,12 @@ private:
   void AdjustPriority(imgRequestProxy *aProxy, PRInt32 aDelta);
 
   // Return whether we've seen some data at this point
-  PRBool HasTransferredData() const { return mGotData; }
+  bool HasTransferredData() const { return mGotData; }
 
   // Set whether this request is stored in the cache. If it isn't, regardless
   // of whether this request has a non-null mCacheEntry, this imgRequest won't
   // try to update or modify the image cache.
-  void SetIsInCache(PRBool cacheable);
+  void SetIsInCache(bool cacheable);
 
   // Update the cache entry size based on the image container
   void UpdateCacheEntrySize();
@@ -247,8 +241,6 @@ private:
 
   nsRefPtr<imgCacheEntry> mCacheEntry; /* we hold on to this to this so long as we have observers */
 
-  void *mCacheId;
-
   void *mLoadId;
 
   imgCacheValidator *mValidator;
@@ -265,11 +257,11 @@ private:
 
   // Sometimes consumers want to do things before the image is ready. Let them,
   // and apply the action when the image becomes available.
-  PRPackedBool mDecodeRequested : 1;
+  bool mDecodeRequested : 1;
 
-  PRPackedBool mIsMultiPartChannel : 1;
-  PRPackedBool mGotData : 1;
-  PRPackedBool mIsInCache : 1;
+  bool mIsMultiPartChannel : 1;
+  bool mGotData : 1;
+  bool mIsInCache : 1;
 };
 
 #endif

@@ -211,7 +211,7 @@ gfxWindowsNativeDrawing::BeginNativeDrawing()
     }
 }
 
-PRBool
+bool
 gfxWindowsNativeDrawing::IsDoublePass()
 {
     nsRefPtr<gfxASurface> surf;
@@ -234,7 +234,7 @@ gfxWindowsNativeDrawing::IsDoublePass()
     return PR_FALSE;
 }
 
-PRBool
+bool
 gfxWindowsNativeDrawing::ShouldRenderAgain()
 {
     switch (mRenderState) {

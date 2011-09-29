@@ -535,7 +535,8 @@ xpc_qsUnwrapThis(JSContext *cx,
                  T **ppThis,
                  nsISupports **pThisRef,
                  jsval *pThisVal,
-                 XPCLazyCallContext *lccx)
+                 XPCLazyCallContext *lccx,
+                 bool failureFatal = true)
 {
     XPCWrappedNative *wrapper;
     XPCWrappedNativeTearOff *tearoff;
@@ -545,7 +546,12 @@ xpc_qsUnwrapThis(JSContext *cx,
                         reinterpret_cast<void **>(ppThis), pThisRef, pThisVal,
                         lccx);
 
-    return NS_SUCCEEDED(rv) || xpc_qsThrow(cx, rv);
+    if (failureFatal)
+        return NS_SUCCEEDED(rv) || xpc_qsThrow(cx, rv);
+
+    if (NS_FAILED(rv))
+        *ppThis = nsnull;
+    return JS_TRUE;
 }
 
 inline nsISupports*
@@ -776,19 +782,19 @@ xpc_qsValueToUint64(JSContext *cx,
 void
 xpc_qsAssertContextOK(JSContext *cx);
 
-inline PRBool
+inline bool
 xpc_qsSameResult(nsISupports *result1, nsISupports *result2)
 {
     return SameCOMIdentity(result1, result2);
 }
 
-inline PRBool
+inline bool
 xpc_qsSameResult(const nsString &result1, const nsString &result2)
 {
     return result1.Equals(result2);
 }
 
-inline PRBool
+inline bool
 xpc_qsSameResult(PRInt32 result1, PRInt32 result2)
 {
     return result1 == result2;

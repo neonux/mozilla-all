@@ -204,12 +204,12 @@ struct JSFunction : public JSObject_Slots2
         return isInterpreted() ? script() : NULL;
     }
 
-    js::Native native() const {
+    JSNative native() const {
         JS_ASSERT(isNative());
         return u.n.native;
     }
 
-    js::Native maybeNative() const {
+    JSNative maybeNative() const {
         return isInterpreted() ? NULL : native();
     }
 
@@ -306,7 +306,7 @@ IsNativeFunction(const js::Value &v, JSFunction **fun)
 }
 
 static JS_ALWAYS_INLINE bool
-IsNativeFunction(const js::Value &v, Native native)
+IsNativeFunction(const js::Value &v, JSNative native)
 {
     JSFunction *fun;
     return IsFunctionObject(v, &fun) && fun->maybeNative() == native;
@@ -321,7 +321,7 @@ IsNativeFunction(const js::Value &v, Native native)
  * TODO: a per-thread shape-based cache would be faster and simpler.
  */
 static JS_ALWAYS_INLINE bool
-ClassMethodIsNative(JSContext *cx, JSObject *obj, Class *clasp, jsid methodid, Native native)
+ClassMethodIsNative(JSContext *cx, JSObject *obj, Class *clasp, jsid methodid, JSNative native)
 {
     JS_ASSERT(obj->getClass() == clasp);
 
@@ -372,6 +372,9 @@ IsConstructing(const Value *vp)
     return vp[1].isMagic();
 }
 
+inline bool
+IsConstructing(CallReceiver call);
+
 static JS_ALWAYS_INLINE bool
 IsConstructing_PossiblyWithGivenThisObject(const Value *vp, JSObject **ctorThis)
 {
@@ -398,6 +401,11 @@ GetFunctionNameBytes(JSContext *cx, JSFunction *fun, JSAutoByteString *bytes)
     return js_anonymous_str;
 }
 
+extern JSFunctionSpec function_methods[];
+
+extern JSBool
+Function(JSContext *cx, uintN argc, Value *vp);
+
 extern bool
 IsBuiltinFunctionConstructor(JSFunction *fun);
 
@@ -422,14 +430,8 @@ extern JSString *
 fun_toStringHelper(JSContext *cx, JSObject *obj, uintN indent);
 
 extern JSFunction *
-js_NewFunction(JSContext *cx, JSObject *funobj, js::Native native, uintN nargs,
+js_NewFunction(JSContext *cx, JSObject *funobj, JSNative native, uintN nargs,
                uintN flags, JSObject *parent, JSAtom *atom);
-
-extern JSObject *
-js_InitFunctionClass(JSContext *cx, JSObject *obj);
-
-extern JSObject *
-js_InitArgumentsClass(JSContext *cx, JSObject *obj);
 
 extern void
 js_FinalizeFunction(JSContext *cx, JSFunction *fun);
@@ -463,6 +465,24 @@ CloneFunctionObject(JSContext *cx, JSFunction *fun, JSObject *parent,
     return js_CloneFunctionObject(cx, fun, parent, proto);
 }
 
+inline JSObject *
+CloneFunctionObject(JSContext *cx, JSFunction *fun)
+{
+    /*
+     * Variant which makes an exact clone of fun, preserving parent and proto.
+     * Calling the above version CloneFunctionObject(cx, fun, fun->getParent())
+     * is not equivalent: API clients, including XPConnect, can reparent
+     * objects so that fun->getGlobal() != fun->getProto()->getGlobal().
+     * See ReparentWrapperIfFound.
+     */
+    JS_ASSERT(fun->getParent() && fun->getProto());
+
+    if (fun->hasSingletonType())
+        return fun;
+
+    return js_CloneFunctionObject(cx, fun, fun->getParent(), fun->getProto());
+}
+
 extern JSObject * JS_FASTCALL
 js_AllocFlatClosure(JSContext *cx, JSFunction *fun, JSObject *scopeChain);
 
@@ -470,7 +490,7 @@ extern JSObject *
 js_NewFlatClosure(JSContext *cx, JSFunction *fun, JSOp op, size_t oplen);
 
 extern JSFunction *
-js_DefineFunction(JSContext *cx, JSObject *obj, jsid id, js::Native native,
+js_DefineFunction(JSContext *cx, JSObject *obj, jsid id, JSNative native,
                   uintN nargs, uintN flags);
 
 /*

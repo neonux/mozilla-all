@@ -43,29 +43,15 @@
 #define jsinfer_h___
 
 #include "jsalloc.h"
-#include "jsarena.h"
 #include "jscell.h"
 #include "jstl.h"
 #include "jsprvtd.h"
-#include "jsvalue.h"
 #include "jshashtable.h"
 
-namespace js {
-    class CallArgs;
-    namespace analyze {
-        class ScriptAnalysis;
-    }
-    class GlobalObject;
-}
+#include "ds/LifoAlloc.h"
 
 namespace js {
 namespace types {
-
-/* Forward declarations. */
-class TypeSet;
-struct TypeCallsite;
-struct TypeObject;
-struct TypeCompartment;
 
 /* Type set entry for either a JSObject with singleton type or a non-singleton TypeObject. */
 struct TypeObjectKey {
@@ -452,7 +438,8 @@ class TypeSet
     void addCall(JSContext *cx, TypeCallsite *site);
     void addArith(JSContext *cx, TypeSet *target, TypeSet *other = NULL);
     void addTransformThis(JSContext *cx, JSScript *script, TypeSet *target);
-    void addPropagateThis(JSContext *cx, JSScript *script, jsbytecode *pc, Type type);
+    void addPropagateThis(JSContext *cx, JSScript *script, jsbytecode *pc,
+                          Type type, TypeSet *types = NULL);
     void addFilterPrimitives(JSContext *cx, TypeSet *target, FilterKind filter);
     void addSubsetBarrier(JSContext *cx, JSScript *script, jsbytecode *pc, TypeSet *target);
     void addLazyArguments(JSContext *cx, TypeSet *target);

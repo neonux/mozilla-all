@@ -97,20 +97,20 @@ resc_trace(JSTracer *trc, JSObject *obj)
 Class js::regexp_statics_class = {
     "RegExpStatics",
     JSCLASS_HAS_PRIVATE,
-    PropertyStub,         /* addProperty */
-    PropertyStub,         /* delProperty */
-    PropertyStub,         /* getProperty */
-    StrictPropertyStub,   /* setProperty */
-    EnumerateStub,
-    ResolveStub,
-    ConvertStub,
+    JS_PropertyStub,         /* addProperty */
+    JS_PropertyStub,         /* delProperty */
+    JS_PropertyStub,         /* getProperty */
+    JS_StrictPropertyStub,   /* setProperty */
+    JS_EnumerateStub,
+    JS_ResolveStub,
+    JS_ConvertStub,
     resc_finalize,
-    NULL,                 /* reserved0   */
-    NULL,                 /* checkAccess */
-    NULL,                 /* call        */
-    NULL,                 /* construct   */
-    NULL,                 /* xdrObject   */
-    NULL,                 /* hasInstance */
+    NULL,                    /* reserved0   */
+    NULL,                    /* checkAccess */
+    NULL,                    /* call        */
+    NULL,                    /* construct   */
+    NULL,                    /* xdrObject   */
+    NULL,                    /* hasInstance */
     resc_trace
 };
 
@@ -366,23 +366,23 @@ JSObject::assignInitialRegExpShape(JSContext *cx)
         code;                                                                   \
     }
 
-DEFINE_STATIC_GETTER(static_input_getter,        return res->createPendingInput(cx, Valueify(vp)))
+DEFINE_STATIC_GETTER(static_input_getter,        return res->createPendingInput(cx, vp))
 DEFINE_STATIC_GETTER(static_multiline_getter,    *vp = BOOLEAN_TO_JSVAL(res->multiline());
                                                  return true)
-DEFINE_STATIC_GETTER(static_lastMatch_getter,    return res->createLastMatch(cx, Valueify(vp)))
-DEFINE_STATIC_GETTER(static_lastParen_getter,    return res->createLastParen(cx, Valueify(vp)))
-DEFINE_STATIC_GETTER(static_leftContext_getter,  return res->createLeftContext(cx, Valueify(vp)))
-DEFINE_STATIC_GETTER(static_rightContext_getter, return res->createRightContext(cx, Valueify(vp)))
+DEFINE_STATIC_GETTER(static_lastMatch_getter,    return res->createLastMatch(cx, vp))
+DEFINE_STATIC_GETTER(static_lastParen_getter,    return res->createLastParen(cx, vp))
+DEFINE_STATIC_GETTER(static_leftContext_getter,  return res->createLeftContext(cx, vp))
+DEFINE_STATIC_GETTER(static_rightContext_getter, return res->createRightContext(cx, vp))
 
-DEFINE_STATIC_GETTER(static_paren1_getter,       return res->createParen(cx, 1, Valueify(vp)))
-DEFINE_STATIC_GETTER(static_paren2_getter,       return res->createParen(cx, 2, Valueify(vp)))
-DEFINE_STATIC_GETTER(static_paren3_getter,       return res->createParen(cx, 3, Valueify(vp)))
-DEFINE_STATIC_GETTER(static_paren4_getter,       return res->createParen(cx, 4, Valueify(vp)))
-DEFINE_STATIC_GETTER(static_paren5_getter,       return res->createParen(cx, 5, Valueify(vp)))
-DEFINE_STATIC_GETTER(static_paren6_getter,       return res->createParen(cx, 6, Valueify(vp)))
-DEFINE_STATIC_GETTER(static_paren7_getter,       return res->createParen(cx, 7, Valueify(vp)))
-DEFINE_STATIC_GETTER(static_paren8_getter,       return res->createParen(cx, 8, Valueify(vp)))
-DEFINE_STATIC_GETTER(static_paren9_getter,       return res->createParen(cx, 9, Valueify(vp)))
+DEFINE_STATIC_GETTER(static_paren1_getter,       return res->createParen(cx, 1, vp))
+DEFINE_STATIC_GETTER(static_paren2_getter,       return res->createParen(cx, 2, vp))
+DEFINE_STATIC_GETTER(static_paren3_getter,       return res->createParen(cx, 3, vp))
+DEFINE_STATIC_GETTER(static_paren4_getter,       return res->createParen(cx, 4, vp))
+DEFINE_STATIC_GETTER(static_paren5_getter,       return res->createParen(cx, 5, vp))
+DEFINE_STATIC_GETTER(static_paren6_getter,       return res->createParen(cx, 6, vp))
+DEFINE_STATIC_GETTER(static_paren7_getter,       return res->createParen(cx, 7, vp))
+DEFINE_STATIC_GETTER(static_paren8_getter,       return res->createParen(cx, 8, vp))
+DEFINE_STATIC_GETTER(static_paren9_getter,       return res->createParen(cx, 9, vp))
 
 #define DEFINE_STATIC_SETTER(name, code)                                        \
     static JSBool                                                               \
@@ -498,21 +498,21 @@ Class js::RegExpClass = {
     JSCLASS_HAS_PRIVATE |
     JSCLASS_HAS_RESERVED_SLOTS(JSObject::REGEXP_CLASS_RESERVED_SLOTS) |
     JSCLASS_HAS_CACHED_PROTO(JSProto_RegExp),
-    PropertyStub,         /* addProperty */
-    PropertyStub,         /* delProperty */
-    PropertyStub,         /* getProperty */
-    StrictPropertyStub,   /* setProperty */
-    EnumerateStub,        /* enumerate */
-    ResolveStub,
-    ConvertStub,
+    JS_PropertyStub,         /* addProperty */
+    JS_PropertyStub,         /* delProperty */
+    JS_PropertyStub,         /* getProperty */
+    JS_StrictPropertyStub,   /* setProperty */
+    JS_EnumerateStub,        /* enumerate */
+    JS_ResolveStub,
+    JS_ConvertStub,
     regexp_finalize,
-    NULL,                 /* reserved0 */
-    NULL,                 /* checkAccess */
-    NULL,                 /* call */
-    NULL,                 /* construct */
+    NULL,                    /* reserved0 */
+    NULL,                    /* checkAccess */
+    NULL,                    /* call */
+    NULL,                    /* construct */
     js_XDRRegExpObject,
-    NULL,                 /* hasInstance */
-    NULL                  /* trace */
+    NULL,                    /* hasInstance */
+    NULL                     /* trace */
 };
 
 /*
@@ -522,11 +522,6 @@ Class js::RegExpClass = {
 JSBool
 js_regexp_toString(JSContext *cx, JSObject *obj, Value *vp)
 {
-    if (!obj->isRegExp()) {
-        ReportIncompatibleMethod(cx, vp, &RegExpClass);
-        return false;
-    }
-
     RegExp *re = RegExp::extractFrom(obj);
     if (!re) {
         *vp = StringValue(cx->runtime->emptyString);
@@ -564,10 +559,14 @@ js_regexp_toString(JSContext *cx, JSObject *obj, Value *vp)
 static JSBool
 regexp_toString(JSContext *cx, uintN argc, Value *vp)
 {
-    JSObject *obj = ToObject(cx, &vp[1]);
+    CallArgs args = CallArgsFromVp(argc, vp);
+
+    bool ok;
+    JSObject *obj = NonGenericMethodGuard(cx, args, &RegExpClass, &ok);
     if (!obj)
-        return false;
-    return js_regexp_toString(cx, obj, vp);
+        return ok;
+
+    return js_regexp_toString(cx, obj, &args.rval());
 }
 
 /*
@@ -637,14 +636,13 @@ enum ExecType { RegExpExec, RegExpTest };
 static JSBool
 ExecuteRegExp(JSContext *cx, ExecType execType, uintN argc, Value *vp)
 {
+    CallArgs args = CallArgsFromVp(argc, vp);
+
     /* Step 1. */
-    JSObject *obj = ToObject(cx, &vp[1]);
+    bool ok;
+    JSObject *obj = NonGenericMethodGuard(cx, args, &RegExpClass, &ok);
     if (!obj)
-        return false;
-    if (!obj->isRegExp()) {
-        ReportIncompatibleMethod(cx, vp, &RegExpClass);
-        return false;
-    }
+        return ok;
 
     RegExp *re = RegExp::extractFrom(obj);
     if (!re)
@@ -658,7 +656,7 @@ ExecuteRegExp(JSContext *cx, ExecType execType, uintN argc, Value *vp)
     RegExpStatics *res = cx->regExpStatics();
 
     /* Step 2. */
-    JSString *input = js_ValueToString(cx, argc > 0 ?  vp[2] : UndefinedValue());    
+    JSString *input = js_ValueToString(cx, args.length() > 0 ?  args[0] : UndefinedValue());    
     if (!input)
         return false;
     
@@ -680,18 +678,18 @@ ExecuteRegExp(JSContext *cx, ExecType execType, uintN argc, Value *vp)
     /* Step 9a. */
     if (i < 0 || i > length) {
         obj->zeroRegExpLastIndex();
-        *vp = NullValue();
+        args.rval() = NullValue();
         return true;
     }
 
     /* Steps 8-21. */
     size_t lastIndexInt(i);
-    if (!re->execute(cx, res, input, &lastIndexInt, execType == RegExpTest, vp))
+    if (!re->execute(cx, res, input, &lastIndexInt, execType == RegExpTest, &args.rval()))
         return false;
 
     /* Step 11 (with sticky extension). */
-    if (re->global() || (!vp->isNull() && re->sticky())) {
-        if (vp->isNull())
+    if (re->global() || (!args.rval().isNull() && re->sticky())) {
+        if (args.rval().isNull())
             obj->zeroRegExpLastIndex();
         else
             obj->setRegExpLastIndex(lastIndexInt);
@@ -788,15 +786,14 @@ CompileRegExpAndSwap(JSContext *cx, JSObject *obj, uintN argc, Value *argv, Valu
 static JSBool
 regexp_compile(JSContext *cx, uintN argc, Value *vp)
 {
-    JSObject *obj = ToObject(cx, &vp[1]);
-    if (!obj)
-        return false;
-    if (!obj->isRegExp()) {
-        ReportIncompatibleMethod(cx, vp, &RegExpClass);
-        return false;
-    }
+    CallArgs args = CallArgsFromVp(argc, vp);
 
-    return CompileRegExpAndSwap(cx, obj, argc, JS_ARGV(cx, vp), &JS_RVAL(cx, vp));
+    bool ok;
+    JSObject *obj = NonGenericMethodGuard(cx, args, &RegExpClass, &ok);
+    if (!obj)
+        return ok;
+
+    return CompileRegExpAndSwap(cx, obj, args.length(), args.array(), &args.rval());
 }
 
 static JSBool

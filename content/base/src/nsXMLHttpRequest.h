@@ -68,6 +68,7 @@
 
 class nsILoadGroup;
 class AsyncVerifyRedirectCallbackForwarder;
+class nsIUnicodeDecoder;
 
 class nsXHREventTarget : public nsDOMEventTargetWrapperCache,
                          public nsIXMLHttpRequestEventTarget
@@ -79,14 +80,6 @@ public:
                                            nsDOMEventTargetWrapperCache)
   NS_DECL_NSIXMLHTTPREQUESTEVENTTARGET
   NS_FORWARD_NSIDOMEVENTTARGET(nsDOMEventTargetHelper::)
-
-protected:
-  nsRefPtr<nsDOMEventListenerWrapper> mOnLoadListener;
-  nsRefPtr<nsDOMEventListenerWrapper> mOnErrorListener;
-  nsRefPtr<nsDOMEventListenerWrapper> mOnAbortListener;
-  nsRefPtr<nsDOMEventListenerWrapper> mOnLoadStartListener;
-  nsRefPtr<nsDOMEventListenerWrapper> mOnProgressListener;
-  nsRefPtr<nsDOMEventListenerWrapper> mOnLoadendListener;
 };
 
 class nsXMLHttpRequestUpload : public nsXHREventTarget,
@@ -105,7 +98,7 @@ public:
   NS_FORWARD_NSIDOMEVENTTARGET(nsXHREventTarget::)
   NS_DECL_NSIXMLHTTPREQUESTUPLOAD
 
-  PRBool HasListeners()
+  bool HasListeners()
   {
     return mListenerManager && mListenerManager->HasListeners();
   }
@@ -132,8 +125,7 @@ public:
   NS_DECL_NSIXMLHTTPREQUEST
 
   // nsIJSXMLHttpRequest
-  NS_IMETHOD GetOnuploadprogress(nsIDOMEventListener** aOnuploadprogress);
-  NS_IMETHOD SetOnuploadprogress(nsIDOMEventListener* aOnuploadprogress);
+  NS_DECL_NSIJSXMLHTTPREQUEST
 
   NS_FORWARD_NSIXMLHTTPREQUESTEVENTTARGET(nsXHREventTarget::)
 
@@ -172,21 +164,26 @@ public:
                              const nsAString& aType,
                              // Whether to use nsXMLHttpProgressEvent,
                              // which implements LS Progress Event.
-                             PRBool aUseLSEventWrapper,
-                             PRBool aLengthComputable,
+                             bool aUseLSEventWrapper,
+                             bool aLengthComputable,
                              // For Progress Events
                              PRUint64 aLoaded, PRUint64 aTotal,
                              // For LS Progress Events
                              PRUint64 aPosition, PRUint64 aTotalSize);
   void DispatchProgressEvent(nsDOMEventTargetHelper* aTarget,
                              const nsAString& aType,
-                             PRBool aLengthComputable,
+                             bool aLengthComputable,
                              PRUint64 aLoaded, PRUint64 aTotal)
   {
     DispatchProgressEvent(aTarget, aType, PR_FALSE,
                           aLengthComputable, aLoaded, aTotal,
                           aLoaded, aLengthComputable ? aTotal : LL_MAXUINT);
   }
+
+  // Dispatch the "progress" event on the XHR or XHR.upload object if we've
+  // received data since the last "progress" event. Also dispatches
+  // "uploadprogress" as needed.
+  void MaybeDispatchProgressEvents(bool aFinalProgress);
 
   // This is called by the factory constructor.
   nsresult Init();
@@ -195,14 +192,14 @@ public:
 
   NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_CLASS_INHERITED(nsXMLHttpRequest,
                                            nsXHREventTarget)
-  PRBool AllowUploadProgress();
+  bool AllowUploadProgress();
   void RootResultArrayBuffer();
   
 protected:
   friend class nsMultipartProxyListener;
 
-  nsresult DetectCharset(nsACString& aCharset);
-  nsresult ConvertBodyToText(nsAString& aOutBuffer);
+  nsresult DetectCharset();
+  nsresult AppendToResponseText(const char * aBuffer, PRUint32 aBufferLen);
   static NS_METHOD StreamReaderFunc(nsIInputStream* in,
                 void* closure,
                 const char* fromRawSegment,
@@ -214,7 +211,7 @@ protected:
   void CreateResponseBlob(nsIRequest *request);
   // Change the state of the object with this. The broadcast argument
   // determines if the onreadystatechange listener should be called.
-  nsresult ChangeState(PRUint32 aState, PRBool aBroadcast = PR_TRUE);
+  nsresult ChangeState(PRUint32 aState, bool aBroadcast = true);
   already_AddRefed<nsILoadGroup> GetLoadGroup() const;
   nsIURI *GetBaseURI();
 
@@ -251,9 +248,6 @@ protected:
   nsCOMPtr<nsIChannel> mCORSPreflightChannel;
   nsTArray<nsCString> mCORSUnsafeHeaders;
 
-  nsRefPtr<nsDOMEventListenerWrapper> mOnUploadProgressListener;
-  nsRefPtr<nsDOMEventListenerWrapper> mOnReadystatechangeListener;
-
   nsCOMPtr<nsIStreamListener> mXMLParserStreamListener;
 
   // used to implement getAllResponseHeaders()
@@ -268,15 +262,30 @@ protected:
     nsCString mHeaders;
   };
 
-  // The bytes of our response body
+  // The bytes of our response body. Only used for DEFAULT, ARRAYBUFFER and
+  // BLOB responseTypes
   nsCString mResponseBody;
 
-  // The Unicode version of our response body.  This is just a cache; if the
-  // string is not void, we have a cached value.  This works because we only
-  // allow looking at this value once state is INTERACTIVE, and at that
-  // point our charset can only change due to more data coming in, which
-  // will cause us to clear the cached value anyway.
-  nsString mResponseBodyUnicode;
+  // The text version of our response body. This is incrementally decoded into
+  // as we receive network data. However for the DEFAULT responseType we
+  // lazily decode into this from mResponseBody only when .responseText is
+  // accessed.
+  // Only used for DEFAULT and TEXT responseTypes.
+  nsString mResponseText;
+  
+  // For DEFAULT responseType we use this to keep track of how far we've
+  // lazily decoded from mResponseBody to mResponseText
+  PRUint32 mResponseBodyDecodedPos;
+
+  // Decoder used for decoding into mResponseText
+  // Only used for DEFAULT, TEXT and JSON responseTypes.
+  // In cases where we've only received half a surrogate, the decoder itself
+  // carries the state to remember this. Next time we receive more data we
+  // simply feed the new data into the decoder which will handle the second
+  // part of the surrogate.
+  nsCOMPtr<nsIUnicodeDecoder> mDecoder;
+
+  nsCString mResponseCharset;
 
   enum {
     XML_HTTP_RESPONSE_TYPE_DEFAULT,
@@ -284,7 +293,9 @@ protected:
     XML_HTTP_RESPONSE_TYPE_BLOB,
     XML_HTTP_RESPONSE_TYPE_DOCUMENT,
     XML_HTTP_RESPONSE_TYPE_TEXT,
-    XML_HTTP_RESPONSE_TYPE_JSON
+    XML_HTTP_RESPONSE_TYPE_JSON,
+    XML_HTTP_RESPONSE_TYPE_CHUNKED_TEXT,
+    XML_HTTP_RESPONSE_TYPE_CHUNKED_ARRAYBUFFER
   } mResponseType;
 
   nsCOMPtr<nsIDOMBlob> mResponseBlob;
@@ -313,25 +324,31 @@ protected:
   nsRefPtr<nsXMLHttpRequestUpload> mUpload;
   PRUint64 mUploadTransferred;
   PRUint64 mUploadTotal;
-  PRPackedBool mUploadComplete;
+  bool mUploadLengthComputable;
+  bool mUploadComplete;
+  bool mProgressSinceLastProgressEvent;
   PRUint64 mUploadProgress; // For legacy
   PRUint64 mUploadProgressMax; // For legacy
 
-  PRPackedBool mErrorLoad;
+  bool mErrorLoad;
 
-  PRPackedBool mTimerIsActive;
-  PRPackedBool mProgressEventWasDelayed;
-  PRPackedBool mLoadLengthComputable;
+  bool mTimerIsActive;
+  bool mProgressEventWasDelayed;
+  bool mLoadLengthComputable;
   PRUint64 mLoadTotal; // 0 if not known.
+  PRUint64 mLoadTransferred;
   nsCOMPtr<nsITimer> mProgressNotifier;
 
-  PRPackedBool mFirstStartRequestSeen;
+  bool mFirstStartRequestSeen;
+  bool mInLoadProgressEvent;
   
   nsCOMPtr<nsIAsyncVerifyRedirectCallback> mRedirectCallback;
   nsCOMPtr<nsIChannel> mNewRedirectChannel;
   
   jsval mResultJSON;
   JSObject* mResultArrayBuffer;
+
+  void ResetResponse();
 
   struct RequestHeader
   {
@@ -369,7 +386,7 @@ public:
   {
     return mInner->SetTarget(aTarget);
   }
-  NS_IMETHOD_(PRBool) IsDispatchStopped()
+  NS_IMETHOD_(bool) IsDispatchStopped()
   {
     return mInner->IsDispatchStopped();
   }
@@ -377,16 +394,16 @@ public:
   {
     return mInner->GetInternalNSEvent();
   }
-  NS_IMETHOD SetTrusted(PRBool aTrusted)
+  NS_IMETHOD SetTrusted(bool aTrusted)
   {
     return mInner->SetTrusted(aTrusted);
   }
   virtual void Serialize(IPC::Message* aMsg,
-                         PRBool aSerializeInterfaceType)
+                         bool aSerializeInterfaceType)
   {
     mInner->Serialize(aMsg, aSerializeInterfaceType);
   }
-  virtual PRBool Deserialize(const IPC::Message* aMsg, void** aIter)
+  virtual bool Deserialize(const IPC::Message* aMsg, void** aIter)
   {
     return mInner->Deserialize(aMsg, aIter);
   }

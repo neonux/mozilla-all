@@ -134,6 +134,7 @@ nsEventListenerManager::nsEventListenerManager(nsISupports* aTarget) :
   mMayHaveSystemGroupListeners(PR_FALSE),
   mMayHaveAudioAvailableEventListener(PR_FALSE),
   mMayHaveTouchEventListener(PR_FALSE),
+  mMayHaveMouseEnterLeaveEventListener(PR_FALSE),
   mNoListenerForEvent(0),
   mTarget(aTarget)
 {
@@ -293,6 +294,19 @@ nsEventListenerManager::AddEventListener(nsIDOMEventListener *aListener,
     nsPIDOMWindow* window = GetInnerWindowForTarget();
     if (window)
       window->SetHasTouchEventListeners();
+  } else if (aTypeAtom == nsGkAtoms::onmouseenter ||
+             aTypeAtom == nsGkAtoms::onmouseleave) {
+    mMayHaveMouseEnterLeaveEventListener = PR_TRUE;
+    nsPIDOMWindow* window = GetInnerWindowForTarget();
+    if (window) {
+#ifdef DEBUG
+      nsCOMPtr<nsIDocument> d = do_QueryInterface(window->GetExtantDocument());
+      NS_WARN_IF_FALSE(!nsContentUtils::IsChromeDoc(d),
+                       "Please do not use mouseenter/leave events in chrome. "
+                       "They are slower than mouseover/out!");
+#endif
+      window->SetHasMouseEnterLeaveEventListeners();
+    }
   }
 }
 
@@ -324,7 +338,7 @@ nsEventListenerManager::RemoveEventListener(nsIDOMEventListener *aListener,
   }
 }
 
-static inline PRBool
+static inline bool
 ListenerCanHandle(nsListenerStruct* aLs, nsEvent* aEvent)
 {
   // This is slightly different from EVENT_TYPE_EQUALS in that it returns
@@ -378,7 +392,7 @@ nsEventListenerManager::SetJSEventListener(nsIScriptContext *aContext,
                                            void *aScopeObject,
                                            nsIAtom* aName,
                                            JSObject *aHandler,
-                                           PRBool aPermitUntrustedEvents,
+                                           bool aPermitUntrustedEvents,
                                            nsListenerStruct **aListenerStruct)
 {
   nsresult rv = NS_OK;
@@ -420,8 +434,8 @@ nsresult
 nsEventListenerManager::AddScriptEventListener(nsIAtom *aName,
                                                const nsAString& aBody,
                                                PRUint32 aLanguage,
-                                               PRBool aDeferCompilation,
-                                               PRBool aPermitUntrustedEvents)
+                                               bool aDeferCompilation,
+                                               bool aPermitUntrustedEvents)
 {
   NS_PRECONDITION(aLanguage != nsIProgrammingLanguage::UNKNOWN,
                   "Must know the language for the script event listener");
@@ -481,7 +495,7 @@ nsEventListenerManager::AddScriptEventListener(nsIAtom *aName,
     NS_ENSURE_SUCCESS(rv, rv);
 
     if (csp) {
-      PRBool inlineOK;
+      bool inlineOK;
       rv = csp->GetAllowsInlineScript(&inlineOK);
       NS_ENSURE_SUCCESS(rv, rv);
 
@@ -549,7 +563,7 @@ nsEventListenerManager::RemoveScriptEventListener(nsIAtom* aName)
 
 nsresult
 nsEventListenerManager::CompileEventHandlerInternal(nsListenerStruct *aListenerStruct,
-                                                    PRBool aNeedsCxPush,
+                                                    bool aNeedsCxPush,
                                                     const nsAString* aBody)
 {
   NS_PRECONDITION(aListenerStruct->GetJSListener(),
@@ -644,8 +658,7 @@ nsEventListenerManager::CompileEventHandlerInternal(nsListenerStruct *aListenerS
     }
 
     nsCxPusher pusher;
-    if (aNeedsCxPush &&
-        !pusher.Push((JSContext*)context->GetNativeContext())) {
+    if (aNeedsCxPush && !pusher.Push(context->GetNativeContext())) {
       return NS_ERROR_FAILURE;
     }
 
@@ -747,7 +760,7 @@ nsEventListenerManager::HandleEventInternal(nsPresContext* aPresContext,
 
   nsAutoTObserverArray<nsListenerStruct, 2>::EndLimitedIterator iter(mListeners);
   nsAutoPopupStatePusher popupStatePusher(nsDOMEvent::GetEventPopupControlState(aEvent));
-  PRBool hasListener = PR_FALSE;
+  bool hasListener = false;
   while (iter.HasMore()) {
     nsListenerStruct* ls = &iter.GetNext();
     // Check that the phase is same in event and event listener.
@@ -807,8 +820,8 @@ nsEventListenerManager::Disconnect()
 void
 nsEventListenerManager::AddEventListener(const nsAString& aType,
                                          nsIDOMEventListener* aListener,
-                                         PRBool aUseCapture,
-                                         PRBool aWantsUntrusted)
+                                         bool aUseCapture,
+                                         bool aWantsUntrusted)
 {
   PRInt32 flags = aUseCapture ? NS_EVENT_FLAG_CAPTURE : NS_EVENT_FLAG_BUBBLE;
 
@@ -822,14 +835,14 @@ nsEventListenerManager::AddEventListener(const nsAString& aType,
 void
 nsEventListenerManager::RemoveEventListener(const nsAString& aType, 
                                             nsIDOMEventListener* aListener, 
-                                            PRBool aUseCapture)
+                                            bool aUseCapture)
 {
   PRInt32 flags = aUseCapture ? NS_EVENT_FLAG_CAPTURE : NS_EVENT_FLAG_BUBBLE;
   
   RemoveEventListenerByType(aListener, aType, flags);
 }
 
-PRBool
+bool
 nsEventListenerManager::HasMutationListeners()
 {
   if (mMayHaveMutationListeners) {
@@ -866,7 +879,7 @@ nsEventListenerManager::MutationListenerBits()
   return bits;
 }
 
-PRBool
+bool
 nsEventListenerManager::HasListenersFor(const nsAString& aEventName)
 {
   nsCOMPtr<nsIAtom> atom = do_GetAtom(NS_LITERAL_STRING("on") + aEventName);
@@ -881,7 +894,7 @@ nsEventListenerManager::HasListenersFor(const nsAString& aEventName)
   return PR_FALSE;
 }
 
-PRBool
+bool
 nsEventListenerManager::HasListeners()
 {
   return !mListeners.IsEmpty();
@@ -896,9 +909,9 @@ nsEventListenerManager::GetListenerInfo(nsCOMArray<nsIEventListenerInfo>* aList)
   PRUint32 count = mListeners.Length();
   for (PRUint32 i = 0; i < count; ++i) {
     const nsListenerStruct& ls = mListeners.ElementAt(i);
-    PRBool capturing = !!(ls.mFlags & NS_EVENT_FLAG_CAPTURE);
-    PRBool systemGroup = !!(ls.mFlags & NS_EVENT_FLAG_SYSTEM_EVENT);
-    PRBool allowsUntrusted = !!(ls.mFlags & NS_PRIV_EVENT_UNTRUSTED_PERMITTED);
+    bool capturing = !!(ls.mFlags & NS_EVENT_FLAG_CAPTURE);
+    bool systemGroup = !!(ls.mFlags & NS_EVENT_FLAG_SYSTEM_EVENT);
+    bool allowsUntrusted = !!(ls.mFlags & NS_PRIV_EVENT_UNTRUSTED_PERMITTED);
     // If this is a script handler and we haven't yet
     // compiled the event handler itself go ahead and compile it
     if ((ls.mFlags & NS_PRIV_EVENT_FLAG_SCRIPT) && ls.mHandlerIsString) {
@@ -916,7 +929,7 @@ nsEventListenerManager::GetListenerInfo(nsCOMArray<nsIEventListenerInfo>* aList)
   return NS_OK;
 }
 
-PRBool
+bool
 nsEventListenerManager::HasUnloadListeners()
 {
   PRUint32 count = mListeners.Length();

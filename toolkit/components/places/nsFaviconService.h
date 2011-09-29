@@ -85,6 +85,10 @@ public:
   // called by nsNavHistory::Init
   static nsresult InitTables(mozIStorageConnection* aDBConn);
 
+  static nsFaviconService* GetFaviconServiceIfAvailable() {
+    return gFaviconService;
+  }
+
   /**
    * Returns a cached pointer to the favicon service for consumers in the
    * places directory.
@@ -103,7 +107,7 @@ public:
   // internal version called by history when done lazily
   nsresult DoSetAndLoadFaviconForPage(nsIURI* aPageURI,
                                       nsIURI* aFaviconURI,
-                                      PRBool aForceReload,
+                                      bool aForceReload,
                                       nsIFaviconDataCallback* aCallback);
 
   // addition to API for strings to prevent excessive parsing of URIs
@@ -210,7 +214,7 @@ private:
   nsDataHashtable<nsCStringHashKey, PRUint32> mFailedFavicons;
 
   nsresult SetFaviconUrlForPageInternal(nsIURI* aURI, nsIURI* aFavicon,
-                                        PRBool* aHasData);
+                                        bool* aHasData);
 
   friend class FaviconLoadListener;
 

@@ -105,10 +105,10 @@ class AutoPtrComparator
   typedef T* B;
 
 public:
-  PRBool Equals(const A& a, const B& b) const {
+  bool Equals(const A& a, const B& b) const {
     return a && b ? *a == *b : !a && !b ? true : false;
   }
-  PRBool LessThan(const A& a, const B& b) const {
+  bool LessThan(const A& a, const B& b) const {
     return a && b ? *a < *b : b ? true : false;
   }
 };
@@ -241,7 +241,7 @@ struct WorkerStructuredCloneCallbacks
         {
           // File should not be mutable.
           nsCOMPtr<nsIMutable> mutableFile = do_QueryInterface(file);
-          PRBool isMutable;
+          bool isMutable;
           NS_ASSERTION(NS_SUCCEEDED(mutableFile->GetMutable(&isMutable)) &&
                        !isMutable,
                        "Only immutable file should be passed to worker");
@@ -266,7 +266,7 @@ struct WorkerStructuredCloneCallbacks
         {
           // Blob should not be mutable.
           nsCOMPtr<nsIMutable> mutableBlob = do_QueryInterface(blob);
-          PRBool isMutable;
+          bool isMutable;
           NS_ASSERTION(NS_SUCCEEDED(mutableBlob->GetMutable(&isMutable)) &&
                        !isMutable,
                        "Only immutable blob should be passed to worker");
@@ -357,7 +357,7 @@ struct MainThreadWorkerStructuredCloneCallbacks
         {
           // File should not be mutable.
           nsCOMPtr<nsIMutable> mutableFile = do_QueryInterface(file);
-          PRBool isMutable;
+          bool isMutable;
           NS_ASSERTION(NS_SUCCEEDED(mutableFile->GetMutable(&isMutable)) &&
                        !isMutable,
                        "Only immutable file should be passed to worker");
@@ -390,7 +390,7 @@ struct MainThreadWorkerStructuredCloneCallbacks
         {
           // Blob should not be mutable.
           nsCOMPtr<nsIMutable> mutableBlob = do_QueryInterface(blob);
-          PRBool isMutable;
+          bool isMutable;
           NS_ASSERTION(NS_SUCCEEDED(mutableBlob->GetMutable(&isMutable)) &&
                        !isMutable,
                        "Only immutable blob should be passed to worker");
@@ -1217,7 +1217,7 @@ public:
   }
 
   NS_IMETHOD
-  IsOnCurrentThread(PRBool* aIsOnCurrentThread)
+  IsOnCurrentThread(bool* aIsOnCurrentThread)
   {
     *aIsOnCurrentThread = false;
     return NS_OK;
@@ -2176,8 +2176,7 @@ WorkerPrivateParent<Derived>::ParentJSContext() const
       return RuntimeService::AutoSafeJSContext::GetSafeContext();
     }
 
-    NS_ASSERTION(mParentJSContext ==
-                 static_cast<JSContext*>(mScriptContext->GetNativeContext()),
+    NS_ASSERTION(mParentJSContext == mScriptContext->GetNativeContext(),
                  "Native context has changed!");
   }
 
@@ -2241,7 +2240,7 @@ WorkerPrivate::Create(JSContext* aCx, JSObject* aObj, WorkerPrivate* aParent,
     nsIScriptSecurityManager* ssm = nsContentUtils::GetSecurityManager();
     NS_ASSERTION(ssm, "This should never be null!");
 
-    PRBool isChrome;
+    bool isChrome;
     if (NS_FAILED(ssm->IsCapabilityEnabled("UniversalXPConnect", &isChrome))) {
       NS_WARNING("IsCapabilityEnabled failed!");
       isChrome = PR_FALSE;
@@ -2289,8 +2288,7 @@ WorkerPrivate::Create(JSContext* aCx, JSObject* aObj, WorkerPrivate* aParent,
         return nsnull;
       }
 
-      parentContext =
-        static_cast<JSContext*>(scriptContext->GetNativeContext());
+      parentContext = scriptContext->GetNativeContext();
 
       // If we're called from a window then we can dig out the principal and URI
       // from the document.
@@ -2318,7 +2316,7 @@ WorkerPrivate::Create(JSContext* aCx, JSObject* aObj, WorkerPrivate* aParent,
 
         NS_NAMED_LITERAL_CSTRING(file, "file");
 
-        PRBool isFile;
+        bool isFile;
         if (NS_FAILED(codebase->SchemeIs(file.get(), &isFile))) {
           JS_ReportError(aCx, "Could not determine if codebase is file!");
           return nsnull;
@@ -3571,7 +3569,7 @@ void
 WorkerPrivate::AssertIsOnWorkerThread() const
 {
   if (mThread) {
-    PRBool current;
+    bool current;
     if (NS_FAILED(mThread->IsOnCurrentThread(&current)) || !current) {
       NS_ERROR("Wrong thread!");
     }

@@ -133,30 +133,46 @@ function DBConn() {
   return gDBConn.connectionReady ? gDBConn : null;
 };
 
+/**
+ * Reads data from the provided inputstream.
+ *
+ * @return an array of bytes.
+ */ 
+function readInputStreamData(aStream) {
+  let bistream = Cc["@mozilla.org/binaryinputstream;1"].
+                 createInstance(Ci.nsIBinaryInputStream);
+  try {
+    bistream.setInputStream(aStream);
+    let expectedData = [];
+    let avail;
+    while (avail = bistream.available()) {
+      expectedData = expectedData.concat(bistream.readByteArray(avail));
+    }
+    return expectedData;
+  } finally {
+    bistream.close();
+  }
+}
 
 /**
- * Reads the data from the specified nsIFile, and returns an array of bytes.
+ * Reads the data from the specified nsIFile.
  *
  * @param aFile
  *        The nsIFile to read from.
+ * @return an array of bytes.
  */
 function readFileData(aFile) {
   let inputStream = Cc["@mozilla.org/network/file-input-stream;1"].
                     createInstance(Ci.nsIFileInputStream);
   // init the stream as RD_ONLY, -1 == default permissions.
   inputStream.init(aFile, 0x01, -1, null);
-  let size = inputStream.available();
 
-  // use a binary input stream to grab the bytes.
-  let bis = Cc["@mozilla.org/binaryinputstream;1"].
-            createInstance(Ci.nsIBinaryInputStream);
-  bis.setInputStream(inputStream);
-
-  let bytes = bis.readByteArray(size);
-
-  if (size != bytes.length)
-      throw "Didn't read expected number of bytes";
-
+  // Check the returned size versus the expected size.
+  let size  = inputStream.available();
+  let bytes = readInputStreamData(inputStream);
+  if (size != bytes.length) {
+    throw "Didn't read expected number of bytes";
+  }
   return bytes;
 }
 
@@ -601,8 +617,12 @@ function waitForAsyncUpdates(aCallback, aScope, aArguments)
   let scope = aScope || this;
   let args = aArguments || [];
   let db = DBConn();
-  db.createAsyncStatement("BEGIN EXCLUSIVE").executeAsync();
-  db.createAsyncStatement("COMMIT").executeAsync({
+  let begin = db.createAsyncStatement("BEGIN EXCLUSIVE");
+  begin.executeAsync();
+  begin.finalize();
+
+  let commit = db.createAsyncStatement("COMMIT");
+  commit.executeAsync({
     handleResult: function() {},
     handleError: function() {},
     handleCompletion: function(aReason)
@@ -610,6 +630,7 @@ function waitForAsyncUpdates(aCallback, aScope, aArguments)
       aCallback.apply(scope, args);
     }
   });
+  commit.finalize();
 }
 
 /**

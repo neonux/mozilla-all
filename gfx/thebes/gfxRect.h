@@ -105,7 +105,7 @@ struct THEBES_API gfxRect :
      *   |round(coord) - coord| <= |aEpsilon|
      * for x,y,width,height.
      */
-    PRBool WithinEpsilonOfIntegerPixels(gfxFloat aEpsilon) const;
+    bool WithinEpsilonOfIntegerPixels(gfxFloat aEpsilon) const;
 
     gfxPoint AtCorner(mozilla::css::Corner corner) const {
         switch (corner) {

@@ -74,7 +74,7 @@ static NS_DEFINE_IID(kRangeCID, NS_RANGE_CID);
 // nsCoreUtils
 ////////////////////////////////////////////////////////////////////////////////
 
-PRBool
+bool
 nsCoreUtils::HasClickListener(nsIContent *aContent)
 {
   NS_ENSURE_TRUE(aContent, PR_FALSE);
@@ -150,7 +150,7 @@ nsCoreUtils::DispatchClickEvent(nsITreeBoxObject *aTreeBoxObj,
                      tcContent, tcFrame, presShell, rootWidget);
 }
 
-PRBool
+bool
 nsCoreUtils::DispatchMouseEvent(PRUint32 aEventType,
                                 nsIPresShell *aPresShell,
                                 nsIContent *aContent)
@@ -204,7 +204,7 @@ nsCoreUtils::GetAccessKeyFor(nsIContent *aContent)
   // Accesskeys are registered by @accesskey attribute only. At first check
   // whether it is presented on the given element to avoid the slow
   // nsEventStateManager::GetRegisteredAccessKey() method.
-  if (!aContent->HasAttr(kNameSpaceID_None, nsAccessibilityAtoms::accesskey))
+  if (!aContent->HasAttr(kNameSpaceID_None, nsGkAtoms::accesskey))
     return 0;
 
   nsCOMPtr<nsIDocument> doc = aContent->GetOwnerDoc();
@@ -280,7 +280,7 @@ nsCoreUtils::GetRoleContent(nsINode *aNode)
   return content;
 }
 
-PRBool
+bool
 nsCoreUtils::IsAncestorOf(nsINode *aPossibleAncestorNode,
                           nsINode *aPossibleDescendantNode,
                           nsINode *aRootNode)
@@ -451,7 +451,7 @@ nsCoreUtils::GetDocShellTreeItemFor(nsINode *aNode)
   return docShellTreeItem;
 }
 
-PRBool
+bool
 nsCoreUtils::IsRootDocument(nsIDocument *aDocument)
 {
   nsCOMPtr<nsISupports> container = aDocument->GetContainer();
@@ -465,7 +465,7 @@ nsCoreUtils::IsRootDocument(nsIDocument *aDocument)
   return !parentTreeItem;
 }
 
-PRBool
+bool
 nsCoreUtils::IsContentDocument(nsIDocument *aDocument)
 {
   nsCOMPtr<nsISupports> container = aDocument->GetContainer();
@@ -498,11 +498,11 @@ nsCoreUtils::IsTabDocument(nsIDocument* aDocumentNode)
   return parentTreeItem == rootTreeItem;
 }
 
-PRBool
+bool
 nsCoreUtils::IsErrorPage(nsIDocument *aDocument)
 {
   nsIURI *uri = aDocument->GetDocumentURI();
-  PRBool isAboutScheme = PR_FALSE;
+  bool isAboutScheme = false;
   uri->SchemeIs("about", &isAboutScheme);
   if (!isAboutScheme)
     return PR_FALSE;
@@ -516,7 +516,7 @@ nsCoreUtils::IsErrorPage(nsIDocument *aDocument)
   return StringBeginsWith(path, neterror) || StringBeginsWith(path, certerror);
 }
 
-PRBool
+bool
 nsCoreUtils::IsCorrectFrameType(nsIFrame *aFrame, nsIAtom *aAtom)
 {
   NS_ASSERTION(aFrame != nsnull,
@@ -547,14 +547,14 @@ nsCoreUtils::GetDOMNodeForContainer(nsIDocShellTreeItem *aContainer)
   return node;
 }
 
-PRBool
+bool
 nsCoreUtils::GetID(nsIContent *aContent, nsAString& aID)
 {
   nsIAtom *idAttribute = aContent->GetIDAttributeName();
   return idAttribute ? aContent->GetAttr(kNameSpaceID_None, idAttribute, aID) : PR_FALSE;
 }
 
-PRBool
+bool
 nsCoreUtils::GetUIntAttr(nsIContent *aContent, nsIAtom *aAttr, PRInt32 *aUInt)
 {
   nsAutoString value;
@@ -571,15 +571,15 @@ nsCoreUtils::GetUIntAttr(nsIContent *aContent, nsIAtom *aAttr, PRInt32 *aUInt)
   return PR_FALSE;
 }
 
-PRBool
+bool
 nsCoreUtils::IsXLink(nsIContent *aContent)
 {
   if (!aContent)
     return PR_FALSE;
 
-  return aContent->AttrValueIs(kNameSpaceID_XLink, nsAccessibilityAtoms::type,
-                               nsAccessibilityAtoms::simple, eCaseMatters) &&
-         aContent->HasAttr(kNameSpaceID_XLink, nsAccessibilityAtoms::href);
+  return aContent->AttrValueIs(kNameSpaceID_XLink, nsGkAtoms::type,
+                               nsGkAtoms::simple, eCaseMatters) &&
+    aContent->HasAttr(kNameSpaceID_XLink, nsGkAtoms::href);
 }
 
 void
@@ -590,8 +590,7 @@ nsCoreUtils::GetLanguageFor(nsIContent *aContent, nsIContent *aRootContent,
 
   nsIContent *walkUp = aContent;
   while (walkUp && walkUp != aRootContent &&
-         !walkUp->GetAttr(kNameSpaceID_None,
-                          nsAccessibilityAtoms::lang, aLanguage))
+         !walkUp->GetAttr(kNameSpaceID_None, nsGkAtoms::lang, aLanguage))
     walkUp = walkUp->GetParent();
 }
 
@@ -638,7 +637,7 @@ nsCoreUtils::GetTreeBoxObject(nsIContent *aContent)
   // Find DOMNode's parents recursively until reach the <tree> tag
   nsIContent* currentContent = aContent;
   while (currentContent) {
-    if (currentContent->NodeInfo()->Equals(nsAccessibilityAtoms::tree,
+    if (currentContent->NodeInfo()->Equals(nsGkAtoms::tree,
                                            kNameSpaceID_XUL)) {
       // We will get the nsITreeBoxObject from the tree node
       nsCOMPtr<nsIDOMXULElement> xulElement(do_QueryInterface(currentContent));
@@ -760,14 +759,14 @@ nsCoreUtils::GetPreviousSensibleColumn(nsITreeColumn *aColumn)
   return prevColumn.forget();
 }
 
-PRBool
+bool
 nsCoreUtils::IsColumnHidden(nsITreeColumn *aColumn)
 {
   nsCOMPtr<nsIDOMElement> element;
   aColumn->GetElement(getter_AddRefs(element));
   nsCOMPtr<nsIContent> content = do_QueryInterface(element);
-  return content->AttrValueIs(kNameSpaceID_None, nsAccessibilityAtoms::hidden,
-                              nsAccessibilityAtoms::_true, eCaseMatters);
+  return content->AttrValueIs(kNameSpaceID_None, nsGkAtoms::hidden,
+                              nsGkAtoms::_true, eCaseMatters);
 }
 
 bool
@@ -821,7 +820,7 @@ nsAccessibleDOMStringList::GetLength(PRUint32 *aLength)
 }
 
 NS_IMETHODIMP
-nsAccessibleDOMStringList::Contains(const nsAString& aString, PRBool *aResult)
+nsAccessibleDOMStringList::Contains(const nsAString& aString, bool *aResult)
 {
   *aResult = mNames.Contains(aString);
 

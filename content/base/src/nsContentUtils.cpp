@@ -1,7 +1,6 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * vim: set ts=2 sw=2 et tw=78:
- *
- * ***** BEGIN LICENSE BLOCK *****
+/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
+/* vim: set ts=2 sw=2 et tw=78: */
+/* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
  * The contents of this file are subject to the Mozilla Public License Version
@@ -234,7 +233,7 @@ nsCOMArray<nsIAtom>* nsContentUtils::sUserDefinedEvents = nsnull;
 nsIStringBundleService *nsContentUtils::sStringBundleService;
 nsIStringBundle *nsContentUtils::sStringBundles[PropertiesFile_COUNT];
 nsIContentPolicy *nsContentUtils::sContentPolicyService;
-PRBool nsContentUtils::sTriedToGetContentPolicy = PR_FALSE;
+bool nsContentUtils::sTriedToGetContentPolicy = false;
 nsILineBreaker *nsContentUtils::sLineBreaker;
 nsIWordBreaker *nsContentUtils::sWordBreaker;
 nsIUGenCategory *nsContentUtils::sGenCat;
@@ -253,8 +252,8 @@ PRUint32 nsContentUtils::sRunnersCountAtFirstBlocker = 0;
 PRUint32 nsContentUtils::sScriptBlockerCountWhereRunnersPrevented = 0;
 nsIInterfaceRequestor* nsContentUtils::sSameOriginChecker = nsnull;
 
-PRBool nsContentUtils::sIsHandlingKeyBoardEvent = PR_FALSE;
-PRBool nsContentUtils::sAllowXULXBL_for_file = PR_FALSE;
+bool nsContentUtils::sIsHandlingKeyBoardEvent = false;
+bool nsContentUtils::sAllowXULXBL_for_file = false;
 
 nsString* nsContentUtils::sShiftText = nsnull;
 nsString* nsContentUtils::sControlText = nsnull;
@@ -262,10 +261,10 @@ nsString* nsContentUtils::sMetaText = nsnull;
 nsString* nsContentUtils::sAltText = nsnull;
 nsString* nsContentUtils::sModifierSeparator = nsnull;
 
-PRBool nsContentUtils::sInitialized = PR_FALSE;
-PRBool nsContentUtils::sIsFullScreenApiEnabled = PR_FALSE;
-PRBool nsContentUtils::sTrustedFullScreenOnly = PR_TRUE;
-PRBool nsContentUtils::sFullScreenKeyInputRestricted = PR_TRUE;
+bool nsContentUtils::sInitialized = false;
+bool nsContentUtils::sIsFullScreenApiEnabled = false;
+bool nsContentUtils::sTrustedFullScreenOnly = true;
+bool nsContentUtils::sFullScreenKeyInputRestricted = true;
 
 PRUint32 nsContentUtils::sHandlingInputTimeout = 1000;
 
@@ -295,7 +294,7 @@ public:
   nsRefPtr<nsEventListenerManager> mListenerManager;
 };
 
-static PRBool
+static bool
 EventListenerManagerHashInitEntry(PLDHashTable *table, PLDHashEntryHdr *entry,
                                   const void *key)
 {
@@ -510,7 +509,7 @@ nsContentUtils::InitImgLoader()
   }
 }
 
-PRBool
+bool
 nsContentUtils::InitializeEventTable() {
   NS_ASSERTION(!sAtomEventTable, "EventTable already initialized!");
   NS_ASSERTION(!sStringEventTable, "EventTable already initialized!");
@@ -561,7 +560,7 @@ nsContentUtils::InitializeEventTable() {
 void
 nsContentUtils::InitializeTouchEventTable()
 {
-  static PRBool sEventTableInitialized = PR_FALSE;
+  static bool sEventTableInitialized = false;
   if (!sEventTableInitialized && sAtomEventTable && sStringEventTable) {
     sEventTableInitialized = PR_TRUE;
     static const EventNameMapping touchEventArray[] = {
@@ -588,7 +587,7 @@ nsContentUtils::InitializeTouchEventTable()
   }
 }
 
-static PRBool
+static bool
 Is8bit(const nsAString& aString)
 {
   static const PRUnichar EIGHT_BIT = PRUnichar(~0x00FF);
@@ -768,7 +767,7 @@ class CopyNormalizeNewlines
 
   public:
     CopyNormalizeNewlines(OutputIterator* aDestination,
-                          PRBool aLastCharCR=PR_FALSE) :
+                          bool aLastCharCR=false) :
       mLastCharCR(aLastCharCR),
       mDestination(aDestination),
       mWritten(0)
@@ -778,7 +777,7 @@ class CopyNormalizeNewlines
       return mWritten;
     }
 
-    PRBool IsLastCharCR() {
+    bool IsLastCharCR() {
       return mLastCharCR;
     }
 
@@ -821,7 +820,7 @@ class CopyNormalizeNewlines
     }
 
   private:
-    PRBool mLastCharCR;
+    bool mLastCharCR;
     OutputIterator* mDestination;
     PRUint32 mWritten;
 };
@@ -832,7 +831,7 @@ nsContentUtils::CopyNewlineNormalizedUnicodeTo(const nsAString& aSource,
                                                PRUint32 aSrcOffset,
                                                PRUnichar* aDest,
                                                PRUint32 aLength,
-                                               PRBool& aLastCharCR)
+                                               bool& aLastCharCR)
 {
   typedef NormalizeNewlinesCharTraits<PRUnichar*> sink_traits;
 
@@ -871,14 +870,14 @@ nsContentUtils::CopyNewlineNormalizedUnicodeTo(nsReadingIterator<PRUnichar>& aSr
 DEFINE_X_CCMAP(gPuncCharsCCMapExt, const);
 
 // static
-PRBool
+bool
 nsContentUtils::IsPunctuationMark(PRUint32 aChar)
 {
   return CCMAP_HAS_CHAR_EXT(gPuncCharsCCMapExt, aChar);
 }
 
 // static
-PRBool
+bool
 nsContentUtils::IsPunctuationMarkAt(const nsTextFragment* aFrag, PRUint32 aOffset)
 {
   PRUnichar h = aFrag->CharAt(aOffset);
@@ -895,7 +894,7 @@ nsContentUtils::IsPunctuationMarkAt(const nsTextFragment* aFrag, PRUint32 aOffse
 }
 
 // static
-PRBool nsContentUtils::IsAlphanumeric(PRUint32 aChar)
+bool nsContentUtils::IsAlphanumeric(PRUint32 aChar)
 {
   nsIUGenCategory::nsUGenCategory cat = sGenCat->Get(aChar);
 
@@ -903,7 +902,7 @@ PRBool nsContentUtils::IsAlphanumeric(PRUint32 aChar)
 }
  
 // static
-PRBool nsContentUtils::IsAlphanumericAt(const nsTextFragment* aFrag, PRUint32 aOffset)
+bool nsContentUtils::IsAlphanumericAt(const nsTextFragment* aFrag, PRUint32 aOffset)
 {
   PRUnichar h = aFrag->CharAt(aOffset);
   if (!IS_SURROGATE(h)) {
@@ -919,7 +918,7 @@ PRBool nsContentUtils::IsAlphanumericAt(const nsTextFragment* aFrag, PRUint32 aO
 }
 
 /* static */
-PRBool
+bool
 nsContentUtils::IsHTMLWhitespace(PRUnichar aChar)
 {
   return aChar == PRUnichar(0x0009) ||
@@ -930,7 +929,7 @@ nsContentUtils::IsHTMLWhitespace(PRUnichar aChar)
 }
 
 /* static */
-PRBool
+bool
 nsContentUtils::ParseIntMarginValue(const nsAString& aString, nsIntMargin& result)
 {
   nsAutoString marginStr(aString);
@@ -1001,7 +1000,7 @@ nsContentUtils::GetOfflineAppManifest(nsIDocument *aDocument, nsIURI **aURI)
 }
 
 /* static */
-PRBool
+bool
 nsContentUtils::OfflineAppAllowed(nsIURI *aURI)
 {
   nsCOMPtr<nsIOfflineCacheUpdateService> updateService =
@@ -1010,7 +1009,7 @@ nsContentUtils::OfflineAppAllowed(nsIURI *aURI)
     return PR_FALSE;
   }
 
-  PRBool allowed;
+  bool allowed;
   nsresult rv =
     updateService->OfflineAppAllowedForURI(aURI,
                                            Preferences::GetRootBranch(),
@@ -1019,7 +1018,7 @@ nsContentUtils::OfflineAppAllowed(nsIURI *aURI)
 }
 
 /* static */
-PRBool
+bool
 nsContentUtils::OfflineAppAllowed(nsIPrincipal *aPrincipal)
 {
   nsCOMPtr<nsIOfflineCacheUpdateService> updateService =
@@ -1028,7 +1027,7 @@ nsContentUtils::OfflineAppAllowed(nsIPrincipal *aPrincipal)
     return PR_FALSE;
   }
 
-  PRBool allowed;
+  bool allowed;
   nsresult rv = updateService->OfflineAppAllowed(aPrincipal,
                                                  Preferences::GetRootBranch(),
                                                  &allowed);
@@ -1117,12 +1116,12 @@ nsContentUtils::Shutdown()
 }
 
 // static
-PRBool
+bool
 nsContentUtils::IsCallerTrustedForCapability(const char* aCapability)
 {
   // The secman really should handle UniversalXPConnect case, since that
   // should include UniversalBrowserRead... doesn't right now, though.
-  PRBool hasCap;
+  bool hasCap;
   if (NS_FAILED(sSecurityManager->IsCapabilityEnabled(aCapability, &hasCap)))
     return PR_FALSE;
   if (hasCap)
@@ -1148,7 +1147,7 @@ nsContentUtils::CheckSameOrigin(nsINode *aTrustedNode,
 {
   NS_PRECONDITION(aTrustedNode, "There must be a trusted node");
 
-  PRBool isSystem = PR_FALSE;
+  bool isSystem = false;
   nsresult rv = sSecurityManager->SubjectPrincipalIsSystem(&isSystem);
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -1173,7 +1172,7 @@ nsContentUtils::CheckSameOrigin(nsINode *aTrustedNode,
     return NS_OK;
   }
 
-  PRBool equal;
+  bool equal;
   // XXXbz should we actually have a Subsumes() check here instead?  Or perhaps
   // a separate method for that, with callers using one or the other?
   if (NS_FAILED(trustedPrincipal->Equals(unTrustedPrincipal, &equal)) ||
@@ -1185,11 +1184,11 @@ nsContentUtils::CheckSameOrigin(nsINode *aTrustedNode,
 }
 
 // static
-PRBool
+bool
 nsContentUtils::CanCallerAccess(nsIPrincipal* aSubjectPrincipal,
                                 nsIPrincipal* aPrincipal)
 {
-  PRBool subsumes;
+  bool subsumes;
   nsresult rv = aSubjectPrincipal->Subsumes(aPrincipal, &subsumes);
   NS_ENSURE_SUCCESS(rv, PR_FALSE);
 
@@ -1200,7 +1199,7 @@ nsContentUtils::CanCallerAccess(nsIPrincipal* aSubjectPrincipal,
   // The subject doesn't subsume aPrincipal.  Allow access only if the subject
   // has either "UniversalXPConnect" (if aPrincipal is system principal) or
   // "UniversalBrowserRead" (in all other cases).
-  PRBool isSystem;
+  bool isSystem;
   rv = sSecurityManager->IsSystemPrincipal(aPrincipal, &isSystem);
   isSystem = NS_FAILED(rv) || isSystem;
   const char* capability =
@@ -1210,7 +1209,7 @@ nsContentUtils::CanCallerAccess(nsIPrincipal* aSubjectPrincipal,
 }
 
 // static
-PRBool
+bool
 nsContentUtils::CanCallerAccess(nsIDOMNode *aNode)
 {
   // XXXbz why not check the IsCapabilityEnabled thing up front, and not bother
@@ -1233,7 +1232,7 @@ nsContentUtils::CanCallerAccess(nsIDOMNode *aNode)
 }
 
 // static
-PRBool
+bool
 nsContentUtils::CanCallerAccess(nsPIDOMWindow* aWindow)
 {
   // XXXbz why not check the IsCapabilityEnabled thing up front, and not bother
@@ -1258,7 +1257,7 @@ nsContentUtils::CanCallerAccess(nsPIDOMWindow* aWindow)
 }
 
 //static
-PRBool
+bool
 nsContentUtils::InProlog(nsINode *aNode)
 {
   NS_PRECONDITION(aNode, "missing node to nsContentUtils::InProlog");
@@ -1286,11 +1285,10 @@ nsContentUtils::GetContextFromDocument(nsIDocument *aDocument)
   nsIScriptContext *scx = sgo->GetContext();
   if (!scx) {
     // No context left in the scope...
-
     return nsnull;
   }
 
-  return (JSContext *)scx->GetNativeContext();
+  return scx->GetNativeContext();
 }
 
 // static
@@ -1425,10 +1423,10 @@ nsContentUtils::GetDocumentFromContext()
   return nsnull;
 }
 
-PRBool
+bool
 nsContentUtils::IsCallerChrome()
 {
-  PRBool is_caller_chrome = PR_FALSE;
+  bool is_caller_chrome = false;
   nsresult rv = sSecurityManager->SubjectPrincipalIsSystem(&is_caller_chrome);
   if (NS_FAILED(rv)) {
     return PR_FALSE;
@@ -1437,13 +1435,13 @@ nsContentUtils::IsCallerChrome()
   return is_caller_chrome;
 }
 
-PRBool
+bool
 nsContentUtils::IsCallerTrustedForRead()
 {
   return IsCallerTrustedForCapability("UniversalBrowserRead");
 }
 
-PRBool
+bool
 nsContentUtils::IsCallerTrustedForWrite()
 {
   return IsCallerTrustedForCapability("UniversalBrowserWrite");
@@ -1465,7 +1463,7 @@ nsContentUtils::GetCrossDocParentNode(nsINode* aChild)
 }
 
 // static
-PRBool
+bool
 nsContentUtils::ContentIsDescendantOf(const nsINode* aPossibleDescendant,
                                       const nsINode* aPossibleAncestor)
 {
@@ -1482,7 +1480,7 @@ nsContentUtils::ContentIsDescendantOf(const nsINode* aPossibleDescendant,
 }
 
 // static
-PRBool
+bool
 nsContentUtils::ContentIsCrossDocDescendantOf(nsINode* aPossibleDescendant,
                                               nsINode* aPossibleAncestor)
 {
@@ -1613,7 +1611,7 @@ nsContentUtils::GetCommonAncestor(nsINode* aNode1,
 PRInt32
 nsContentUtils::ComparePoints(nsINode* aParent1, PRInt32 aOffset1,
                               nsINode* aParent2, PRInt32 aOffset2,
-                              PRBool* aDisconnected)
+                              bool* aDisconnected)
 {
   if (aParent1 == aParent2) {
     return aOffset1 < aOffset2 ? -1 :
@@ -1636,7 +1634,7 @@ nsContentUtils::ComparePoints(nsINode* aParent1, PRInt32 aOffset1,
   PRUint32 pos1 = parents1.Length() - 1;
   PRUint32 pos2 = parents2.Length() - 1;
   
-  PRBool disconnected = parents1.ElementAt(pos1) != parents2.ElementAt(pos2);
+  bool disconnected = parents1.ElementAt(pos1) != parents2.ElementAt(pos2);
   if (aDisconnected) {
     *aDisconnected = disconnected;
   }
@@ -1673,7 +1671,7 @@ nsContentUtils::ComparePoints(nsINode* aParent1, PRInt32 aOffset1,
   return parent->IndexOf(child1) < aOffset2 ? -1 : 1;
 }
 
-inline PRBool
+inline bool
 IsCharInSet(const char* aSet,
             const PRUnichar aChar)
 {
@@ -1728,9 +1726,9 @@ nsContentUtils::TrimCharsInSet(const char* aSet,
  */
 
 // static
-template<PRBool IsWhitespace(PRUnichar)>
+template<bool IsWhitespace(PRUnichar)>
 const nsDependentSubstring
-nsContentUtils::TrimWhitespace(const nsAString& aStr, PRBool aTrimTrailing)
+nsContentUtils::TrimWhitespace(const nsAString& aStr, bool aTrimTrailing)
 {
   nsAString::const_iterator start, end;
 
@@ -1767,10 +1765,10 @@ nsContentUtils::TrimWhitespace(const nsAString& aStr, PRBool aTrimTrailing)
 // methods we can consider this to be better than inlining.
 template
 const nsDependentSubstring
-nsContentUtils::TrimWhitespace<nsCRT::IsAsciiSpace>(const nsAString&, PRBool);
+nsContentUtils::TrimWhitespace<nsCRT::IsAsciiSpace>(const nsAString&, bool);
 template
 const nsDependentSubstring
-nsContentUtils::TrimWhitespace<nsContentUtils::IsHTMLWhitespace>(const nsAString&, PRBool);
+nsContentUtils::TrimWhitespace<nsContentUtils::IsHTMLWhitespace>(const nsAString&, bool);
 
 static inline void KeyAppendSep(nsACString& aKey)
 {
@@ -1813,7 +1811,7 @@ static inline void KeyAppendAtom(nsIAtom* aAtom, nsACString& aKey)
   KeyAppendString(nsAtomCString(aAtom), aKey);
 }
 
-static inline PRBool IsAutocompleteOff(const nsIContent* aElement)
+static inline bool IsAutocompleteOff(const nsIContent* aElement)
 {
   return aElement->AttrValueIs(kNameSpaceID_None, nsGkAtoms::autocomplete,
                                NS_LITERAL_STRING("off"), eIgnoreCase);
@@ -1855,7 +1853,7 @@ nsContentUtils::GenerateStateKey(nsIContent* aContent,
   // Make sure we can't possibly collide with an nsIStatefulFrame
   // special id of some sort
   KeyAppendInt(nsIStatefulFrame::eNoID, aKey);
-  PRBool generatedUniqueKey = PR_FALSE;
+  bool generatedUniqueKey = false;
 
   if (htmlDocument) {
     // Flush our content model so it'll be up to date
@@ -1997,7 +1995,7 @@ nsContentUtils::NewURIWithDocumentCharset(nsIURI** aResult,
 }
 
 // static
-PRBool
+bool
 nsContentUtils::BelongsInForm(nsIContent *aForm,
                               nsIContent *aContent)
 {
@@ -2055,7 +2053,7 @@ nsContentUtils::BelongsInForm(nsIContent *aForm,
 // static
 nsresult
 nsContentUtils::CheckQName(const nsAString& aQualifiedName,
-                           PRBool aNamespaceAware)
+                           bool aNamespaceAware)
 {
   nsIParserService *parserService = GetParserService();
   NS_ENSURE_TRUE(parserService, NS_ERROR_FAILURE);
@@ -2213,7 +2211,7 @@ nsContentUtils::GetContextForContent(const nsIContent* aContent)
 }
 
 // static
-PRBool
+bool
 nsContentUtils::CanLoadImage(nsIURI* aURI, nsISupports* aContext,
                              nsIDocument* aLoadingDocument,
                              nsIPrincipal* aLoadingPrincipal,
@@ -2281,7 +2279,7 @@ nsContentUtils::CanLoadImage(nsIURI* aURI, nsISupports* aContext,
 }
 
 // static
-PRBool
+bool
 nsContentUtils::IsImageInCache(nsIURI* aURI)
 {
     if (!sImgLoaderInitialized)
@@ -2395,12 +2393,12 @@ nsContentUtils::GetStaticRequest(imgIRequest* aRequest)
 }
 
 // static
-PRBool
+bool
 nsContentUtils::ContentIsDraggable(nsIContent* aContent)
 {
   nsCOMPtr<nsIDOMNSHTMLElement> htmlElement = do_QueryInterface(aContent);
   if (htmlElement) {
-    PRBool draggable = PR_FALSE;
+    bool draggable = false;
     htmlElement->GetDraggable(&draggable);
     if (draggable)
       return PR_TRUE;
@@ -2415,7 +2413,7 @@ nsContentUtils::ContentIsDraggable(nsIContent* aContent)
 }
 
 // static
-PRBool
+bool
 nsContentUtils::IsDraggableImage(nsIContent* aContent)
 {
   NS_PRECONDITION(aContent, "Must have content node to test");
@@ -2435,13 +2433,13 @@ nsContentUtils::IsDraggableImage(nsIContent* aContent)
 }
 
 // static
-PRBool
+bool
 nsContentUtils::IsDraggableLink(const nsIContent* aContent) {
   nsCOMPtr<nsIURI> absURI;
   return aContent->IsLink(getter_AddRefs(absURI));
 }
 
-PRBool
+bool
 nsContentUtils::IsSitePermAllow(nsIURI* aURI, const char* aType)
 {
   nsCOMPtr<nsIPermissionManager> permMgr =
@@ -2496,7 +2494,7 @@ nsCxPusher::~nsCxPusher()
   Pop();
 }
 
-static PRBool
+static bool
 IsContextOnStack(nsIJSContextStack *aStack, JSContext *aContext)
 {
   JSContext *ctx = nsnull;
@@ -2513,7 +2511,7 @@ IsContextOnStack(nsIJSContextStack *aStack, JSContext *aContext)
   nsresult rv = iterator->Reset(aStack);
   NS_ENSURE_SUCCESS(rv, PR_FALSE);
 
-  PRBool done;
+  bool done;
   while (NS_SUCCEEDED(iterator->Done(&done)) && !done) {
     rv = iterator->Prev(&ctx);
     NS_ASSERTION(NS_SUCCEEDED(rv), "Broken iterator implementation");
@@ -2529,7 +2527,7 @@ IsContextOnStack(nsIJSContextStack *aStack, JSContext *aContext)
   return PR_FALSE;
 }
 
-PRBool
+bool
 nsCxPusher::Push(nsIDOMEventTarget *aCurrentTarget)
 {
   if (mPushedSomething) {
@@ -2559,7 +2557,7 @@ nsCxPusher::Push(nsIDOMEventTarget *aCurrentTarget)
   JSContext* cx = nsnull;
 
   if (scx) {
-    cx = static_cast<JSContext*>(scx->GetNativeContext());
+    cx = scx->GetNativeContext();
     // Bad, no JSContext from script context!
     NS_ENSURE_TRUE(cx, PR_FALSE);
   }
@@ -2571,7 +2569,7 @@ nsCxPusher::Push(nsIDOMEventTarget *aCurrentTarget)
   return Push(cx);
 }
 
-PRBool
+bool
 nsCxPusher::RePush(nsIDOMEventTarget *aCurrentTarget)
 {
   if (!mPushedSomething) {
@@ -2599,8 +2597,8 @@ nsCxPusher::RePush(nsIDOMEventTarget *aCurrentTarget)
   return Push(aCurrentTarget);
 }
 
-PRBool
-nsCxPusher::Push(JSContext *cx, PRBool aRequiresScriptContext)
+bool
+nsCxPusher::Push(JSContext *cx, bool aRequiresScriptContext)
 {
   if (mPushedSomething) {
     NS_ERROR("Whaaa! No double pushing with nsCxPusher::Push()!");
@@ -2624,7 +2622,7 @@ nsCxPusher::Push(JSContext *cx, PRBool aRequiresScriptContext)
   return DoPush(cx);
 }
 
-PRBool
+bool
 nsCxPusher::DoPush(JSContext* cx)
 {
   nsIThreadJSContextStack* stack = nsContentUtils::ThreadJSContextStack();
@@ -2651,7 +2649,7 @@ nsCxPusher::DoPush(JSContext* cx)
   return PR_TRUE;
 }
 
-PRBool
+bool
 nsCxPusher::PushNull()
 {
   return DoPush(nsnull);
@@ -2829,7 +2827,7 @@ nsContentUtils::ReportToConsole(PropertiesFile aFile,
                          aCategory, innerWindowID);
 }
 
-PRBool
+bool
 nsContentUtils::IsChromeDoc(nsIDocument *aDocument)
 {
   if (!aDocument) {
@@ -2842,7 +2840,7 @@ nsContentUtils::IsChromeDoc(nsIDocument *aDocument)
   return aDocument->NodePrincipal() == systemPrincipal;
 }
 
-PRBool
+bool
 nsContentUtils::IsChildOfSameType(nsIDocument* aDoc)
 {
   nsCOMPtr<nsISupports> container = aDoc->GetContainer();
@@ -2854,12 +2852,12 @@ nsContentUtils::IsChildOfSameType(nsIDocument* aDoc)
   return sameTypeParent != nsnull;
 }
 
-PRBool
+bool
 nsContentUtils::GetWrapperSafeScriptFilename(nsIDocument *aDocument,
                                              nsIURI *aURI,
                                              nsACString& aScriptURI)
 {
-  PRBool scriptFileNameModified = PR_FALSE;
+  bool scriptFileNameModified = false;
   aURI->GetSpec(aScriptURI);
 
   if (IsChromeDoc(aDocument)) {
@@ -2873,10 +2871,10 @@ nsContentUtils::GetWrapperSafeScriptFilename(nsIDocument *aDocument,
       return scriptFileNameModified;
     }
 
-    PRBool docWrappersEnabled =
+    bool docWrappersEnabled =
       chromeReg->WrappersEnabled(aDocument->GetDocumentURI());
 
-    PRBool uriWrappersEnabled = chromeReg->WrappersEnabled(aURI);
+    bool uriWrappersEnabled = chromeReg->WrappersEnabled(aURI);
 
     nsIURI *docURI = aDocument->GetDocumentURI();
 
@@ -2902,7 +2900,7 @@ nsContentUtils::GetWrapperSafeScriptFilename(nsIDocument *aDocument,
 }
 
 // static
-PRBool
+bool
 nsContentUtils::IsInChromeDocshell(nsIDocument *aDocument)
 {
   if (!aDocument) {
@@ -2937,7 +2935,7 @@ nsContentUtils::GetContentPolicy()
 }
 
 // static
-PRBool
+bool
 nsContentUtils::IsEventAttributeName(nsIAtom* aName, PRInt32 aType)
 {
   const PRUnichar* name = aName->GetUTF16String();
@@ -3005,7 +3003,7 @@ nsContentUtils::GetEventIdAndAtom(const nsAString& aName,
 static
 nsresult GetEventAndTarget(nsIDocument* aDoc, nsISupports* aTarget,
                            const nsAString& aEventName,
-                           PRBool aCanBubble, PRBool aCancelable,
+                           bool aCanBubble, bool aCancelable,
                            nsIDOMEvent** aEvent,
                            nsIDOMEventTarget** aTargetOut)
 {
@@ -3039,8 +3037,8 @@ nsresult GetEventAndTarget(nsIDocument* aDoc, nsISupports* aTarget,
 nsresult
 nsContentUtils::DispatchTrustedEvent(nsIDocument* aDoc, nsISupports* aTarget,
                                      const nsAString& aEventName,
-                                     PRBool aCanBubble, PRBool aCancelable,
-                                     PRBool *aDefaultAction)
+                                     bool aCanBubble, bool aCancelable,
+                                     bool *aDefaultAction)
 {
   nsCOMPtr<nsIDOMEvent> event;
   nsCOMPtr<nsIDOMEventTarget> target;
@@ -3049,7 +3047,7 @@ nsContentUtils::DispatchTrustedEvent(nsIDocument* aDoc, nsISupports* aTarget,
                                   getter_AddRefs(target));
   NS_ENSURE_SUCCESS(rv, rv);
 
-  PRBool dummy;
+  bool dummy;
   return target->DispatchEvent(event, aDefaultAction ? aDefaultAction : &dummy);
 }
 
@@ -3057,8 +3055,8 @@ nsresult
 nsContentUtils::DispatchChromeEvent(nsIDocument *aDoc,
                                     nsISupports *aTarget,
                                     const nsAString& aEventName,
-                                    PRBool aCanBubble, PRBool aCancelable,
-                                    PRBool *aDefaultAction)
+                                    bool aCanBubble, bool aCancelable,
+                                    bool *aDefaultAction)
 {
 
   nsCOMPtr<nsIDOMEvent> event;
@@ -3172,11 +3170,11 @@ nsContentUtils::ConvertStringFromCharset(const nsACString& aCharset,
 }
 
 /* static */
-PRBool
+bool
 nsContentUtils::CheckForBOM(const unsigned char* aBuffer, PRUint32 aLength,
-                            nsACString& aCharset, PRBool *bigEndian)
+                            nsACString& aCharset, bool *bigEndian)
 {
-  PRBool found = PR_TRUE;
+  bool found = true;
   aCharset.Truncate();
   if (aLength >= 3 &&
       aBuffer[0] == 0xEF &&
@@ -3227,7 +3225,7 @@ nsContentUtils::UnregisterShutdownObserver(nsIObserver* aObserver)
 }
 
 /* static */
-PRBool
+bool
 nsContentUtils::HasNonEmptyAttr(const nsIContent* aContent, PRInt32 aNameSpaceID,
                                 nsIAtom* aName)
 {
@@ -3237,7 +3235,7 @@ nsContentUtils::HasNonEmptyAttr(const nsIContent* aContent, PRInt32 aNameSpaceID
 }
 
 /* static */
-PRBool
+bool
 nsContentUtils::HasMutationListeners(nsINode* aNode,
                                      PRUint32 aType,
                                      nsINode* aTargetForSubtreeModified)
@@ -3298,7 +3296,7 @@ nsContentUtils::HasMutationListeners(nsINode* aNode,
 }
 
 /* static */
-PRBool
+bool
 nsContentUtils::HasMutationListeners(nsIDocument* aDocument,
                                      PRUint32 aType)
 {
@@ -3377,7 +3375,7 @@ nsContentUtils::TraverseListenerManager(nsINode *aNode,
 
 nsEventListenerManager*
 nsContentUtils::GetListenerManager(nsINode *aNode,
-                                   PRBool aCreateIfNotFound)
+                                   bool aCreateIfNotFound)
 {
   if (!aCreateIfNotFound && !aNode->HasFlag(NODE_HAS_LISTENERMANAGER)) {
     return nsnull;
@@ -3442,7 +3440,7 @@ nsContentUtils::RemoveListenerManager(nsINode *aNode)
 }
 
 /* static */
-PRBool
+bool
 nsContentUtils::IsValidNodeName(nsIAtom *aLocalName, nsIAtom *aPrefix,
                                 PRInt32 aNamespaceID)
 {
@@ -3480,7 +3478,7 @@ nsContentUtils::IsValidNodeName(nsIAtom *aLocalName, nsIAtom *aPrefix,
 nsresult
 nsContentUtils::CreateContextualFragment(nsINode* aContextNode,
                                          const nsAString& aFragment,
-                                         PRBool aPreventScriptExecution,
+                                         bool aPreventScriptExecution,
                                          nsIDOMDocumentFragment** aReturn)
 {
   *aReturn = nsnull;
@@ -3491,7 +3489,7 @@ nsContentUtils::CreateContextualFragment(nsINode* aContextNode,
   nsCOMPtr<nsIDocument> document = aContextNode->GetOwnerDoc();
   NS_ENSURE_TRUE(document, NS_ERROR_NOT_AVAILABLE);
 
-  PRBool isHTML = document->IsHTML();
+  bool isHTML = document->IsHTML();
 #ifdef DEBUG
   nsCOMPtr<nsIHTMLDocument> htmlDoc = do_QueryInterface(document);
   NS_ASSERTION(!isHTML || htmlDoc, "Should have HTMLDocument here!");
@@ -3548,7 +3546,7 @@ nsContentUtils::CreateContextualFragment(nsINode* aContextNode,
 
     // see if we need to add xmlns declarations
     PRUint32 count = content->GetAttrCount();
-    PRBool setDefaultNamespace = PR_FALSE;
+    bool setDefaultNamespace = false;
     if (count > 0) {
       PRUint32 index;
 
@@ -3617,8 +3615,8 @@ nsContentUtils::ParseFragmentHTML(const nsAString& aSourceBuffer,
                                   nsIContent* aTargetNode,
                                   nsIAtom* aContextLocalName,
                                   PRInt32 aContextNamespace,
-                                  PRBool aQuirks,
-                                  PRBool aPreventScriptExecution)
+                                  bool aQuirks,
+                                  bool aPreventScriptExecution)
 {
   if (!sHTMLFragmentParser) {
     sHTMLFragmentParser =
@@ -3639,7 +3637,7 @@ nsresult
 nsContentUtils::ParseFragmentXML(const nsAString& aSourceBuffer,
                                  nsIDocument* aDocument,
                                  nsTArray<nsString>& aTagStack,
-                                 PRBool aPreventScriptExecution,
+                                 bool aPreventScriptExecution,
                                  nsIDOMDocumentFragment** aReturn)
 {
   if (!sXMLFragmentParser) {
@@ -3688,11 +3686,10 @@ nsContentUtils::CreateDocument(const nsAString& aNamespaceURI,
 {
   nsresult rv = NS_NewDOMDocument(aResult, aNamespaceURI, aQualifiedName,
                                   aDoctype, aDocumentURI, aBaseURI, aPrincipal,
-                                  PR_TRUE);
+                                  PR_TRUE, aEventObject);
   NS_ENSURE_SUCCESS(rv, rv);
 
   nsCOMPtr<nsIDocument> document = do_QueryInterface(*aResult);
-  document->SetScriptHandlingObject(aEventObject);
   
   // created documents are immediately "complete" (ready to use)
   document->SetReadyStateInternal(nsIDocument::READYSTATE_COMPLETE);
@@ -3703,7 +3700,7 @@ nsContentUtils::CreateDocument(const nsAString& aNamespaceURI,
 nsresult
 nsContentUtils::SetNodeTextContent(nsIContent* aContent,
                                    const nsAString& aValue,
-                                   PRBool aTryReuse)
+                                   bool aTryReuse)
 {
   // Fire DOMNodeRemoved mutation events before we do anything else.
   nsCOMPtr<nsIContent> owningContent;
@@ -3785,9 +3782,9 @@ nsContentUtils::SetNodeTextContent(nsIContent* aContent,
 
 static void AppendNodeTextContentsRecurse(nsINode* aNode, nsAString& aResult)
 {
-  nsIContent* child;
-  PRUint32 i;
-  for (i = 0; (child = aNode->GetChildAt(i)); ++i) {
+  for (nsIContent* child = aNode->GetFirstChild();
+       child;
+       child = child->GetNextSibling()) {
     if (child->IsElement()) {
       AppendNodeTextContentsRecurse(child, aResult);
     }
@@ -3799,7 +3796,7 @@ static void AppendNodeTextContentsRecurse(nsINode* aNode, nsAString& aResult)
 
 /* static */
 void
-nsContentUtils::AppendNodeTextContent(nsINode* aNode, PRBool aDeep,
+nsContentUtils::AppendNodeTextContent(nsINode* aNode, bool aDeep,
                                       nsAString& aResult)
 {
   if (aNode->IsNodeOfType(nsINode::eTEXT)) {
@@ -3809,9 +3806,9 @@ nsContentUtils::AppendNodeTextContent(nsINode* aNode, PRBool aDeep,
     AppendNodeTextContentsRecurse(aNode, aResult);
   }
   else {
-    nsIContent* child;
-    PRUint32 i;
-    for (i = 0; (child = aNode->GetChildAt(i)); ++i) {
+    for (nsIContent* child = aNode->GetFirstChild();
+         child;
+         child = child->GetNextSibling()) {
       if (child->IsNodeOfType(nsINode::eTEXT)) {
         child->AppendTextTo(aResult);
       }
@@ -3819,12 +3816,12 @@ nsContentUtils::AppendNodeTextContent(nsINode* aNode, PRBool aDeep,
   }
 }
 
-PRBool
+bool
 nsContentUtils::HasNonEmptyTextContent(nsINode* aNode)
 {
-  nsIContent* child;
-  PRUint32 i;
-  for (i = 0; (child = aNode->GetChildAt(i)); ++i) {
+  for (nsIContent* child = aNode->GetFirstChild();
+       child;
+       child = child->GetNextSibling()) {
     if (child->IsNodeOfType(nsINode::eTEXT) &&
         child->TextLength() > 0) {
       return PR_TRUE;
@@ -3835,7 +3832,7 @@ nsContentUtils::HasNonEmptyTextContent(nsINode* aNode)
 }
 
 /* static */
-PRBool
+bool
 nsContentUtils::IsInSameAnonymousTree(const nsINode* aNode,
                                       const nsIContent* aContent)
 {
@@ -4003,17 +4000,17 @@ nsContentUtils::GetWidgetStatusFromIMEStatus(PRUint32 aState)
 
 /* static */
 void
-nsContentUtils::NotifyInstalledMenuKeyboardListener(PRBool aInstalling)
+nsContentUtils::NotifyInstalledMenuKeyboardListener(bool aInstalling)
 {
   nsIMEStateManager::OnInstalledMenuKeyboardListener(aInstalling);
 }
 
-static PRBool SchemeIs(nsIURI* aURI, const char* aScheme)
+static bool SchemeIs(nsIURI* aURI, const char* aScheme)
 {
   nsCOMPtr<nsIURI> baseURI = NS_GetInnermostURI(aURI);
   NS_ENSURE_TRUE(baseURI, PR_FALSE);
 
-  PRBool isScheme = PR_FALSE;
+  bool isScheme = false;
   return NS_SUCCEEDED(baseURI->SchemeIs(aScheme, &isScheme)) && isScheme;
 }
 
@@ -4022,7 +4019,7 @@ nsresult
 nsContentUtils::CheckSecurityBeforeLoad(nsIURI* aURIToLoad,
                                         nsIPrincipal* aLoadingPrincipal,
                                         PRUint32 aCheckLoadFlags,
-                                        PRBool aAllowData,
+                                        bool aAllowData,
                                         PRUint32 aContentPolicyType,
                                         nsISupports* aContext,
                                         const nsACString& aMimeGuess,
@@ -4030,7 +4027,7 @@ nsContentUtils::CheckSecurityBeforeLoad(nsIURI* aURIToLoad,
 {
   NS_PRECONDITION(aLoadingPrincipal, "Must have a loading principal here");
 
-  PRBool isSystemPrin = PR_FALSE;
+  bool isSystemPrin = false;
   if (NS_SUCCEEDED(sSecurityManager->IsSystemPrincipal(aLoadingPrincipal,
                                                        &isSystemPrin)) &&
       isSystemPrin) {
@@ -4069,10 +4066,10 @@ nsContentUtils::CheckSecurityBeforeLoad(nsIURI* aURIToLoad,
   return aLoadingPrincipal->CheckMayLoad(aURIToLoad, PR_TRUE);
 }
 
-PRBool
+bool
 nsContentUtils::IsSystemPrincipal(nsIPrincipal* aPrincipal)
 {
-  PRBool isSystem;
+  bool isSystem;
   nsresult rv = sSecurityManager->IsSystemPrincipal(aPrincipal, &isSystem);
   return NS_SUCCEEDED(rv) && isSystem;
 }
@@ -4081,8 +4078,8 @@ nsContentUtils::IsSystemPrincipal(nsIPrincipal* aPrincipal)
 void
 nsContentUtils::TriggerLink(nsIContent *aContent, nsPresContext *aPresContext,
                             nsIURI *aLinkURI, const nsString &aTargetSpec,
-                            PRBool aClick, PRBool aIsUserTriggered,
-                            PRBool aIsTrusted)
+                            bool aClick, bool aIsUserTriggered,
+                            bool aIsTrusted)
 {
   NS_ASSERTION(aPresContext, "Need a nsPresContext");
   NS_PRECONDITION(aLinkURI, "No link URI");
@@ -4159,18 +4156,18 @@ nsContentUtils::GetNativeEvent(nsIDOMEvent* aDOMEvent)
 }
 
 //static
-PRBool
+bool
 nsContentUtils::DOMEventToNativeKeyEvent(nsIDOMKeyEvent* aKeyEvent,
                                          nsNativeKeyEvent* aNativeEvent,
-                                         PRBool aGetCharCode)
+                                         bool aGetCharCode)
 {
   nsCOMPtr<nsIDOMNSEvent> nsevent = do_QueryInterface(aKeyEvent);
-  PRBool defaultPrevented;
+  bool defaultPrevented;
   nsevent->GetPreventDefault(&defaultPrevented);
   if (defaultPrevented)
     return PR_FALSE;
 
-  PRBool trusted = PR_FALSE;
+  bool trusted = false;
   nsevent->GetIsTrusted(&trusted);
   if (!trusted)
     return PR_FALSE;
@@ -4191,7 +4188,7 @@ nsContentUtils::DOMEventToNativeKeyEvent(nsIDOMKeyEvent* aKeyEvent,
   return PR_TRUE;
 }
 
-static PRBool
+static bool
 HasASCIIDigit(const nsTArray<nsShortcutCandidate>& aCandidates)
 {
   for (PRUint32 i = 0; i < aCandidates.Length(); ++i) {
@@ -4202,7 +4199,7 @@ HasASCIIDigit(const nsTArray<nsShortcutCandidate>& aCandidates)
   return PR_FALSE;
 }
 
-static PRBool
+static bool
 CharsCaseInsensitiveEqual(PRUint32 aChar1, PRUint32 aChar2)
 {
   return aChar1 == aChar2 ||
@@ -4210,7 +4207,7 @@ CharsCaseInsensitiveEqual(PRUint32 aChar1, PRUint32 aChar2)
           ToLowerCase(PRUnichar(aChar1)) == ToLowerCase(PRUnichar(aChar2)));
 }
 
-static PRBool
+static bool
 IsCaseChangeableChar(PRUint32 aChar)
 {
   return IS_IN_BMP(aChar) &&
@@ -4411,7 +4408,7 @@ nsContentUtils::RemoveScriptBlocker()
 }
 
 /* static */
-PRBool
+bool
 nsContentUtils::AddScriptRunner(nsIRunnable* aRunnable)
 {
   if (!aRunnable) {
@@ -4671,12 +4668,13 @@ nsContentUtils::FilterDropEffect(PRUint32 aAction, PRUint32 aEffectAllowed)
 }
 
 /* static */
-PRBool
+bool
 nsContentUtils::URIIsLocalFile(nsIURI *aURI)
 {
-  PRBool isFile;
+  bool isFile;
   nsCOMPtr<nsINetUtil> util = do_QueryInterface(sIOService);
 
+  // Important: we do NOT test the entire URI chain here!
   return util && NS_SUCCEEDED(util->ProtocolHasFlags(aURI,
                                 nsIProtocolHandler::URI_IS_LOCAL_FILE,
                                 &isFile)) &&
@@ -4721,7 +4719,7 @@ nsContentUtils::GetContextForEventHandlers(nsINode* aNode,
     return nsnull;
   }
 
-  PRBool hasHadScriptObject = PR_TRUE;
+  bool hasHadScriptObject = true;
   nsIScriptGlobalObject* sgo =
     ownerDoc->GetScriptHandlingObject(hasHadScriptObject);
   // It is bad if the document doesn't have event handling context,
@@ -4825,7 +4823,7 @@ nsContentUtils::ASCIIToUpper(const nsAString& aSource, nsAString& aDest)
   }
 }
 
-PRBool
+bool
 nsContentUtils::EqualsIgnoreASCIICase(const nsAString& aStr1,
                                       const nsAString& aStr2)
 {
@@ -5066,7 +5064,7 @@ nsContentUtils::GetDocumentFromScriptContext(nsIScriptContext *aScriptContext)
 }
 
 /* static */
-PRBool
+bool
 nsContentUtils::CheckMayLoad(nsIPrincipal* aPrincipal, nsIChannel* aChannel)
 {
   nsCOMPtr<nsIURI> channelURI;
@@ -5100,7 +5098,7 @@ nsContentTypeParser::GetParameter(const char* aParameterName, nsAString& aResult
 
 // If you change this code, change also AllowedToAct() in
 // XPCSystemOnlyWrapper.cpp!
-PRBool
+bool
 nsContentUtils::CanAccessNativeAnon()
 {
   JSContext* cx = nsnull;
@@ -5127,7 +5125,7 @@ nsContentUtils::CanAccessNativeAnon()
     fp = nsnull;
   }
 
-  PRBool privileged;
+  bool privileged;
   if (NS_SUCCEEDED(sSecurityManager->IsSystemPrincipal(principal, &privileged)) &&
       privileged) {
     // Chrome things are allowed to touch us.
@@ -5155,13 +5153,13 @@ nsContentUtils::CanAccessNativeAnon()
 
 /* static */ nsresult
 nsContentUtils::DispatchXULCommand(nsIContent* aTarget,
-                                   PRBool aTrusted,
+                                   bool aTrusted,
                                    nsIDOMEvent* aSourceEvent,
                                    nsIPresShell* aShell,
-                                   PRBool aCtrl,
-                                   PRBool aAlt,
-                                   PRBool aShift,
-                                   PRBool aMeta)
+                                   bool aCtrl,
+                                   bool aAlt,
+                                   bool aShift,
+                                   bool aMeta)
 {
   NS_ENSURE_STATE(aTarget);
   nsIDocument* doc = aTarget->GetOwnerDoc();
@@ -5187,7 +5185,7 @@ nsContentUtils::DispatchXULCommand(nsIContent* aTarget,
 
   nsCOMPtr<nsIDOMEventTarget> target = do_QueryInterface(aTarget);
   NS_ENSURE_STATE(target);
-  PRBool dummy;
+  bool dummy;
   return target->DispatchEvent(event, &dummy);
 }
 
@@ -5196,7 +5194,7 @@ nsresult
 nsContentUtils::WrapNative(JSContext *cx, JSObject *scope, nsISupports *native,
                            nsWrapperCache *cache, const nsIID* aIID, jsval *vp,
                            nsIXPConnectJSObjectHolder **aHolder,
-                           PRBool aAllowWrapping)
+                           bool aAllowWrapping)
 {
   if (!native) {
     NS_ASSERTION(!aHolder || !*aHolder, "*aHolder should be null!");
@@ -5219,7 +5217,7 @@ nsContentUtils::WrapNative(JSContext *cx, JSObject *scope, nsISupports *native,
   // more expensive reference sXPConnect directly. We have to use manual
   // AddRef and Release calls so don't early-exit from this function after we've
   // added the reference!
-  PRBool isMainThread = NS_IsMainThread();
+  bool isMainThread = NS_IsMainThread();
 
   if (isMainThread) {
     nsLayoutStatics::AddRef();
@@ -5231,7 +5229,7 @@ nsContentUtils::WrapNative(JSContext *cx, JSObject *scope, nsISupports *native,
   JSContext *topJSContext;
   nsresult rv = sThreadJSContextStack->Peek(&topJSContext);
   if (NS_SUCCEEDED(rv)) {
-    PRBool push = topJSContext != cx;
+    bool push = topJSContext != cx;
     if (push) {
       rv = sThreadJSContextStack->Push(cx);
     }
@@ -5281,7 +5279,7 @@ struct ClassMatchingInfo {
   nsCaseTreatment mCaseTreatment;
 };
 
-static PRBool
+static bool
 MatchClassNames(nsIContent* aContent, PRInt32 aNamespaceID, nsIAtom* aAtom,
                 void* aData)
 {
@@ -5376,7 +5374,7 @@ public:
                                            const char *objName)
   {
   }
-  NS_IMETHOD_(void) DescribeGCedNode(PRBool isMarked,
+  NS_IMETHOD_(void) DescribeGCedNode(bool isMarked,
                                      size_t objSz,
                                      const char *objName)
   {
@@ -5406,7 +5404,7 @@ public:
   {
   }
 
-  PRBool mFound;
+  bool mFound;
 
 private:
   void* mWrapper;
@@ -5445,7 +5443,7 @@ nsContentUtils::CheckCCWrapperTraversal(nsISupports* aScriptObjectHolder,
 #endif
 
 // static
-PRBool
+bool
 nsContentUtils::IsFocusedContent(const nsIContent* aContent)
 {
   nsFocusManager* fm = nsFocusManager::GetFocusManager();
@@ -5691,7 +5689,7 @@ nsContentUtils::FindInternalContentViewer(const char* aType,
 }
 
 // static
-PRBool
+bool
 nsContentUtils::IsPatternMatching(nsAString& aValue, nsAString& aPattern,
                                   nsIDocument* aDocument)
 {
@@ -5724,18 +5722,83 @@ nsContentUtils::IsPatternMatching(nsAString& aValue, nsAString& aPattern,
   return res == JS_FALSE || rval != JSVAL_NULL;
 }
 
-PRBool
+// static
+nsresult
+nsContentUtils::URIInheritsSecurityContext(nsIURI *aURI, bool *aResult)
+{
+  // Note: about:blank URIs do NOT inherit the security context from the
+  // current document, which is what this function tests for...
+  return NS_URIChainHasFlags(aURI,
+                             nsIProtocolHandler::URI_INHERITS_SECURITY_CONTEXT,
+                             aResult);
+}
+
+// static
+bool
+nsContentUtils::SetUpChannelOwner(nsIPrincipal* aLoadingPrincipal,
+                                  nsIChannel* aChannel,
+                                  nsIURI* aURI,
+                                  bool aSetUpForAboutBlank)
+{
+  //
+  // Set the owner of the channel, but only for channels that can't
+  // provide their own security context.
+  //
+  // XXX: It seems wrong that the owner is ignored - even if one is
+  //      supplied) unless the URI is javascript or data or about:blank.
+  // XXX: If this is ever changed, check all callers for what owners
+  //      they're passing in.  In particular, see the code and
+  //      comments in nsDocShell::LoadURI where we fall back on
+  //      inheriting the owner if called from chrome.  That would be
+  //      very wrong if this code changed anything but channels that
+  //      can't provide their own security context!
+  //
+  //      (Currently chrome URIs set the owner when they are created!
+  //      So setting a NULL owner would be bad!)
+  //
+  bool inherit;
+  // We expect URIInheritsSecurityContext to return success for an
+  // about:blank URI, so don't call NS_IsAboutBlank() if this call fails.
+  // This condition needs to match the one in nsDocShell::InternalLoad where
+  // we're checking for things that will use the owner.
+  if (NS_SUCCEEDED(URIInheritsSecurityContext(aURI, &inherit)) &&
+      (inherit || (aSetUpForAboutBlank && NS_IsAboutBlank(aURI)))) {
+    aChannel->SetOwner(aLoadingPrincipal);
+    return true;
+  }
+
+  //
+  // file: uri special-casing
+  //
+  // If this is a file: load opened from another file: then it may need
+  // to inherit the owner from the referrer so they can script each other.
+  // If we don't set the owner explicitly then each file: gets an owner
+  // based on its own codebase later.
+  //
+  if (URIIsLocalFile(aURI) && aLoadingPrincipal &&
+      NS_SUCCEEDED(aLoadingPrincipal->CheckMayLoad(aURI, PR_FALSE)) &&
+      // One more check here.  CheckMayLoad will always return true for the
+      // system principal, but we do NOT want to inherit in that case.
+      !IsSystemPrincipal(aLoadingPrincipal)) {
+    aChannel->SetOwner(aLoadingPrincipal);
+    return true;
+  }
+
+  return false;
+}
+
+bool
 nsContentUtils::IsFullScreenApiEnabled()
 {
   return sIsFullScreenApiEnabled;
 }
 
-PRBool nsContentUtils::IsRequestFullScreenAllowed()
+bool nsContentUtils::IsRequestFullScreenAllowed()
 {
   return !sTrustedFullScreenOnly || nsEventStateManager::IsHandlingUserInput();
 }
 
-PRBool
+bool
 nsContentUtils::IsFullScreenKeyInputRestricted()
 {
   return sFullScreenKeyInputRestricted;

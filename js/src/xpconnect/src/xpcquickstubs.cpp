@@ -361,8 +361,7 @@ DefineGetterOrSetter(JSContext *cx, uintN argc, JSBool wantGetter, jsval *vp)
     JSObject *obj = JS_THIS_OBJECT(cx, vp);
     if (!obj)
         return JS_FALSE;
-    JSNative forward = wantGetter ? Jsvalify(js_obj_defineGetter)
-                                  : Jsvalify(js_obj_defineSetter);
+    JSNative forward = wantGetter ? js_obj_defineGetter : js_obj_defineSetter;
     jsval idval = (argc >= 1) ? JS_ARGV(cx, vp)[0] : JSVAL_VOID;
     if(!JSVAL_IS_STRING(idval))
         return forward(cx, argc, vp);
@@ -416,7 +415,7 @@ xpc_qsDefineQuickStubs(JSContext *cx, JSObject *proto, uintN flags,
      * searching the interfaces forward.  Here, definitions toward the
      * front of 'interfaces' overwrite those toward the back.
      */
-    PRBool definedProperty = PR_FALSE;
+    bool definedProperty = false;
     for(uint32 i = ifacec; i-- != 0;)
     {
         const nsID &iid = *interfaces[i];

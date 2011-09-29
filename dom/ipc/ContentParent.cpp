@@ -96,6 +96,7 @@
 #include "mozilla/Services.h"
 #include "mozilla/unused.h"
 #include "nsDeviceMotion.h"
+#include "mozilla/Util.h"
 
 #include "nsIMemoryReporter.h"
 #include "nsMemoryReporterManager.h"
@@ -224,7 +225,7 @@ ContentParent::Init()
     // If accessibility is running in chrome process then start it in content
     // process.
     if (nsIPresShell::IsAccessibilityActive()) {
-        SendActivateA11y();
+        unused << SendActivateA11y();
     }
 #endif
 }
@@ -368,7 +369,7 @@ ContentParent::ActorDestroy(ActorDestroyReason why)
                 notes.Put(NS_LITERAL_CSTRING("ProcessType"), NS_LITERAL_CSTRING("content"));
 
                 char startTime[32];
-                sprintf(startTime, "%lld", static_cast<PRInt64>(mProcessStartTime));
+                sprintf(startTime, "%lld", static_cast<long long>(mProcessStartTime));
                 notes.Put(NS_LITERAL_CSTRING("StartupTime"),
                           nsDependentCString(startTime));
 
@@ -491,10 +492,10 @@ ContentParent::RecvReadPermissions(InfallibleTArray<IPC::Permission>* aPermissio
                  "We have no permissionManager in the Chrome process !");
 
     nsCOMPtr<nsISimpleEnumerator> enumerator;
-    nsresult rv = permissionManager->GetEnumerator(getter_AddRefs(enumerator));
+    DebugOnly<nsresult> rv = permissionManager->GetEnumerator(getter_AddRefs(enumerator));
     NS_ABORT_IF_FALSE(NS_SUCCEEDED(rv), "Could not get enumerator!");
     while(1) {
-        PRBool hasMore;
+        bool hasMore;
         enumerator->HasMoreElements(&hasMore);
         if (!hasMore)
             break;
@@ -612,7 +613,7 @@ ContentParent::RecvEmptyClipboard()
 }
 
 bool
-ContentParent::RecvClipboardHasText(PRBool* hasText)
+ContentParent::RecvClipboardHasText(bool* hasText)
 {
     nsresult rv;
     nsCOMPtr<nsIClipboard> clipboard(do_GetService(kCClipboardCID, &rv));
@@ -660,7 +661,7 @@ ContentParent::RecvGetIconForExtension(const nsCString& aFileExt, const PRUint32
 }
 
 bool
-ContentParent::RecvGetShowPasswordSetting(PRBool* showPassword)
+ContentParent::RecvGetShowPasswordSetting(bool* showPassword)
 {
     // default behavior is to show the last password character
     *showPassword = PR_TRUE;
@@ -703,7 +704,7 @@ ContentParent::Observe(nsISupports* aSubject,
         nsCOMPtr<nsIPrefServiceInternal> prefService =
           do_GetService("@mozilla.org/preferences-service;1");
 
-        PRBool prefNeedUpdate;
+        bool prefNeedUpdate;
         prefService->PrefHasUserValue(strData, &prefNeedUpdate);
 
         // If the pref does not have a user value, check if it exist on the
@@ -751,7 +752,7 @@ ContentParent::Observe(nsISupports* aSubject,
             return NS_ERROR_NOT_AVAILABLE;
     }
     else if (!strcmp(aTopic, "child-memory-reporter-request")) {
-        SendPMemoryReportRequestConstructor();
+        unused << SendPMemoryReportRequestConstructor();
     }
     else if (!strcmp(aTopic, "child-gc-request")){
         SendGarbageCollect();
@@ -764,7 +765,7 @@ ContentParent::Observe(nsISupports* aSubject,
     // gets initiated in chrome process.
     else if (aData && (*aData == '1') &&
              !strcmp(aTopic, "a11y-init-or-shutdown")) {
-        SendActivateA11y();
+        unused << SendActivateA11y();
     }
 #endif
 
@@ -1001,7 +1002,7 @@ ContentParent::RecvSetURITitle(const IPC::URI& uri,
 bool
 ContentParent::RecvShowFilePicker(const PRInt16& mode,
                                   const PRInt16& selectedType,
-                                  const PRBool& addToRecentDocs,
+                                  const bool& addToRecentDocs,
                                   const nsString& title,
                                   const nsString& defaultFile,
                                   const nsString& defaultExtension,
@@ -1049,7 +1050,7 @@ ContentParent::RecvShowFilePicker(const PRInt16& mode,
         *result = filePicker->GetFiles(getter_AddRefs(fileIter));
 
         nsCOMPtr<nsILocalFile> singleFile;
-        PRBool loop = PR_TRUE;
+        bool loop = true;
         while (NS_SUCCEEDED(fileIter->HasMoreElements(&loop)) && loop) {
             fileIter->GetNext(getter_AddRefs(singleFile));
             if (singleFile) {
@@ -1097,7 +1098,7 @@ ContentParent::OnDispatchedEvent(nsIThreadInternal *thread)
 /* void onProcessNextEvent (in nsIThreadInternal thread, in boolean mayWait, in unsigned long recursionDepth); */
 NS_IMETHODIMP
 ContentParent::OnProcessNextEvent(nsIThreadInternal *thread,
-                                  PRBool mayWait,
+                                  bool mayWait,
                                   PRUint32 recursionDepth)
 {
     if (mRunToCompletionDepth)
@@ -1133,7 +1134,7 @@ ContentParent::AfterProcessNextEvent(nsIThreadInternal *thread,
 
 bool
 ContentParent::RecvShowAlertNotification(const nsString& aImageUrl, const nsString& aTitle,
-                                         const nsString& aText, const PRBool& aTextClickable,
+                                         const nsString& aText, const bool& aTextClickable,
                                          const nsString& aCookie, const nsString& aName)
 {
     nsCOMPtr<nsIAlertsService> sysAlerts(do_GetService(NS_ALERTSERVICE_CONTRACTID));

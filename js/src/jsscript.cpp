@@ -384,14 +384,7 @@ js_XDRScript(JSXDRState *xdr, JSScript **scriptp)
     Bindings bindings(cx);
     uint32 nameCount = nargs + nvars + nupvars;
     if (nameCount > 0) {
-        struct AutoMark {
-          JSArenaPool * const pool;
-          void * const mark;
-          AutoMark(JSArenaPool *pool) : pool(pool), mark(JS_ARENA_MARK(pool)) { }
-          ~AutoMark() {
-            JS_ARENA_RELEASE(pool, mark);
-          }
-        } automark(&cx->tempPool);
+        LifoAllocScope las(&cx->tempLifoAlloc());
 
         /*
          * To xdr the names we prefix the names with a bitmap descriptor and
@@ -402,9 +395,7 @@ js_XDRScript(JSXDRState *xdr, JSScript **scriptp)
          * name is declared as const, not as ordinary var.
          * */
         uintN bitmapLength = JS_HOWMANY(nameCount, JS_BITS_PER_UINT32);
-        uint32 *bitmap;
-        JS_ARENA_ALLOCATE_CAST(bitmap, uint32 *, &cx->tempPool,
-                               bitmapLength * sizeof *bitmap);
+        uint32 *bitmap = cx->tempLifoAlloc().newArray<uint32>(bitmapLength);
         if (!bitmap) {
             js_ReportOutOfMemory(cx);
             return false;
@@ -732,7 +723,7 @@ js_XDRScript(JSXDRState *xdr, JSScript **scriptp)
     }
 
     for (i = 0; i != nconsts; ++i) {
-        if (!JS_XDRValue(xdr, Jsvalify(&script->consts()->vector[i])))
+        if (!JS_XDRValue(xdr, &script->consts()->vector[i]))
             goto error;
     }
 
@@ -782,20 +773,20 @@ Class js::ScriptClass = {
     "Script",
     JSCLASS_HAS_PRIVATE |
     JSCLASS_HAS_CACHED_PROTO(JSProto_Object),
-    PropertyStub,         /* addProperty */
-    PropertyStub,         /* delProperty */
-    PropertyStub,         /* getProperty */
-    StrictPropertyStub,   /* setProperty */
-    EnumerateStub,
-    ResolveStub,
-    ConvertStub,
-    NULL,                 /* finalize */
-    NULL,                 /* reserved0   */
-    NULL,                 /* checkAccess */
-    NULL,                 /* call        */
-    NULL,                 /* construct   */
-    NULL,                 /* xdrObject   */
-    NULL,                 /* hasInstance */
+    JS_PropertyStub,         /* addProperty */
+    JS_PropertyStub,         /* delProperty */
+    JS_PropertyStub,         /* getProperty */
+    JS_StrictPropertyStub,   /* setProperty */
+    JS_EnumerateStub,
+    JS_ResolveStub,
+    JS_ConvertStub,
+    NULL,                    /* finalize */
+    NULL,                    /* reserved0   */
+    NULL,                    /* checkAccess */
+    NULL,                    /* call        */
+    NULL,                    /* construct   */
+    NULL,                    /* xdrObject   */
+    NULL,                    /* hasInstance */
     script_trace
 };
 

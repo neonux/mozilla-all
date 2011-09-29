@@ -59,11 +59,12 @@ class RasterImage;
 class nsPNGDecoder : public Decoder
 {
 public:
-  nsPNGDecoder();
+  nsPNGDecoder(RasterImage *aImage, imgIDecoderObserver* aObserver);
   virtual ~nsPNGDecoder();
 
   virtual void InitInternal();
   virtual void WriteInternal(const char* aBuffer, PRUint32 aCount);
+  virtual Telemetry::ID SpeedHistogram();
 
   void CreateFrame(png_uint_32 x_offset, png_uint_32 y_offset,
                    PRInt32 width, PRInt32 height,
@@ -104,12 +105,12 @@ public:
   PRUint32 mHeaderBytesRead;
 
   PRUint8 mChannels;
-  PRPackedBool mFrameHasNoAlpha;
-  PRPackedBool mFrameIsHidden;
+  bool mFrameHasNoAlpha;
+  bool mFrameIsHidden;
 
   // whether CMS or premultiplied alpha are forced off
   PRUint32 mCMSMode;
-  PRPackedBool mDisablePremultipliedAlpha;
+  bool mDisablePremultipliedAlpha;
   
   /*
    * libpng callbacks

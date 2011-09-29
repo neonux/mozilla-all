@@ -44,7 +44,7 @@
 #include "txXMLUtils.h"
 #include "nsString.h"
 #include "nsReadableUtils.h"
-#include "txAtoms.h"
+#include "nsGkAtoms.h"
 #include "txStringUtils.h"
 #include "txNamespaceMap.h"
 #include "txXPathTreeWalker.h"
@@ -55,7 +55,7 @@ txExpandedName::init(const nsAString& aQName, txNamespaceMap* aResolver,
 {
     const nsAFlatString& qName = PromiseFlatString(aQName);
     const PRUnichar* colon;
-    PRBool valid = XMLUtils::isValidQName(qName, &colon);
+    bool valid = XMLUtils::isValidQName(qName, &colon);
     if (!valid) {
         return NS_ERROR_FAILURE;
     }
@@ -149,7 +149,7 @@ XMLUtils::splitQName(const nsAString& aName, nsIAtom** aPrefix,
 {
     const nsAFlatString& qName = PromiseFlatString(aName);
     const PRUnichar* colon;
-    PRBool valid = XMLUtils::isValidQName(qName, &colon);
+    bool valid = XMLUtils::isValidQName(qName, &colon);
     if (!valid) {
         return NS_ERROR_FAILURE;
     }
@@ -184,7 +184,7 @@ const nsDependentSubstring XMLUtils::getLocalPart(const nsAString& src)
 /**
  * Returns true if the given string has only whitespace characters
  */
-PRBool XMLUtils::isWhitespace(const nsAFlatString& aText)
+bool XMLUtils::isWhitespace(const nsAFlatString& aText)
 {
     nsAFlatString::const_char_iterator start, end;
     aText.BeginReading(start);
@@ -235,11 +235,11 @@ MBool XMLUtils::getXMLSpacePreserve(const txXPathNode& aNode)
     nsAutoString value;
     txXPathTreeWalker walker(aNode);
     do {
-        if (walker.getAttr(txXMLAtoms::space, kNameSpaceID_XML, value)) {
-            if (TX_StringEqualsAtom(value, txXMLAtoms::preserve)) {
+        if (walker.getAttr(nsGkAtoms::space, kNameSpaceID_XML, value)) {
+            if (TX_StringEqualsAtom(value, nsGkAtoms::preserve)) {
                 return PR_TRUE;
             }
-            if (TX_StringEqualsAtom(value, txXMLAtoms::_default)) {
+            if (TX_StringEqualsAtom(value, nsGkAtoms::_default)) {
                 return PR_FALSE;
             }
         }

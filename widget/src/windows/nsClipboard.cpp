@@ -602,7 +602,7 @@ nsresult nsClipboard::GetDataFromDataObject(IDataObject     * aDataObject,
       // not lost.
       void* data = nsnull;
       PRUint32 dataLen = 0;
-      PRBool dataFound = PR_FALSE;
+      bool dataFound = false;
       if (nsnull != aDataObject) {
         if ( NS_SUCCEEDED(GetNativeDataOffClipboard(aDataObject, anIndex, format, flavorStr, &data, &dataLen)) )
           dataFound = PR_TRUE;
@@ -690,26 +690,50 @@ nsresult nsClipboard::GetDataFromDataObject(IDataObject     * aDataObject,
 //
 // Someone asked for the OS CF_HTML flavor. We give it back to them exactly as-is.
 //
-PRBool
+bool
 nsClipboard :: FindPlatformHTML ( IDataObject* inDataObject, UINT inIndex, void** outData, PRUint32* outDataLen )
 {
-  PRBool dataFound = PR_FALSE;
+  // Reference: MSDN doc entitled "HTML Clipboard Format"
+  // http://msdn.microsoft.com/en-us/library/aa767917(VS.85).aspx#unknown_854
+  // CF_HTML is UTF8, not unicode. We also can't rely on it being null-terminated
+  // so we have to check the CF_HTML header for the correct length. 
+  // The length we return is the bytecount from the beginning of the selected data to the end
+  // of the selected data, without the null termination. Because it's UTF8, we're guaranteed 
+  // the header is ASCII.
 
-  if ( outData && *outData ) {
-    // CF_HTML is UTF8, not unicode. We also can't rely on it being null-terminated
-    // so we have to check the CF_HTML header for the correct length. The length we return
-    // is the bytecount from the beginning of the data to the end, without
-    // the null termination. Because it's UTF8, we're guaranteed the header is ascii (yay!).
-    float vers = 0.0;
-    PRUint32 startOfData = 0;
-    sscanf((char*)*outData, "Version:%f\nStartHTML:%u\nEndHTML:%u", &vers, &startOfData, outDataLen);
-    NS_ASSERTION(startOfData && *outDataLen, "Couldn't parse CF_HTML description header");
- 
-    if ( *outDataLen )
-      dataFound = PR_TRUE;
+  if (!outData || !*outData) {
+    return PR_FALSE;
   }
 
-  return dataFound;
+  float vers = 0.0;
+  PRInt32 startOfData = 0;
+  PRInt32 endOfData = 0;
+  int numFound = sscanf((char*)*outData, "Version:%f\nStartHTML:%d\nEndHTML:%d", 
+                        &vers, &startOfData, &endOfData);
+
+  if (numFound != 3 || startOfData < -1 || endOfData < -1) {
+    return PR_FALSE;
+  }
+
+  // Fixup the start and end markers if they have no context (set to -1)
+  if (startOfData == -1) {
+    startOfData = 0;
+  }
+  if (endOfData == -1) {
+    endOfData = *outDataLen;
+  }
+
+  // Make sure we were passed sane values within our buffer size.
+  if (!endOfData || startOfData >= endOfData || 
+      endOfData > *outDataLen) {
+    return PR_FALSE;
+  }
+  
+  // We want to return the buffer not offset by startOfData because it will be 
+  // parsed out later (probably by nsHTMLEditor::ParseCFHTML) when it is still
+  // in CF_HTML format.
+  *outDataLen = endOfData;
+  return PR_TRUE;
 }
 
 
@@ -719,10 +743,10 @@ nsClipboard :: FindPlatformHTML ( IDataObject* inDataObject, UINT inIndex, void*
 // we are looking for text/unicode and we failed to find it on the clipboard first,
 // try again with text/plain. If that is present, convert it to unicode.
 //
-PRBool
+bool
 nsClipboard :: FindUnicodeFromPlainText ( IDataObject* inDataObject, UINT inIndex, void** outData, PRUint32* outDataLen )
 {
-  PRBool dataFound = PR_FALSE;
+  bool dataFound = false;
 
   // we are looking for text/unicode and we failed to find it on the clipboard first,
   // try again with text/plain. If that is present, convert it to unicode.
@@ -755,10 +779,10 @@ nsClipboard :: FindUnicodeFromPlainText ( IDataObject* inDataObject, UINT inInde
 // In both cases, however, we can get a URL (it will be a file:// url in the
 // local file case).
 //
-PRBool
+bool
 nsClipboard :: FindURLFromLocalFile ( IDataObject* inDataObject, UINT inIndex, void** outData, PRUint32* outDataLen )
 {
-  PRBool dataFound = PR_FALSE;
+  bool dataFound = false;
 
   nsresult loadResult = GetNativeDataOffClipboard(inDataObject, inIndex, GetFormat(kFileMime), nsnull, outData, outDataLen);
   if ( NS_SUCCEEDED(loadResult) && *outData ) {
@@ -815,10 +839,10 @@ nsClipboard :: FindURLFromLocalFile ( IDataObject* inDataObject, UINT inIndex, v
 // URL flavor, so look for it using the native URL flavor,
 // CF_INETURLSTRW (We don't handle CF_INETURLSTRA currently)
 //
-PRBool
+bool
 nsClipboard :: FindURLFromNativeURL ( IDataObject* inDataObject, UINT inIndex, void** outData, PRUint32* outDataLen )
 {
-  PRBool dataFound = PR_FALSE;
+  bool dataFound = false;
 
   void* tempOutData = nsnull;
   PRUint32 tempDataLen = 0;
@@ -840,7 +864,7 @@ nsClipboard :: FindURLFromNativeURL ( IDataObject* inDataObject, UINT inIndex, v
       // CFSTR_INETURLA is (currently) equal to CFSTR_SHELLURL which is equal to CF_TEXT
       // which is by definition ANSI encoded.
       nsCString urlUnescapedA;
-      PRBool unescaped = NS_UnescapeURL(static_cast<char*>(tempOutData), tempDataLen, esc_OnlyNonASCII | esc_SkipControl, urlUnescapedA);
+      bool unescaped = NS_UnescapeURL(static_cast<char*>(tempOutData), tempDataLen, esc_OnlyNonASCII | esc_SkipControl, urlUnescapedA);
 
       nsString urlString;
       if (unescaped)
@@ -886,7 +910,7 @@ nsClipboard :: ResolveShortcut ( nsILocalFile* aFile, nsACString& outURL )
 //
 // A file is an Internet Shortcut if it ends with .URL
 //
-PRBool
+bool
 nsClipboard :: IsInternetShortcut ( const nsAString& inFileName ) 
 {
   return StringEndsWith(inFileName, NS_LITERAL_STRING(".url"), nsCaseInsensitiveStringComparator());
@@ -923,7 +947,7 @@ nsClipboard::GetNativeClipboardData ( nsITransferable * aTransferable, PRInt32 a
 NS_IMETHODIMP nsClipboard::HasDataMatchingFlavors(const char** aFlavorList,
                                                   PRUint32 aLength,
                                                   PRInt32 aWhichClipboard,
-                                                  PRBool *_retval)
+                                                  bool *_retval)
 {
   *_retval = PR_FALSE;
   if (aWhichClipboard != kGlobalClipboard || !aFlavorList)

@@ -50,21 +50,23 @@
  * is reference counted and the slot vector is malloc'ed.
  */
 #include "jsapi.h"
+#include "jsclass.h"
 #include "jsinfer.h"
 #include "jshash.h"
 #include "jspubtd.h"
 #include "jsprvtd.h"
 #include "jslock.h"
-#include "jsvalue.h"
 #include "jsvector.h"
 #include "jscell.h"
+
+#include "vm/String.h"
 
 namespace nanojit { class ValidateWriter; }
 
 namespace js {
 
 class AutoPropDescArrayRooter;
-class JSProxyHandler;
+class ProxyHandler;
 class RegExp;
 class CallObject;
 struct GCMarker;
@@ -84,16 +86,16 @@ CastAsStrictPropertyOp(JSObject *object)
     return JS_DATA_TO_FUNC_PTR(StrictPropertyOp, object);
 }
 
-static inline JSPropertyOp
+static inline PropertyOp
 CastAsJSPropertyOp(JSObject *object)
 {
-    return JS_DATA_TO_FUNC_PTR(JSPropertyOp, object);
+    return JS_DATA_TO_FUNC_PTR(PropertyOp, object);
 }
 
-static inline JSStrictPropertyOp
+static inline StrictPropertyOp
 CastAsJSStrictPropertyOp(JSObject *object)
 {
-    return JS_DATA_TO_FUNC_PTR(JSStrictPropertyOp, object);
+    return JS_DATA_TO_FUNC_PTR(StrictPropertyOp, object);
 }
 
 inline JSObject *
@@ -119,6 +121,22 @@ CastAsObjectJsval(StrictPropertyOp op)
 {
     return ObjectOrNullValue(CastAsObject(op));
 }
+
+/*
+ * JSPropertySpec uses JSAPI JSPropertyOp and JSStrictPropertyOp in function
+ * signatures, but with JSPROP_NATIVE_ACCESSORS the actual values must be
+ * JSNatives. To avoid widespread casting, have JS_PSG and JS_PSGS perform
+ * type-safe casts.
+ */
+#define JS_PSG(name,getter,flags)                                             \
+    {name, 0, (flags) | JSPROP_SHARED | JSPROP_NATIVE_ACCESSORS,              \
+     (JSPropertyOp)getter, NULL}
+#define JS_PSGS(name,getter,setter,flags)                                     \
+    {name, 0, (flags) | JSPROP_SHARED | JSPROP_NATIVE_ACCESSORS,              \
+     (JSPropertyOp)getter, (JSStrictPropertyOp)setter}
+#define JS_PS_END {0, 0, 0, 0, 0}
+
+/******************************************************************************/
 
 /*
  * A representation of ECMA-262 ed. 5's internal Property Descriptor data
@@ -213,10 +231,10 @@ struct PropDesc {
         return set;
     }
 
-    js::PropertyOp getter() const {
+    PropertyOp getter() const {
         return js::CastAsPropertyOp(getterObject());
     }
-    js::StrictPropertyOp setter() const {
+    StrictPropertyOp setter() const {
         return js::CastAsStrictPropertyOp(setterObject());
     }
 
@@ -247,17 +265,33 @@ extern JS_FRIEND_API(JSBool)
 js_LookupProperty(JSContext *cx, JSObject *obj, jsid id, JSObject **objp,
                   JSProperty **propp);
 
+extern JS_FRIEND_API(JSBool)
+js_LookupElement(JSContext *cx, JSObject *obj, uint32 index, JSObject **objp, JSProperty **propp);
+
 extern JSBool
 js_DefineProperty(JSContext *cx, JSObject *obj, jsid id, const js::Value *value,
-                  js::PropertyOp getter, js::StrictPropertyOp setter, uintN attrs);
+                  JSPropertyOp getter, JSStrictPropertyOp setter, uintN attrs);
+
+extern JSBool
+js_DefineElement(JSContext *cx, JSObject *obj, uint32 index, const js::Value *value,
+                 JSPropertyOp getter, JSStrictPropertyOp setter, uintN attrs);
 
 extern JSBool
 js_GetProperty(JSContext *cx, JSObject *obj, JSObject *receiver, jsid id, js::Value *vp);
+
+extern JSBool
+js_GetElement(JSContext *cx, JSObject *obj, JSObject *receiver, uint32, js::Value *vp);
 
 inline JSBool
 js_GetProperty(JSContext *cx, JSObject *obj, jsid id, js::Value *vp)
 {
     return js_GetProperty(cx, obj, obj, id, vp);
+}
+
+inline JSBool
+js_GetElement(JSContext *cx, JSObject *obj, uint32 index, js::Value *vp)
+{
+    return js_GetElement(cx, obj, obj, index, vp);
 }
 
 namespace js {
@@ -272,13 +306,26 @@ js_SetPropertyHelper(JSContext *cx, JSObject *obj, jsid id, uintN defineHow,
                      js::Value *vp, JSBool strict);
 
 extern JSBool
+js_SetElementHelper(JSContext *cx, JSObject *obj, uint32 index, uintN defineHow,
+                    js::Value *vp, JSBool strict);
+
+extern JSBool
 js_GetAttributes(JSContext *cx, JSObject *obj, jsid id, uintN *attrsp);
+
+extern JSBool
+js_GetElementAttributes(JSContext *cx, JSObject *obj, uint32 index, uintN *attrsp);
 
 extern JSBool
 js_SetAttributes(JSContext *cx, JSObject *obj, jsid id, uintN *attrsp);
 
 extern JSBool
+js_SetElementAttributes(JSContext *cx, JSObject *obj, uint32 index, uintN *attrsp);
+
+extern JSBool
 js_DeleteProperty(JSContext *cx, JSObject *obj, jsid id, js::Value *rval, JSBool strict);
+
+extern JSBool
+js_DeleteElement(JSContext *cx, JSObject *obj, uint32 index, js::Value *rval, JSBool strict);
 
 extern JS_FRIEND_API(JSBool)
 js_Enumerate(JSContext *cx, JSObject *obj, JSIterateOp enum_op,
@@ -333,6 +380,7 @@ extern Class XMLFilterClass;
 class ArgumentsObject;
 class GlobalObject;
 class NormalArgumentsObject;
+class NumberObject;
 class StrictArgumentsObject;
 class StringObject;
 
@@ -1005,6 +1053,7 @@ struct JSObject : js::gc::Cell {
     }
 
   public:
+    inline js::NumberObject *asNumber();
     inline js::StringObject *asString();
 
     /*
@@ -1244,12 +1293,12 @@ struct JSObject : js::gc::Cell {
      * Proxy-specific getters and setters.
      */
 
-    inline js::JSProxyHandler *getProxyHandler() const;
+    inline js::ProxyHandler *getProxyHandler() const;
     inline const js::Value &getProxyPrivate() const;
     inline void setProxyPrivate(const js::Value &priv);
     inline const js::Value &getProxyExtra() const;
     inline void setProxyExtra(const js::Value &extra);
-    inline JSWrapper *getWrapperHandler() const;
+    inline js::Wrapper *getWrapperHandler() const;
 
     /*
      * With object-specific getters and setters.
@@ -1326,7 +1375,7 @@ struct JSObject : js::gc::Cell {
      * 2. !isExtensible() checking must be done by callers.
      */
     const js::Shape *addPropertyInternal(JSContext *cx, jsid id,
-                                         js::PropertyOp getter, js::StrictPropertyOp setter,
+                                         JSPropertyOp getter, JSStrictPropertyOp setter,
                                          uint32 slot, uintN attrs,
                                          uintN flags, intN shortid,
                                          js::Shape **spp);
@@ -1345,7 +1394,7 @@ struct JSObject : js::gc::Cell {
   public:
     /* Add a property whose id is not yet in this scope. */
     const js::Shape *addProperty(JSContext *cx, jsid id,
-                                 js::PropertyOp getter, js::StrictPropertyOp setter,
+                                 JSPropertyOp getter, JSStrictPropertyOp setter,
                                  uint32 slot, uintN attrs,
                                  uintN flags, intN shortid);
 
@@ -1357,13 +1406,13 @@ struct JSObject : js::gc::Cell {
 
     /* Add or overwrite a property for id in this scope. */
     const js::Shape *putProperty(JSContext *cx, jsid id,
-                                 js::PropertyOp getter, js::StrictPropertyOp setter,
+                                 JSPropertyOp getter, JSStrictPropertyOp setter,
                                  uint32 slot, uintN attrs,
                                  uintN flags, intN shortid);
 
     /* Change the given property into a sibling with the same id in this scope. */
     const js::Shape *changeProperty(JSContext *cx, const js::Shape *shape, uintN attrs, uintN mask,
-                                    js::PropertyOp getter, js::StrictPropertyOp setter);
+                                    JSPropertyOp getter, JSStrictPropertyOp setter);
 
     /* Remove the property named by id from this object. */
     bool removeProperty(JSContext *cx, jsid id);
@@ -1376,16 +1425,35 @@ struct JSObject : js::gc::Cell {
         return (op ? op : js_LookupProperty)(cx, this, id, objp, propp);
     }
 
+    inline JSBool lookupElement(JSContext *cx, uint32 index, JSObject **objp, JSProperty **propp);
+
     JSBool defineProperty(JSContext *cx, jsid id, const js::Value &value,
-                          js::PropertyOp getter = js::PropertyStub,
-                          js::StrictPropertyOp setter = js::StrictPropertyStub,
+                          JSPropertyOp getter = JS_PropertyStub,
+                          JSStrictPropertyOp setter = JS_StrictPropertyStub,
                           uintN attrs = JSPROP_ENUMERATE) {
         js::DefinePropOp op = getOps()->defineProperty;
         return (op ? op : js_DefineProperty)(cx, this, id, &value, getter, setter, attrs);
     }
 
-    inline JSBool getProperty(JSContext *cx, JSObject *receiver, jsid id, js::Value *vp);
-    inline JSBool getProperty(JSContext *cx, jsid id, js::Value *vp);
+    JSBool defineElement(JSContext *cx, uint32 index, const js::Value &value,
+                         JSPropertyOp getter = JS_PropertyStub,
+                         JSStrictPropertyOp setter = JS_StrictPropertyStub,
+                         uintN attrs = JSPROP_ENUMERATE)
+    {
+        js::DefineElementOp op = getOps()->defineElement;
+        return (op ? op : js_DefineElement)(cx, this, index, &value, getter, setter, attrs);
+    }
+
+    inline JSBool getGeneric(JSContext *cx, JSObject *receiver, jsid id, js::Value *vp);
+    inline JSBool getProperty(JSContext *cx, JSObject *receiver, js::PropertyName *name,
+                              js::Value *vp);
+    inline JSBool getElement(JSContext *cx, JSObject *receiver, uint32 index, js::Value *vp);
+    inline JSBool getSpecial(JSContext *cx, JSObject *receiver, js::SpecialId sid, js::Value *vp);
+
+    inline JSBool getGeneric(JSContext *cx, jsid id, js::Value *vp);
+    inline JSBool getProperty(JSContext *cx, js::PropertyName *name, js::Value *vp);
+    inline JSBool getElement(JSContext *cx, uint32 index, js::Value *vp);
+    inline JSBool getSpecial(JSContext *cx, js::SpecialId sid, js::Value *vp);
 
     JSBool setProperty(JSContext *cx, jsid id, js::Value *vp, JSBool strict) {
         if (getOps()->setProperty)
@@ -1393,24 +1461,45 @@ struct JSObject : js::gc::Cell {
         return js_SetPropertyHelper(cx, this, id, 0, vp, strict);
     }
 
+    JSBool setElement(JSContext *cx, uint32 index, js::Value *vp, JSBool strict) {
+        if (getOps()->setElement)
+            return nonNativeSetElement(cx, index, vp, strict);
+        return js_SetElementHelper(cx, this, index, 0, vp, strict);
+    }
+
     JSBool nonNativeSetProperty(JSContext *cx, jsid id, js::Value *vp, JSBool strict);
+
+    JSBool nonNativeSetElement(JSContext *cx, uint32 index, js::Value *vp, JSBool strict);
 
     JSBool getAttributes(JSContext *cx, jsid id, uintN *attrsp) {
         js::AttributesOp op = getOps()->getAttributes;
         return (op ? op : js_GetAttributes)(cx, this, id, attrsp);
     }
 
+    JSBool getElementAttributes(JSContext *cx, uint32 index, uintN *attrsp) {
+        js::ElementAttributesOp op = getOps()->getElementAttributes;
+        return (op ? op : js_GetElementAttributes)(cx, this, index, attrsp);
+    }
+
     inline JSBool setAttributes(JSContext *cx, jsid id, uintN *attrsp);
+
+    JSBool setElementAttributes(JSContext *cx, uint32 index, uintN *attrsp) {
+        js::ElementAttributesOp op = getOps()->setElementAttributes;
+        return (op ? op : js_SetElementAttributes)(cx, this, index, attrsp);
+    }
+
     inline JSBool deleteProperty(JSContext *cx, jsid id, js::Value *rval, JSBool strict);
 
+    inline JSBool deleteElement(JSContext *cx, uint32 index, js::Value *rval, JSBool strict);
+
     JSBool enumerate(JSContext *cx, JSIterateOp iterop, js::Value *statep, jsid *idp) {
-        js::NewEnumerateOp op = getOps()->enumerate;
+        JSNewEnumerateOp op = getOps()->enumerate;
         return (op ? op : js_Enumerate)(cx, this, iterop, statep, idp);
     }
 
     bool defaultValue(JSContext *cx, JSType hint, js::Value *vp) {
-        js::ConvertOp op = getClass()->convert;
-        bool ok = (op == js::ConvertStub ? js::DefaultValue : op)(cx, this, hint, vp);
+        JSConvertOp op = getClass()->convert;
+        bool ok = (op == JS_ConvertStub ? js::DefaultValue : op)(cx, this, hint, vp);
         JS_ASSERT_IF(ok, vp->isPrimitive());
         return ok;
     }
@@ -1688,13 +1777,19 @@ js_HasOwnProperty(JSContext *cx, js::LookupPropOp lookup, JSObject *obj, jsid id
 extern JSBool
 js_PropertyIsEnumerable(JSContext *cx, JSObject *obj, jsid id, js::Value *vp);
 
+#if JS_HAS_OBJ_PROTO_PROP
+extern JSPropertySpec object_props[];
+#else
+#define object_props NULL
+#endif
+
+extern JSFunctionSpec object_methods[];
+extern JSFunctionSpec object_static_methods[];
+
 #ifdef OLD_GETTER_SETTER_METHODS
 JS_FRIEND_API(JSBool) js_obj_defineGetter(JSContext *cx, uintN argc, js::Value *vp);
 JS_FRIEND_API(JSBool) js_obj_defineSetter(JSContext *cx, uintN argc, js::Value *vp);
 #endif
-
-extern JSObject *
-js_InitObjectClass(JSContext *cx, JSObject *obj);
 
 namespace js {
 
@@ -1716,7 +1811,7 @@ MarkStandardClassInitializedNoProto(JSObject *obj, js::Class *clasp);
 
 extern JSObject *
 js_InitClass(JSContext *cx, JSObject *obj, JSObject *parent_proto,
-             js::Class *clasp, js::Native constructor, uintN nargs,
+             js::Class *clasp, JSNative constructor, uintN nargs,
              JSPropertySpec *ps, JSFunctionSpec *fs,
              JSPropertySpec *static_ps, JSFunctionSpec *static_fs,
              JSObject **ctorp = NULL);
@@ -1797,7 +1892,7 @@ js_PurgeScopeChain(JSContext *cx, JSObject *obj, jsid id)
  */
 extern const js::Shape *
 js_AddNativeProperty(JSContext *cx, JSObject *obj, jsid id,
-                     js::PropertyOp getter, js::StrictPropertyOp setter, uint32 slot,
+                     JSPropertyOp getter, JSStrictPropertyOp setter, uint32 slot,
                      uintN attrs, uintN flags, intN shortid);
 
 /*
@@ -1808,7 +1903,7 @@ js_AddNativeProperty(JSContext *cx, JSObject *obj, jsid id,
 extern const js::Shape *
 js_ChangeNativePropertyAttrs(JSContext *cx, JSObject *obj,
                              const js::Shape *shape, uintN attrs, uintN mask,
-                             js::PropertyOp getter, js::StrictPropertyOp setter);
+                             JSPropertyOp getter, JSStrictPropertyOp setter);
 
 extern JSBool
 js_DefineOwnProperty(JSContext *cx, JSObject *obj, jsid id,
@@ -2108,13 +2203,16 @@ SetProto(JSContext *cx, JSObject *obj, JSObject *proto, bool checkForCycles);
 extern JSString *
 obj_toStringHelper(JSContext *cx, JSObject *obj);
 
+extern JSBool
+eval(JSContext *cx, uintN argc, Value *vp);
+
 /*
  * Performs a direct eval for the given arguments, which must correspond to the
  * currently-executing stack frame, which must be a script frame. On completion
- * the result is returned in call.rval.
+ * the result is returned in args.rval.
  */
 extern JS_REQUIRES_STACK bool
-DirectEval(JSContext *cx, const CallArgs &call);
+DirectEval(JSContext *cx, const CallArgs &args);
 
 /*
  * True iff |v| is the built-in eval function for the global object that
@@ -2129,13 +2227,94 @@ IsAnyBuiltinEval(JSFunction *fun);
 
 /* 'call' should be for the eval/Function native invocation. */
 extern JSPrincipals *
-PrincipalsForCompiledCode(const CallArgs &call, JSContext *cx);
+PrincipalsForCompiledCode(const CallReceiver &call, JSContext *cx);
 
 extern JSObject *
 NonNullObject(JSContext *cx, const Value &v);
 
 extern const char *
 InformalValueTypeName(const Value &v);
-}
+
+/*
+ * Report an error if call.thisv is not compatible with the specified class.
+ *
+ * NB: most callers should be calling or NonGenericMethodGuard,
+ * HandleNonGenericMethodClassMismatch, or BoxedPrimitiveMethodGuard (so that
+ * transparent proxies are handled correctly). Thus, any caller of this
+ * function better have a good explanation for why proxies are being handled
+ * correctly (e.g., by IsCallable) or are not an issue (E4X).
+ */
+extern void
+ReportIncompatibleMethod(JSContext *cx, CallReceiver call, Class *clasp);
+
+/*
+ * A non-generic method is specified to report an error if args.thisv is not an
+ * object with a specific [[Class]] internal property (ES5 8.6.2).
+ * NonGenericMethodGuard performs this checking. Canonical usage is:
+ *
+ *   CallArgs args = ...
+ *   bool ok;
+ *   JSObject *thisObj = NonGenericMethodGuard(cx, args, clasp, &ok);
+ *   if (!thisObj)
+ *     return ok;
+ *
+ * Specifically: if obj is a proxy, NonGenericMethodGuard will call the
+ * object's ProxyHandler's nativeCall hook (which may recursively call
+ * args.callee in args.thisv's compartment). Thus, there are three possible
+ * post-conditions:
+ *
+ *   1. thisv is an object of the given clasp: the caller may proceed;
+ *
+ *   2. there was an error: the caller must return 'false';
+ *
+ *   3. thisv wrapped an object of the given clasp and the native was reentered
+ *      and completed succesfully: the caller must return 'true'.
+ *
+ * Case 1 is indicated by a non-NULL return value; case 2 by a NULL return
+ * value with *ok == false; and case 3 by a NULL return value with *ok == true.
+ *
+ * NB: since this guard may reenter the native, the guard must be placed before
+ * any effectful operations are performed.
+ */
+inline JSObject *
+NonGenericMethodGuard(JSContext *cx, CallArgs args, Class *clasp, bool *ok);
+
+/*
+ * NonGenericMethodGuard tests args.thisv's class using 'clasp'. If more than
+ * one class is acceptable (viz., isDenseArray() || isSlowArray()), the caller
+ * may test the class and delegate to HandleNonGenericMethodClassMismatch to
+ * handle the proxy case and error reporting. The 'clasp' argument is only used
+ * for error reporting (clasp->name).
+ */
+extern bool
+HandleNonGenericMethodClassMismatch(JSContext *cx, CallArgs args, Class *clasp);
+
+/*
+ * Implement the extraction of a primitive from a value as needed for the
+ * toString, valueOf, and a few other methods of the boxed primitives classes
+ * Boolean, Number, and String (e.g., ES5 15.6.4.2). If 'true' is returned, the
+ * extracted primitive is stored in |*v|. If 'false' is returned, the caller
+ * must immediately 'return *ok'. For details, see NonGenericMethodGuard.
+ */
+template <typename T>
+inline bool
+BoxedPrimitiveMethodGuard(JSContext *cx, CallArgs args, T *v, bool *ok);
+
+/*
+ * Enumeration describing possible values of the [[Class]] internal property
+ * value of objects.
+ */
+enum ESClassValue { ESClass_Array, ESClass_Number, ESClass_String, ESClass_Boolean };
+
+/*
+ * Return whether the given object has the given [[Class]] internal property
+ * value. Beware, this query says nothing about the js::Class of the JSObject
+ * so the caller must not assume anything about obj's representation (e.g., obj
+ * may be a proxy).
+ */
+inline bool
+ObjectClassIs(JSObject &obj, ESClassValue classValue, JSContext *cx);
+
+}  /* namespace js */
 
 #endif /* jsobj_h___ */

@@ -160,19 +160,19 @@ nsXFormsAccessible::NativeState()
 
   nsCOMPtr<nsIDOMNode> DOMNode(do_QueryInterface(mContent));
 
-  PRBool isRelevant = PR_FALSE;
+  bool isRelevant = false;
   nsresult rv = sXFormsService->IsRelevant(DOMNode, &isRelevant);
   NS_ENSURE_SUCCESS(rv, 0);
 
-  PRBool isReadonly = PR_FALSE;
+  bool isReadonly = false;
   rv = sXFormsService->IsReadonly(DOMNode, &isReadonly);
   NS_ENSURE_SUCCESS(rv, 0);
 
-  PRBool isRequired = PR_FALSE;
+  bool isRequired = false;
   rv = sXFormsService->IsRequired(DOMNode, &isRequired);
   NS_ENSURE_SUCCESS(rv, 0);
 
-  PRBool isValid = PR_FALSE;
+  bool isValid = false;
   rv = sXFormsService->IsValid(DOMNode, &isValid);
   NS_ENSURE_SUCCESS(rv, 0);
 
@@ -204,14 +204,14 @@ void
 nsXFormsAccessible::Description(nsString& aDescription)
 {
   nsTextEquivUtils::
-    GetTextEquivFromIDRefs(this, nsAccessibilityAtoms::aria_describedby,
+    GetTextEquivFromIDRefs(this, nsGkAtoms::aria_describedby,
                            aDescription);
 
   if (aDescription.IsEmpty())
     GetBoundChildElementValue(NS_LITERAL_STRING("hint"), aDescription);
 }
 
-PRBool
+bool
 nsXFormsAccessible::GetAllowsAnonChildAccessibles()
 {
   return PR_FALSE;
@@ -234,7 +234,7 @@ nsXFormsContainerAccessible::NativeRole()
   return nsIAccessibleRole::ROLE_GROUPING;
 }
 
-PRBool
+bool
 nsXFormsContainerAccessible::GetAllowsAnonChildAccessibles()
 {
   return PR_TRUE;
@@ -258,12 +258,12 @@ nsXFormsEditableAccessible::NativeState()
 
   nsCOMPtr<nsIDOMNode> DOMNode(do_QueryInterface(mContent));
 
-  PRBool isReadonly = PR_FALSE;
+  bool isReadonly = false;
   nsresult rv = sXFormsService->IsReadonly(DOMNode, &isReadonly);
   NS_ENSURE_SUCCESS(rv, state);
 
   if (!isReadonly) {
-    PRBool isRelevant = PR_FALSE;
+    bool isRelevant = false;
     rv = sXFormsService->IsRelevant(DOMNode, &isRelevant);
     NS_ENSURE_SUCCESS(rv, state);
     if (isRelevant) {
@@ -300,7 +300,7 @@ nsXFormsSelectableAccessible::
   nsXFormsEditableAccessible(aContent, aShell), mIsSelect1Element(nsnull)
 {
   mIsSelect1Element =
-    mContent->NodeInfo()->Equals(nsAccessibilityAtoms::select1);
+    mContent->NodeInfo()->Equals(nsGkAtoms::select1);
 }
 
 bool
@@ -473,7 +473,7 @@ nsXFormsSelectableAccessible::IsItemSelected(PRUint32 aIndex)
     return selItemDOMNode == itemDOMNode;
   }
 
-  PRBool isSelected = PR_FALSE;
+  bool isSelected = false;
   sXFormsService->IsSelectItemSelected(DOMNode, itemDOMNode, &isSelected);
   return isSelected;
 }
@@ -511,12 +511,12 @@ nsXFormsSelectableAccessible::GetItemByIndex(PRUint32* aIndex,
     nsIContent* childContent = child->GetContent();
     nsINodeInfo *nodeInfo = childContent->NodeInfo();
     if (nodeInfo->NamespaceEquals(NS_LITERAL_STRING(NS_NAMESPACE_XFORMS))) {
-      if (nodeInfo->Equals(nsAccessibilityAtoms::item)) {
+      if (nodeInfo->Equals(nsGkAtoms::item)) {
         if (!*aIndex)
           return childContent;
 
         --*aIndex;
-      } else if (nodeInfo->Equals(nsAccessibilityAtoms::choices)) {
+      } else if (nodeInfo->Equals(nsGkAtoms::choices)) {
         nsIContent* itemContent = GetItemByIndex(aIndex, child);
         if (itemContent)
           return itemContent;
@@ -582,13 +582,13 @@ nsXFormsSelectableItemAccessible::IsSelected()
       continue;
 
     nsCOMPtr<nsIDOMNode> DOMNode(do_QueryInterface(mContent));
-    if (nodeinfo->Equals(nsAccessibilityAtoms::select)) {
-      PRBool isSelected = PR_FALSE;
+    if (nodeinfo->Equals(nsGkAtoms::select)) {
+      bool isSelected = false;
       rv = sXFormsService->IsSelectItemSelected(select, DOMNode, &isSelected);
       return NS_SUCCEEDED(rv) && isSelected;
     }
 
-    if (nodeinfo->Equals(nsAccessibilityAtoms::select1)) {
+    if (nodeinfo->Equals(nsGkAtoms::select1)) {
       nsCOMPtr<nsIDOMNode> selitem;
       rv = sXFormsService->GetSelectedItemForSelect1(select,
                                                      getter_AddRefs(selitem));

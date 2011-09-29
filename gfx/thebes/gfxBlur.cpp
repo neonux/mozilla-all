@@ -73,7 +73,7 @@ gfxAlphaBoxBlur::Init(const gfxRect& aRect,
 
     unsigned char* data = mBlur->GetData();
     if (!data)
-      return nsnull;
+        return nsnull;
 
     IntSize size = mBlur->GetSize();
 

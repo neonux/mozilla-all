@@ -97,16 +97,13 @@ public:
   }
 
   // nsINode
-  virtual PRBool IsNodeOfType(PRUint32 aFlags) const;
+  virtual bool IsNodeOfType(PRUint32 aFlags) const;
 
   // nsIContent overrides
   virtual const nsTextFragment* GetText();
-  virtual nsresult BindToTree(nsIDocument *aDocument, nsIContent *aParent,
-                              nsIContent *aBindingParent,
-                              PRBool aCompileEventHandlers);
 
   virtual nsGenericDOMDataNode* CloneDataNode(nsINodeInfo *aNodeInfo,
-                                              PRBool aCloneText) const;
+                                              bool aCloneText) const;
 
   virtual nsXPCClassInfo* GetClassInfo();
 protected:
@@ -117,8 +114,7 @@ protected:
 
 nsresult
 NS_NewDOMDocumentType(nsIDOMDocumentType** aDocType,
-                      nsNodeInfoManager *aOwnerDoc,
-                      nsIPrincipal *aPrincipal,
+                      nsNodeInfoManager* aNodeInfoManager,
                       nsIAtom *aName,
                       const nsAString& aPublicId,
                       const nsAString& aSystemId,

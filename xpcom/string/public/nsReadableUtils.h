@@ -223,14 +223,14 @@ void AppendUnicodeTo( const nsAString::const_iterator& aSrcStart,
    *
    * @param aString a 16-bit wide string to scan
    */
-PRBool IsASCII( const nsAString& aString );
+bool IsASCII( const nsAString& aString );
 
   /**
    * Returns |PR_TRUE| if |aString| contains only ASCII characters, that is, characters in the range (0x00, 0x7F).
    *
    * @param aString a 8-bit wide string to scan
    */
-PRBool IsASCII( const nsACString& aString );
+bool IsASCII( const nsACString& aString );
 
   /**
    * Returns |PR_TRUE| if |aString| is a valid UTF-8 string.
@@ -241,18 +241,31 @@ PRBool IsASCII( const nsACString& aString );
    *
    * (see bug 191541)
    * As such,  it does not check for non-UTF-8 7bit encodings such as 
-   * ISO-2022-JP and HZ. However, it filters out  UTF-8 representation
-   * of surrogate codepoints and non-characters ( 0xFFFE and 0xFFFF
-   * in planes 0 through 16.) as well as overlong UTF-8 sequences. 
-   * Also note that it regards UTF-8 sequences corresponding to 
-   * codepoints above 0x10FFFF as invalid in accordance with 
-   * http://www.ietf.org/internet-drafts/draft-yergeau-rfc2279bis-04.txt
+   * ISO-2022-JP and HZ. 
+   *
+   * It rejects sequences with the following errors:
+   *
+   * byte sequences that cannot be decoded into characters according to
+   *   UTF-8's rules (including cases where the input is part of a valid
+   *   UTF-8 sequence but starts or ends mid-character)
+   * overlong sequences (i.e., cases where a character was encoded
+   *   non-canonically by using more bytes than necessary)
+   * surrogate codepoints (i.e., the codepoints reserved for
+       representing astral characters in UTF-16)
+   * codepoints above the unicode range (i.e., outside the first 17
+   *   planes; higher than U+10FFFF), in accordance with
+   *   http://tools.ietf.org/html/rfc3629
+   * when aRejectNonChar is true (the default), any codepoint whose low
+   *   16 bits are 0xFFFE or 0xFFFF
+
    *
    * @param aString an 8-bit wide string to scan
+   * @param aRejectNonChar a boolean to control the rejection of utf-8
+   *        non characters
    */
-PRBool IsUTF8( const nsACString& aString );
+bool IsUTF8( const nsACString& aString, bool aRejectNonChar = true );
 
-PRBool ParseString(const nsACString& aAstring, char aDelimiter, 
+bool ParseString(const nsACString& aAstring, char aDelimiter, 
                           nsTArray<nsCString>& aArray);
 
   /**
@@ -283,12 +296,12 @@ void ToLowerCase( const nsACString& aSource, nsACString& aDest );
    * If we need something faster, then we can implement that later.
    */
 
-PRBool FindInReadable( const nsAString& aPattern, nsAString::const_iterator&, nsAString::const_iterator&, const nsStringComparator& = nsDefaultStringComparator() );
-PRBool FindInReadable( const nsACString& aPattern, nsACString::const_iterator&, nsACString::const_iterator&, const nsCStringComparator& = nsDefaultCStringComparator() );
+bool FindInReadable( const nsAString& aPattern, nsAString::const_iterator&, nsAString::const_iterator&, const nsStringComparator& = nsDefaultStringComparator() );
+bool FindInReadable( const nsACString& aPattern, nsACString::const_iterator&, nsACString::const_iterator&, const nsCStringComparator& = nsDefaultCStringComparator() );
 
 /* sometimes we don't care about where the string was, just that we
  * found it or not */
-inline PRBool FindInReadable( const nsAString& aPattern, const nsAString& aSource, const nsStringComparator& compare = nsDefaultStringComparator() )
+inline bool FindInReadable( const nsAString& aPattern, const nsAString& aSource, const nsStringComparator& compare = nsDefaultStringComparator() )
 {
   nsAString::const_iterator start, end;
   aSource.BeginReading(start);
@@ -296,7 +309,7 @@ inline PRBool FindInReadable( const nsAString& aPattern, const nsAString& aSourc
   return FindInReadable(aPattern, start, end, compare);
 }
 
-inline PRBool FindInReadable( const nsACString& aPattern, const nsACString& aSource, const nsCStringComparator& compare = nsDefaultCStringComparator() )
+inline bool FindInReadable( const nsACString& aPattern, const nsACString& aSource, const nsCStringComparator& compare = nsDefaultCStringComparator() )
 {
   nsACString::const_iterator start, end;
   aSource.BeginReading(start);
@@ -305,7 +318,7 @@ inline PRBool FindInReadable( const nsACString& aPattern, const nsACString& aSou
 }
 
 
-PRBool CaseInsensitiveFindInReadable( const nsACString& aPattern, nsACString::const_iterator&, nsACString::const_iterator& );
+bool CaseInsensitiveFindInReadable( const nsACString& aPattern, nsACString::const_iterator&, nsACString::const_iterator& );
 
   /**
    * Finds the rightmost occurrence of |aPattern| 
@@ -313,8 +326,8 @@ PRBool CaseInsensitiveFindInReadable( const nsACString& aPattern, nsACString::co
    * point to the match.  If no match was found, returns |PR_FALSE| and makes |aSearchStart == aSearchEnd|.
    *
    */
-PRBool RFindInReadable( const nsAString& aPattern, nsAString::const_iterator&, nsAString::const_iterator&, const nsStringComparator& = nsDefaultStringComparator() );
-PRBool RFindInReadable( const nsACString& aPattern, nsACString::const_iterator&, nsACString::const_iterator&, const nsCStringComparator& = nsDefaultCStringComparator() );
+bool RFindInReadable( const nsAString& aPattern, nsAString::const_iterator&, nsAString::const_iterator&, const nsStringComparator& = nsDefaultStringComparator() );
+bool RFindInReadable( const nsACString& aPattern, nsACString::const_iterator&, nsACString::const_iterator&, const nsCStringComparator& = nsDefaultCStringComparator() );
 
    /**
    * Finds the leftmost occurrence of |aChar|, if any in the range 
@@ -324,8 +337,8 @@ PRBool RFindInReadable( const nsACString& aPattern, nsACString::const_iterator&,
    * point to the match.  If no match was found, returns |PR_FALSE| and 
    * makes |aSearchStart == aSearchEnd|.
    */
-PRBool FindCharInReadable( PRUnichar aChar, nsAString::const_iterator& aSearchStart, const nsAString::const_iterator& aSearchEnd );
-PRBool FindCharInReadable( char aChar, nsACString::const_iterator& aSearchStart, const nsACString::const_iterator& aSearchEnd );
+bool FindCharInReadable( PRUnichar aChar, nsAString::const_iterator& aSearchStart, const nsAString::const_iterator& aSearchEnd );
+bool FindCharInReadable( char aChar, nsACString::const_iterator& aSearchStart, const nsACString::const_iterator& aSearchEnd );
 
     /**
     * Finds the number of occurences of |aChar| in the string |aStr|
@@ -335,19 +348,19 @@ PRUint32 CountCharInReadable( const nsAString& aStr,
 PRUint32 CountCharInReadable( const nsACString& aStr,
                                      char aChar );
 
-PRBool
+bool
 StringBeginsWith( const nsAString& aSource, const nsAString& aSubstring,
                   const nsStringComparator& aComparator =
                                               nsDefaultStringComparator() );
-PRBool
+bool
 StringBeginsWith( const nsACString& aSource, const nsACString& aSubstring,
                   const nsCStringComparator& aComparator =
                                                nsDefaultCStringComparator() );
-PRBool
+bool
 StringEndsWith( const nsAString& aSource, const nsAString& aSubstring,
                 const nsStringComparator& aComparator =
                                             nsDefaultStringComparator() );
-PRBool
+bool
 StringEndsWith( const nsACString& aSource, const nsACString& aSubstring,
                 const nsCStringComparator& aComparator =
                                              nsDefaultCStringComparator() );
@@ -371,7 +384,7 @@ void
 AppendUCS4ToUTF16(const PRUint32 aSource, nsAString& aDest);
 
 template<class T>
-inline PRBool EnsureStringLength(T& aStr, PRUint32 aLen)
+inline bool EnsureStringLength(T& aStr, PRUint32 aLen)
 {
     aStr.SetLength(aLen);
     return (aStr.Length() == aLen);

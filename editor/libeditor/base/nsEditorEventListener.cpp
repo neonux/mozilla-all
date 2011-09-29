@@ -71,6 +71,7 @@
 #include "nsIFocusManager.h"
 #include "nsIDOMWindow.h"
 #include "nsContentUtils.h"
+#include "nsIBidiKeyboard.h"
 
 using namespace mozilla;
 
@@ -91,6 +92,11 @@ private:
 nsEditorEventListener::nsEditorEventListener() :
   mEditor(nsnull), mCommitText(PR_FALSE),
   mInTransaction(PR_FALSE)
+#ifdef HANDLE_NATIVE_TEXT_DIRECTION_SWITCH
+  , mHaveBidiKeyboards(PR_FALSE)
+  , mShouldSwitchTextDirection(PR_FALSE)
+  , mSwitchToRTL(PR_FALSE)
+#endif
 {
 }
 
@@ -106,6 +112,15 @@ nsresult
 nsEditorEventListener::Connect(nsEditor* aEditor)
 {
   NS_ENSURE_ARG(aEditor);
+
+#ifdef HANDLE_NATIVE_TEXT_DIRECTION_SWITCH
+  nsIBidiKeyboard* bidiKeyboard = nsContentUtils::GetBidiKeyboard();
+  if (bidiKeyboard) {
+    bool haveBidiKeyboards = false;
+    bidiKeyboard->GetHaveBidiKeyboards(&haveBidiKeyboards);
+    mHaveBidiKeyboards = haveBidiKeyboards;
+  }
+#endif
 
   mEditor = aEditor;
 
@@ -128,6 +143,16 @@ nsEditorEventListener::InstallToEditor()
   nsEventListenerManager* elmP = piTarget->GetListenerManager(PR_TRUE);
   NS_ENSURE_STATE(elmP);
 
+#ifdef HANDLE_NATIVE_TEXT_DIRECTION_SWITCH
+  elmP->AddEventListenerByType(this,
+                               NS_LITERAL_STRING("keydown"),
+                               NS_EVENT_FLAG_BUBBLE |
+                               NS_EVENT_FLAG_SYSTEM_EVENT);
+  elmP->AddEventListenerByType(this,
+                               NS_LITERAL_STRING("keyup"),
+                               NS_EVENT_FLAG_BUBBLE |
+                               NS_EVENT_FLAG_SYSTEM_EVENT);
+#endif
   elmP->AddEventListenerByType(this,
                                NS_LITERAL_STRING("keypress"),
                                NS_EVENT_FLAG_BUBBLE |
@@ -208,6 +233,16 @@ nsEditorEventListener::UninstallFromEditor()
     return;
   }
 
+#ifdef HANDLE_NATIVE_TEXT_DIRECTION_SWITCH
+  elmP->RemoveEventListenerByType(this,
+                                  NS_LITERAL_STRING("keydown"),
+                                  NS_EVENT_FLAG_BUBBLE |
+                                  NS_EVENT_FLAG_SYSTEM_EVENT);
+  elmP->RemoveEventListenerByType(this,
+                                  NS_LITERAL_STRING("keyup"),
+                                  NS_EVENT_FLAG_BUBBLE |
+                                  NS_EVENT_FLAG_SYSTEM_EVENT);
+#endif
   elmP->RemoveEventListenerByType(this,
                                   NS_LITERAL_STRING("keypress"),
                                   NS_EVENT_FLAG_BUBBLE |
@@ -298,6 +333,12 @@ nsEditorEventListener::HandleEvent(nsIDOMEvent* aEvent)
       return Drop(dragEvent);
   }
 
+#ifdef HANDLE_NATIVE_TEXT_DIRECTION_SWITCH
+  if (eventType.EqualsLiteral("keydown"))
+    return KeyDown(aEvent);
+  if (eventType.EqualsLiteral("keyup"))
+    return KeyUp(aEvent);
+#endif
   if (eventType.EqualsLiteral("keypress"))
     return KeyPress(aEvent);
   if (eventType.EqualsLiteral("mousedown"))
@@ -320,6 +361,117 @@ nsEditorEventListener::HandleEvent(nsIDOMEvent* aEvent)
   return NS_OK;
 }
 
+#ifdef HANDLE_NATIVE_TEXT_DIRECTION_SWITCH
+#include <windows.h>
+
+namespace {
+
+// This function is borrowed from Chromium's ImeInput::IsCtrlShiftPressed
+bool IsCtrlShiftPressed(bool& isRTL)
+{
+  BYTE keystate[256];
+  if (!::GetKeyboardState(keystate)) {
+    return false;
+  }
+
+  // To check if a user is pressing only a control key and a right-shift key
+  // (or a left-shift key), we use the steps below:
+  // 1. Check if a user is pressing a control key and a right-shift key (or
+  //    a left-shift key).
+  // 2. If the condition 1 is true, we should check if there are any other
+  //    keys pressed at the same time.
+  //    To ignore the keys checked in 1, we set their status to 0 before
+  //    checking the key status.
+  const int kKeyDownMask = 0x80;
+  if ((keystate[VK_CONTROL] & kKeyDownMask) == 0)
+    return false;
+
+  if (keystate[VK_RSHIFT] & kKeyDownMask) {
+    keystate[VK_RSHIFT] = 0;
+    isRTL = true;
+  } else if (keystate[VK_LSHIFT] & kKeyDownMask) {
+    keystate[VK_LSHIFT] = 0;
+    isRTL = false;
+  } else {
+    return false;
+  }
+
+  // Scan the key status to find pressed keys. We should abandon changing the
+  // text direction when there are other pressed keys.
+  // This code is executed only when a user is pressing a control key and a
+  // right-shift key (or a left-shift key), i.e. we should ignore the status of
+  // the keys: VK_SHIFT, VK_CONTROL, VK_RCONTROL, and VK_LCONTROL.
+  // So, we reset their status to 0 and ignore them.
+  keystate[VK_SHIFT] = 0;
+  keystate[VK_CONTROL] = 0;
+  keystate[VK_RCONTROL] = 0;
+  keystate[VK_LCONTROL] = 0;
+  for (int i = 0; i <= VK_PACKET; ++i) {
+    if (keystate[i] & kKeyDownMask)
+      return false;
+  }
+  return true;
+}
+
+}
+
+// This logic is mostly borrowed from Chromium's
+// RenderWidgetHostViewWin::OnKeyEvent.
+
+NS_IMETHODIMP
+nsEditorEventListener::KeyUp(nsIDOMEvent* aKeyEvent)
+{
+  if (mHaveBidiKeyboards) {
+    nsCOMPtr<nsIDOMKeyEvent> keyEvent = do_QueryInterface(aKeyEvent);
+    if (!keyEvent) {
+      // non-key event passed to keyup.  bad things.
+      return NS_OK;
+    }
+
+    PRUint32 keyCode = 0;
+    keyEvent->GetKeyCode(&keyCode);
+    if (keyCode == nsIDOMKeyEvent::DOM_VK_SHIFT ||
+        keyCode == nsIDOMKeyEvent::DOM_VK_CONTROL) {
+      if (mShouldSwitchTextDirection && mEditor->IsPlaintextEditor()) {
+        mEditor->SwitchTextDirectionTo(mSwitchToRTL ?
+          nsIPlaintextEditor::eEditorRightToLeft :
+          nsIPlaintextEditor::eEditorLeftToRight);
+        mShouldSwitchTextDirection = PR_FALSE;
+      }
+    }
+  }
+
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsEditorEventListener::KeyDown(nsIDOMEvent* aKeyEvent)
+{
+  if (mHaveBidiKeyboards) {
+    nsCOMPtr<nsIDOMKeyEvent> keyEvent = do_QueryInterface(aKeyEvent);
+    if (!keyEvent) {
+      // non-key event passed to keydown.  bad things.
+      return NS_OK;
+    }
+
+    PRUint32 keyCode = 0;
+    keyEvent->GetKeyCode(&keyCode);
+    if (keyCode == nsIDOMKeyEvent::DOM_VK_SHIFT) {
+      bool switchToRTL;
+      if (IsCtrlShiftPressed(switchToRTL)) {
+        mShouldSwitchTextDirection = PR_TRUE;
+        mSwitchToRTL = switchToRTL;
+      }
+    } else if (keyCode != nsIDOMKeyEvent::DOM_VK_CONTROL) {
+      // In case the user presses any other key besides Ctrl and Shift
+      mShouldSwitchTextDirection = PR_FALSE;
+    }
+  }
+
+  return NS_OK;
+}
+#endif
+
 NS_IMETHODIMP
 nsEditorEventListener::KeyPress(nsIDOMEvent* aKeyEvent)
 {
@@ -340,7 +492,7 @@ nsEditorEventListener::KeyPress(nsIDOMEvent* aKeyEvent)
   // below.
 
   if (NSEvent) {
-    PRBool defaultPrevented;
+    bool defaultPrevented;
     NSEvent->GetPreventDefault(&defaultPrevented);
     if (defaultPrevented) {
       return NS_OK;
@@ -363,14 +515,14 @@ nsEditorEventListener::MouseClick(nsIDOMEvent* aMouseEvent)
 
   nsCOMPtr<nsIDOMMouseEvent> mouseEvent = do_QueryInterface(aMouseEvent);
   nsCOMPtr<nsIDOMNSEvent> nsevent = do_QueryInterface(aMouseEvent);
-  PRBool isTrusted = PR_FALSE;
+  bool isTrusted = false;
   if (!mouseEvent || !nsevent ||
       NS_FAILED(nsevent->GetIsTrusted(&isTrusted)) || !isTrusted) {
     // Non-ui or non-trusted event passed in. Bad things.
     return NS_OK;
   }
 
-  PRBool preventDefault;
+  bool preventDefault;
   nsresult rv = nsevent->GetPreventDefault(&preventDefault);
   if (NS_FAILED(rv) || preventDefault) {
     // We're done if 'preventdefault' is true (see for example bug 70698).
@@ -386,7 +538,7 @@ nsEditorEventListener::MouseClick(nsIDOMEvent* aMouseEvent)
   // middle-mouse click (paste);
   if (button == 1)
   {
-    if (Preferences::GetBool("middlemouse.paste", PR_FALSE))
+    if (Preferences::GetBool("middlemouse.paste", false))
     {
       // Set the selection to the point under the mouse cursor:
       nsCOMPtr<nsIDOMNode> parent;
@@ -402,7 +554,7 @@ nsEditorEventListener::MouseClick(nsIDOMEvent* aMouseEvent)
 
       // If the ctrl key is pressed, we'll do paste as quotation.
       // Would've used the alt key, but the kde wmgr treats alt-middle specially. 
-      PRBool ctrlKey = PR_FALSE;
+      bool ctrlKey = false;
       mouseEvent->GetCtrlKey(&ctrlKey);
 
       nsCOMPtr<nsIEditorMailSupport> mailEditor;
@@ -479,7 +631,7 @@ nsresult
 nsEditorEventListener::DragGesture(nsIDOMDragEvent* aDragEvent)
 {
   // ...figure out if a drag should be started...
-  PRBool canDrag;
+  bool canDrag;
   nsresult rv = mEditor->CanDrag(aDragEvent, &canDrag);
   if ( NS_SUCCEEDED(rv) && canDrag )
     rv = mEditor->DoDrag(aDragEvent);
@@ -510,7 +662,7 @@ nsEditorEventListener::DragOver(nsIDOMDragEvent* aDragEvent)
   nsCOMPtr<nsIDOMNode> parent;
   nsCOMPtr<nsIDOMNSEvent> domNSEvent = do_QueryInterface(aDragEvent);
   if (domNSEvent) {
-    PRBool defaultPrevented;
+    bool defaultPrevented;
     domNSEvent->GetPreventDefault(&defaultPrevented);
     if (defaultPrevented)
       return NS_OK;
@@ -585,7 +737,7 @@ nsEditorEventListener::Drop(nsIDOMDragEvent* aMouseEvent)
 
   nsCOMPtr<nsIDOMNSEvent> domNSEvent = do_QueryInterface(aMouseEvent);
   if (domNSEvent) {
-    PRBool defaultPrevented;
+    bool defaultPrevented;
     domNSEvent->GetPreventDefault(&defaultPrevented);
     if (defaultPrevented)
       return NS_OK;
@@ -620,7 +772,7 @@ nsEditorEventListener::Drop(nsIDOMDragEvent* aMouseEvent)
   return mEditor->InsertFromDrop(aMouseEvent);
 }
 
-PRBool
+bool
 nsEditorEventListener::CanDrop(nsIDOMDragEvent* aEvent)
 {
   // if the target doc is read-only, we can't drop
@@ -638,7 +790,7 @@ nsEditorEventListener::CanDrop(nsIDOMDragEvent* aEvent)
 
   // Plaintext editors only support dropping text. Otherwise, HTML and files
   // can be dropped as well.
-  PRBool typeSupported;
+  bool typeSupported;
   types->Contains(NS_LITERAL_STRING(kTextMime), &typeSupported);
   if (!typeSupported) {
     types->Contains(NS_LITERAL_STRING(kMozTextInternal), &typeSupported);
@@ -680,7 +832,7 @@ nsEditorEventListener::CanDrop(nsIDOMDragEvent* aEvent)
     if (NS_FAILED(rv) || !selection)
       return PR_FALSE;
     
-    PRBool isCollapsed;
+    bool isCollapsed;
     rv = selection->GetIsCollapsed(&isCollapsed);
     NS_ENSURE_SUCCESS(rv, PR_FALSE);
   
@@ -707,7 +859,7 @@ nsEditorEventListener::CanDrop(nsIDOMDragEvent* aEvent)
         if (NS_FAILED(rv) || !nsrange) 
           continue; //don't bail yet, iterate through them all
 
-        PRBool inRange = PR_TRUE;
+        bool inRange = true;
         (void)nsrange->IsPointInRange(parent, offset, &inRange);
         if (inRange)
           return PR_FALSE;  //okay, now you can bail, we are over the orginal selection

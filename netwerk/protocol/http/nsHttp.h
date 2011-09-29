@@ -67,7 +67,6 @@
 #include "nsPromiseFlatString.h"
 #include "nsURLHelper.h"
 #include "netCore.h"
-#include "nsIAtom.h"
 
 #if defined(PR_LOGGING)
 //
@@ -165,8 +164,6 @@ struct nsHttp
     static nsresult CreateAtomTable();
     static void DestroyAtomTable();
 
-    static void CreateMethodAtoms();
-
     // will dynamically add atoms to the table if they don't already exist
     static nsHttpAtom ResolveAtom(const char *);
     static nsHttpAtom ResolveAtom(const nsACString &s)
@@ -176,9 +173,9 @@ struct nsHttp
 
     // returns true if the specified token [start,end) is valid per RFC 2616
     // section 2.2
-    static PRBool IsValidToken(const char *start, const char *end);
+    static bool IsValidToken(const char *start, const char *end);
 
-    static inline PRBool IsValidToken(const nsCString &s) {
+    static inline bool IsValidToken(const nsCString &s) {
         const char *start = s.get();
         return IsValidToken(start, start + s.Length());
     }
@@ -199,12 +196,12 @@ struct nsHttp
     //
     // TODO(darin): Replace this with something generic.
     //
-    static PRBool ParseInt64(const char *input, const char **next,
+    static bool ParseInt64(const char *input, const char **next,
                              PRInt64 *result);
 
     // Variant on ParseInt64 that expects the input string to contain nothing
     // more than the value being parsed.
-    static inline PRBool ParseInt64(const char *input, PRInt64 *result) {
+    static inline bool ParseInt64(const char *input, PRInt64 *result) {
         const char *next;
         return ParseInt64(input, &next, result) && *next == '\0';
     }
@@ -218,10 +215,6 @@ struct nsHttp
 #define HTTP_ATOM(_name, _value) static nsHttpAtom _name;
 #include "nsHttpAtomList.h"
 #undef HTTP_ATOM
-
-#define HTTP_METHOD_ATOM(_name, _value) static nsIAtom* _name;
-#include "nsHttpAtomList.h"
-#undef HTTP_METHOD_ATOM
 };
 
 //-----------------------------------------------------------------------------

@@ -66,7 +66,7 @@
 
 using namespace mozilla::dom;
 
-NS_IMPL_NS_NEW_HTML_ELEMENT_CHECK_PARSER(Video)
+NS_IMPL_NS_NEW_HTML_ELEMENT(Video)
 
 NS_IMPL_ADDREF_INHERITED(nsHTMLVideoElement, nsHTMLMediaElement)
 NS_IMPL_RELEASE_INHERITED(nsHTMLVideoElement, nsHTMLMediaElement)
@@ -100,9 +100,8 @@ NS_IMETHODIMP nsHTMLVideoElement::GetVideoHeight(PRUint32 *aVideoHeight)
   return NS_OK;
 }
 
-nsHTMLVideoElement::nsHTMLVideoElement(already_AddRefed<nsINodeInfo> aNodeInfo,
-                                       FromParser aFromParser)
-  : nsHTMLMediaElement(aNodeInfo, aFromParser)
+nsHTMLVideoElement::nsHTMLVideoElement(already_AddRefed<nsINodeInfo> aNodeInfo)
+  : nsHTMLMediaElement(aNodeInfo)
 {
 }
 
@@ -115,7 +114,7 @@ nsIntSize nsHTMLVideoElement::GetVideoSize(nsIntSize aDefaultSize)
   return mMediaSize.width == -1 && mMediaSize.height == -1 ? aDefaultSize : mMediaSize;
 }
 
-PRBool
+bool
 nsHTMLVideoElement::ParseAttribute(PRInt32 aNamespaceID,
                                    nsIAtom* aAttribute,
                                    const nsAString& aValue,
@@ -137,7 +136,7 @@ MapAttributesIntoRule(const nsMappedAttributes* aAttributes,
   nsGenericHTMLElement::MapCommonAttributesInto(aAttributes, aData);
 }
 
-NS_IMETHODIMP_(PRBool)
+NS_IMETHODIMP_(bool)
 nsHTMLVideoElement::IsAttributeMapped(const nsIAtom* aAttribute) const
 {
   static const MappedAttributeEntry attributes[] = {

@@ -82,7 +82,7 @@ public:
 
     // nsIScriptGlobalObject methods
     virtual void OnFinalize(JSObject* aObject);
-    virtual void SetScriptsEnabled(PRBool aEnabled, PRBool aFireTimeouts);
+    virtual void SetScriptsEnabled(bool aEnabled, bool aFireTimeouts);
 
     virtual void *GetScriptGlobal(PRUint32 lang);
     virtual nsresult EnsureScriptEnvironment(PRUint32 aLangID);
@@ -310,7 +310,7 @@ nsXULPrototypeDocument::Read(nsIObjectInputStream* aStream)
 
     rv |= aStream->Read32(&count);
     nsAutoString namespaceURI, prefixStr, localName;
-    PRBool prefixIsNull;
+    bool prefixIsNull;
     nsCOMPtr<nsIAtom> prefix;
     for (i = 0; i < count; ++i) {
         rv |= aStream->ReadString(namespaceURI);
@@ -454,7 +454,7 @@ nsXULPrototypeDocument::Write(nsIObjectOutputStream* aStream)
 
         nsAutoString prefix;
         nodeInfo->GetPrefix(prefix);
-        PRBool nullPrefix = DOMStringIsNull(prefix);
+        bool nullPrefix = DOMStringIsNull(prefix);
         rv |= aStream->WriteBoolean(nullPrefix);
         if (!nullPrefix) {
             rv |= aStream->WriteWStringZ(prefix.get());
@@ -588,7 +588,7 @@ nsXULPrototypeDocument::GetNodeInfoManager()
 
 
 nsresult
-nsXULPrototypeDocument::AwaitLoadDone(nsXULDocument* aDocument, PRBool* aResult)
+nsXULPrototypeDocument::AwaitLoadDone(nsXULDocument* aDocument, bool* aResult)
 {
     nsresult rv = NS_OK;
 
@@ -728,7 +728,7 @@ nsXULPDGlobalObject::EnsureScriptEnvironment(PRUint32 lang_id)
   // attach it as the global for this context.  Then, ::SetScriptContext
   // will re-fetch the global and set it up in our language globals array.
   {
-    JSContext *cx = (JSContext *)ctxNew->GetNativeContext();
+    JSContext *cx = ctxNew->GetNativeContext();
     JSAutoRequest ar(cx);
 
     nsIPrincipal *principal = GetPrincipal();
@@ -802,7 +802,7 @@ nsXULPDGlobalObject::OnFinalize(JSObject* aObject)
 }
 
 void
-nsXULPDGlobalObject::SetScriptsEnabled(PRBool aEnabled, PRBool aFireTimeouts)
+nsXULPDGlobalObject::SetScriptsEnabled(bool aEnabled, bool aFireTimeouts)
 {
   // We don't care...
 }
