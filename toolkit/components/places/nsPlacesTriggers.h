@@ -101,6 +101,52 @@
 )
 
 /**
+ * These triggers add or remove entries from moz_hostname when entries are
+ * added or removed from moz_places.
+ */
+#define CREATE_HOSTNAMES_AFTERINSERT_TRIGGER NS_LITERAL_CSTRING( \
+   "CREATE TEMP TRIGGER moz_hostnames_afterinsert_trigger " \
+   "AFTER INSERT ON moz_places FOR EACH ROW " \
+   "WHEN NEW.hidden = 0 AND LENGTH(NEW.rev_host) > 1 " \
+   "BEGIN " \
+     "INSERT OR REPLACE INTO moz_hostnames (host, page_count, frecency) " \
+     "VALUES (fixup_url(get_unreversed_host(NEW.rev_host)), " \
+             "IFNULL((SELECT page_count FROM moz_hostnames " \
+                     "WHERE host = fixup_url(get_unreversed_host(NEW.rev_host))), 0) + 1, " \
+             "MAX((SELECT frecency FROM moz_hostnames " \
+                  "WHERE host = fixup_url(get_unreversed_host(NEW.rev_host))), NEW.frecency)); " \
+   "END" \
+)
+
+#define CREATE_HOSTNAMES_AFTERDELETE_TRIGGER NS_LITERAL_CSTRING( \
+   "CREATE TEMP TRIGGER moz_hostnames_afterdelete_trigger " \
+   "AFTER DELETE ON moz_places FOR EACH ROW " \
+   "BEGIN " \
+     "UPDATE moz_hostnames " \
+     "SET page_count = page_count - 1 " \
+     "WHERE host = fixup_url(get_unreversed_host(OLD.rev_host)); " \
+     "DELETE FROM moz_hostnames " \
+     "WHERE page_count = 0; " \
+   "END" \
+)
+
+/**
+ * This update trigger changes the frecency of a hostname entry if the moz_places
+ * entry it was based from gets a higher frecency.
+ */
+#define CREATE_HOSTNAMES_AFTERUPDATE_FRECENCY_TRIGGER NS_LITERAL_CSTRING( \
+   "CREATE TEMP TRIGGER moz_hostnames_afterupdate_frecency_trigger " \
+   "AFTER UPDATE OF frecency ON moz_places FOR EACH ROW " \
+   "WHEN NEW.frecency > OLD.frecency " \
+   "BEGIN " \
+     "UPDATE moz_hostnames " \
+     "SET frecency = NEW.frecency " \
+     "WHERE host = fixup_url(get_unreversed_host(OLD.rev_host)) " \
+     "AND frecency = OLD.frecency; " \
+   "END" \
+)
+
+/**
  * This trigger removes a row from moz_openpages_temp when open_count reaches 0.
  *
  * @note this should be kept up-to-date with the definition in

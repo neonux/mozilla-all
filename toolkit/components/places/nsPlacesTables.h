@@ -160,6 +160,15 @@
   ")" \
 )
 
+#define CREATE_MOZ_HOSTNAMES NS_LITERAL_CSTRING( \
+  "CREATE TABLE moz_hostnames (" \
+    "  id INTEGER PRIMARY KEY" \
+    ", host TEXT UNIQUE NOT NULL" \
+    ", frecency INTEGER" \
+    ", page_count INTEGER DEFAULT 0" \
+  ")" \
+)
+
 // Note: this should be kept up-to-date with the definition in
 //       nsPlacesAutoComplete.js.
 #define CREATE_MOZ_OPENPAGES_TEMP NS_LITERAL_CSTRING( \
