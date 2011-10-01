@@ -499,7 +499,7 @@
         <textbox id="urlbar" flex="1"
                  placeholder="&urlbar.placeholder;"
                  type="autocomplete"
-                 autocompletesearch="urlinline history"
+                 autocompletesearch="history"
                  autocompletesearchparam="enable-actions"
                  autocompletepopup="PopupAutoCompleteRichResult"
                  completeselectedindex="true"

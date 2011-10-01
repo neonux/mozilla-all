@@ -163,7 +163,7 @@ using namespace mozilla::places;
 
 // This is the schema version, update it at any schema change and add a
 // corresponding migrateVxx method below.
-#define DATABASE_SCHEMA_VERSION 12
+#define DATABASE_SCHEMA_VERSION 11
 
 // Filename of the database.
 #define DATABASE_FILENAME NS_LITERAL_STRING("places.sqlite")
@@ -880,11 +880,6 @@ nsNavHistory::InitDB()
 
       // Firefox 4.0 uses schema version 11.
 
-      if (currentSchemaVersion < 12) {
-        rv = MigrateV12Up(mDBConn);
-        NS_ENSURE_SUCCESS(rv, rv);
-      }
-
       // Schema Upgrades must add migration code here.
     }
   }
@@ -917,11 +912,6 @@ nsNavHistory::InitDB()
     NS_ENSURE_SUCCESS(rv, rv);
 
     rv = mDBConn->ExecuteSimpleSQL(CREATE_MOZ_INPUTHISTORY);
-    NS_ENSURE_SUCCESS(rv, rv);
-
-    rv = mDBConn->ExecuteSimpleSQL(CREATE_MOZ_HOSTNAMES);
-    NS_ENSURE_SUCCESS(rv, rv);
-    rv = mDBConn->ExecuteSimpleSQL(CREATE_IDX_MOZ_HOSTNAMES_FRECENCY);
     NS_ENSURE_SUCCESS(rv, rv);
 
     // Initialize the other Places services' database tables, since some of our
@@ -1200,41 +1190,6 @@ mozStorageFunctionGetUnreversedHost::OnFunctionCall(
   return NS_OK;
 }
 
-class mozStorageFunctionFixupUrl: public mozIStorageFunction
-{
-public:
-  NS_DECL_ISUPPORTS
-  NS_DECL_MOZISTORAGEFUNCTION
-};
-
-NS_IMPL_ISUPPORTS1(mozStorageFunctionFixupUrl, mozIStorageFunction)
-
-NS_IMETHODIMP
-mozStorageFunctionFixupUrl::OnFunctionCall(
-  mozIStorageValueArray* aFunctionArguments,
-  nsIVariant** _retval)
-{
-  NS_ASSERTION(aFunctionArguments, "Must have non-null function args");
-  NS_ASSERTION(_retval, "Must have non-null return pointer");
-
-  nsAutoString src;
-  aFunctionArguments->GetString(0, src);
-
-  nsresult rv;
-  nsCOMPtr<nsIWritableVariant> result(do_CreateInstance(
-      "@mozilla.org/variant;1", &rv));
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  // Remove common URL hostname prefixes
-  if (StringBeginsWith(src, NS_LITERAL_STRING("www."))) {
-    src.Cut(0, 4);
-  }
-
-  result->SetAsAString(src);
-  NS_ADDREF(*_retval = result);
-  return NS_OK;
-}
-
 nsresult
 nsNavHistory::InitFunctions()
 {
@@ -1243,13 +1198,6 @@ nsNavHistory::InitFunctions()
   NS_ENSURE_TRUE(func, NS_ERROR_OUT_OF_MEMORY);
   nsresult rv = mDBConn->CreateFunction(
     NS_LITERAL_CSTRING("get_unreversed_host"), 1, func
-  );
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  func = new mozStorageFunctionFixupUrl;
-  NS_ENSURE_TRUE(func, NS_ERROR_OUT_OF_MEMORY);
-  rv = mDBConn->CreateFunction(
-    NS_LITERAL_CSTRING("fixup_url"), 1, func
   );
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -1271,13 +1219,6 @@ nsNavHistory::InitTriggers()
   nsresult rv = mDBConn->ExecuteSimpleSQL(CREATE_HISTORYVISITS_AFTERINSERT_TRIGGER);
   NS_ENSURE_SUCCESS(rv, rv);
   rv = mDBConn->ExecuteSimpleSQL(CREATE_HISTORYVISITS_AFTERDELETE_TRIGGER);
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  rv = mDBConn->ExecuteSimpleSQL(CREATE_HOSTNAMES_AFTERINSERT_TRIGGER);
-  NS_ENSURE_SUCCESS(rv, rv);
-  rv = mDBConn->ExecuteSimpleSQL(CREATE_HOSTNAMES_AFTERDELETE_TRIGGER);
-  NS_ENSURE_SUCCESS(rv, rv);
-  rv = mDBConn->ExecuteSimpleSQL(CREATE_HOSTNAMES_AFTERUPDATE_FRECENCY_TRIGGER);
   NS_ENSURE_SUCCESS(rv, rv);
 
   return NS_OK;
@@ -1781,39 +1722,6 @@ nsNavHistory::MigrateV11Up(mozIStorageConnection *aDBConn)
 
   // We need to update our guids before we do any real database work.
   rv = CheckAndUpdateGUIDs();
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  return NS_OK;
-}
-
-
-nsresult
-nsNavHistory::MigrateV12Up(mozIStorageConnection *aDBConn)
-{
-  // Add the moz_hostnames table so we can get hostnames for URL
-  // autocomplete.
-  nsresult rv = aDBConn->ExecuteSimpleSQL(CREATE_MOZ_HOSTNAMES);
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  // Delete any adaptive entries that won't help in ordering anymore.
-  nsCOMPtr<mozIStorageAsyncStatement> fillHostnameTable;
-  rv = aDBConn->CreateAsyncStatement(NS_LITERAL_CSTRING(
-    "INSERT OR IGNORE INTO moz_hostnames (host, page_count, frecency) "
-        "SELECT fixup_url(get_unreversed_host(h.rev_host)) AS host, "
-               "COUNT(*) as page_count, "
-               "MAX(h.frecency) as frecency "
-        "FROM moz_places h "
-        "WHERE h.hidden = 0 AND LENGTH(h.rev_host) > 1 "
-        "GROUP BY host"),
-    getter_AddRefs(fillHostnameTable));
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  mozIStorageBaseStatement *stmts[] = {
-    fillHostnameTable
-  };
-  nsCOMPtr<mozIStoragePendingStatement> ps;
-  rv = aDBConn->ExecuteAsync(stmts, NS_ARRAY_LENGTH(stmts), nsnull,
-                             getter_AddRefs(ps));
   NS_ENSURE_SUCCESS(rv, rv);
 
   return NS_OK;
