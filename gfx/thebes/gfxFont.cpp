@@ -1652,7 +1652,6 @@ void
 gfxFont::SetupGlyphExtents(gfxContext *aContext, PRUint32 aGlyphID, bool aNeedTight,
                            gfxGlyphExtents *aExtents)
 {
-  return;
     gfxMatrix matrix = aContext->CurrentMatrix();
     aContext->IdentityMatrix();
     cairo_glyph_t glyph;

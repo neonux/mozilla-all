@@ -605,7 +605,7 @@ static void
 SetAntialiasingFlags(Layer* aLayer, gfxContext* aTarget)
 {
   nsRefPtr<gfxASurface> surface = aTarget->CurrentSurface();
-  if (surface->GetContentType() != gfxASurface::CONTENT_COLOR_ALPHA) {
+  if (!surface || surface->GetContentType() != gfxASurface::CONTENT_COLOR_ALPHA) {
     // Destination doesn't have alpha channel; no need to set any special flags
     return;
   }
@@ -1358,7 +1358,7 @@ BasicLayerManager::PopGroupToSourceWithCachedSurface(gfxContext *aTarget, gfxCon
   if (!aTarget)
     return;
   nsRefPtr<gfxASurface> current = aPushed->CurrentSurface();
-  if (mCachedSurface.IsSurface(current)) {
+  if (current && mCachedSurface.IsSurface(current)) {
     gfxContextMatrixAutoSaveRestore saveMatrix(aTarget);
     aTarget->IdentityMatrix();
     aTarget->SetSource(current);

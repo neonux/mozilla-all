@@ -708,7 +708,11 @@ private:
     mozilla::RefPtr<mozilla::gfx::SourceSurface> sourceSurface;
     mozilla::gfx::Point surfOffset;
     mozilla::gfx::Matrix mTransform;
-    std::vector<mozilla::RefPtr<mozilla::gfx::Path> > pushedClips;
+    struct pushedClip {
+      mozilla::RefPtr<mozilla::gfx::Path> path;
+      mozilla::gfx::Matrix transform;
+    };
+    std::vector<pushedClip> pushedClips;
     bool clipWasReset;
     mozilla::gfx::FillRule fillRule;
     mozilla::gfx::StrokeOptions strokeOptions;
@@ -874,6 +878,9 @@ public:
     {
         if (aDisable) {
             mSurface = aContext->CurrentSurface();
+            if (!mSurface) {
+              return;
+            }
             mSubpixelAntialiasingEnabled = mSurface->GetSubpixelAntialiasingEnabled();
             mSurface->SetSubpixelAntialiasingEnabled(PR_FALSE);
         }

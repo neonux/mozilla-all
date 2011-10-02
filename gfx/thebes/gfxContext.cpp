@@ -193,11 +193,14 @@ gfxContext::Restore()
         }
       }
 
+      // Don't need to save the old transform, we'll be setting a new one soon!
+
       // Push all clips from the last state on the stack where the clip was
       // reset to the clip before ours.
       for (int i = lastReset; i < mStateStack.size() - 1; i++) {
         for (int c = 0; c < mStateStack[i].pushedClips.size(); c++) {
-          mDT->PushClip(mStateStack[i].pushedClips[c]);
+          mDT->SetTransform(mStateStack[i].pushedClips[c].transform);
+          mDT->PushClip(mStateStack[i].pushedClips[c].path);
         }
       }
     }
@@ -270,30 +273,30 @@ gfxContext::Stroke()
   if (mCairo) {
     cairo_stroke_preserve(mCairo);
   } else {
-  AzureState &state = CurrentState();
-  if (mPathIsRect) {
-    if (state.pattern) {
-      mDT->StrokeRect(mRect, *state.pattern->GetPattern(mDT),
-                      state.strokeOptions,
-                      DrawOptions(1.0f, state.op));
+    AzureState &state = CurrentState();
+    if (mPathIsRect) {
+      if (state.pattern) {
+        mDT->StrokeRect(mRect, *state.pattern->GetPattern(mDT),
+                        state.strokeOptions,
+                        DrawOptions(1.0f, state.op));
+      } else {
+        mDT->StrokeRect(mRect, ColorPattern(state.color),
+                        state.strokeOptions,
+                        DrawOptions(1.0f, state.op));
+      }
     } else {
-      mDT->StrokeRect(mRect, ColorPattern(state.color),
-                      state.strokeOptions,
-                      DrawOptions(1.0f, state.op));
-    }
-  } else {
-    EnsureUserSpacePath();
+      EnsureUserSpacePath();
 
-    if (state.pattern) {
-      mDT->Stroke(mPath, *state.pattern->GetPattern(mDT),
-                  state.strokeOptions,
-                  DrawOptions(1.0f, state.op));
-    } else {
-      mDT->Stroke(mPath, ColorPattern(state.color),
-                  state.strokeOptions,
-                  DrawOptions(1.0f, state.op));
+      if (state.pattern) {
+        mDT->Stroke(mPath, *state.pattern->GetPattern(mDT),
+                    state.strokeOptions,
+                    DrawOptions(1.0f, state.op));
+      } else {
+        mDT->Stroke(mPath, ColorPattern(state.color),
+                    state.strokeOptions,
+                    DrawOptions(1.0f, state.op));
+      }
     }
-  }
   }
 }
 
@@ -396,6 +399,7 @@ gfxContext::Arc(const gfxPoint& center, gfxFloat radius,
   if (mCairo) {
     cairo_arc(mCairo, center.x, center.y, radius, angle1, angle2);
   } else {
+    mPathBuilder->Arc(ToPoint(center), Float(radius), Float(angle1), Float(angle2));
   }
 }
 
@@ -1031,7 +1035,8 @@ gfxContext::Clip()
   } else {
     EnsureUserSpacePath();
     mDT->PushClip(mPath);
-    CurrentState().pushedClips.push_back(mPath);
+    AzureState::pushedClip clip = { mPath, mDT->GetTransform() };
+    CurrentState().pushedClips.push_back(clip);
   }
 }
 
@@ -1076,7 +1081,23 @@ gfxContext::GetClipExtents()
     cairo_clip_extents(mCairo, &xmin, &ymin, &xmax, &ymax);
     return gfxRect(xmin, ymin, xmax - xmin, ymax - ymin);
   } else {
-    return gfxRect(0, 0, 0, 0);
+    uint32_t lastReset = 0;
+    for (int i = mStateStack.size() - 1; i > 0; i--) {
+      if (mStateStack[i].clipWasReset) {
+        lastReset = i;
+      }
+    }
+
+    Rect rect(0, 0, mDT->GetSize().width, mDT->GetSize().height);
+    for (int i = lastReset; i < mStateStack.size() - 1; i++) {
+      for (int c = 0; c < mStateStack[i].pushedClips.size(); c++) {
+        Rect bounds = mStateStack[i].pushedClips[c].path->
+          GetBounds(mStateStack[i].pushedClips[c].transform);
+        rect.IntersectRect(rect, bounds);
+      }
+    }
+
+    return GFXRect(rect);
   }
 }
 
@@ -1222,6 +1243,7 @@ gfxContext::Mask(gfxPattern *pattern)
   if (mCairo) {
     cairo_mask(mCairo, pattern->CairoPattern());
   } else {
+    Paint();
   }
 }
 
@@ -1231,6 +1253,7 @@ gfxContext::Mask(gfxASurface *surface, const gfxPoint& offset)
   if (mCairo) {
     cairo_mask_surface(mCairo, surface->CairoSurface(), offset.x, offset.y);
   } else {
+    Paint();
   }
 }
 
@@ -1329,6 +1352,7 @@ gfxContext::PushGroupAndCopyBackground(gfxASurface::gfxContentType content)
     }
     cairo_push_group_with_content(mCairo, (cairo_content_t) content);
   } else {
+    PushGroup();
   }
 }
 
@@ -1357,6 +1381,7 @@ gfxContext::PopGroupToSource()
       return;
     }
 
+    CurrentState().pattern = NULL;
     CurrentState().sourceSurface = mDT->Snapshot();
     CurrentState().pushedGroups.pop_back();
     mDT = CurrentState().pushedGroups.size() ?
