@@ -67,8 +67,6 @@
 #define DEFLATE  8
 #define LZMA    14
 
-#define NS_EXPORT __attribute__ ((visibility("default")))
-
 struct local_file_header {
   uint32_t signature;
   uint16_t min_version;
@@ -309,6 +307,11 @@ extractFile(const char * path, const struct cdir_entry *entry, void * data)
     __android_log_print(ANDROID_LOG_ERROR, "GeckoLibLoad", "inflateEnd failed: %s", strm.msg);
 
   close(fd);
+#ifdef ANDROID_ARM_LINKER
+  /* We just extracted data that is going to be executed in the future.
+   * We thus need to ensure Instruction and Data cache coherency. */
+  cacheflush((unsigned) buf, (unsigned) buf + size, 0);
+#endif
   munmap(buf, size);
 }
 

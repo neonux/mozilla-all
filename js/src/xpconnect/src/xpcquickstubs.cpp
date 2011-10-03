@@ -415,7 +415,7 @@ xpc_qsDefineQuickStubs(JSContext *cx, JSObject *proto, uintN flags,
      * searching the interfaces forward.  Here, definitions toward the
      * front of 'interfaces' overwrite those toward the back.
      */
-    PRBool definedProperty = PR_FALSE;
+    bool definedProperty = false;
     for(uint32 i = ifacec; i-- != 0;)
     {
         const nsID &iid = *interfaces[i];
@@ -726,8 +726,10 @@ xpc_qsDOMString::xpc_qsDOMString(JSContext *cx, jsval v, jsval *pval,
 
     size_t len;
     const jschar *chars = JS_GetStringCharsZAndLength(cx, s, &len);
-    if (!chars)
+    if (!chars) {
+        mValid = JS_FALSE;
         return;
+    }
 
     new(mBuf) implementation_type(chars, len);
     mValid = JS_TRUE;
@@ -772,8 +774,10 @@ xpc_qsAUTF8String::xpc_qsAUTF8String(JSContext *cx, jsval v, jsval *pval)
 
     size_t len;
     const PRUnichar *chars = JS_GetStringCharsZAndLength(cx, s, &len);
-    if (!chars)
+    if (!chars) {
+        mValid = JS_FALSE;
         return;
+    }
 
     new(mBuf) implementation_type(chars, len);
     mValid = JS_TRUE;

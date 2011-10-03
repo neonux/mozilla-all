@@ -117,16 +117,18 @@ var BrowserUI = {
 
   _titleChanged: function(aBrowser) {
     let url = this.getDisplayURI(aBrowser);
-    let caption = aBrowser.contentTitle || url;
+    let contentTitle = aBrowser.contentTitle;
+    let caption = contentTitle || url;
+    let tabCaption = contentTitle || (Util.isURLEmpty(url) ? "" : url);
 
-    if (aBrowser.contentTitle == "" && !Util.isURLEmpty(aBrowser.userTypedValue))
-      caption = aBrowser.userTypedValue;
+    if (contentTitle == "" && !Util.isURLEmpty(aBrowser.userTypedValue))
+      caption = tabCaption = aBrowser.userTypedValue;
     else if (Util.isURLEmpty(url))
       caption = "";
 
     let tab = Browser.getTabForBrowser(aBrowser);
     if (tab)
-      tab.chromeTab.updateTitle(caption);
+      tab.chromeTab.updateTitle(tabCaption);
 
     let browser = Browser.selectedBrowser;
     if (browser && aBrowser != browser)
@@ -426,7 +428,7 @@ var BrowserUI = {
     window.addEventListener("mousedown", this, true);
 
     // listening escape to dismiss dialog on VK_ESCAPE
-    window.addEventListener("keypress", this, true);
+    window.addEventListener("keypress", this, false);
 
     // listening AppCommand to handle special keys
     window.addEventListener("AppCommand", this, true);

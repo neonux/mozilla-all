@@ -48,7 +48,6 @@
 #include <sys/stat.h>
 #include "jstypes.h"
 #include "jsstdint.h"
-#include "jsarena.h"
 #include "jsutil.h"
 #include "jsclist.h"
 #include "jsdhash.h"
@@ -100,6 +99,7 @@
 
 #include "vm/Stack-inl.h"
 #include "vm/String-inl.h"
+#include "ds/LifoAlloc.h"
 
 #if ENABLE_YARR_JIT
 #include "assembler/jit/ExecutableAllocator.h"
@@ -636,11 +636,99 @@ JS_IsBuiltinFunctionConstructor(JSFunction *fun)
 static JSBool js_NewRuntimeWasCalled = JS_FALSE;
 
 JSRuntime::JSRuntime()
-  : trustedPrincipals_(NULL)
+  : atomsCompartment(NULL),
+#ifdef JS_THREADSAFE
+    atomsCompartmentIsLocked(false),
+#endif
+    state(),
+    cxCallback(NULL),
+    compartmentCallback(NULL),
+    activityCallback(NULL),
+    activityCallbackArg(NULL),
+    protoHazardShape(0),
+    gcSystemAvailableChunkListHead(NULL),
+    gcUserAvailableChunkListHead(NULL),
+    gcEmptyChunkListHead(NULL),
+    gcEmptyChunkCount(0),
+    gcKeepAtoms(0),
+    gcBytes(0),
+    gcTriggerBytes(0),
+    gcLastBytes(0),
+    gcMaxBytes(0),
+    gcMaxMallocBytes(0),
+    gcEmptyArenaPoolLifespan(0),
+    gcNumber(0),
+    gcMarkingTracer(NULL),
+    gcChunkAllocationSinceLastGC(false),
+    gcNextFullGCTime(0),
+    gcJitReleaseTime(0),
+    gcMode(JSGC_MODE_GLOBAL),
+    gcIsNeeded(0),
+    gcWeakMapList(NULL),
+    gcTriggerCompartment(NULL),
+    gcCurrentCompartment(NULL),
+    gcCheckCompartment(NULL),
+    gcPoke(false),
+    gcMarkAndSweep(false),
+    gcRunning(false),
+    gcRegenShapes(false),
+#ifdef JS_GC_ZEAL
+    gcZeal_(0),
+    gcZealFrequency(0),
+    gcNextScheduled(0),
+    gcDebugCompartmentGC(false),
+#endif
+    gcCallback(NULL),
+    gcMallocBytes(0),
+    gcExtraRootsTraceOp(NULL),
+    gcExtraRootsData(NULL),
+    NaNValue(UndefinedValue()),
+    negativeInfinityValue(UndefinedValue()),
+    positiveInfinityValue(UndefinedValue()),
+    emptyString(NULL),
+    debugMode(false),
+    hadOutOfMemory(false),
+    data(NULL),
+#ifdef JS_THREADSAFE
+    gcLock(NULL),
+    gcDone(NULL),
+    requestDone(NULL),
+    requestCount(0),
+    gcThread(NULL),
+    rtLock(NULL),
+# ifdef DEBUG
+    rtLockOwner(0),
+# endif
+    stateChange(NULL),
+#endif
+    debuggerMutations(0),
+    securityCallbacks(NULL),
+    structuredCloneCallbacks(NULL),
+    propertyRemovals(0),
+    scriptFilenameTable(NULL),
+#ifdef JS_THREADSAFE
+    scriptFilenameTableLock(NULL),
+#endif
+    thousandsSeparator(0),
+    decimalSeparator(0),
+    numGrouping(0),
+    anynameObject(NULL),
+    functionNamespaceObject(NULL),
+#ifdef JS_THREADSAFE
+    interruptCounter(0),
+#endif
+    trustedPrincipals_(NULL),
+    shapeGen(0),
+    wrapObjectCallback(NULL),
+    preWrapObjectCallback(NULL),
+    inOOMReport(0)
 {
     /* Initialize infallibly first, so we can goto bad and JS_DestroyRuntime. */
     JS_INIT_CLIST(&contextList);
     JS_INIT_CLIST(&debuggerList);
+
+    PodZero(&globalDebugHooks);
+    PodZero(&atomState);
 }
 
 bool
@@ -769,11 +857,10 @@ JS_NewRuntime(uint32 maxbytes)
         js_NewRuntimeWasCalled = JS_TRUE;
     }
 
-    void *mem = OffTheBooks::calloc_(sizeof(JSRuntime));
-    if (!mem)
+    JSRuntime *rt = OffTheBooks::new_<JSRuntime>();
+    if (!rt)
         return NULL;
 
-    JSRuntime *rt = new (mem) JSRuntime();
     if (!rt->init(maxbytes)) {
         JS_DestroyRuntime(rt);
         return NULL;
@@ -2608,10 +2695,6 @@ JS_CompartmentGC(JSContext *cx, JSCompartment *comp)
 
     LeaveTrace(cx);
 
-    /* Don't nuke active arenas if executing or compiling. */
-    if (cx->tempPool.current == &cx->tempPool.first)
-        JS_FinishArenaPool(&cx->tempPool);
-
     GCREASON(PUBLIC_API);
     js_GC(cx, comp, GC_NORMAL);
 }
@@ -2627,10 +2710,6 @@ JS_PUBLIC_API(void)
 JS_MaybeGC(JSContext *cx)
 {
     LeaveTrace(cx);
-
-    /* Don't nuke active arenas if executing or compiling. */
-    if (cx->tempPool.current == &cx->tempPool.first)
-        JS_FinishArenaPool(&cx->tempPool);
 
     MaybeGC(cx);
 }

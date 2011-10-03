@@ -387,15 +387,10 @@ nsRootAccessible::ProcessDOMEvent(nsIDOMEvent* aDOMEvent)
   NS_ASSERTION(targetDocument, "No document while accessible is in document?!");
 
   nsINode* targetNode = accessible->GetNode();
-  nsIContent* targetContent = targetNode->IsElement() ?
-    targetNode->AsElement() : nsnull;
-  nsIContent* origTargetContent = origTargetNode->IsElement() ?
-    origTargetNode->AsElement() : nsnull;
 
 #ifdef MOZ_XUL
-  PRBool isTree = targetContent ?
-    targetContent->NodeInfo()->Equals(nsGkAtoms::tree, kNameSpaceID_XUL) :
-    PR_FALSE;
+  bool isTree = targetNode->IsElement() &&
+    targetNode->AsElement()->NodeInfo()->Equals(nsGkAtoms::tree, kNameSpaceID_XUL);
 
   if (isTree) {
     nsRefPtr<nsXULTreeAccessible> treeAcc = do_QueryObject(accessible);
@@ -428,7 +423,7 @@ nsRootAccessible::ProcessDOMEvent(nsIDOMEvent* aDOMEvent)
     // and panebutton is exposed as XULListitem in A11y.
     // nsXULListitemAccessible::GetStateInternal uses STATE_SELECTED in this case,
     // so we need to check states::SELECTED also.
-    PRBool isEnabled = (state & (states::CHECKED | states::SELECTED)) != 0;
+    bool isEnabled = (state & (states::CHECKED | states::SELECTED)) != 0;
 
     nsRefPtr<AccEvent> accEvent =
       new AccStateChangeEvent(accessible, states::CHECKED, isEnabled);
@@ -445,7 +440,7 @@ nsRootAccessible::ProcessDOMEvent(nsIDOMEvent* aDOMEvent)
   if (eventType.EqualsLiteral("CheckboxStateChange")) {
     PRUint64 state = accessible->State();
 
-    PRBool isEnabled = !!(state & states::CHECKED);
+    bool isEnabled = !!(state & states::CHECKED);
 
     nsRefPtr<AccEvent> accEvent =
       new AccStateChangeEvent(accessible, states::CHECKED, isEnabled);
@@ -467,7 +462,7 @@ nsRootAccessible::ProcessDOMEvent(nsIDOMEvent* aDOMEvent)
 #ifdef MOZ_XUL
   if (treeItemAccessible && eventType.EqualsLiteral("OpenStateChange")) {
     PRUint64 state = accessible->State();
-    PRBool isEnabled = (state & states::EXPANDED) != 0;
+    bool isEnabled = (state & states::EXPANDED) != 0;
 
     nsRefPtr<AccEvent> accEvent =
       new AccStateChangeEvent(accessible, states::EXPANDED, isEnabled);

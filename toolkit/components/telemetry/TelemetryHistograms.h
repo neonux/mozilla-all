@@ -53,6 +53,8 @@
  * a11y telemetry
  */
 HISTOGRAM(A11Y_INSTANTIATED, 0, 1, 2, BOOLEAN, "has accessibility support been instantiated")
+HISTOGRAM(ISIMPLE_DOM_USAGE, 0, 1, 2, BOOLEAN, "have the ISimpleDOM* accessibility interfaces been used")
+HISTOGRAM(IACCESSIBLE_TABLE_USAGE, 0, 1, 2, BOOLEAN, "has the IAccessibleTable accessibility interface been used")
 
 HISTOGRAM(CYCLE_COLLECTOR, 1, 10000, 50, EXPONENTIAL, "Time spent on one cycle collection (ms)")
 HISTOGRAM(CYCLE_COLLECTOR_VISITED_REF_COUNTED, 1, 300000, 50, EXPONENTIAL, "Number of ref counted objects visited by the cycle collector")
@@ -184,6 +186,7 @@ HISTOGRAM(NETWORK_DISK_CACHE_DELETEDIR, 1, 10000, 10, EXPONENTIAL, "Time spent d
  */
 #ifdef MOZ_URL_CLASSIFIER
 HISTOGRAM(URLCLASSIFIER_PS_FILELOAD_TIME, 1, 1000, 10, EXPONENTIAL, "Time spent loading PrefixSet from file (ms)")
+HISTOGRAM(URLCLASSIFIER_PS_FALLOCATE_TIME, 1, 1000, 10, EXPONENTIAL, "Time spent fallocating PrefixSet (ms)")
 HISTOGRAM(URLCLASSIFIER_PS_CONSTRUCT_TIME, 1, 5000, 15, EXPONENTIAL, "Time spent constructing PrefixSet from DB (ms)")
 HISTOGRAM(URLCLASSIFIER_PS_LOOKUP_TIME, 1, 500, 10, EXPONENTIAL, "Time spent per PrefixSet lookup (ms)")
 #endif
