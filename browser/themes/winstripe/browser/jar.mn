@@ -109,6 +109,9 @@ browser.jar:
         skin/classic/browser/devtools/arrows.png                    (devtools/arrows.png)
         skin/classic/browser/devtools/search.png                    (devtools/search.png)
         skin/classic/browser/devtools/csshtmltree.css               (devtools/csshtmltree.css)
+        skin/classic/browser/devtools/AdaptiveSplitView.css         (devtools/AdaptiveSplitView.css)
+        skin/classic/browser/devtools/StyleEditor.css               (devtools/StyleEditor.css)
+        skin/classic/browser/devtools/gimp-eye.png                  (devtools/gimp-eye.png)
 #ifdef MOZ_SERVICES_SYNC
         skin/classic/browser/sync-throbber.png
         skin/classic/browser/sync-16.png
@@ -232,6 +235,9 @@ browser.jar:
         skin/classic/aero/browser/devtools/arrows.png                (devtools/arrows.png)
         skin/classic/aero/browser/devtools/search.png                (devtools/search.png)
         skin/classic/aero/browser/devtools/csshtmltree.css           (devtools/csshtmltree.css)
+        skin/classic/aero/browser/devtools/AdaptiveSplitView.css     (devtools/AdaptiveSplitView.css)
+        skin/classic/aero/browser/devtools/StyleEditor.css           (devtools/StyleEditor.css)
+        skin/classic/aero/browser/devtools/gimp-eye.png              (devtools/gimp-eye.png)
 #ifdef MOZ_SERVICES_SYNC
         skin/classic/aero/browser/sync-throbber.png
         skin/classic/aero/browser/sync-16.png

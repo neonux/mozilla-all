@@ -99,3 +99,6 @@ browser.jar:
   skin/classic/browser/syncCommon.css
   skin/classic/browser/syncQuota.css
 #endif
+  skin/classic/browser/devtools/AdaptiveSplitView.css (devtools/AdaptiveSplitView.css)
+  skin/classic/browser/devtools/StyleEditor.css (devtools/StyleEditor.css)
+  skin/classic/browser/devtools/gimp-eye.png (devtools/gimp-eye.png)
