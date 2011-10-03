@@ -150,6 +150,13 @@ public:
 private: // methods
   void PrepareForDrawing(cairo_t* aContext);
 
+  enum DrawPatternType { DRAW_FILL, DRAW_STROKE };
+  void DrawPattern(const Rect& aRect,
+                   const Pattern& aPattern,
+                   const StrokeOptions& aStrokeOptions,
+                   const DrawOptions& aOptions,
+                   DrawPatternType aDrawType);
+
   // Copy-on-write support for snapshot surfaces.
   friend class SourceSurfaceCairo;
   void AppendSnapshot(SourceSurfaceCairo* aSnapshot);

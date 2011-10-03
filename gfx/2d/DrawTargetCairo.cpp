@@ -151,6 +151,40 @@ GfxFormatToCairoContent(SurfaceFormat format)
   return CAIRO_CONTENT_COLOR_ALPHA;
 }
 
+static cairo_line_join_t
+GfxLineJoinToCairoLineJoin(JoinStyle style)
+{
+  switch (style)
+  {
+    case JOIN_BEVEL:
+      return CAIRO_LINE_JOIN_BEVEL;
+    case JOIN_ROUND:
+      return CAIRO_LINE_JOIN_ROUND;
+    case JOIN_MITER:
+      return CAIRO_LINE_JOIN_MITER;
+    case JOIN_MITER_OR_BEVEL:
+      return CAIRO_LINE_JOIN_MITER;
+  }
+
+  return CAIRO_LINE_JOIN_MITER;
+}
+
+static cairo_line_cap_t
+GfxLineCapToCairoLineCap(CapStyle style)
+{
+  switch (style)
+  {
+    case CAP_BUTT:
+      return CAIRO_LINE_CAP_BUTT;
+    case CAP_ROUND:
+      return CAIRO_LINE_CAP_ROUND;
+    case CAP_SQUARE:
+      return CAIRO_LINE_CAP_SQUARE;
+  }
+
+  return CAIRO_LINE_CAP_BUTT;
+}
+
 static SurfaceFormat
 CairoContentToGfxFormat(cairo_content_t content)
 {
@@ -210,6 +244,98 @@ void
 GfxMatrixToCairoMatrix(const Matrix& mat, cairo_matrix_t& retval)
 {
   cairo_matrix_init(&retval, mat._11, mat._12, mat._21, mat._22, mat._31, mat._32);
+}
+
+cairo_pattern_t*
+GfxPatternToCairoPattern(const Pattern& aPattern)
+{
+  cairo_pattern_t* pat = NULL;
+
+  switch (aPattern.GetType())
+  {
+    case PATTERN_COLOR:
+    {
+      Color color = static_cast<const ColorPattern&>(aPattern).mColor;
+      pat = cairo_pattern_create_rgba(color.r, color.g, color.b, color.a);
+      break;
+    }
+
+    case PATTERN_SURFACE:
+    {
+      const SurfacePattern& pattern = static_cast<const SurfacePattern&>(aPattern);
+      cairo_surface_t* surf = NULL;
+
+      if (pattern.mSurface->GetType() == SURFACE_CAIRO) {
+        const SourceSurfaceCairo* sourcesurf = static_cast<const SourceSurfaceCairo*>(pattern.mSurface.get());
+        surf = sourcesurf->GetSurface();
+        cairo_surface_reference(surf);
+      } else if (pattern.mSurface->GetType() == SURFACE_CAIRO_IMAGE) {
+        const DataSourceSurfaceCairo* sourcesurf =
+          static_cast<const DataSourceSurfaceCairo*>(pattern.mSurface.get());
+        surf = sourcesurf->GetSurface();
+        cairo_surface_reference(surf);
+      } else {
+        RefPtr<DataSourceSurface> sourcesurf = pattern.mSurface->GetDataSurface();
+        surf = cairo_image_surface_create_for_data(sourcesurf->GetData(),
+                                                   GfxFormatToCairoFormat(sourcesurf->GetFormat()),
+                                                   sourcesurf->GetSize().width,
+                                                   sourcesurf->GetSize().height,
+                                                   sourcesurf->Stride());
+      }
+
+      pat = cairo_pattern_create_for_surface(surf);
+      cairo_pattern_set_filter(pat, GfxFilterToCairoFilter(pattern.mFilter));
+      cairo_pattern_set_extend(pat, GfxExtendToCairoExtend(pattern.mExtendMode));
+
+      cairo_surface_destroy(surf);
+
+      break;
+    }
+    case PATTERN_LINEAR_GRADIENT:
+    {
+      const LinearGradientPattern& pattern = static_cast<const LinearGradientPattern&>(aPattern);
+      RefPtr<GradientStops> stops = pattern.mStops;
+      if (stops->GetBackendType() == BACKEND_CAIRO) {
+        pat = cairo_pattern_create_linear(pattern.mBegin.x, pattern.mBegin.y,
+                                          pattern.mEnd.x, pattern.mEnd.y);
+
+        const std::vector<GradientStop>& stops =
+          static_cast<GradientStopsCairo*>(pattern.mStops.get())->GetStops();
+        for (std::vector<GradientStop>::const_iterator i = stops.begin();
+             i != stops.end();
+             ++i) {
+          cairo_pattern_add_color_stop_rgba(pat, i->offset, i->color.r,
+                                            i->color.g, i->color.b,
+                                            i->color.a);
+        }
+      }
+
+      break;
+    }
+    case PATTERN_RADIAL_GRADIENT:
+    {
+      const RadialGradientPattern& pattern = static_cast<const RadialGradientPattern&>(aPattern);
+      RefPtr<GradientStops> stops = pattern.mStops;
+      if (stops->GetBackendType() == BACKEND_CAIRO) {
+        pat = cairo_pattern_create_radial(pattern.mCenter1.x, pattern.mCenter1.y, pattern.mRadius1,
+                                          pattern.mCenter2.x, pattern.mCenter2.y, pattern.mRadius2);
+
+        const std::vector<GradientStop>& stops =
+          static_cast<GradientStopsCairo*>(pattern.mStops.get())->GetStops();
+        for (std::vector<GradientStop>::const_iterator i = stops.begin();
+             i != stops.end();
+             ++i) {
+          cairo_pattern_add_color_stop_rgba(pat, i->offset, i->color.r,
+                                            i->color.g, i->color.b,
+                                            i->color.a);
+        }
+      }
+
+      break;
+    }
+  }
+
+  return pat;
 }
 
 DrawTargetCairo::DrawTargetCairo()
@@ -389,119 +515,71 @@ DrawTargetCairo::DrawSurfaceWithShadow(SourceSurface *aSurface,
 }
 
 void
-DrawTargetCairo::FillRect(const Rect &aRect,
-                          const Pattern &aPattern,
-                          const DrawOptions &aOptions)
+SetStrokeOptions(cairo_t* aCtx, const StrokeOptions& aStrokeOptions)
 {
-  PrepareForDrawing(mContext);
+  cairo_set_line_width(aCtx, aStrokeOptions.mLineWidth);
 
-  cairo_save(mContext);
+  cairo_set_miter_limit(aCtx, aStrokeOptions.mMiterLimit);
 
-  cairo_set_operator(mContext, GfxOpToCairoOp(aOptions.mCompositionOp));
-
-  cairo_pattern_t* pat;
-
-  switch (aPattern.GetType())
-  {
-    case PATTERN_COLOR:
-    {
-      Color color = static_cast<const ColorPattern&>(aPattern).mColor;
-      pat = cairo_pattern_create_rgba(color.r, color.g, color.b, color.a);
-      break;
+  if (aStrokeOptions.mDashPattern) {
+    // Convert array of floats to array of doubles
+    std::vector<double> dashes(aStrokeOptions.mDashLength);
+    for (size_t i = 0; i < aStrokeOptions.mDashLength; ++i) {
+      dashes[i] = aStrokeOptions.mDashPattern[i];
     }
-
-    case PATTERN_SURFACE:
-    {
-      const SurfacePattern& pattern = static_cast<const SurfacePattern&>(aPattern);
-      cairo_surface_t* surf = NULL;
-
-      if (pattern.mSurface->GetType() == SURFACE_CAIRO) {
-        const SourceSurfaceCairo* sourcesurf = static_cast<const SourceSurfaceCairo*>(pattern.mSurface.get());
-        surf = sourcesurf->GetSurface();
-        cairo_surface_reference(surf);
-      } else if (pattern.mSurface->GetType() == SURFACE_CAIRO_IMAGE) {
-        const DataSourceSurfaceCairo* sourcesurf =
-          static_cast<const DataSourceSurfaceCairo*>(pattern.mSurface.get());
-        surf = sourcesurf->GetSurface();
-        cairo_surface_reference(surf);
-      } else {
-        RefPtr<DataSourceSurface> sourcesurf = pattern.mSurface->GetDataSurface();
-        surf = cairo_image_surface_create_for_data(sourcesurf->GetData(),
-                                                   GfxFormatToCairoFormat(sourcesurf->GetFormat()),
-                                                   sourcesurf->GetSize().width,
-                                                   sourcesurf->GetSize().height,
-                                                   sourcesurf->Stride());
-      }
-
-      pat = cairo_pattern_create_for_surface(surf);
-      cairo_pattern_set_filter(pat, GfxFilterToCairoFilter(pattern.mFilter));
-      cairo_pattern_set_extend(pat, GfxExtendToCairoExtend(pattern.mExtendMode));
-
-      cairo_surface_destroy(surf);
-
-      break;
-    }
-    case PATTERN_LINEAR_GRADIENT:
-    {
-      const LinearGradientPattern& pattern = static_cast<const LinearGradientPattern&>(aPattern);
-      RefPtr<GradientStops> stops = pattern.mStops;
-      if (stops->GetBackendType() == BACKEND_CAIRO) {
-        pat = cairo_pattern_create_linear(pattern.mBegin.x, pattern.mBegin.y,
-                                          pattern.mEnd.x, pattern.mEnd.y);
-
-        const std::vector<GradientStop>& stops =
-          static_cast<GradientStopsCairo*>(pattern.mStops.get())->GetStops();
-        for (std::vector<GradientStop>::const_iterator i = stops.begin();
-             i != stops.end();
-             ++i) {
-          cairo_pattern_add_color_stop_rgba(pat, i->offset, i->color.r,
-                                            i->color.g, i->color.b,
-                                            i->color.a);
-        }
-      }
-
-      break;
-    }
-    case PATTERN_RADIAL_GRADIENT:
-    {
-      const RadialGradientPattern& pattern = static_cast<const RadialGradientPattern&>(aPattern);
-      RefPtr<GradientStops> stops = pattern.mStops;
-      if (stops->GetBackendType() == BACKEND_CAIRO) {
-        pat = cairo_pattern_create_radial(pattern.mCenter1.x, pattern.mCenter1.y, pattern.mRadius1,
-                                          pattern.mCenter2.x, pattern.mCenter2.y, pattern.mRadius2);
-
-        const std::vector<GradientStop>& stops =
-          static_cast<GradientStopsCairo*>(pattern.mStops.get())->GetStops();
-        for (std::vector<GradientStop>::const_iterator i = stops.begin();
-             i != stops.end();
-             ++i) {
-          cairo_pattern_add_color_stop_rgba(pat, i->offset, i->color.r,
-                                            i->color.g, i->color.b,
-                                            i->color.a);
-        }
-      }
-
-      break;
-    }
+    cairo_set_dash(aCtx, &dashes[0], aStrokeOptions.mDashLength,
+                   aStrokeOptions.mDashOffset);
   }
 
+  cairo_set_line_join(aCtx, GfxLineJoinToCairoLineJoin(aStrokeOptions.mLineJoin));
+
+  cairo_set_line_cap(aCtx, GfxLineCapToCairoLineCap(aStrokeOptions.mLineCap));
+}
+
+void
+DrawTargetCairo::DrawPattern(const Rect& aRect,
+                             const Pattern& aPattern,
+                             const StrokeOptions& aStrokeOptions,
+                             const DrawOptions& aOptions,
+                             DrawPatternType aDrawType)
+{
+  cairo_save(mContext);
+
+  cairo_pattern_t* pat = GfxPatternToCairoPattern(aPattern);
+
   if (pat) {
+    cairo_set_operator(mContext, GfxOpToCairoOp(aOptions.mCompositionOp));
     cairo_set_source(mContext, pat);
 
     cairo_new_path(mContext);
     cairo_rectangle(mContext, aRect.x, aRect.y, aRect.Width(), aRect.Height());
 
-    if (aOptions.mAlpha != 1.0) {
-      cairo_clip(mContext);
-      cairo_paint_with_alpha(mContext, aOptions.mAlpha);
+    if (aDrawType == DRAW_STROKE) {
+      SetStrokeOptions(mContext, aStrokeOptions);
+      cairo_stroke(mContext);
     } else {
-      cairo_fill(mContext);
+      if (aOptions.mAlpha != 1.0) {
+        cairo_clip(mContext);
+        cairo_paint_with_alpha(mContext, aOptions.mAlpha);
+      } else {
+        cairo_fill(mContext);
+      }
     }
 
     cairo_pattern_destroy(pat);
   }
 
   cairo_restore(mContext);
+}
+
+void
+DrawTargetCairo::FillRect(const Rect &aRect,
+                          const Pattern &aPattern,
+                          const DrawOptions &aOptions)
+{
+  PrepareForDrawing(mContext);
+
+  DrawPattern(aRect, aPattern, StrokeOptions(), aOptions, DRAW_FILL);
 }
 
 void
@@ -530,11 +608,13 @@ DrawTargetCairo::ClearRect(const Rect& aRect)
 
 void
 DrawTargetCairo::StrokeRect(const Rect &aRect,
-                          const Pattern &aPattern,
-                          const StrokeOptions &aStrokeOptions /* = StrokeOptions() */,
-                          const DrawOptions &aOptions /* = DrawOptions() */)
+                            const Pattern &aPattern,
+                            const StrokeOptions &aStrokeOptions /* = StrokeOptions() */,
+                            const DrawOptions &aOptions /* = DrawOptions() */)
 {
   PrepareForDrawing(mContext);
+
+  DrawPattern(aRect, aPattern, aStrokeOptions, aOptions, DRAW_STROKE);
 }
 
 void
@@ -545,6 +625,26 @@ DrawTargetCairo::StrokeLine(const Point &aStart,
                             const DrawOptions &aOptions /* = DrawOptions() */)
 {
   PrepareForDrawing(mContext);
+
+  cairo_save(mContext);
+
+  cairo_pattern_t* pat = GfxPatternToCairoPattern(aPattern);
+  if (pat) {
+    SetStrokeOptions(mContext, aStrokeOptions);
+    cairo_set_operator(mContext, GfxOpToCairoOp(aOptions.mCompositionOp));
+
+    cairo_set_source(mContext, pat);
+
+    cairo_new_path(mContext);
+    cairo_move_to(mContext, aStart.x, aStart.y);
+    cairo_line_to(mContext, aEnd.x, aEnd.y);
+
+    cairo_stroke(mContext);
+
+    cairo_pattern_destroy(pat);
+  }
+
+  cairo_restore(mContext);
 }
 
 void
