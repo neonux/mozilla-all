@@ -247,7 +247,7 @@ GfxMatrixToCairoMatrix(const Matrix& mat, cairo_matrix_t& retval)
 }
 
 cairo_pattern_t*
-GfxPatternToCairoPattern(const Pattern& aPattern)
+GfxPatternToCairoPattern(const Pattern& aPattern, Float aAlpha)
 {
   cairo_pattern_t* pat = NULL;
 
@@ -256,7 +256,7 @@ GfxPatternToCairoPattern(const Pattern& aPattern)
     case PATTERN_COLOR:
     {
       Color color = static_cast<const ColorPattern&>(aPattern).mColor;
-      pat = cairo_pattern_create_rgba(color.r, color.g, color.b, color.a);
+      pat = cairo_pattern_create_rgba(color.r, color.g, color.b, color.a * aAlpha);
       break;
     }
 
@@ -336,6 +336,20 @@ GfxPatternToCairoPattern(const Pattern& aPattern)
   }
 
   return pat;
+}
+
+bool
+NeedIntermediateSurface(const Pattern& aPattern, const DrawOptions& aOptions)
+{
+  // We pre-multiply colours' alpha by the global alpha, so we don't need to
+  // use an intermediate surface for them.
+  if (aPattern.GetType() == PATTERN_COLOR)
+    return false;
+
+  if (aOptions.mAlpha == 1.0)
+    return false;
+
+  return true;
 }
 
 DrawTargetCairo::DrawTargetCairo()
@@ -425,7 +439,7 @@ DrawTargetCairo::DrawSurface(SourceSurface *aSurface,
   cairo_new_path(mContext);
   cairo_rectangle(mContext, 0, 0, aDest.Width(), aDest.Height());
   cairo_clip(mContext);
-  cairo_paint(mContext);
+  cairo_paint_with_alpha(mContext, aOptions.mAlpha);
 
   cairo_restore(mContext);
 
@@ -545,10 +559,19 @@ DrawTargetCairo::DrawPattern(const Rect& aRect,
 {
   cairo_save(mContext);
 
-  cairo_pattern_t* pat = GfxPatternToCairoPattern(aPattern);
+  cairo_set_operator(mContext, GfxOpToCairoOp(aOptions.mCompositionOp));
+
+  bool needIntermediate = NeedIntermediateSurface(aPattern, aOptions);
+  if (needIntermediate) {
+    cairo_push_group_with_content(mContext, CAIRO_CONTENT_COLOR_ALPHA);
+
+    // Don't want operators to be applied twice
+    cairo_set_operator(mContext, CAIRO_OPERATOR_SOURCE);
+  }
+
+  cairo_pattern_t* pat = GfxPatternToCairoPattern(aPattern, aOptions.mAlpha);
 
   if (pat) {
-    cairo_set_operator(mContext, GfxOpToCairoOp(aOptions.mCompositionOp));
     cairo_set_source(mContext, pat);
 
     cairo_new_path(mContext);
@@ -558,15 +581,24 @@ DrawTargetCairo::DrawPattern(const Rect& aRect,
       SetStrokeOptions(mContext, aStrokeOptions);
       cairo_stroke(mContext);
     } else {
-      if (aOptions.mAlpha != 1.0) {
-        cairo_clip(mContext);
-        cairo_paint_with_alpha(mContext, aOptions.mAlpha);
-      } else {
+      // It's possible that we could simply always clip and paint here, but the
+      // old canvas implementation didn't, so to maintain similar performance
+      // characteristics we choose the same.
+      if (needIntermediate || aOptions.mAlpha == 1.0) {
         cairo_fill(mContext);
+      } else {
+        cairo_clip(mContext);
+        cairo_paint(mContext);
       }
     }
 
     cairo_pattern_destroy(pat);
+  }
+
+  if (needIntermediate) {
+    cairo_pop_group_to_source(mContext);
+
+    cairo_paint_with_alpha(mContext, aOptions.mAlpha);
   }
 
   cairo_restore(mContext);
@@ -628,7 +660,7 @@ DrawTargetCairo::StrokeLine(const Point &aStart,
 
   cairo_save(mContext);
 
-  cairo_pattern_t* pat = GfxPatternToCairoPattern(aPattern);
+  cairo_pattern_t* pat = GfxPatternToCairoPattern(aPattern, aOptions.mAlpha);
   if (pat) {
     SetStrokeOptions(mContext, aStrokeOptions);
     cairo_set_operator(mContext, GfxOpToCairoOp(aOptions.mCompositionOp));
