@@ -771,8 +771,10 @@ DrawTargetCairo::GetNativeSurface(NativeSurfaceType aType)
 void
 DrawTargetCairo::MarkSnapshotsIndependent()
 {
-  for (std::vector<SourceSurfaceCairo*>::iterator iter = mSnapshots.begin();
-       iter != mSnapshots.end();
+  // Make a copy of the vector, since MarkIndependent implicitly modifies mSnapshots.
+  std::vector<SourceSurfaceCairo*> snapshots = mSnapshots;
+  for (std::vector<SourceSurfaceCairo*>::iterator iter = snapshots.begin();
+       iter != snapshots.end();
        ++iter) {
     (*iter)->MarkIndependent();
   }
