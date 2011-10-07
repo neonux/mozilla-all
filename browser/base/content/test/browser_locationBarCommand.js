@@ -17,13 +17,11 @@ var oldSaveURL = saveURL;
 saveURL = function() {
   ok(true, "SaveURL was called");
   is(gURLBar.value, "", "Urlbar reverted to original value");
-  gBrowser.removeTab(gBrowser.selectedTab);
-  saveURL = oldSaveURL;
   runShiftLeftClickTest();
+  saveURL = oldSaveURL;
 }
 function runAltLeftClickTest() {
   info("Running test: Alt left click");
-  gBrowser.selectedTab = gBrowser.addTab();
   triggerCommand(true, { altKey: true });
 }
 
@@ -38,14 +36,12 @@ function runShiftLeftClickTest() {
       is(aWindow.gURLBar.value, TEST_VALUE, "New URL is loaded in new window");
 
       aWindow.close();
-      gBrowser.removeTab(gBrowser.selectedTab);
       runNextTest();
     });
   });
   Services.wm.addListener(listener);
 
   info("Running test: Shift left click");
-  gBrowser.selectedTab = gBrowser.addTab();
   triggerCommand(true, { shiftKey: true });
 }
 
