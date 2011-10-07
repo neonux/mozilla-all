@@ -334,45 +334,29 @@
           // area when the current tab is re-selected.
           gBrowser.selectedBrowser.focus();
 
-          let isMouseEvent = aTriggeringEvent instanceof MouseEvent;
-          let altEnter = !isMouseEvent && aTriggeringEvent && aTriggeringEvent.altKey;
-
-          if (altEnter) {
+          if (aTriggeringEvent instanceof MouseEvent) {
+            // We have a mouse event (from the go button), so use the standard
+            // UI link behaviors
+            let where = whereToOpenLink(aTriggeringEvent, false, false);
+            if (where == "current") {
+              loadCurrent();
+            } else {
+              this.handleRevert();
+              openUILinkIn(url, where,
+                           { allowThirdPartyFixup: true, postData: postData });
+            }
+          } else if (aTriggeringEvent && aTriggeringEvent.altKey &&
+                     !isTabEmpty(gBrowser.selectedTab)) {
+            this.handleRevert();
+            gBrowser.loadOneTab(url, {
+                                postData: postData,
+                                inBackground: false,
+                                allowThirdPartyFixup: true});
             aTriggeringEvent.preventDefault();
             aTriggeringEvent.stopPropagation();
-          }
-
-          // Mouse events and Alt+Enter are handled by openUILinkIn
-          // Alt+Enter only needs special handling if the current tab isn't
-          // empty
-          if (!isMouseEvent && !(altEnter && !isTabEmpty(gBrowser.selectedTab))) {
+          } else {
             loadCurrent();
-            return;
           }
-
-          let where = "tab";
-          if (isMouseEvent)
-            where = whereToOpenLink(aTriggeringEvent, false, false);
-
-          if (where == "current") {
-            loadCurrent();
-            return;
-          }
-
-          this.handleRevert();
-
-          let args = {
-            allowThirdPartyFixup: true,
-            postData: postData
-          };
-
-          // Alt+Enter never loads tabs in the background. Mouse events obey
-          // browser.tabs.loadBookmarksInBackground, which is handled by
-          // openUILinkIn.
-          if (!isMouseEvent)
-            args.inBackground = false;
-
-          openUILinkIn(url, where, args);
         ]]></body>
       </method>
 
