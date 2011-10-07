@@ -345,8 +345,7 @@
           // Mouse events and Alt+Enter are handled by openUILinkIn
           // Alt+Enter only needs special handling if the current tab isn't
           // empty
-          if (!gBrowser.selectedTab.pinned &&
-              !isMouseEvent && !(altEnter && !isTabEmpty(gBrowser.selectedTab))) {
+          if (!isMouseEvent && !(altEnter && !isTabEmpty(gBrowser.selectedTab))) {
             loadCurrent();
             return;
           }
@@ -354,14 +353,10 @@
           let where = "tab";
           if (isMouseEvent)
             where = whereToOpenLink(aTriggeringEvent, false, false);
-          
+
           if (where == "current") {
-            if (gBrowser.selectedTab.pinned) {
-              where = "tab";
-            } else {
-              loadCurrent();
-              return;
-            }
+            loadCurrent();
+            return;
           }
 
           this.handleRevert();

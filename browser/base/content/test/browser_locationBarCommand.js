@@ -55,9 +55,6 @@ function runNextTest() {
   info("Running test: " + test.desc);
   // Tab will be blank if test.startValue is null
   let tab = gBrowser.selectedTab = gBrowser.addTab(test.startValue);
-  if (test.pinTab)
-    gBrowser.pinTab(tab);
-
   addPageShowListener(gBrowser, function() {
     triggerCommand(test.click, test.event);
     test.check(tab);
@@ -126,19 +123,6 @@ let gTests = [
   { desc: "Ctrl/Cmd+Return keypress",
     event: { meta: true },
     check: checkCurrent
-  },
-
-  { desc: "Pinned tab return keypress",
-    event: {},
-    check: checkNewTab,
-    pinTab: true
-  },
-
-  { desc: "Pinned tab left click on go button",
-    click: true,
-    event: {},
-    check: checkNewTab,
-    pinTab: true
   }
 ]
 
