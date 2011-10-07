@@ -4075,35 +4075,6 @@ nsNavHistory::AddPageWithDetails(nsIURI *aURI, const PRUnichar *aTitle,
 }
 
 
-/**
- * This was once used when the new window was set to "previous page".
- * Currently it is still referenced by browser.startup.page == 2, but that value
- * is not selectable from the UI.
- * TODO: Should be deprecated? There is no fast alternative to get this info.
- */
-NS_IMETHODIMP
-nsNavHistory::GetLastPageVisited(nsACString & aLastPageVisited)
-{
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
-
-  nsCOMPtr<mozIStorageStatement> statement;
-  nsresult rv = mDBConn->CreateStatement(NS_LITERAL_CSTRING(
-      "SELECT url FROM moz_places "
-      "WHERE hidden = 0 "
-        "AND last_visit_date NOTNULL "
-      "ORDER BY last_visit_date DESC "),
-    getter_AddRefs(statement));
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  bool hasMatch = false;
-  if (NS_SUCCEEDED(statement->ExecuteStep(&hasMatch)) && hasMatch)
-    return statement->GetUTF8String(0, aLastPageVisited);
-
-  aLastPageVisited.Truncate(0);
-  return NS_OK;
-}
-
-
 // nsNavHistory::GetCount
 //
 //    This function is used in legacy code to see if there is any history to
@@ -5182,8 +5153,8 @@ nsNavHistory::AsyncExecuteLegacyQueries(nsINavHistoryQuery** aQueries,
                                      paramsPresent, addParams);
   NS_ENSURE_SUCCESS(rv,rv);
 
-  nsCOMPtr<mozIStorageStatement> statement;
-  rv = mDBConn->CreateStatement(queryString, getter_AddRefs(statement));
+  nsCOMPtr<mozIStorageAsyncStatement> statement;
+  rv = mDBConn->CreateAsyncStatement(queryString, getter_AddRefs(statement));
 #ifdef DEBUG
   if (NS_FAILED(rv)) {
     nsCAutoString lastErrorString;
@@ -5639,7 +5610,7 @@ nsNavHistory::QueryToSelectClause(nsNavHistoryQuery* aQuery, // const
 //    THE BEHAVIOR SHOULD BE IN SYNC WITH QueryToSelectClause
 
 nsresult
-nsNavHistory::BindQueryClauseParameters(mozIStorageStatement* statement,
+nsNavHistory::BindQueryClauseParameters(mozIStorageBaseStatement* statement,
                                         PRInt32 aQueryIndex,
                                         nsNavHistoryQuery* aQuery, // const
                                         nsNavHistoryQueryOptions* aOptions)
@@ -6774,8 +6745,8 @@ nsNavHistory::FixInvalidFrecencies()
   // Note, we are not limiting ourselves to places with visits because we may
   // not have any if the place is a bookmark and we expired or deleted all the
   // visits.
-  nsCOMPtr<mozIStorageStatement> fixInvalidFrecenciesStmt;
-  nsresult rv = mDBConn->CreateStatement(NS_LITERAL_CSTRING(
+  nsCOMPtr<mozIStorageAsyncStatement> fixInvalidFrecenciesStmt;
+  nsresult rv = mDBConn->CreateAsyncStatement(NS_LITERAL_CSTRING(
       "UPDATE moz_places "
       "SET frecency = CALCULATE_FRECENCY(id) "
       "WHERE frecency < 0"),

@@ -648,8 +648,6 @@ JSRuntime::JSRuntime()
     protoHazardShape(0),
     gcSystemAvailableChunkListHead(NULL),
     gcUserAvailableChunkListHead(NULL),
-    gcEmptyChunkListHead(NULL),
-    gcEmptyChunkCount(0),
     gcKeepAtoms(0),
     gcBytes(0),
     gcTriggerBytes(0),
@@ -695,6 +693,7 @@ JSRuntime::JSRuntime()
     requestDone(NULL),
     requestCount(0),
     gcThread(NULL),
+    gcHelperThread(this),
     rtLock(NULL),
 # ifdef DEBUG
     rtLockOwner(0),
@@ -1323,19 +1322,35 @@ JS_LeaveCrossCompartmentCall(JSCrossCompartmentCall *call)
 bool
 JSAutoEnterCompartment::enter(JSContext *cx, JSObject *target)
 {
-    JS_ASSERT(!call);
-    if (cx->compartment == target->getCompartment()) {
-        call = reinterpret_cast<JSCrossCompartmentCall*>(1);
+    JS_ASSERT(state == STATE_UNENTERED);
+    if (cx->compartment == target->compartment()) {
+        state = STATE_SAME_COMPARTMENT;
         return true;
     }
-    call = JS_EnterCrossCompartmentCall(cx, target);
-    return call != NULL;
+
+    JS_STATIC_ASSERT(sizeof(bytes) == sizeof(AutoCompartment));
+    CHECK_REQUEST(cx);
+    AutoCompartment *call = new (bytes) AutoCompartment(cx, target);
+    if (call->enter()) {
+        state = STATE_OTHER_COMPARTMENT;
+        return true;
+    }
+    return false;
 }
 
 void
 JSAutoEnterCompartment::enterAndIgnoreErrors(JSContext *cx, JSObject *target)
 {
     (void) enter(cx, target);
+}
+
+JSAutoEnterCompartment::~JSAutoEnterCompartment()
+{
+    if (state == STATE_OTHER_COMPARTMENT) {
+        AutoCompartment* ac = reinterpret_cast<AutoCompartment*>(bytes);
+        CHECK_REQUEST(ac->context);
+        ac->~AutoCompartment();
+    }
 }
 
 namespace JS {
@@ -1402,12 +1417,12 @@ JS_TransplantObject(JSContext *cx, JSObject *origobj, JSObject *target)
      // This function is called when an object moves between two
      // different compartments. In that case, we need to "move" the
      // window from origobj's compartment to target's compartment.
-    JSCompartment *destination = target->getCompartment();
+    JSCompartment *destination = target->compartment();
     WrapperMap &map = destination->crossCompartmentWrappers;
     Value origv = ObjectValue(*origobj);
     JSObject *obj;
 
-    if (origobj->getCompartment() == destination) {
+    if (origobj->compartment() == destination) {
         // If the original object is in the same compartment as the
         // destination, then we know that we won't find wrapper in the
         // destination's cross compartment map and that the same
@@ -1479,14 +1494,14 @@ JS_TransplantObject(JSContext *cx, JSObject *origobj, JSObject *target)
     }
 
     // Lastly, update the original object to point to the new one.
-    if (origobj->getCompartment() != destination) {
+    if (origobj->compartment() != destination) {
         AutoCompartment ac(cx, origobj);
         JSObject *tobj = obj;
         if (!ac.enter() || !JS_WrapObject(cx, &tobj))
             return NULL;
         if (!origobj->swap(cx, tobj))
             return NULL;
-        origobj->getCompartment()->crossCompartmentWrappers.put(targetv, origv);
+        origobj->compartment()->crossCompartmentWrappers.put(targetv, origv);
     }
 
     return obj;
@@ -1508,7 +1523,7 @@ js_TransplantObjectWithWrapper(JSContext *cx,
                                JSObject *targetwrapper)
 {
     JSObject *obj;
-    JSCompartment *destination = targetobj->getCompartment();
+    JSCompartment *destination = targetobj->compartment();
     WrapperMap &map = destination->crossCompartmentWrappers;
 
     // |origv| is the map entry we're looking up. The map entries are going to
@@ -1583,8 +1598,8 @@ js_TransplantObjectWithWrapper(JSContext *cx,
             return NULL;
         if (!origwrapper->swap(cx, tobj))
             return NULL;
-        origwrapper->getCompartment()->crossCompartmentWrappers.put(targetv,
-                                                                    ObjectValue(*origwrapper));
+        origwrapper->compartment()->crossCompartmentWrappers.put(targetv,
+                                                                 ObjectValue(*origwrapper));
     }
 
     return obj;
@@ -2776,9 +2791,9 @@ JS_GetGCParameter(JSRuntime *rt, JSGCParamKey key)
       case JSGC_MODE:
         return uint32(rt->gcMode);
       case JSGC_UNUSED_CHUNKS:
-        return uint32(rt->gcEmptyChunkCount);
+        return uint32(rt->gcChunkPool.getEmptyCount());
       case JSGC_TOTAL_CHUNKS:
-        return uint32(rt->gcChunkSet.count() + rt->gcEmptyChunkCount);
+        return uint32(rt->gcChunkSet.count() + rt->gcChunkPool.getEmptyCount());
       default:
         JS_ASSERT(key == JSGC_NUMBER);
         return rt->gcNumber;
@@ -4834,7 +4849,7 @@ CompileUCFunctionForPrincipalsCommon(JSContext *cx, JSObject *obj,
                                        chars, length, filename, lineno, version)) {
         return NULL;
     }
-    
+
     if (obj && funAtom &&
         !obj->defineProperty(cx, ATOM_TO_JSID(funAtom), ObjectValue(*fun),
                              NULL, NULL, JSPROP_ENUMERATE)) {

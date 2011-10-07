@@ -388,30 +388,31 @@ TypeSet::add(JSContext *cx, TypeConstraint *constraint, bool callExisting)
     if (!callExisting)
         return;
 
+    /* If any type is possible, there's no need to worry about specifics. */
     if (flags & TYPE_FLAG_UNKNOWN) {
         cx->compartment->types.addPending(cx, constraint, this, Type::UnknownType());
-        cx->compartment->types.resolvePending(cx);
-        return;
-    }
-
-    for (TypeFlags flag = 1; flag < TYPE_FLAG_ANYOBJECT; flag <<= 1) {
-        if (flags & flag) {
-            Type type = Type::PrimitiveType(TypeFlagPrimitive(flag));
-            cx->compartment->types.addPending(cx, constraint, this, type);
+    } else {
+        /* Enqueue type set members stored as bits. */ 
+        for (TypeFlags flag = 1; flag < TYPE_FLAG_ANYOBJECT; flag <<= 1) {
+            if (flags & flag) {
+                Type type = Type::PrimitiveType(TypeFlagPrimitive(flag));
+                cx->compartment->types.addPending(cx, constraint, this, type);
+            }
         }
-    }
 
-    if (flags & TYPE_FLAG_ANYOBJECT) {
-        cx->compartment->types.addPending(cx, constraint, this, Type::AnyObjectType());
-        cx->compartment->types.resolvePending(cx);
-        return;
-    }
-
-    unsigned count = getObjectCount();
-    for (unsigned i = 0; i < count; i++) {
-        TypeObjectKey *object = getObject(i);
-        if (object)
-            cx->compartment->types.addPending(cx, constraint, this, Type::ObjectType(object));
+        /* If any object is possible, skip specifics. */
+        if (flags & TYPE_FLAG_ANYOBJECT) {
+            cx->compartment->types.addPending(cx, constraint, this, Type::AnyObjectType());
+        } else {
+            /* Enqueue specific object types. */
+            unsigned count = getObjectCount();
+            for (unsigned i = 0; i < count; i++) {
+                TypeObjectKey *object = getObject(i);
+                if (object)
+                    cx->compartment->types.addPending(cx, constraint, this,
+                                                      Type::ObjectType(object));
+            }
+        }
     }
 
     cx->compartment->types.resolvePending(cx);
@@ -2723,6 +2724,14 @@ TypeObject::addProperty(JSContext *cx, jsid id, Property **pprop)
             if (shape)
                 UpdatePropertyType(cx, &base->types, singleton, shape, false);
         }
+
+        if (singleton->watched()) {
+            /*
+             * Mark the property as configured, to inhibit optimizations on it
+             * and avoid bypassing the watchpoint handler.
+             */
+            base->types.setOwnProperty(cx, true);
+        }
     }
 
     *pprop = base;
@@ -4273,6 +4282,48 @@ ScriptAnalysis::followEscapingArguments(JSContext *cx, SSAUseChain *use, Vector<
     return false;
 }
 
+bool
+ScriptAnalysis::integerOperation(JSContext *cx, jsbytecode *pc)
+{
+    JS_ASSERT(uint32(pc - script->code) < script->length);
+
+    switch (JSOp(*pc)) {
+
+      case JSOP_INCARG:
+      case JSOP_DECARG:
+      case JSOP_ARGINC:
+      case JSOP_ARGDEC:
+      case JSOP_INCLOCAL:
+      case JSOP_DECLOCAL:
+      case JSOP_LOCALINC:
+      case JSOP_LOCALDEC: {
+        if (pushedTypes(pc, 0)->getKnownTypeTag(cx) != JSVAL_TYPE_INT32)
+            return false;
+        uint32 slot = GetBytecodeSlot(script, pc);
+        if (trackSlot(slot)) {
+            if (poppedTypes(pc, 0)->getKnownTypeTag(cx) != JSVAL_TYPE_INT32)
+                return false;
+        }
+        return true;
+      }
+
+      case JSOP_ADD:
+      case JSOP_SUB:
+      case JSOP_MUL:
+      case JSOP_DIV:
+        if (pushedTypes(pc, 0)->getKnownTypeTag(cx) != JSVAL_TYPE_INT32)
+            return false;
+        if (poppedTypes(pc, 0)->getKnownTypeTag(cx) != JSVAL_TYPE_INT32)
+            return false;
+        if (poppedTypes(pc, 1)->getKnownTypeTag(cx) != JSVAL_TYPE_INT32)
+            return false;
+        return true;
+
+      default:
+        return true;
+    }
+}
+
 /*
  * Persistent constraint clearing out newScript and definite properties from
  * an object should a property on another object get a setter.
@@ -4891,14 +4942,6 @@ IsAboutToBeFinalized(JSContext *cx, TypeObjectKey *key)
 {
     /* Mask out the low bit indicating whether this is a type or JS object. */
     return !reinterpret_cast<const gc::Cell *>((jsuword) key & ~1)->isMarked();
-}
-
-inline bool
-ScriptIsAboutToBeFinalized(JSContext *cx, JSScript *script, JSFunction *fun)
-{
-    return script->isCachedEval ||
-        (script->u.object && IsAboutToBeFinalized(cx, script->u.object)) ||
-        (fun && IsAboutToBeFinalized(cx, fun));
 }
 
 void

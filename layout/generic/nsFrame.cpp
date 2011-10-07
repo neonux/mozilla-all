@@ -1529,13 +1529,12 @@ WrapPreserve3DListInternal(nsIFrame* aFrame, nsDisplayListBuilder *aBuilder, nsD
   nsDisplayList temp;
   while (nsDisplayItem *item = aList->RemoveBottom()) {
     nsIFrame *childFrame = item->GetUnderlyingFrame();
-    NS_ASSERTION(childFrame, "All display items to be wrapped must have a frame!");
 
     // We accumulate sequential items that aren't transforms into the 'temp' list
     // and then flush this list into newList by wrapping the whole lot with a single
     // nsDisplayTransform.
 
-    if (childFrame->GetParent()->Preserves3DChildren()) {
+    if (childFrame && childFrame->GetParent()->Preserves3DChildren()) {
       switch (item->GetType()) {
         case nsDisplayItem::TYPE_TRANSFORM: {
           if (!temp.IsEmpty()) {
@@ -1550,7 +1549,8 @@ WrapPreserve3DListInternal(nsIFrame* aFrame, nsDisplayListBuilder *aBuilder, nsD
           }
           nsDisplayWrapList *list = static_cast<nsDisplayWrapList*>(item);
           rv = WrapPreserve3DListInternal(aFrame, aBuilder, list->GetList(), aIndex);
-          newList.AppendToTop(item);
+          newList.AppendToTop(list->GetList());
+          list->~nsDisplayWrapList();
           break;
         }
         case nsDisplayItem::TYPE_OPACITY: {
@@ -1645,7 +1645,7 @@ nsIFrame::BuildDisplayListForStackingContext(nsDisplayListBuilder* aBuilder,
   }
 
   // Mark the display list items for absolutely positioned children
-  MarkAbsoluteFramesForDisplayList(aBuilder, aDirtyRect);
+  MarkAbsoluteFramesForDisplayList(aBuilder, dirtyRect);
 
   nsDisplayListCollection set;
   nsresult rv;
@@ -1775,13 +1775,6 @@ nsIFrame::BuildDisplayListForStackingContext(nsDisplayListBuilder* aBuilder,
       rv = WrapPreserve3DList(this, aBuilder, &resultList);
       if (NS_FAILED(rv))
         return rv;
-
-      if (resultList.Count() > 1) {
-        rv = resultList.AppendNewToTop(
-          new (aBuilder) nsDisplayWrapList(aBuilder, this, &resultList));
-        if (NS_FAILED(rv))
-          return rv;
-      }
     } else {
       rv = resultList.AppendNewToTop(
         new (aBuilder) nsDisplayTransform(aBuilder, this, &resultList));
@@ -2278,12 +2271,12 @@ nsFrame::IsSelectable(bool* aSelectable, PRUint8* aSelectStyle) const
     selectStyle = NS_STYLE_USER_SELECT_NONE;
 
   // return stuff
-  if (aSelectable)
-    *aSelectable = (selectStyle != NS_STYLE_USER_SELECT_NONE);
   if (aSelectStyle)
     *aSelectStyle = selectStyle;
   if (mState & NS_FRAME_GENERATED_CONTENT)
     *aSelectable = PR_FALSE;
+  else
+    *aSelectable = (selectStyle != NS_STYLE_USER_SELECT_NONE);
   return NS_OK;
 }
 
@@ -4075,7 +4068,8 @@ nsIFrame::GetOffsetToCrossDoc(const nsIFrame* aOther, const PRInt32 aAPD) const
   if (PresContext()->GetRootPresContext() !=
         aOther->PresContext()->GetRootPresContext()) {
     // crash right away, we are almost certainly going to crash anyway.
-    *(static_cast<PRInt32*>(nsnull)) = 3;
+    NS_RUNTIMEABORT("trying to get the offset between frames in different "
+                    "document hierarchies?");
   }
 
   const nsIFrame* root = nsnull;
