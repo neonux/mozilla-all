@@ -145,5 +145,14 @@
     "itemattributeindex", "moz_items_annos", "item_id, anno_attribute_id", "UNIQUE" \
   )
 
+/**
+ * moz_hostnames
+ */
+
+#define CREATE_IDX_MOZ_HOSTNAMES_FRECENCY \
+  CREATE_PLACES_IDX( \
+    "frecencyindex", "moz_hostnames", "frecency", "" \
+  )
+
 
 #endif // nsPlacesIndexes_h__
