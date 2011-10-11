@@ -66,7 +66,7 @@
 #include "prmem.h"
 #include "jsapi.h"              // for JSAutoRequest
 #include "jsdbgapi.h"           // for JS_ClearWatchPointsForObject
-#include "jsfriendapi.h"        // for JS_GetFrameScopeChainRaw
+#include "jsfriendapi.h"        // for JS_GetGlobalForFrame
 #include "nsReadableUtils.h"
 #include "nsDOMClassInfo.h"
 #include "nsJSEnvironment.h"
@@ -167,7 +167,6 @@
 #include "nsIWindowWatcher.h"
 #include "nsPIWindowWatcher.h"
 #include "nsIContentViewer.h"
-#include "nsDOMClassInfo.h"
 #include "nsIJSNativeInitializer.h"
 #include "nsIScriptError.h"
 #include "nsIConsoleService.h"
@@ -248,6 +247,7 @@
 
 #include "mozilla/Telemetry.h"
 #include "nsLocation.h"
+#include "nsWrapperCacheInlines.h"
 
 #ifdef PR_LOGGING
 static PRLogModuleInfo* gDOMLeakPRLog;
@@ -268,7 +268,6 @@ static nsIEntropyCollector *gEntropyCollector          = nsnull;
 static PRInt32              gRefCnt                    = 0;
 static PRInt32              gOpenPopupSpamCount        = 0;
 static PopupControlState    gPopupControlState         = openAbused;
-static PopupOpenedState     gPopupOpenedState          = noTrack;
 static PRInt32              gRunningTimeoutDepth       = 0;
 static bool                 gMouseDown                 = false;
 static bool                 gDragServiceDisabled       = false;
@@ -778,7 +777,7 @@ nsPIDOMWindow::~nsPIDOMWindow() {}
 JSString *
 nsOuterWindowProxy::obj_toString(JSContext *cx, JSObject *proxy)
 {
-    JS_ASSERT(proxy->isProxy());
+    JS_ASSERT(js::IsProxy(proxy));
 
     return JS_NewStringCopyZ(cx, "[object Window]");
 }
@@ -794,9 +793,9 @@ NS_NewOuterWindowProxy(JSContext *cx, JSObject *parent)
     return nsnull;
   }
 
-  JSObject *obj = js::Wrapper::New(cx, parent, parent->getProto(), parent,
+  JSObject *obj = js::Wrapper::New(cx, parent, js::GetObjectProto(parent), parent,
                                    &nsOuterWindowProxy::singleton);
-  NS_ASSERTION(obj->getClass()->ext.innerObject, "bad class");
+  NS_ASSERTION(js::GetObjectClass(obj)->ext.innerObject, "bad class");
   return obj;
 }
 
@@ -1714,30 +1713,6 @@ nsGlobalWindow::GetPopupControlState() const
   return gPopupControlState;
 }
 
-PopupOpenedState
-GetPopupOpenedState()
-{
-  return gPopupOpenedState;
-}
-
-PopupOpenedState
-nsGlobalWindow::GetPopupOpenedState() const
-{
-  return ::GetPopupOpenedState();
-}
-
-void
-SetPopupOpenedState(PopupOpenedState aValue)
-{
-  gPopupOpenedState = aValue;
-}
-
-void
-nsGlobalWindow::SetPopupOpenedState(PopupOpenedState aValue) const
-{
-  ::SetPopupOpenedState(aValue);
-}
-
 #define WINDOWSTATEHOLDER_IID \
 {0x0b917c3e, 0xbd50, 0x4683, {0xaf, 0xc9, 0xc7, 0x81, 0x07, 0xae, 0x33, 0x26}}
 
@@ -2267,7 +2242,8 @@ nsGlobalWindow::SetNewDocument(nsIDocument* aDocument,
       if (navigatorHolder) {
         JS_ASSERT(JSVAL_IS_OBJECT(nav));
 
-        if (JSVAL_TO_OBJECT(nav)->compartment() == newInnerWindow->mJSObject->compartment()) {
+        if (js::GetObjectCompartment(JSVAL_TO_OBJECT(nav)) ==
+            js::GetObjectCompartment(newInnerWindow->mJSObject)) {
           // Restore window.navigator onto the new inner window.
 
           ::JS_DefineProperty(cx, newInnerWindow->mJSObject, "navigator",
@@ -5739,21 +5715,6 @@ nsGlobalWindow::RevisePopupAbuseLevel(PopupControlState aControl)
       abuse = openOverridden;
   }
 
-  if (Preferences::GetBool("dom.block_multiple_popups", true)) {
-    // Do not allow opening more than one popup per event.
-    switch (GetPopupOpenedState()) {
-      case noOpenedPopup:
-        SetPopupOpenedState(openedPopup);
-        break;
-      case openedPopup:
-        abuse = openOverridden;
-        break;
-      case noTrack:
-      default:
-        break;
-    }
-  }
-
   return abuse;
 }
 
@@ -5945,11 +5906,11 @@ nsGlobalWindow::CallerInnerWindow()
     }
 
     if (fp)
-      scope = JS_GetFrameScopeChainRaw(fp);
+      scope = JS_GetGlobalForFrame(fp);
   }
 
   if (!scope)
-    scope = JS_GetScopeChain(cx);
+    scope = JS_GetGlobalForScopeChain(cx);
 
   JSAutoEnterCompartment ac;
   if (!ac.enter(cx, scope))
@@ -5957,8 +5918,7 @@ nsGlobalWindow::CallerInnerWindow()
 
   nsCOMPtr<nsIXPConnectWrappedNative> wrapper;
   nsContentUtils::XPConnect()->
-    GetWrappedNativeOfJSObject(cx, ::JS_GetGlobalForObject(cx, scope),
-                               getter_AddRefs(wrapper));
+    GetWrappedNativeOfJSObject(cx, scope, getter_AddRefs(wrapper));
   if (!wrapper)
     return nsnull;
 
@@ -6046,7 +6006,7 @@ PostMessageReadStructuredClone(JSContext* cx,
 
     nsISupports* supports;
     if (JS_ReadBytes(reader, &supports, sizeof(supports))) {
-      JSObject* global = JS_GetGlobalForObject(cx, JS_GetScopeChain(cx));
+      JSObject* global = JS_GetGlobalForScopeChain(cx);
       if (global) {
         jsval val;
         nsCOMPtr<nsIXPConnectJSObjectHolder> wrapper;
@@ -10217,6 +10177,11 @@ nsGlobalWindow::SetHasOrientationEventListener()
   EnableDeviceMotionUpdates();
 }
 
+void
+nsGlobalWindow::RemoveOrientationEventListener() {
+  DisableDeviceMotionUpdates();
+}
+
 NS_IMETHODIMP
 nsGlobalWindow::GetURL(nsIDOMMozURLProperty** aURL)
 {
@@ -11360,6 +11325,9 @@ NS_IMETHODIMP nsNavigator::GetGeolocation(nsIDOMGeoGeolocation **_retval)
 {
   NS_ENSURE_ARG_POINTER(_retval);
   *_retval = nsnull;
+
+  if (!Preferences::GetBool("geo.enabled", PR_TRUE))
+    return NS_OK;
 
   if (mGeolocation) {
     NS_ADDREF(*_retval = mGeolocation);

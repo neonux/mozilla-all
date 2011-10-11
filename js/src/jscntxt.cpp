@@ -319,30 +319,17 @@ js_PurgeThreads(JSContext *cx)
 JSContext *
 js_NewContext(JSRuntime *rt, size_t stackChunkSize)
 {
-    JSContext *cx;
-    JSBool first;
-    JSContextCallback cxCallback;
-
     /*
      * We need to initialize the new context fully before adding it to the
      * runtime list. After that it can be accessed from another thread via
      * js_ContextIterator.
      */
-    void *mem = OffTheBooks::calloc_(sizeof *cx);
-    if (!mem)
+    JSContext *cx = OffTheBooks::new_<JSContext>(rt);
+    if (!cx)
         return NULL;
 
-    cx = new (mem) JSContext(rt);
-    cx->debugHooks = &rt->globalDebugHooks;
-#if JS_STACK_GROWTH_DIRECTION > 0
-    cx->stackLimit = (jsuword) -1;
-#endif
-    cx->iterValue.setMagic(JS_NO_ITER_VALUE);
-    JS_STATIC_ASSERT(JSVERSION_DEFAULT == 0);
     JS_ASSERT(cx->findVersion() == JSVERSION_DEFAULT);
     VOUCH_DOES_NOT_REQUIRE_STACK();
-
-    JS_ASSERT(cx->resolveFlags == 0);
 
     if (!cx->busyArrays.init()) {
         Foreground::delete_(cx);
@@ -360,15 +347,16 @@ js_NewContext(JSRuntime *rt, size_t stackChunkSize)
      * Here the GC lock is still held after js_InitContextThreadAndLockGC took it and
      * the GC is not running on another thread.
      */
+    bool first;
     for (;;) {
         if (rt->state == JSRTS_UP) {
             JS_ASSERT(!JS_CLIST_IS_EMPTY(&rt->contextList));
-            first = JS_FALSE;
+            first = false;
             break;
         }
         if (rt->state == JSRTS_DOWN) {
             JS_ASSERT(JS_CLIST_IS_EMPTY(&rt->contextList));
-            first = JS_TRUE;
+            first = true;
             rt->state = JSRTS_LAUNCHING;
             break;
         }
@@ -417,7 +405,7 @@ js_NewContext(JSRuntime *rt, size_t stackChunkSize)
         JS_NOTIFY_ALL_CONDVAR(rt->stateChange);
     }
 
-    cxCallback = rt->cxCallback;
+    JSContextCallback cxCallback = rt->cxCallback;
     if (cxCallback && !cxCallback(cx, JSCONTEXT_NEW)) {
         js_DestroyContext(cx, JSDCM_NEW_FAILED);
         return NULL;
@@ -488,10 +476,10 @@ js_DestroyContext(JSContext *cx, JSDestroyContextMode mode)
         ) {
         JS_ASSERT(!rt->gcRunning);
 
-        JS_UNLOCK_GC(rt);
 #ifdef JS_THREADSAFE
-        rt->gcHelperThread.waitBackgroundSweepEnd(rt);
+        rt->gcHelperThread.waitBackgroundSweepEnd();
 #endif
+        JS_UNLOCK_GC(rt);
 
         if (last) {
 #ifdef JS_THREADSAFE
@@ -571,10 +559,10 @@ js_DestroyContext(JSContext *cx, JSDestroyContextMode mode)
     js_ClearContextThread(cx);
     JS_ASSERT_IF(JS_CLIST_IS_EMPTY(&t->contextList), !t->data.requestDepth);
 #endif
-    JS_UNLOCK_GC(rt);
 #ifdef JS_THREADSAFE
-    rt->gcHelperThread.waitBackgroundSweepEnd(rt);
+    rt->gcHelperThread.waitBackgroundSweepEnd();
 #endif
+    JS_UNLOCK_GC(rt);
     Foreground::delete_(cx);
 }
 
@@ -1189,7 +1177,10 @@ js_InvokeOperationCallback(JSContext *cx)
             * We have to wait until the background thread is done in order
             * to get a correct answer.
             */
-            rt->gcHelperThread.waitBackgroundSweepEnd(rt);
+            {
+                AutoLockGC lock(rt);
+                rt->gcHelperThread.waitBackgroundSweepEnd();
+            }
             if (checkOutOfMemory(rt)) {
                 js_ReportOutOfMemory(cx);
                 return false;
@@ -1346,15 +1337,68 @@ DSTOffsetCache::DSTOffsetCache()
 }
 
 JSContext::JSContext(JSRuntime *rt)
-  : hasVersionOverride(false),
+  : defaultVersion(JSVERSION_DEFAULT),
+    hasVersionOverride(false),
+    throwing(false),
+    exception(UndefinedValue()),
+    runOptions(0),
+    localeCallbacks(NULL),
+    resolvingList(NULL),
+    generatingError(false),
+#if JS_STACK_GROWTH_DIRECTION > 0
+    stackLimit((jsuword)-1),
+#else
+    stackLimit(0),
+#endif
     runtime(rt),
     compartment(NULL),
-    stack(thisDuringConstruction()),
-    busyArrays()
+#ifdef JS_THREADSAFE
+    thread_(NULL),
+#endif
+    stack(thisDuringConstruction()),  /* depends on cx->thread_ */
+    parseMapPool_(NULL),
+    globalObject(NULL),
+    argumentFormatMap(NULL),
+    lastMessage(NULL),
+    errorReporter(NULL),
+    operationCallback(NULL),
+    data(NULL),
+    data2(NULL),
+#ifdef JS_THREADSAFE
+    outstandingRequests(0),
+#endif
+    autoGCRooters(NULL),
+    debugHooks(&rt->globalDebugHooks),
+    securityCallbacks(NULL),
+    resolveFlags(0),
+    rngSeed(0),
+    iterValue(MagicValue(JS_NO_ITER_VALUE)),
+#ifdef JS_TRACER
+    traceJitEnabled(false),
+#endif
+#ifdef JS_METHODJIT
+    methodJitEnabled(false),
+    profilingEnabled(false),
+#endif
+    inferenceEnabled(false),
+#ifdef MOZ_TRACE_JSCALLS
+    functionCallback(NULL),
+#endif
+    enumerators(NULL),
+#ifdef JS_THREADSAFE
+    gcBackgroundFree(NULL),
+#endif
+    activeCompilations(0)
 #ifdef DEBUG
     , stackIterAssertionEnabled(true)
 #endif
-{}
+{
+    PodZero(&sharpObjectMap);
+    PodZero(&link);
+#ifdef JS_THREADSAFE
+    PodZero(&threadLinks);
+#endif
+}
 
 JSContext::~JSContext()
 {
@@ -1477,8 +1521,17 @@ JSRuntime::onTooMuchMalloc()
 JS_FRIEND_API(void *)
 JSRuntime::onOutOfMemory(void *p, size_t nbytes, JSContext *cx)
 {
+    /*
+     * Retry when we are done with the background sweeping and have stopped
+     * all the allocations and released the empty GC chunks.
+     */
+    {
 #ifdef JS_THREADSAFE
-    gcHelperThread.waitBackgroundSweepEnd(this);
+        AutoLockGC lock(this);
+        gcHelperThread.waitBackgroundSweepOrAllocEnd();
+#endif
+        gcChunkPool.expire(this, true);
+    }
     if (!p)
         p = OffTheBooks::malloc_(nbytes);
     else if (p == reinterpret_cast<void *>(1))
@@ -1487,7 +1540,6 @@ JSRuntime::onOutOfMemory(void *p, size_t nbytes, JSContext *cx)
       p = OffTheBooks::realloc_(p, nbytes);
     if (p)
         return p;
-#endif
     if (cx)
         js_ReportOutOfMemory(cx);
     return NULL;
@@ -1621,6 +1673,15 @@ CanLeaveTrace(JSContext *cx)
 #else
     return false;
 #endif
+}
+
+AutoEnumStateRooter::~AutoEnumStateRooter()
+{
+    if (!stateValue.isNull()) {
+        DebugOnly<JSBool> ok =
+            obj->enumerate(context, JSENUMERATE_DESTROY, &stateValue, 0);
+        JS_ASSERT(ok);
+    }
 }
 
 } /* namespace js */

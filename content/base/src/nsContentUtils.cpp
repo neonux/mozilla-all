@@ -203,6 +203,7 @@ static NS_DEFINE_CID(kXTFServiceCID, NS_XTFSERVICE_CID);
 #include "prdtoa.h"
 
 #include "mozilla/Preferences.h"
+#include "nsWrapperCacheInlines.h"
 
 using namespace mozilla::dom;
 using namespace mozilla::layers;
@@ -5137,7 +5138,7 @@ nsContentUtils::CanAccessNativeAnon()
   static const char prefix[] = "chrome://global/";
   const char *filename;
   if (fp && JS_IsScriptFrame(cx, fp) &&
-      (filename = JS_GetFrameScript(cx, fp)->filename) &&
+      (filename = JS_GetScriptFilename(cx, JS_GetFrameScript(cx, fp))) &&
       !strncmp(filename, prefix, NS_ARRAY_LENGTH(prefix) - 1)) {
     return PR_TRUE;
   }
@@ -5802,4 +5803,36 @@ bool
 nsContentUtils::IsFullScreenKeyInputRestricted()
 {
   return sFullScreenKeyInputRestricted;
+}
+
+// static
+void
+nsContentUtils::ReleaseWrapper(nsISupports* aScriptObjectHolder,
+                               nsWrapperCache* aCache)
+{
+  if (aCache->PreservingWrapper()) {
+    DropJSObjects(aScriptObjectHolder);
+    aCache->SetPreservingWrapper(false);
+  }
+
+  aCache->ClearWrapperIfProxy();
+}
+
+// static
+void
+nsContentUtils::TraceWrapper(nsWrapperCache* aCache, TraceCallback aCallback,
+                             void *aClosure)
+{
+  if (aCache->PreservingWrapper()) {
+    aCallback(nsIProgrammingLanguage::JAVASCRIPT,
+              aCache->GetWrapperPreserveColor(),
+              "Preserved wrapper", aClosure);
+  }
+  else {
+    JSObject *expando = aCache->GetExpandoObjectPreserveColor();
+    if (expando) {
+      aCallback(nsIProgrammingLanguage::JAVASCRIPT, expando, "Expando object",
+                aClosure);
+    }
+  }
 }

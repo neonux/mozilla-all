@@ -39,7 +39,7 @@
 
 #include "nsContentCID.h"
 #include "nsContentUtils.h"
-#include "nsDOMClassInfo.h"
+#include "nsDOMClassInfoID.h"
 #include "nsDOMFile.h"
 #include "nsDOMError.h"
 #include "nsICharsetAlias.h"
@@ -69,7 +69,6 @@
 #include "nsIJSContextStack.h"
 #include "nsJSEnvironment.h"
 #include "nsIScriptGlobalObject.h"
-#include "nsIDOMClassInfo.h"
 #include "nsCExternalHandlerService.h"
 #include "nsIStreamConverterService.h"
 #include "nsCycleCollectionParticipant.h"
@@ -81,6 +80,7 @@
 #include "xpcpublic.h"
 #include "xpcquickstubs.h"
 #include "jstypedarray.h"
+#include "nsDOMJSUtils.h"
 
 using namespace mozilla;
 
@@ -97,6 +97,9 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(nsDOMFileReader,
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mFile)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mPrincipal)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mChannel)
+  NS_CYCLE_COLLECTION_TRAVERSE_EVENT_HANDLER(load)
+  NS_CYCLE_COLLECTION_TRAVERSE_EVENT_HANDLER(loadstart)
+  NS_CYCLE_COLLECTION_TRAVERSE_EVENT_HANDLER(loadend)
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(nsDOMFileReader,
@@ -104,6 +107,9 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(nsDOMFileReader,
   tmp->mResultArrayBuffer = nsnull;
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mFile)
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mPrincipal)
+  NS_CYCLE_COLLECTION_UNLINK_EVENT_HANDLER(load)
+  NS_CYCLE_COLLECTION_UNLINK_EVENT_HANDLER(loadstart)
+  NS_CYCLE_COLLECTION_UNLINK_EVENT_HANDLER(loadend)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 
 

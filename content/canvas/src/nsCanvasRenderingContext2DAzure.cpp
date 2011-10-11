@@ -2332,7 +2332,7 @@ nsCanvasRenderingContext2DAzure::QuadraticCurveTo(float cpx, float cpy, float x,
     mPathBuilder->QuadraticBezierTo(Point(cpx, cpy), Point(x, y));
   } else {
     Matrix transform = mTarget->GetTransform();
-    mDSPathBuilder->QuadraticBezierTo(transform * Point(cpx, cpy), transform * Point(cpx, cpy));
+    mDSPathBuilder->QuadraticBezierTo(transform * Point(cpx, cpy), transform * Point(x, y));
   }
 
   return NS_OK;
@@ -2863,9 +2863,6 @@ nsCanvasRenderingContext2DAzure::SetTextAlign(const nsAString& ta)
     CurrentState().textAlign = TEXT_ALIGN_RIGHT;
   else if (ta.EqualsLiteral("center"))
     CurrentState().textAlign = TEXT_ALIGN_CENTER;
-  // spec says to not throw error for invalid arg, but do it anyway
-  else
-    return NS_ERROR_INVALID_ARG;
 
   return NS_OK;
 }
@@ -2913,9 +2910,6 @@ nsCanvasRenderingContext2DAzure::SetTextBaseline(const nsAString& tb)
     CurrentState().textBaseline = TEXT_BASELINE_IDEOGRAPHIC;
   else if (tb.EqualsLiteral("bottom"))
     CurrentState().textBaseline = TEXT_BASELINE_BOTTOM;
-  // spec says to not throw error for invalid arg, but do it anyway
-  else
-    return NS_ERROR_INVALID_ARG;
 
   return NS_OK;
 }
@@ -3677,6 +3671,27 @@ nsCanvasRenderingContext2DAzure::DrawImage(nsIDOMElement *imgElt, float a1,
     // Self-copy.
     srcSurf = mTarget->Snapshot();
     imgSize = gfxIntSize(mWidth, mHeight);
+  }
+
+  // Special case for Canvas, which could be an Azure canvas!
+  if (canvas) {
+    if (canvas->CountContexts() == 1) {
+      nsICanvasRenderingContextInternal *srcCanvas = canvas->GetContextAtIndex(0);
+
+      // This might not be an Azure canvas!
+      if (srcCanvas) {
+        srcSurf = srcCanvas->GetSurfaceSnapshot();
+
+        if (srcSurf && mCanvasElement) {
+          // Do security check here.
+          CanvasUtils::DoDrawImageSecurityCheck(HTMLCanvasElement(),
+                                                content->NodePrincipal(), canvas->IsWriteOnly(),
+                                                false);
+
+          imgSize = gfxIntSize(srcSurf->GetSize().width, srcSurf->GetSize().height);
+        }
+      }
+    }
   }
 
   if (!srcSurf) {

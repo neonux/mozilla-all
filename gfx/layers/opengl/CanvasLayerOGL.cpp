@@ -272,7 +272,7 @@ CanvasLayerOGL::RenderLayer(int aPreviousDestination,
   }
 #endif
 
-  ApplyFilter(mFilter);
+  gl()->ApplyFilterToBoundTexture(mFilter);
 
   program->Activate();
   program->SetLayerQuadRect(drawRect);
@@ -377,7 +377,7 @@ ShadowCanvasLayerOGL::RenderLayer(int aPreviousFrameBuffer,
   ColorTextureLayerProgram *program =
     mOGLManager->GetColorTextureLayerProgram(mTexImage->GetShaderProgramType());
 
-  ApplyFilter(mFilter);
+  mTexImage->SetFilter(mFilter);
 
   program->Activate();
   program->SetLayerTransform(GetEffectiveTransform());
@@ -387,7 +387,7 @@ ShadowCanvasLayerOGL::RenderLayer(int aPreviousFrameBuffer,
 
   mTexImage->BeginTileIteration();
   do {
-    TextureImage::ScopedBindTexture texBind(mTexImage, LOCAL_GL_TEXTURE0);
+    TextureImage::ScopedBindTextureAndApplyFilter texBind(mTexImage, LOCAL_GL_TEXTURE0);
     program->SetLayerQuadRect(mTexImage->GetTileRect());
     mOGLManager->BindAndDrawQuad(program, mNeedsYFlip); // FIXME flip order of tiles?
   } while (mTexImage->NextTile());

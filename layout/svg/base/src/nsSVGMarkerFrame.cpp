@@ -206,6 +206,57 @@ nsSVGMarkerFrame::RegionMark(nsSVGPathGeometryFrame *aMarkedFrame,
   return nsSVGUtils::GetCoveredRegion(mFrames);
 }
 
+gfxRect
+nsSVGMarkerFrame::GetMarkBBoxContribution(const gfxMatrix &aToBBoxUserspace,
+                                          PRUint32 aFlags,
+                                          nsSVGPathGeometryFrame *aMarkedFrame,
+                                          const nsSVGMark *aMark,
+                                          float aStrokeWidth)
+{
+  // If the flag is set when we get here, it means this marker frame
+  // has already been used in calculating the current mark bbox, and
+  // the document has a marker reference loop.
+  if (mInUse)
+    return gfxRect();
+
+  AutoMarkerReferencer markerRef(this, aMarkedFrame);
+
+  nsSVGMarkerElement *content = static_cast<nsSVGMarkerElement*>(mContent);
+
+  const nsSVGViewBoxRect viewBox = content->GetViewBoxRect();
+
+  if (viewBox.width <= 0.0f || viewBox.height <= 0.0f) {
+    return gfxRect();
+  }
+
+  mStrokeWidth = aStrokeWidth;
+  mX = aMark->x;
+  mY = aMark->y;
+  mAutoAngle = aMark->angle;
+
+  gfxRect bbox;
+
+  gfxMatrix markerTM =
+    content->GetMarkerTransform(mStrokeWidth, mX, mY, mAutoAngle);
+  gfxMatrix viewBoxTM = content->GetViewBoxTransform();
+
+  gfxMatrix tm = viewBoxTM * markerTM * aToBBoxUserspace;
+
+  for (nsIFrame* kid = mFrames.FirstChild();
+       kid;
+       kid = kid->GetNextSibling()) {
+    nsISVGChildFrame* child = do_QueryFrame(kid);
+    if (child) {
+      // When we're being called to obtain the invalidation area, we need to
+      // pass down all the flags so that stroke is included. However, once DOM
+      // getBBox() accepts flags, maybe we should strip some of those here?
+      bbox.UnionRect(bbox, child->GetBBoxContribution(tm, aFlags));
+    }
+  }
+
+  return bbox;
+}
+
 void
 nsSVGMarkerFrame::SetParentCoordCtxProvider(nsSVGSVGElement *aContext)
 {

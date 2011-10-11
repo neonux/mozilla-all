@@ -61,7 +61,7 @@
 #include "nsWeakPtr.h"
 #include "nsICharsetAlias.h"
 #include "nsIScriptGlobalObject.h"
-#include "nsIDOMClassInfo.h"
+#include "nsDOMClassInfoID.h"
 #include "nsIDOMElement.h"
 #include "nsIDOMWindow.h"
 #include "nsIMIMEService.h"
@@ -76,7 +76,6 @@
 #include "nsEventDispatcher.h"
 #include "nsDOMJSUtils.h"
 #include "nsCOMArray.h"
-#include "nsDOMClassInfo.h"
 #include "nsIScriptableUConv.h"
 #include "nsCycleCollectionParticipant.h"
 #include "nsIContentPolicy.h"
@@ -288,15 +287,24 @@ nsMultipartProxyListener::OnDataAvailable(nsIRequest *aRequest,
 
 NS_IMPL_CYCLE_COLLECTION_CLASS(nsXHREventTarget)
 
-// nsXHREventTarget's CC participant doesn't actually do anything anymore
-// but these are left here as placeholders in case it needs to do something
-// in the future.
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(nsXHREventTarget,
                                                   nsDOMEventTargetWrapperCache)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mOnLoadListener)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mOnErrorListener)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mOnAbortListener)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mOnLoadStartListener)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mOnProgressListener)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mOnLoadendListener)
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(nsXHREventTarget,
                                                 nsDOMEventTargetWrapperCache)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mOnLoadListener)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mOnErrorListener)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mOnAbortListener)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mOnLoadStartListener)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mOnProgressListener)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mOnLoadendListener)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION_INHERITED(nsXHREventTarget)
@@ -306,12 +314,83 @@ NS_INTERFACE_MAP_END_INHERITING(nsDOMEventTargetWrapperCache)
 NS_IMPL_ADDREF_INHERITED(nsXHREventTarget, nsDOMEventTargetWrapperCache)
 NS_IMPL_RELEASE_INHERITED(nsXHREventTarget, nsDOMEventTargetWrapperCache)
 
-NS_IMPL_EVENT_HANDLER(nsXHREventTarget, load)
-NS_IMPL_EVENT_HANDLER(nsXHREventTarget, error)
-NS_IMPL_EVENT_HANDLER(nsXHREventTarget, abort)
-NS_IMPL_EVENT_HANDLER(nsXHREventTarget, loadstart)
-NS_IMPL_EVENT_HANDLER(nsXHREventTarget, progress)
-NS_IMPL_EVENT_HANDLER(nsXHREventTarget, loadend)
+NS_IMETHODIMP
+nsXHREventTarget::GetOnload(nsIDOMEventListener** aOnLoad)
+{
+  return GetInnerEventListener(mOnLoadListener, aOnLoad);
+}
+
+NS_IMETHODIMP
+nsXHREventTarget::SetOnload(nsIDOMEventListener* aOnLoad)
+{
+  return RemoveAddEventListener(NS_LITERAL_STRING(LOAD_STR),
+                                mOnLoadListener, aOnLoad);
+}
+
+NS_IMETHODIMP
+nsXHREventTarget::GetOnerror(nsIDOMEventListener** aOnerror)
+{
+  return GetInnerEventListener(mOnErrorListener, aOnerror);
+}
+
+NS_IMETHODIMP
+nsXHREventTarget::SetOnerror(nsIDOMEventListener* aOnerror)
+{
+  return RemoveAddEventListener(NS_LITERAL_STRING(ERROR_STR),
+                                mOnErrorListener, aOnerror);
+}
+
+NS_IMETHODIMP
+nsXHREventTarget::GetOnabort(nsIDOMEventListener** aOnabort)
+{
+  return GetInnerEventListener(mOnAbortListener, aOnabort);
+}
+
+NS_IMETHODIMP
+nsXHREventTarget::SetOnabort(nsIDOMEventListener* aOnabort)
+{
+  return RemoveAddEventListener(NS_LITERAL_STRING(ABORT_STR),
+                                mOnAbortListener, aOnabort);
+}
+
+NS_IMETHODIMP
+nsXHREventTarget::GetOnloadstart(nsIDOMEventListener** aOnloadstart)
+{
+  return GetInnerEventListener(mOnLoadStartListener, aOnloadstart);
+}
+
+NS_IMETHODIMP
+nsXHREventTarget::SetOnloadstart(nsIDOMEventListener* aOnloadstart)
+{
+  return RemoveAddEventListener(NS_LITERAL_STRING(LOADSTART_STR),
+                                mOnLoadStartListener, aOnloadstart);
+}
+
+NS_IMETHODIMP
+nsXHREventTarget::GetOnprogress(nsIDOMEventListener** aOnprogress)
+{
+  return GetInnerEventListener(mOnProgressListener, aOnprogress);
+}
+
+NS_IMETHODIMP
+nsXHREventTarget::SetOnprogress(nsIDOMEventListener* aOnprogress)
+{
+  return RemoveAddEventListener(NS_LITERAL_STRING(PROGRESS_STR),
+                                mOnProgressListener, aOnprogress);
+}
+
+NS_IMETHODIMP
+nsXHREventTarget::GetOnloadend(nsIDOMEventListener** aOnLoadend)
+{
+  return GetInnerEventListener(mOnLoadendListener, aOnLoadend);
+}
+
+NS_IMETHODIMP
+nsXHREventTarget::SetOnloadend(nsIDOMEventListener* aOnLoadend)
+{
+  return RemoveAddEventListener(NS_LITERAL_STRING(LOADEND_STR),
+                                mOnLoadendListener, aOnLoadend);
+}
 
 /////////////////////////////////////////////
 
@@ -505,6 +584,9 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(nsXMLHttpRequest,
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mResponseXML)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mCORSPreflightChannel)
 
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mOnUploadProgressListener)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mOnReadystatechangeListener)
+
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mXMLParserStreamListener)
 
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mChannelEventSink)
@@ -523,6 +605,9 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(nsXMLHttpRequest,
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mReadRequest)
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mResponseXML)
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mCORSPreflightChannel)
+
+  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mOnUploadProgressListener)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mOnReadystatechangeListener)
 
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mXMLParserStreamListener)
 
@@ -564,8 +649,39 @@ NS_INTERFACE_MAP_END_INHERITING(nsXHREventTarget)
 NS_IMPL_ADDREF_INHERITED(nsXMLHttpRequest, nsXHREventTarget)
 NS_IMPL_RELEASE_INHERITED(nsXMLHttpRequest, nsXHREventTarget)
 
-NS_IMPL_EVENT_HANDLER(nsXMLHttpRequest, readystatechange)
-NS_IMPL_EVENT_HANDLER(nsXMLHttpRequest, uploadprogress)
+NS_IMETHODIMP
+nsXMLHttpRequest::GetOnreadystatechange(nsIDOMEventListener * *aOnreadystatechange)
+{
+  return
+    nsXHREventTarget::GetInnerEventListener(mOnReadystatechangeListener,
+                                            aOnreadystatechange);
+}
+
+NS_IMETHODIMP
+nsXMLHttpRequest::SetOnreadystatechange(nsIDOMEventListener * aOnreadystatechange)
+{
+  return
+    nsXHREventTarget::RemoveAddEventListener(NS_LITERAL_STRING(READYSTATE_STR),
+                                             mOnReadystatechangeListener,
+                                             aOnreadystatechange);
+}
+
+NS_IMETHODIMP
+nsXMLHttpRequest::GetOnuploadprogress(nsIDOMEventListener * *aOnuploadprogress)
+{
+  return
+    nsXHREventTarget::GetInnerEventListener(mOnUploadProgressListener,
+                                            aOnuploadprogress);
+}
+
+NS_IMETHODIMP
+nsXMLHttpRequest::SetOnuploadprogress(nsIDOMEventListener * aOnuploadprogress)
+{
+  return
+    nsXHREventTarget::RemoveAddEventListener(NS_LITERAL_STRING(UPLOADPROGRESS_STR),
+                                             mOnUploadProgressListener,
+                                             aOnuploadprogress);
+}
 
 /* readonly attribute nsIChannel channel; */
 NS_IMETHODIMP
@@ -732,7 +848,7 @@ NS_IMETHODIMP nsXMLHttpRequest::GetResponseText(nsAString& aResponseText)
 
   nsCOMPtr<nsIDocument> document = do_QueryInterface(mResponseXML);
   if (mResponseCharset != document->GetDocumentCharacterSet()) {
-    mResponseCharset == document->GetDocumentCharacterSet();
+    mResponseCharset = document->GetDocumentCharacterSet();
     mResponseText.Truncate();
     mResponseBodyDecodedPos = 0;
 
@@ -932,7 +1048,7 @@ NS_IMETHODIMP nsXMLHttpRequest::GetResponse(JSContext *aCx, jsval *aResult)
 
   case XML_HTTP_RESPONSE_TYPE_BLOB:
     if (mState & XML_HTTP_REQUEST_DONE && mResponseBlob) {
-      JSObject* scope = JS_GetScopeChain(aCx);
+      JSObject* scope = JS_GetGlobalForScopeChain(aCx);
       rv = nsContentUtils::WrapNative(aCx, scope, mResponseBlob, aResult,
                                       nsnull, PR_TRUE);
     } else {
@@ -942,7 +1058,7 @@ NS_IMETHODIMP nsXMLHttpRequest::GetResponse(JSContext *aCx, jsval *aResult)
 
   case XML_HTTP_RESPONSE_TYPE_DOCUMENT:
     if (mState & XML_HTTP_REQUEST_DONE && mResponseXML) {
-      JSObject* scope = JS_GetScopeChain(aCx);
+      JSObject* scope = JS_GetGlobalForScopeChain(aCx);
       rv = nsContentUtils::WrapNative(aCx, scope, mResponseXML, aResult,
                                       nsnull, PR_TRUE);
     } else {
@@ -1284,10 +1400,7 @@ nsXMLHttpRequest::DispatchProgressEvent(nsDOMEventTargetHelper* aTarget,
 
   if (aUseLSEventWrapper) {
     nsCOMPtr<nsIDOMProgressEvent> xhrprogressEvent =
-      new nsXMLHttpProgressEvent(progress, aPosition, aTotalSize);
-    if (!xhrprogressEvent) {
-      return;
-    }
+      new nsXMLHttpProgressEvent(progress, aPosition, aTotalSize, mOwner);
     event = xhrprogressEvent;
   }
   aTarget->DispatchDOMEvent(nsnull, event, nsnull, nsnull);
@@ -3123,7 +3236,9 @@ nsHeaderVisitor::VisitHeader(const nsACString &header, const nsACString &value)
 // DOM event class to handle progress notifications
 nsXMLHttpProgressEvent::nsXMLHttpProgressEvent(nsIDOMProgressEvent* aInner,
                                                PRUint64 aCurrentProgress,
-                                               PRUint64 aMaxProgress)
+                                               PRUint64 aMaxProgress,
+                                               nsPIDOMWindow* aWindow)
+  : mWindow(aWindow)
 {
   mInner = static_cast<nsDOMProgressEvent*>(aInner);
   mCurProgress = aCurrentProgress;
@@ -3153,11 +3268,13 @@ NS_IMPL_CYCLE_COLLECTING_RELEASE(nsXMLHttpProgressEvent)
 
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN(nsXMLHttpProgressEvent)
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mInner);
+  NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mWindow);
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN(nsXMLHttpProgressEvent)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR_AMBIGUOUS(mInner,
                                                        nsIDOMProgressEvent)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mWindow);
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
 NS_IMETHODIMP nsXMLHttpProgressEvent::GetInput(nsIDOMLSInput * *aInput)
@@ -3166,8 +3283,23 @@ NS_IMETHODIMP nsXMLHttpProgressEvent::GetInput(nsIDOMLSInput * *aInput)
   return NS_ERROR_NOT_IMPLEMENTED;
 }
 
+void
+nsXMLHttpProgressEvent::WarnAboutLSProgressEvent(nsIDocument::DeprecatedOperations aOperation)
+{
+  if (!mWindow) {
+    return;
+  }
+  nsCOMPtr<nsIDocument> document =
+    do_QueryInterface(mWindow->GetExtantDocument());
+  if (!document) {
+    return;
+  }
+  document->WarnOnceAbout(aOperation);
+}
+
 NS_IMETHODIMP nsXMLHttpProgressEvent::GetPosition(PRUint32 *aPosition)
 {
+  WarnAboutLSProgressEvent(nsIDocument::ePosition);
   // XXX can we change the iface?
   LL_L2UI(*aPosition, mCurProgress);
   return NS_OK;
@@ -3175,8 +3307,8 @@ NS_IMETHODIMP nsXMLHttpProgressEvent::GetPosition(PRUint32 *aPosition)
 
 NS_IMETHODIMP nsXMLHttpProgressEvent::GetTotalSize(PRUint32 *aTotalSize)
 {
+  WarnAboutLSProgressEvent(nsIDocument::eTotalSize);
   // XXX can we change the iface?
   LL_L2UI(*aTotalSize, mMaxProgress);
   return NS_OK;
 }
-

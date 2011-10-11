@@ -80,6 +80,14 @@ public:
                                            nsDOMEventTargetWrapperCache)
   NS_DECL_NSIXMLHTTPREQUESTEVENTTARGET
   NS_FORWARD_NSIDOMEVENTTARGET(nsDOMEventTargetHelper::)
+
+protected:
+  nsRefPtr<nsDOMEventListenerWrapper> mOnLoadListener;
+  nsRefPtr<nsDOMEventListenerWrapper> mOnErrorListener;
+  nsRefPtr<nsDOMEventListenerWrapper> mOnAbortListener;
+  nsRefPtr<nsDOMEventListenerWrapper> mOnLoadStartListener;
+  nsRefPtr<nsDOMEventListenerWrapper> mOnProgressListener;
+  nsRefPtr<nsDOMEventListenerWrapper> mOnLoadendListener;
 };
 
 class nsXMLHttpRequestUpload : public nsXHREventTarget,
@@ -125,7 +133,8 @@ public:
   NS_DECL_NSIXMLHTTPREQUEST
 
   // nsIJSXMLHttpRequest
-  NS_DECL_NSIJSXMLHTTPREQUEST
+  NS_IMETHOD GetOnuploadprogress(nsIDOMEventListener** aOnuploadprogress);
+  NS_IMETHOD SetOnuploadprogress(nsIDOMEventListener* aOnuploadprogress);
 
   NS_FORWARD_NSIXMLHTTPREQUESTEVENTTARGET(nsXHREventTarget::)
 
@@ -248,6 +257,9 @@ protected:
   nsCOMPtr<nsIChannel> mCORSPreflightChannel;
   nsTArray<nsCString> mCORSUnsafeHeaders;
 
+  nsRefPtr<nsDOMEventListenerWrapper> mOnUploadProgressListener;
+  nsRefPtr<nsDOMEventListenerWrapper> mOnReadystatechangeListener;
+
   nsCOMPtr<nsIStreamListener> mXMLParserStreamListener;
 
   // used to implement getAllResponseHeaders()
@@ -368,7 +380,8 @@ class nsXMLHttpProgressEvent : public nsIDOMProgressEvent,
 public:
   nsXMLHttpProgressEvent(nsIDOMProgressEvent* aInner,
                          PRUint64 aCurrentProgress,
-                         PRUint64 aMaxProgress);
+                         PRUint64 aMaxProgress,
+                         nsPIDOMWindow* aWindow);
   virtual ~nsXMLHttpProgressEvent();
 
   NS_DECL_CYCLE_COLLECTING_ISUPPORTS
@@ -409,9 +422,12 @@ public:
   }
 
 protected:
+  void WarnAboutLSProgressEvent(nsIDocument::DeprecatedOperations);
+
   // Use nsDOMProgressEvent so that we can forward
   // most of the method calls easily.
   nsRefPtr<nsDOMProgressEvent> mInner;
+  nsCOMPtr<nsPIDOMWindow> mWindow;
   PRUint64 mCurProgress;
   PRUint64 mMaxProgress;
 };

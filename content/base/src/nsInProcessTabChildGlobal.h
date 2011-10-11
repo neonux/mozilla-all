@@ -42,7 +42,7 @@
 #include "nsCOMPtr.h"
 #include "nsFrameMessageManager.h"
 #include "nsIScriptContext.h"
-#include "nsDOMEventTargetHelper.h"
+#include "nsDOMEventTargetWrapperCache.h"
 #include "nsIScriptObjectPrincipal.h"
 #include "nsIScriptContext.h"
 #include "nsIClassInfo.h"
@@ -52,7 +52,7 @@
 #include "nsCOMArray.h"
 #include "nsThreadUtils.h"
 
-class nsInProcessTabChildGlobal : public nsDOMEventTargetHelper,
+class nsInProcessTabChildGlobal : public nsDOMEventTargetWrapperCache,
                                   public nsFrameScriptExecutor,
                                   public nsIInProcessContentFrameMessageManager,
                                   public nsIScriptObjectPrincipal,
@@ -64,12 +64,17 @@ public:
   virtual ~nsInProcessTabChildGlobal();
   NS_DECL_ISUPPORTS_INHERITED
   NS_DECL_CYCLE_COLLECTION_CLASS_INHERITED(nsInProcessTabChildGlobal,
-                                           nsDOMEventTargetHelper)
+                                           nsDOMEventTargetWrapperCache)
   NS_FORWARD_SAFE_NSIFRAMEMESSAGEMANAGER(mMessageManager)
-  NS_IMETHOD SendSyncMessage()
+  NS_IMETHOD SendSyncMessage(const nsAString& aMessageName,
+                             const jsval& aObject,
+                             JSContext* aCx,
+                             PRUint8 aArgc,
+                             jsval* aRetval)
   {
-    return mMessageManager ? mMessageManager->SendSyncMessage()
-                           : NS_ERROR_NULL_POINTER;
+    return mMessageManager
+      ? mMessageManager->SendSyncMessage(aMessageName, aObject, aCx, aArgc, aRetval)
+      : NS_ERROR_NULL_POINTER;
   }
   NS_IMETHOD GetContent(nsIDOMWindow** aContent);
   NS_IMETHOD GetDocShell(nsIDocShell** aDocShell);

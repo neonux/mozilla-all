@@ -40,11 +40,19 @@
 #include "jscntxt.h"
 #include "jscompartment.h"
 #include "jsfriendapi.h"
+#include "jswrapper.h"
 
 #include "jsobjinlines.h"
 
 using namespace js;
 using namespace JS;
+
+JS_FRIEND_API(void)
+JS_SetGrayGCRootsTracer(JSRuntime *rt, JSTraceDataOp traceOp, void *data)
+{
+    rt->gcGrayRootsTraceOp = traceOp;
+    rt->gcGrayRootsData = data;
+}
 
 JS_FRIEND_API(JSString *)
 JS_GetAnonymousString(JSRuntime *rt)
@@ -61,7 +69,7 @@ JS_FindCompilationScope(JSContext *cx, JSObject *obj)
      * asked of us.
      */
     if (obj->isWrapper())
-        obj = obj->unwrap();
+        obj = UnwrapObject(obj);
     
     /*
      * Innerize the target_obj so that we compile in the correct (inner)
@@ -72,16 +80,18 @@ JS_FindCompilationScope(JSContext *cx, JSObject *obj)
     return obj;
 }
 
-JS_FRIEND_API(JSObject *)
-JS_UnwrapObject(JSObject *obj)
+JS_FRIEND_API(JSFunction *)
+JS_GetObjectFunction(JSObject *obj)
 {
-    return obj->unwrap();
+    if (obj->isFunction())
+        return obj->getFunctionPrivate();
+    return NULL;
 }
 
 JS_FRIEND_API(JSObject *)
-JS_GetFrameScopeChainRaw(JSStackFrame *fp)
+JS_GetGlobalForFrame(JSStackFrame *fp)
 {
-    return &Valueify(fp)->scopeChain();
+    return Valueify(fp)->scopeChain().getGlobal();
 }
 
 JS_FRIEND_API(JSBool)
@@ -168,6 +178,21 @@ AutoSwitchCompartment::~AutoSwitchCompartment()
     /* The old compartment may have been destroyed, so we can't use cx->setCompartment. */
     cx->compartment = oldCompartment;
 }
+
+#ifdef DEBUG
+JS_FRIEND_API(void)
+js::CheckReservedSlot(const JSObject *obj, size_t slot)
+{
+    CheckSlot(obj, slot);
+    JS_ASSERT(slot < JSSLOT_FREE(obj->getClass()));
+}
+
+JS_FRIEND_API(void)
+js::CheckSlot(const JSObject *obj, size_t slot)
+{
+    JS_ASSERT(slot < obj->numSlots());
+}
+#endif
 
 /*
  * The below code is for temporary telemetry use. It can be removed when

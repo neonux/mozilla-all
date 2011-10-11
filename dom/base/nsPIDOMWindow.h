@@ -69,14 +69,6 @@ enum PopupControlState {
   openOverridden    // disallow window open
 };
 
-// PopupOpenedState helps track abuse of opened popups while the privilege has
-// been given.
-enum PopupOpenedState {
-  noTrack = -1,      // Don't track opened popups.
-  noOpenedPopup = 0, // Tracking opened popups but none opened yet.
-  openedPopup = 1    // Tracking opened popups and one has been opened.
-};
-
 class nsIDocShell;
 class nsIContent;
 class nsIDocument;
@@ -304,8 +296,6 @@ public:
                                                   bool aForce) const = 0;
   virtual void PopPopupControlState(PopupControlState state) const = 0;
   virtual PopupControlState GetPopupControlState() const = 0;
-  virtual void SetPopupOpenedState(PopupOpenedState aValue) const = 0;
-  virtual PopupOpenedState GetPopupOpenedState() const = 0;
 
   // Returns an object containing the window's state.  This also suspends
   // all running timeouts in the window.
@@ -587,6 +577,11 @@ public:
   virtual void SetHasOrientationEventListener() = 0;
 
   /**
+   * Tell this window that we remove an orientation listener
+   */
+  virtual void RemoveOrientationEventListener() = 0;
+
+  /**
    * Set a arguments for this window. This will be set on the window
    * right away (if there's an existing document) and it will also be
    * installed on the window when the next document is loaded. Each
@@ -697,12 +692,6 @@ PushPopupControlState(PopupControlState aState, bool aForce);
 void
 PopPopupControlState(PopupControlState aState);
 
-PopupOpenedState
-GetPopupOpenedState();
-
-void
-SetPopupOpenedState(PopupOpenedState aState);
-
 #define NS_AUTO_POPUP_STATE_PUSHER nsAutoPopupStatePusherInternal
 #else
 #define NS_AUTO_POPUP_STATE_PUSHER nsAutoPopupStatePusherExternal
@@ -720,28 +709,19 @@ public:
 #ifdef _IMPL_NS_LAYOUT
   NS_AUTO_POPUP_STATE_PUSHER(PopupControlState aState, bool aForce = false)
     : mOldState(::PushPopupControlState(aState, aForce))
-    , mPreviousOpenState(::GetPopupOpenedState())
   {
-    SetPopupOpenedState(mPreviousOpenState == openedPopup ? openedPopup
-                                                          : noOpenedPopup);
   }
 
   ~NS_AUTO_POPUP_STATE_PUSHER()
   {
     PopPopupControlState(mOldState);
-    SetPopupOpenedState(mPreviousOpenState);
   }
 #else
   NS_AUTO_POPUP_STATE_PUSHER(nsPIDOMWindow *aWindow, PopupControlState aState)
-    : mWindow(aWindow)
-    , mOldState(openAbused)
-    , mPreviousOpenState(noTrack)
+    : mWindow(aWindow), mOldState(openAbused)
   {
     if (aWindow) {
       mOldState = aWindow->PushPopupControlState(aState, PR_FALSE);
-      mPreviousOpenState = aWindow->GetPopupOpenedState();
-      aWindow->SetPopupOpenedState(mPreviousOpenState == openedPopup ? openedPopup
-                                                                     : noOpenedPopup);
     }
   }
 
@@ -749,7 +729,6 @@ public:
   {
     if (mWindow) {
       mWindow->PopPopupControlState(mOldState);
-      mWindow->SetPopupOpenedState(mPreviousOpenState);
     }
   }
 #endif
@@ -759,7 +738,6 @@ protected:
   nsCOMPtr<nsPIDOMWindow> mWindow;
 #endif
   PopupControlState mOldState;
-  PopupOpenedState mPreviousOpenState;
 
 private:
   // Hide so that this class can only be stack-allocated

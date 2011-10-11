@@ -1,4 +1,4 @@
-/* -*- Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil; tab-width: 8; -*- */
+/* -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil; tab-width: 2; -*- */
 /* vim: set sw=4 ts=8 et tw=80 : */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -65,7 +65,7 @@
 #include "nsNetUtil.h"
 #include "nsFrameMessageManager.h"
 #include "nsIScriptContext.h"
-#include "nsDOMEventTargetHelper.h"
+#include "nsDOMEventTargetWrapperCache.h"
 #include "nsIDialogCreator.h"
 #include "nsIDialogParamBlock.h"
 #include "nsIPresShell.h"
@@ -87,7 +87,7 @@ namespace dom {
 class TabChild;
 class PContentDialogChild;
 
-class TabChildGlobal : public nsDOMEventTargetHelper,
+class TabChildGlobal : public nsDOMEventTargetWrapperCache,
                        public nsIContentFrameMessageManager,
                        public nsIScriptObjectPrincipal,
                        public nsIScriptContextPrincipal
@@ -96,12 +96,17 @@ public:
   TabChildGlobal(TabChild* aTabChild);
   ~TabChildGlobal();
   NS_DECL_ISUPPORTS_INHERITED
-  NS_DECL_CYCLE_COLLECTION_CLASS_INHERITED(TabChildGlobal, nsDOMEventTargetHelper)
+  NS_DECL_CYCLE_COLLECTION_CLASS_INHERITED(TabChildGlobal, nsDOMEventTargetWrapperCache)
   NS_FORWARD_SAFE_NSIFRAMEMESSAGEMANAGER(mMessageManager)
-  NS_IMETHOD SendSyncMessage()
+  NS_IMETHOD SendSyncMessage(const nsAString& aMessageName,
+                             const jsval& aObject,
+                             JSContext* aCx,
+                             PRUint8 aArgc,
+                             jsval* aRetval)
   {
-    return mMessageManager ? mMessageManager->SendSyncMessage()
-                           : NS_ERROR_NULL_POINTER;
+    return mMessageManager
+      ? mMessageManager->SendSyncMessage(aMessageName, aObject, aCx, aArgc, aRetval)
+      : NS_ERROR_NULL_POINTER;
   }
   NS_IMETHOD GetContent(nsIDOMWindow** aContent);
   NS_IMETHOD GetDocShell(nsIDocShell** aDocShell);

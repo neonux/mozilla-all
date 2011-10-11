@@ -48,7 +48,6 @@
 #include "nsIDocument.h"
 #include "nsIDOMHTMLCollection.h"
 #include "nsIDOMHTMLOptionsCollection.h"
-#include "nsIDOMNSHTMLOptionCollectn.h"
 #include "nsIDOMHTMLSelectElement.h"
 #include "nsIDOMHTMLOptionElement.h"
 #include "nsComboboxControlFrame.h"
@@ -1756,15 +1755,6 @@ nsIAtom*
 nsListControlFrame::GetType() const
 {
   return nsGkAtoms::listControlFrame; 
-}
-
-bool
-nsListControlFrame::IsContainingBlock() const
-{
-  // We are in fact the containing block for our options.  They should
-  // certainly not use our parent block (or worse yet our parent combobox) for
-  // their sizing.
-  return PR_TRUE;
 }
 
 void

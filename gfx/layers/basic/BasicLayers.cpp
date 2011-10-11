@@ -534,6 +534,9 @@ public:
     ThebesLayer::ComputeEffectiveTransforms(aTransformToSurface);
   }
 
+  // Sync front/back buffers content
+  virtual void SyncFrontBufferToBackBuffer() {}
+
 protected:
   BasicLayerManager* BasicManager()
   {
@@ -658,6 +661,7 @@ BasicThebesLayer::PaintThebes(gfxContext* aContext,
   if (aReadback && UsedForReadback()) {
     aReadback->GetThebesLayerUpdates(this, &readbackUpdates);
   }
+  SyncFrontBufferToBackBuffer();
 
   bool canUseOpaqueSurface = CanUseOpaqueSurface();
   Buffer::ContentType contentType =
@@ -1368,18 +1372,6 @@ BasicLayerManager::PopGroupToSourceWithCachedSurface(gfxContext *aTarget, gfxCon
   }
 }
 
-already_AddRefed<gfxASurface>
-BasicLayerManager::PopGroupToSurface(gfxContext *aTarget, gfxContext *aPushed)
-{
-  if (!aTarget)
-    return nsnull;
-  nsRefPtr<gfxASurface> current = aPushed->CurrentSurface();
-  NS_ASSERTION(!mCachedSurface.IsSurface(current), "Should never be popping cached surface here!");
-  nsRefPtr<gfxPattern> pat = aTarget->PopGroup();
-  current = pat->GetSurface();
-  return current.forget();
-}
-
 void
 BasicLayerManager::BeginTransactionWithTarget(gfxContext* aTarget)
 {
@@ -1847,8 +1839,6 @@ BasicLayerManager::PaintLayer(gfxContext* aTarget,
     aTarget->SetMatrix(transform);
   } else {
     aTarget->SetMatrix(gfxMatrix());
-    // Save so we can restore clipping after PushGroupForLayer changes it.
-    aTarget->Save();
   }
 
   const nsIntRegion& visibleRegion = aLayer->GetEffectiveVisibleRegion();
@@ -1865,18 +1855,25 @@ BasicLayerManager::PaintLayer(gfxContext* aTarget,
 
   // Try to annotate currentSurface with a region of pixels that have been
   // (or will be) painted opaque, if no such region is currently set.
+  const nsIntRect& bounds = visibleRegion.GetBounds();
   if (currentSurface &&
       targetOpaqueRect.IsEmpty() && visibleRegion.GetNumRects() == 1 &&
       (aLayer->GetContentFlags() & Layer::CONTENT_OPAQUE) &&
       !transform.HasNonAxisAlignedTransform()) {
-    const nsIntRect& bounds = visibleRegion.GetBounds();
     currentSurface->SetOpaqueRect(
         aTarget->UserToDevice(gfxRect(bounds.x, bounds.y, bounds.width, bounds.height)));
     pushedTargetOpaqueRect = PR_TRUE;
   }
 
   nsRefPtr<gfxContext> groupTarget;
-  if (needsGroup) {
+  nsRefPtr<gfxASurface> untransformedSurface;
+  if (!is2D) {
+    untransformedSurface = 
+      gfxPlatform::GetPlatform()->CreateOffscreenSurface(gfxIntSize(bounds.width, bounds.height), 
+                                                         gfxASurface::CONTENT_COLOR_ALPHA);
+    untransformedSurface->SetDeviceOffset(gfxPoint(-bounds.x, -bounds.y));
+    groupTarget = new gfxContext(untransformedSurface);
+  } else if (needsGroup) {
     groupTarget = PushGroupForLayer(aTarget, aLayer, aLayer->GetEffectiveVisibleRegion(),
                                     &needsClipToVisibleRegion);
   } else {
@@ -1897,13 +1894,16 @@ BasicLayerManager::PaintLayer(gfxContext* aTarget,
     }
   } else {
     ReadbackProcessor readback;
+    ContainerLayer* container = static_cast<ContainerLayer*>(aLayer);
     if (IsRetained()) {
-      ContainerLayer* container = static_cast<ContainerLayer*>(aLayer);
       readback.BuildUpdates(container);
     }
+  
+    nsAutoTArray<Layer*, 12> children;
+    container->SortChildrenBy3DZOrder(children);
 
-    for (; child; child = child->GetNextSibling()) {
-      PaintLayer(groupTarget, child, aCallback, aCallbackData, &readback);
+    for (PRUint32 i = 0; i < children.Length(); i++) {
+      PaintLayer(groupTarget, children.ElementAt(i), aCallback, aCallbackData, &readback);
       if (mTransactionIncomplete)
         break;
     }
@@ -1914,16 +1914,14 @@ BasicLayerManager::PaintLayer(gfxContext* aTarget,
     if (is2D) {
       PopGroupToSourceWithCachedSurface(aTarget, groupTarget);
     } else {
-      nsRefPtr<gfxASurface> sourceSurface = PopGroupToSurface(aTarget, groupTarget);
-      aTarget->Restore();
-      NS_ABORT_IF_FALSE(sourceSurface, "PopGroup should always return a surface pattern");
-      gfxRect bounds = visibleRegion.GetBounds();
+      NS_ABORT_IF_FALSE(untransformedSurface, 
+                        "We should always allocate an untransformed surface with 3d transforms!");
 
       gfxPoint offset;
       bool dontBlit = needsClipToVisibleRegion || mTransactionIncomplete || 
                         aLayer->GetEffectiveOpacity() != 1.0f;
       nsRefPtr<gfxASurface> result = 
-        Transform3D(sourceSurface, aTarget, bounds,
+        Transform3D(untransformedSurface, aTarget, bounds,
                     effectiveTransform, offset, dontBlit);
 
       blitComplete = !result;
@@ -2192,13 +2190,13 @@ public:
   BasicShadowableThebesLayer(BasicShadowLayerManager* aManager)
     : BasicThebesLayer(aManager)
     , mIsNewBuffer(false)
+    , mFrontAndBackBufferDiffer(false)
   {
     MOZ_COUNT_CTOR(BasicShadowableThebesLayer);
   }
   virtual ~BasicShadowableThebesLayer()
   {
-    if (IsSurfaceDescriptorValid(mBackBuffer))
-      BasicManager()->ShadowLayerForwarder::DestroySharedSurface(&mBackBuffer);
+    DestroyBackBuffer();
     MOZ_COUNT_DTOR(BasicShadowableThebesLayer);
   }
 
@@ -2211,7 +2209,7 @@ public:
   virtual ShadowableLayer* AsShadowableLayer() { return this; }
   virtual bool MustRetainContent() { return HasShadow(); }
 
-  void SetBackBufferAndAttrs(const ThebesBuffer& aBuffer,
+  void SetBackBufferAndAttrs(const OptionalThebesBuffer& aBuffer,
                              const nsIntRegion& aValidRegion,
                              const OptionalThebesBuffer& aReadOnlyFrontBuffer,
                              const nsIntRegion& aFrontUpdatedRegion);
@@ -2223,6 +2221,8 @@ public:
   }
 
   virtual BasicShadowableThebesLayer* AsThebes() { return this; }
+
+  virtual void SyncFrontBufferToBackBuffer();
 
 private:
   BasicShadowLayerManager* BasicManager()
@@ -2242,46 +2242,89 @@ private:
   NS_OVERRIDE virtual already_AddRefed<gfxASurface>
   CreateBuffer(Buffer::ContentType aType, const nsIntSize& aSize);
 
+  void DestroyBackBuffer()
+  {
+    if (IsSurfaceDescriptorValid(mBackBuffer)) {
+      BasicManager()->ShadowLayerForwarder::DestroySharedSurface(&mBackBuffer);
+    }
+  }
+
   // This describes the gfxASurface we hand to mBuffer.  We keep a
   // copy of the descriptor here so that we can call
   // DestroySharedSurface() on the descriptor.
   SurfaceDescriptor mBackBuffer;
+  nsIntRect mBackBufferRect;
+  nsIntPoint mBackBufferRectRotation;
 
   bool mIsNewBuffer;
+  OptionalThebesBuffer mROFrontBuffer;
+  nsIntRegion mFrontUpdatedRegion;
+  nsIntRegion mFrontValidRegion;
+  PRPackedBool mFrontAndBackBufferDiffer;
 };
 
 void
-BasicShadowableThebesLayer::SetBackBufferAndAttrs(const ThebesBuffer& aBuffer,
+BasicShadowableThebesLayer::SetBackBufferAndAttrs(const OptionalThebesBuffer& aBuffer,
                                                   const nsIntRegion& aValidRegion,
                                                   const OptionalThebesBuffer& aReadOnlyFrontBuffer,
                                                   const nsIntRegion& aFrontUpdatedRegion)
 {
-  mBackBuffer = aBuffer.buffer();
-  nsRefPtr<gfxASurface> backBuffer = BasicManager()->OpenDescriptor(mBackBuffer);
+  if (OptionalThebesBuffer::Tnull_t == aBuffer.type()) {
+    mBackBuffer = SurfaceDescriptor();
+  } else {
+    mBackBuffer = aBuffer.get_ThebesBuffer().buffer();
+    mBackBufferRect = aBuffer.get_ThebesBuffer().rect();
+    mBackBufferRectRotation = aBuffer.get_ThebesBuffer().rotation();
+  }
+  mFrontAndBackBufferDiffer = true;
+  mROFrontBuffer = aReadOnlyFrontBuffer;
+  mFrontUpdatedRegion = aFrontUpdatedRegion;
+  mFrontValidRegion = aValidRegion;
+}
 
-  if (OptionalThebesBuffer::Tnull_t == aReadOnlyFrontBuffer.type()) {
+void
+BasicShadowableThebesLayer::SyncFrontBufferToBackBuffer()
+{
+  if (!mFrontAndBackBufferDiffer) {
+    return;
+  }
+
+  nsRefPtr<gfxASurface> backBuffer;
+  if (!IsSurfaceDescriptorValid(mBackBuffer)) {
+    NS_ABORT_IF_FALSE(mROFrontBuffer.type() == OptionalThebesBuffer::TThebesBuffer,
+                      "should have a front RO buffer by now");
+    const ThebesBuffer roFront = mROFrontBuffer.get_ThebesBuffer();
+    nsRefPtr<gfxASurface> roFrontBuffer = BasicManager()->OpenDescriptor(roFront.buffer());
+    backBuffer = CreateBuffer(roFrontBuffer->GetContentType(), roFrontBuffer->GetSize());
+  } else {
+    backBuffer = BasicManager()->OpenDescriptor(mBackBuffer);
+  }
+  mFrontAndBackBufferDiffer = false;
+
+  if (OptionalThebesBuffer::Tnull_t == mROFrontBuffer.type()) {
     // We didn't get back a read-only ref to our old back buffer (the
     // parent's new front buffer).  If the parent is pushing updates
     // to a texture it owns, then we probably got back the same buffer
     // we pushed in the update and all is well.  If not, ...
-    mValidRegion = aValidRegion;
-    mBuffer.SetBackingBuffer(backBuffer, aBuffer.rect(), aBuffer.rotation());
+    mValidRegion = mFrontValidRegion;
+    mBuffer.SetBackingBuffer(backBuffer, mBackBufferRect, mBackBufferRectRotation);
     return;
   }
 
   MOZ_LAYERS_LOG(("BasicShadowableThebes(%p): reading back <x=%d,y=%d,w=%d,h=%d>",
                   this,
-                  aFrontUpdatedRegion.GetBounds().x,
-                  aFrontUpdatedRegion.GetBounds().y,
-                  aFrontUpdatedRegion.GetBounds().width,
-                  aFrontUpdatedRegion.GetBounds().height));
+                  mFrontUpdatedRegion.GetBounds().x,
+                  mFrontUpdatedRegion.GetBounds().y,
+                  mFrontUpdatedRegion.GetBounds().width,
+                  mFrontUpdatedRegion.GetBounds().height));
 
-  const ThebesBuffer roFront = aReadOnlyFrontBuffer.get_ThebesBuffer();
+  const ThebesBuffer roFront = mROFrontBuffer.get_ThebesBuffer();
   nsRefPtr<gfxASurface> roFrontBuffer = BasicManager()->OpenDescriptor(roFront.buffer());
   mBuffer.SetBackingBufferAndUpdateFrom(
     backBuffer,
     roFrontBuffer, roFront.rect(), roFront.rotation(),
-    aFrontUpdatedRegion);
+    mFrontUpdatedRegion);
+  mIsNewBuffer = false;
   // Now the new back buffer has the same (interesting) pixels as the
   // new front buffer, and mValidRegion et al. are correct wrt the new
   // back buffer (i.e. as they were for the old back buffer)
@@ -2349,30 +2392,17 @@ BasicShadowableThebesLayer::CreateBuffer(Buffer::ContentType aType,
   }
 
   // XXX error handling
-  SurfaceDescriptor tmpFront;
-  if (BasicManager()->ShouldDoubleBuffer()) {
-    if (!BasicManager()->AllocDoubleBuffer(gfxIntSize(aSize.width, aSize.height),
-                                           aType,
-                                           &tmpFront,
-                                           &mBackBuffer)) {
+  if (!BasicManager()->AllocBuffer(gfxIntSize(aSize.width, aSize.height),
+                                   aType,
+                                   &mBackBuffer)) {
       NS_RUNTIMEABORT("creating ThebesLayer 'back buffer' failed!");
-    }
-  } else {
-    if (!BasicManager()->AllocBuffer(gfxIntSize(aSize.width, aSize.height),
-                                     aType,
-                                     &mBackBuffer)) {
-      NS_RUNTIMEABORT("creating ThebesLayer 'back buffer' failed!");
-    }
   }
 
   NS_ABORT_IF_FALSE(!mIsNewBuffer,
                     "Bad! Did we create a buffer twice without painting?");
+
   mIsNewBuffer = true;
 
-  BasicManager()->CreatedThebesBuffer(BasicManager()->Hold(this),
-                                      nsIntRegion(),
-                                      nsIntRect(),
-                                      tmpFront);
   return BasicManager()->OpenDescriptor(mBackBuffer);
 }
 
@@ -2719,9 +2749,6 @@ public:
     MOZ_COUNT_DTOR(BasicShadowThebesLayer);
   }
 
-  virtual void SetFrontBuffer(const OptionalThebesBuffer& aNewFront,
-                              const nsIntRegion& aValidRegion);
-
   virtual void SetValidRegion(const nsIntRegion& aRegion)
   {
     mOldValidRegion = mValidRegion;
@@ -2736,7 +2763,7 @@ public:
 
   virtual void
   Swap(const ThebesBuffer& aNewFront, const nsIntRegion& aUpdatedRegion,
-       ThebesBuffer* aNewBack, nsIntRegion* aNewBackValidRegion,
+       OptionalThebesBuffer* aNewBack, nsIntRegion* aNewBackValidRegion,
        OptionalThebesBuffer* aReadOnlyFront, nsIntRegion* aFrontUpdatedRegion);
 
   virtual void DestroyFrontBuffer()
@@ -2747,6 +2774,7 @@ public:
 
     if (IsSurfaceDescriptorValid(mFrontBufferDescriptor)) {
       mAllocator->DestroySharedSurface(&mFrontBufferDescriptor);
+      mFrontBufferDescriptor = SurfaceDescriptor();
     }
   }
 
@@ -2772,47 +2800,45 @@ private:
 };
 
 void
-BasicShadowThebesLayer::SetFrontBuffer(const OptionalThebesBuffer& aNewFront,
-                                       const nsIntRegion& aValidRegion)
-{
-  mValidRegion = mOldValidRegion = aValidRegion;
-
-  NS_ABORT_IF_FALSE(OptionalThebesBuffer::Tnull_t != aNewFront.type(),
-                    "aNewFront must be valid here!");
-
-  const ThebesBuffer newFront = aNewFront.get_ThebesBuffer();
-  nsRefPtr<gfxASurface> newFrontBuffer =
-    BasicManager()->OpenDescriptor(newFront.buffer());
-
-  nsRefPtr<gfxASurface> unused;
-  nsIntRect unusedRect;
-  nsIntPoint unusedRotation;
-  mFrontBuffer.Swap(newFrontBuffer, newFront.rect(), newFront.rotation(),
-                    getter_AddRefs(unused), &unusedRect, &unusedRotation);
-  mFrontBufferDescriptor = newFront.buffer();
-}
-
-void
 BasicShadowThebesLayer::Swap(const ThebesBuffer& aNewFront,
                              const nsIntRegion& aUpdatedRegion,
-                             ThebesBuffer* aNewBack,
+                             OptionalThebesBuffer* aNewBack,
                              nsIntRegion* aNewBackValidRegion,
                              OptionalThebesBuffer* aReadOnlyFront,
                              nsIntRegion* aFrontUpdatedRegion)
 {
+  nsRefPtr<gfxASurface> newFrontBuffer =
+    BasicManager()->OpenDescriptor(aNewFront.buffer());
+
+  if (IsSurfaceDescriptorValid(mFrontBufferDescriptor)) {
+    nsRefPtr<gfxASurface> currentFront = BasicManager()->OpenDescriptor(mFrontBufferDescriptor);
+    if (currentFront->GetSize() != newFrontBuffer->GetSize()) {
+      // Current front buffer is obsolete
+      DestroyFrontBuffer();
+    }
+  }
   // This code relies on Swap() arriving *after* attribute mutations.
-  aNewBack->buffer() = mFrontBufferDescriptor;
+  if (IsSurfaceDescriptorValid(mFrontBufferDescriptor)) {
+    *aNewBack = ThebesBuffer();
+    aNewBack->get_ThebesBuffer().buffer() = mFrontBufferDescriptor;
+  } else {
+    *aNewBack = null_t();
+  }
   // We have to invalidate the pixels painted into the new buffer.
   // They might overlap with our old pixels.
   aNewBackValidRegion->Sub(mOldValidRegion, aUpdatedRegion);
 
-  nsRefPtr<gfxASurface> newFrontBuffer =
-    BasicManager()->OpenDescriptor(aNewFront.buffer());
-
   nsRefPtr<gfxASurface> unused;
+  nsIntRect backRect;
+  nsIntPoint backRotation;
   mFrontBuffer.Swap(
     newFrontBuffer, aNewFront.rect(), aNewFront.rotation(),
-    getter_AddRefs(unused), &aNewBack->rect(), &aNewBack->rotation());
+    getter_AddRefs(unused), &backRect, &backRotation);
+
+  if (aNewBack->type() != OptionalThebesBuffer::Tnull_t) {
+    aNewBack->get_ThebesBuffer().rect() = backRect;
+    aNewBack->get_ThebesBuffer().rotation() = backRotation;
+  }
 
   mFrontBufferDescriptor = aNewFront.buffer();
 

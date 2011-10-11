@@ -129,6 +129,10 @@ XPCWrappedNativeScope::GetNewOrUsed(XPCCallContext& ccx, JSObject* aGlobal)
         // called by nsXPConnect::InitClasses.
         scope->SetGlobal(ccx, aGlobal);
     }
+    if(js::GetObjectClass(aGlobal)->flags & JSCLASS_XPCONNECT_GLOBAL)
+        JS_ALWAYS_TRUE(JS_SetReservedSlot(ccx, aGlobal,
+                                          JSCLASS_GLOBAL_SLOT_COUNT,
+                                          PRIVATE_TO_JSVAL(scope)));
     return scope;
 }
 
@@ -144,7 +148,8 @@ XPCWrappedNativeScope::XPCWrappedNativeScope(XPCCallContext& ccx,
         mPrototypeJSObject(nsnull),
         mPrototypeJSFunction(nsnull),
         mPrototypeNoHelper(nsnull),
-        mScriptObjectPrincipal(nsnull)
+        mScriptObjectPrincipal(nsnull),
+        mNewDOMBindingsEnabled(ccx.GetRuntime()->NewDOMBindingsEnabled())
 {
     // add ourselves to the scopes list
     {   // scoped lock
@@ -237,7 +242,7 @@ XPCWrappedNativeScope::SetGlobal(XPCCallContext& ccx, JSObject* aGlobal)
     mScriptObjectPrincipal = nsnull;
     // Now init our script object principal, if the new global has one
 
-    const JSClass* jsClass = aGlobal->getJSClass();
+    const JSClass* jsClass = js::GetObjectJSClass(aGlobal);
     if(!(~jsClass->flags & (JSCLASS_HAS_PRIVATE |
                             JSCLASS_PRIVATE_IS_NSISUPPORTS)))
     {
@@ -442,13 +447,15 @@ XPCWrappedNativeScope::FinishedMarkPhaseOfGC(JSContext* cx, XPCJSRuntime* rt)
     {
         XPCWrappedNativeScope* next = cur->mNext;
 
-        JS::AutoSwitchCompartment sc(cx, cur->mGlobalJSObject);
+        js::AutoSwitchCompartment sc(cx, cur->mGlobalJSObject);
 
         if(cur->mGlobalJSObject &&
            JS_IsAboutToBeFinalized(cx, cur->mGlobalJSObject))
         {
             cur->mGlobalJSObject = nsnull;
             cur->mScriptObjectPrincipal = nsnull;
+            if(cur->GetCachedDOMPrototypes().IsInitialized())
+                 cur->GetCachedDOMPrototypes().Clear();
             // Move this scope from the live list to the dying list.
             if(prev)
                 prev->mNext = next;
@@ -707,7 +714,7 @@ XPCWrappedNativeScope*
 GetScopeOfObject(JSObject* obj)
 {
     nsISupports* supports;
-    js::Class* clazz = obj->getClass();
+    js::Class* clazz = js::GetObjectClass(obj);
     JSBool isWrapper = IS_WRAPPER_CLASS(clazz);
 
     if(isWrapper && IS_SLIM_WRAPPER_OBJECT(obj))
@@ -760,9 +767,9 @@ void DEBUG_CheckForComponentsInScope(JSContext* cx, JSObject* obj,
     js_DumpObject(startingObj);
 
     JSObject *p = startingObj;
-    while(p->isWrapper())
+    while(js::IsWrapper(p))
     {
-        p = p->getProxyPrivate().toObjectOrNull();
+        p = js::GetProxyPrivate(p).toObjectOrNull();
         if(!p)
             break;
         printf("which is a wrapper for:\n");
@@ -802,6 +809,13 @@ XPCWrappedNativeScope::FindInJSObjectScope(JSContext* cx, JSObject* obj,
 #endif
 
     obj = JS_GetGlobalForObject(cx, obj);
+
+    if(js::GetObjectClass(obj)->flags & JSCLASS_XPCONNECT_GLOBAL)
+    {
+        scope = XPCWrappedNativeScope::GetNativeScope(cx, obj);
+        if(scope)
+            return scope;
+    }
 
     if(!runtime)
     {
@@ -905,6 +919,22 @@ XPCWrappedNativeScope::RemoveWrappedNativeProtos()
         GetRuntime()->GetDetachedWrappedNativeProtoMap());
     mMainThreadWrappedNativeProtoMap->Enumerate(WNProtoRemover, 
         GetRuntime()->GetDetachedWrappedNativeProtoMap());
+}
+
+static PLDHashOperator
+TraceDOMPrototype(const char* aKey, JSObject* aData, void* aClosure)
+{
+    JSTracer *trc = static_cast<JSTracer*>(aClosure);
+    JS_CALL_OBJECT_TRACER(trc, aData, "DOM prototype");
+    return PL_DHASH_NEXT;
+}
+
+void
+XPCWrappedNativeScope::TraceDOMPrototypes(JSTracer *trc)
+{
+    if(mCachedDOMPrototypes.IsInitialized()) {
+        mCachedDOMPrototypes.EnumerateRead(TraceDOMPrototype, trc);
+    }
 }
 
 /***************************************************************************/
