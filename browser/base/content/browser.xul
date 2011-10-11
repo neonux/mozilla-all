@@ -978,7 +978,9 @@
                      accesskey="&inspectButton.accesskey;"
                      class="toolbarbutton-text"
                      command="Inspector:Inspect"/>
-      <toolbarseparator />
+      <arrowscrollbox id="inspector-breadcrumbs"
+                      flex="1" orient="horizontal"
+                      clicktoscroll="true"/>
       <hbox id="inspector-tools">
         <!-- registered tools go here -->
       </hbox>
