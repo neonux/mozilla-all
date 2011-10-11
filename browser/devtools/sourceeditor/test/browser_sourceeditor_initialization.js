@@ -145,35 +145,10 @@ function editorLoaded()
 
   is(editor.getCaretOffset(), 8, "caret moved to the left");
 
-  EventUtils.synthesizeKey("a", {accelKey: true}, testWin);
-
-  is(editor.getSelectedText(), "code-ed.aitor",
-     "select all worked");
-
-  EventUtils.synthesizeKey("x", {accelKey: true}, testWin);
-
-  ok(!editor.getText(), "cut works");
-
-  EventUtils.synthesizeKey("v", {accelKey: true}, testWin);
-  EventUtils.synthesizeKey("v", {accelKey: true}, testWin);
-
-  is(editor.getText(), "code-ed.aitorcode-ed.aitor", "paste works");
-
-  editor.setText("foo");
-
-  EventUtils.synthesizeKey("a", {accelKey: true}, testWin);
-  EventUtils.synthesizeKey("c", {accelKey: true}, testWin);
-  EventUtils.synthesizeKey("v", {accelKey: true}, testWin);
-  EventUtils.synthesizeKey("v", {accelKey: true}, testWin);
-
-  is(editor.getText(), "foofoo", "ctrl-a, c, v, v works");
-
-  is(editor.getCaretOffset(), 6, "caret location is correct");
-
   EventUtils.synthesizeKey(".", {}, testWin);
   EventUtils.synthesizeKey("VK_TAB", {}, testWin);
 
-  is(editor.getText(), "foofoo.       ", "Tab works");
+  is(editor.getText(), "code-ed..     aitor", "Tab works");
 
   is(editor.getCaretOffset(), 14, "caret location is correct");
 
@@ -276,24 +251,8 @@ function editorLoaded()
   is(event.removedCharCount, 0, "event.removedCharCount is correct");
   is(event.addedCharCount, 1, "event.addedCharCount is correct");
 
-  let chars = editor.getText().length;
-  event = null;
-
-  EventUtils.synthesizeKey("a", {accelKey: true}, testWin);
-  EventUtils.synthesizeKey("c", {accelKey: true}, testWin);
-
-  editor.setCaretOffset(chars);
-
-  EventUtils.synthesizeKey("v", {accelKey: true}, testWin);
-
-  ok(event, "the TextChanged event fired after paste");
-  is(event.start, chars, "event.start is correct");
-  is(event.removedCharCount, 0, "event.removedCharCount is correct");
-  is(event.addedCharCount, chars, "event.addedCharCount is correct");
-
   editor.setText("line1\nline2\nline3");
-  chars = editor.getText().length;
-
+  let chars = editor.getText().length;
   event = null;
 
   editor.setText("a\nline4\nline5", chars);
@@ -303,6 +262,7 @@ function editorLoaded()
   is(event.removedCharCount, 0, "event.removedCharCount is correct");
   is(event.addedCharCount, 13, "event.addedCharCount is correct");
 
+  event = null;
   editor.setText("line3b\nline4b\nfoo", 12, 24);
 
   ok(event, "the TextChanged event fired after setText() again");
@@ -312,8 +272,11 @@ function editorLoaded()
 
   editor.removeEventListener(SourceEditor.EVENTS.TEXT_CHANGED, eventHandler);
 
-  // Done.
+  testClipboardEvents();
+}
 
+function testEnd()
+{
   editor.destroy();
   ok(!editor.parentElement && !editor.editorElement, "destroy() works");
 
@@ -359,5 +322,56 @@ function testReturnKey()
   is(editor.getText(), "       a" + lineDelimiter +
                        "    z" + lineDelimiter + "    yx\n  b\n c",
      "return maintains indentation (again)");
+}
+
+function testClipboardEvents()
+{
+  editor.setText("foobar");
+
+  EventUtils.synthesizeKey("a", {accelKey: true}, testWin);
+
+  is(editor.getSelectedText(), "foobar",
+     "select all worked");
+
+  EventUtils.synthesizeKey("x", {accelKey: true}, testWin);
+
+  ok(!editor.getText(), "cut works");
+
+  editor.setText("test--");
+  editor.setCaretOffset(5);
+
+  let paste1handler = function(aEvent) {
+    editor.removeEventListener(SourceEditor.EVENTS.TEXT_CHANGED, paste1handler);
+
+    is(editor.getText(), "test-foobar-", "paste works");
+
+    executeSoon(function() {
+      editor.setSelection(0, 4);
+      EventUtils.synthesizeKey("c", {accelKey: true}, testWin);
+
+      executeSoon(function() {
+        editor.setSelection(5, 11);
+        editor.addEventListener(SourceEditor.EVENTS.TEXT_CHANGED, paste2handler);
+        EventUtils.synthesizeKey("v", {accelKey: true}, testWin);
+      });
+    });
+  };
+
+  let paste2handler = function(aEvent) {
+    editor.removeEventListener(SourceEditor.EVENTS.TEXT_CHANGED, paste2handler);
+
+    is(editor.getText(), "test-test-", "paste works after copy");
+
+    is(aEvent.start, 5, "event.start is correct");
+    is(aEvent.removedCharCount, 6, "event.removedCharCount is correct");
+    is(aEvent.addedCharCount, 4, "event.addedCharCount is correct");
+
+    executeSoon(testEnd);
+  };
+
+  executeSoon(function() {
+    editor.addEventListener(SourceEditor.EVENTS.TEXT_CHANGED, paste1handler);
+    EventUtils.synthesizeKey("v", {accelKey: true}, testWin);
+  });
 }
 
