@@ -698,15 +698,17 @@ private:
   struct AzureState {
     AzureState()
       : op(mozilla::gfx::OP_OVER)
+      , opIsClear(false)
       , clipWasReset(false)
       , fillRule(mozilla::gfx::FILL_WINDING)
     {}
 
     mozilla::gfx::CompositionOp op;
+    bool opIsClear;
     mozilla::gfx::Color color;
     nsRefPtr<gfxPattern> pattern;
     mozilla::RefPtr<mozilla::gfx::SourceSurface> sourceSurface;
-    mozilla::gfx::Point surfOffset;
+    mozilla::gfx::Matrix surfTransform;
     mozilla::gfx::Matrix mTransform;
     struct pushedClip {
       mozilla::RefPtr<mozilla::gfx::Path> path;
@@ -716,7 +718,8 @@ private:
     bool clipWasReset;
     mozilla::gfx::FillRule fillRule;
     mozilla::gfx::StrokeOptions strokeOptions;
-    std::vector<mozilla::RefPtr<mozilla::gfx::DrawTarget> > pushedGroups;
+    mozilla::RefPtr<mozilla::gfx::DrawTarget> drawTarget;
+    mozilla::RefPtr<mozilla::gfx::DrawTarget> parentTarget;
   };
 
   void EnsureUserSpacePath();

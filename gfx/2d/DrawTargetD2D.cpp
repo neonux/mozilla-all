@@ -1076,7 +1076,12 @@ DrawTargetD2D::Init(const IntSize &aSize, SurfaceFormat aFormat)
     return false;
   }
 
-  return InitD2DRenderTarget();
+  if (!InitD2DRenderTarget()) {
+    return false;
+  }
+
+  mRT->Clear(D2D1::ColorF(0, 0));
+  return true;
 }
 
 bool
@@ -1195,8 +1200,6 @@ DrawTargetD2D::InitD2DRenderTarget()
   }
 
   mRT->BeginDraw();
-
-  mRT->Clear(D2D1::ColorF(0, 0));
 
   if (mFormat == FORMAT_B8G8R8X8) {
     mRT->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE);
@@ -1900,7 +1903,7 @@ DrawTargetD2D::factory()
 
   D2D1_FACTORY_OPTIONS options;
 #ifdef _DEBUG
-  options.debugLevel = D2D1_DEBUG_LEVEL_NONE;
+  options.debugLevel = D2D1_DEBUG_LEVEL_WARNING;
 #else
   options.debugLevel = D2D1_DEBUG_LEVEL_NONE;
 #endif

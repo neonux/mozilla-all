@@ -87,6 +87,7 @@ gfxContext::gfxContext(DrawTarget *aTarget)
   , mOriginalDT(aTarget)
 {
   mStateStack.resize(1);
+  CurrentState().drawTarget = mDT;
 }
 
 gfxContext::~gfxContext()
@@ -207,6 +208,7 @@ gfxContext::Restore()
 
     mStateStack.pop_back();
 
+    mDT = CurrentState().drawTarget;
     mDT->SetTransform(CurrentState().mTransform);
   }
 }
@@ -410,6 +412,7 @@ gfxContext::NegativeArc(const gfxPoint& center, gfxFloat radius,
   if (mCairo) {
     cairo_arc_negative(mCairo, center.x, center.y, radius, angle1, angle2);
   } else {
+    mPathBuilder->Arc(ToPoint(center), Float(radius), Float(angle2), Float(angle1));
   }
 }
 
@@ -614,7 +617,11 @@ gfxContext::DeviceToUser(const gfxPoint& point) const
     cairo_device_to_user(mCairo, &ret.x, &ret.y);
     return ret;
   } else {
-    return gfxPoint(0, 0);
+    Matrix matrix = mDT->GetTransform();
+
+    matrix.Invert();
+
+    return GFXPoint(matrix * ToPoint(point));
   }
 }
 
@@ -626,7 +633,14 @@ gfxContext::DeviceToUser(const gfxSize& size) const
     cairo_device_to_user_distance(mCairo, &ret.width, &ret.height);
     return ret;
   } else {
-    return gfxSize(0, 0);
+    Matrix matrix = mDT->GetTransform();
+
+    matrix.Invert();
+
+    gfxSize newSize = size;
+    newSize.width = newSize.width * matrix._11 + newSize.height * matrix._12;
+    newSize.height = newSize.width * matrix._21 + newSize.height * matrix._22;
+    return newSize;
   }
 }
 
@@ -639,7 +653,11 @@ gfxContext::DeviceToUser(const gfxRect& rect) const
     cairo_device_to_user_distance(mCairo, &ret.width, &ret.height);
     return ret;
   } else {
-    return gfxRect(0, 0, 0, 0);
+    Matrix matrix = mDT->GetTransform();
+
+    matrix.Invert();
+
+    return GFXRect(matrix.TransformBounds(ToRect(rect)));
   }
 }
 
@@ -651,7 +669,7 @@ gfxContext::UserToDevice(const gfxPoint& point) const
     cairo_user_to_device(mCairo, &ret.x, &ret.y);
     return ret;
   } else {
-    return gfxPoint(0, 0);
+    return GFXPoint(mDT->GetTransform() * ToPoint(point));
   }
 }
 
@@ -663,7 +681,12 @@ gfxContext::UserToDevice(const gfxSize& size) const
     cairo_user_to_device_distance(mCairo, &ret.width, &ret.height);
     return ret;
   } else {
-    return gfxSize(0, 0);
+    const Matrix &matrix = mDT->GetTransform();
+
+    gfxSize newSize = size;
+    newSize.width = newSize.width * matrix._11 + newSize.height * matrix._12;
+    newSize.height = newSize.width * matrix._21 + newSize.height * matrix._22;
+    return newSize;
   }
 }
 
@@ -691,7 +714,8 @@ gfxContext::UserToDevice(const gfxRect& rect) const
 
     return gfxRect(xmin, ymin, xmax - xmin, ymax - ymin);
   } else {
-    return gfxRect(0, 0, 0, 0);
+    const Matrix &matrix = mDT->GetTransform();
+    return GFXRect(matrix.TransformBounds(ToRect(rect)));
   }
 }
 
@@ -924,6 +948,12 @@ gfxContext::SetOperator(GraphicsOperator op)
 
     cairo_set_operator(mCairo, (cairo_operator_t)op);
   } else {
+    if (op == OPERATOR_CLEAR) {
+      CurrentState().opIsClear = true;
+      return;
+    }
+    CurrentState().opIsClear = false;
+    CurrentState().op = CompositionOpForOp(op);
   }
 }
 
@@ -980,6 +1010,8 @@ gfxContext::SetMiterLimit(gfxFloat limit)
 {
   if (mCairo) {
     cairo_set_miter_limit(mCairo, limit);
+  } else {
+    CurrentState().strokeOptions.mMiterLimit = Float(limit);
   }
 }
 
@@ -989,7 +1021,7 @@ gfxContext::CurrentMiterLimit() const
   if (mCairo) {
     return cairo_get_miter_limit(mCairo);
   } else {
-    return 10.0;
+    return CurrentState().strokeOptions.mMiterLimit;
   }
 }
 
@@ -1121,9 +1153,10 @@ gfxContext::ClipContainsRect(const gfxRect& aRect)
         }
     }
 
-   cairo_rectangle_list_destroy(clip);
-   return result;
+    cairo_rectangle_list_destroy(clip);
+    return result;
   } else {
+    return true;
   }
 }
 
@@ -1195,7 +1228,7 @@ gfxContext::SetSource(gfxASurface *surface, const gfxPoint& offset)
     NS_ASSERTION(surface->GetAllowUseAsSource(), "Surface not allowed to be used as source!");
     cairo_set_source_surface(mCairo, surface->CairoSurface(), offset.x, offset.y);
   } else {
-    CurrentState().surfOffset = ToPoint(offset);
+    CurrentState().surfTransform = Matrix(1.0f, 0, 0, 1.0f, offset.x, offset.y);
     CurrentState().pattern = NULL;
     CurrentState().sourceSurface =
       gfxPlatform::GetPlatform()->GetSourceSurfaceForSurface(mDT, surface);
@@ -1243,7 +1276,7 @@ gfxContext::Mask(gfxPattern *pattern)
   if (mCairo) {
     cairo_mask(mCairo, pattern->CairoPattern());
   } else {
-    Paint();
+    //Paint();
   }
 }
 
@@ -1253,7 +1286,7 @@ gfxContext::Mask(gfxASurface *surface, const gfxPoint& offset)
   if (mCairo) {
     cairo_mask_surface(mCairo, surface->CairoSurface(), offset.x, offset.y);
   } else {
-    Paint();
+    //Paint();
   }
 }
 
@@ -1265,16 +1298,18 @@ gfxContext::Paint(gfxFloat alpha)
   } else {
     AzureState &state = CurrentState();
 
-    if (state.pattern) {
-      mDT->FillRect(Rect(-10000, -10000, 10000, 10000), *state.pattern->GetPattern(mDT),
+    if (state.opIsClear) {
+      mDT->ClearRect(Rect(-10000, -10000, 20000, 20000));
+    } else if (state.pattern) {
+      mDT->FillRect(Rect(-10000, -10000, 20000, 20000), *state.pattern->GetPattern(mDT),
                     DrawOptions(alpha, state.op));
     } else if (state.sourceSurface) {
-      mDT->FillRect(Rect(-10000, -10000, 10000, 10000),
+      mDT->FillRect(Rect(-10000, -10000, 20000, 20000),
                     SurfacePattern(state.sourceSurface, EXTEND_CLAMP,
-                                   Matrix(1.0f, 0, 0, 1.0f, state.surfOffset.x, state.surfOffset.y)),
+                                   state.surfTransform),
                     DrawOptions(alpha, state.op));
     } else {
-      mDT->FillRect(Rect(-10000, -10000, 10000, 10000), ColorPattern(state.color),
+      mDT->FillRect(Rect(-10000, -10000, 20000, 20000), ColorPattern(state.color),
                     DrawOptions(alpha, state.op));
     }
   }
@@ -1291,7 +1326,9 @@ gfxContext::PushGroup(gfxASurface::gfxContentType content)
     RefPtr<DrawTarget> newDT =
       mDT->CreateSimilarDrawTarget(mDT->GetSize(), FormatForContent(content));
 
-    CurrentState().pushedGroups.push_back(newDT);
+    Save();
+    CurrentState().drawTarget = newDT;
+    newDT->SetTransform(mDT->GetTransform());
     mDT = newDT;
   }
 }
@@ -1366,6 +1403,11 @@ gfxContext::PopGroup()
     NS_IF_ADDREF(wrapper);
     return wrapper;
   } else {
+    Restore();
+
+    Matrix mat = mDT->GetTransform();
+    mat.Invert();
+    CurrentState().surfTransform = mat;
     return NULL;
   }
 }
@@ -1376,16 +1418,13 @@ gfxContext::PopGroupToSource()
   if (mCairo) {
     cairo_pop_group_to_source(mCairo);
   } else {
-    if (!CurrentState().pushedGroups.size()) {
-      // No groups pushed, silently ignore.
-      return;
-    }
-
+    Restore();
     CurrentState().pattern = NULL;
     CurrentState().sourceSurface = mDT->Snapshot();
-    CurrentState().pushedGroups.pop_back();
-    mDT = CurrentState().pushedGroups.size() ?
-      CurrentState().pushedGroups.back() : mOriginalDT;
+
+    Matrix mat = mDT->GetTransform();
+    mat.Invert();
+    CurrentState().surfTransform = mat;
   }
 }
 
@@ -1716,13 +1755,14 @@ gfxContext::FillAzure(Float aOpacity)
 {
   AzureState &state = CurrentState();
   if (mPathIsRect) {
-    if (state.pattern) {
+    if (state.opIsClear) {
+      mDT->ClearRect(mRect);
+    } else if (state.pattern) {
       mDT->FillRect(mRect, *state.pattern->GetPattern(mDT),
                     DrawOptions(aOpacity, state.op));
     } else if (state.sourceSurface) {
       mDT->FillRect(mRect,
-                    SurfacePattern(state.sourceSurface, EXTEND_CLAMP,
-                                   Matrix(1.0f, 0, 0, 1.0f, state.surfOffset.x, state.surfOffset.y)),
+                    SurfacePattern(state.sourceSurface, EXTEND_CLAMP, state.surfTransform),
                     DrawOptions(aOpacity, state.op));
     } else {
       mDT->FillRect(mRect, ColorPattern(state.color),
@@ -1731,13 +1771,14 @@ gfxContext::FillAzure(Float aOpacity)
   } else {
     EnsureUserSpacePath();
 
+    NS_ASSERTION(!state.opIsClear, "We shouldn't be clearing complex paths!");
+
     if (state.pattern) {
       mDT->Fill(mPath, *state.pattern->GetPattern(mDT),
                 DrawOptions(aOpacity, state.op));
     } else if (state.sourceSurface) {
       mDT->Fill(mPath,
-                SurfacePattern(state.sourceSurface, EXTEND_CLAMP,
-                               Matrix(1.0f, 0, 0, 1.0f, state.surfOffset.x, state.surfOffset.y)),
+                SurfacePattern(state.sourceSurface, EXTEND_CLAMP, state.surfTransform),
                 DrawOptions(aOpacity, state.op));
     } else {
       mDT->Fill(mPath, ColorPattern(state.color),

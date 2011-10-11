@@ -1,6 +1,7 @@
 
 #include "gfxRect.h"
 #include "gfxMatrix.h"
+#include "gfxContext.h"
 #include "mozilla/gfx/Rect.h"
 #include "mozilla/gfx/2D.h"
 
@@ -80,6 +81,32 @@ inline SurfaceFormat FormatForContent(gfxASurface::gfxContentType aContent)
     return FORMAT_A8;
   case gfxASurface::CONTENT_COLOR_ALPHA:
     return FORMAT_B8G8R8A8;
+  }
+}
+
+inline CompositionOp CompositionOpForOp(gfxContext::GraphicsOperator aOp)
+{
+  switch (aOp) {
+  case gfxContext::OPERATOR_ADD:
+    return OP_ADD;
+  case gfxContext::OPERATOR_ATOP:
+    return OP_ATOP;
+  case gfxContext::OPERATOR_IN:
+    return OP_IN;
+  case gfxContext::OPERATOR_OUT:
+    return OP_OUT;
+  case gfxContext::OPERATOR_SOURCE:
+    return OP_SOURCE;
+  case gfxContext::OPERATOR_DEST_IN:
+    return OP_DEST_IN;
+  case gfxContext::OPERATOR_DEST_OUT:
+    return OP_DEST_OUT;
+  case gfxContext::OPERATOR_DEST_ATOP:
+    return OP_DEST_ATOP;
+  case gfxContext::OPERATOR_XOR:
+    return OP_XOR;
+  default:
+    return OP_OVER;
   }
 }
 

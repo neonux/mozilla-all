@@ -42,6 +42,8 @@
 
 #include "cairo.h"
 
+#include <vector>
+
 using namespace mozilla::gfx;
 
 gfxPattern::gfxPattern(cairo_pattern_t *aPattern)
@@ -143,6 +145,68 @@ gfxPattern::GetPattern(mozilla::gfx::DrawTarget *aTarget)
         newMat.Invert();
         new (mSurfacePattern.addr()) SurfacePattern(mSourceSurface, EXTEND_CLAMP, newMat);
         return mSurfacePattern.addr();
+      }
+      break;
+    }
+  case CAIRO_PATTERN_TYPE_LINEAR:
+    {
+      if (!mStops) {
+        int count = 0;
+        cairo_pattern_get_color_stop_count(mPattern, &count);
+
+        std::vector<GradientStop> stops;
+
+        for (int i = 0; i < count; i++) {
+          GradientStop stop;
+          double r, g, b, a, offset;
+          cairo_pattern_get_color_stop_rgba(mPattern, i, &offset, &r, &g, &b, &a);
+
+          stop.offset = offset;
+          stop.color = Color(Float(r), Float(g), Float(b), Float(a));
+          stops.push_back(stop);
+        }
+
+        mStops = aTarget->CreateGradientStops(&stops.front(), count);
+      }
+
+      if (mStops) {
+        double x1, y1, x2, y2;
+        cairo_pattern_get_linear_points(mPattern, &x1, &y1, &x2, &y2);
+        new (mLinearGradientPattern.addr())
+          LinearGradientPattern(Point(x1, y1), Point(x2, y2), mStops);
+
+        return mLinearGradientPattern.addr();
+      }
+      break;
+    }
+  case CAIRO_PATTERN_TYPE_RADIAL:
+    {
+      if (!mStops) {
+        int count = 0;
+        cairo_pattern_get_color_stop_count(mPattern, &count);
+
+        std::vector<GradientStop> stops;
+
+        for (int i = 0; i < count; i++) {
+          GradientStop stop;
+          double r, g, b, a, offset;
+          cairo_pattern_get_color_stop_rgba(mPattern, i, &offset, &r, &g, &b, &a);
+
+          stop.offset = offset;
+          stop.color = Color(Float(r), Float(g), Float(b), Float(a));
+          stops.push_back(stop);
+        }
+
+        mStops = aTarget->CreateGradientStops(&stops.front(), count);
+      }
+
+      if (mStops) {
+        double x1, y1, x2, y2, r1, r2;
+        cairo_pattern_get_radial_circles(mPattern, &x1, &y1, &r1, &x2, &y2, &r2);
+        new (mRadialGradientPattern.addr())
+          RadialGradientPattern(Point(x1, y1), Point(x2, y2), r1, r2, mStops);
+
+        return mRadialGradientPattern.addr();
       }
       break;
     }

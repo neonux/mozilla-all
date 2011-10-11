@@ -132,6 +132,7 @@ protected:
     };
 
     mozilla::RefPtr<mozilla::gfx::SourceSurface> mSourceSurface;
+    mozilla::RefPtr<mozilla::gfx::GradientStops> mStops;
 };
 
 #endif /* GFX_PATTERN_H */
