@@ -976,7 +976,6 @@
       <toolbarbutton id="inspector-inspect-toolbutton"
                      label="&inspectButton.label;"
                      accesskey="&inspectButton.accesskey;"
-                     class="toolbarbutton-text"
                      command="Inspector:Inspect"/>
       <arrowscrollbox id="inspector-breadcrumbs"
                       flex="1" orient="horizontal"
