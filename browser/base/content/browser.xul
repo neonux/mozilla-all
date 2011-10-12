@@ -987,10 +987,11 @@
           <arrowscrollbox id="inspector-breadcrumbs"
                           flex="1" orient="horizontal"
                           clicktoscroll="true"/>
-          <hbox id="inspector-tools">
+          <toolbarseparator />
+          <hbox id="inspector-tools"
+		align="end">
             <!-- registered tools go here -->
           </hbox>
-          <spacer flex="1"/>
           <resizer id="inspector-end-resizer"
                    class="inspector-resizer"
                    dir="top" disabled="true"
