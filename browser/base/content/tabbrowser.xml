@@ -879,9 +879,6 @@
             this.mCurrentTab.removeAttribute("unread");
             this.showTab(this.mCurrentTab);
 
-            //document.documentElement.setAttribute("switchingtabs", "true");
-            gURLBar.style.MozTransition = "0s";
-
             if (updatePageReport)
               this.mCurrentBrowser.updatePageReport();
 
@@ -947,9 +944,6 @@
                                            nsIWebProgressListener.STATE_IS_NETWORK, 0],
                                           true, false);
             }
-
-            document.documentElement.removeAttribute("switchingtabs");
-            gURLBar.style.MozTransition = "0s";
 
             if (this.mCurrentTab.selected)
               this._setCloseKeyState(!this.mCurrentTab.pinned);
