@@ -147,7 +147,7 @@ function readInputStreamData(aStream) {
     bistream.setInputStream(aStream);
     let expectedData = [];
     let avail;
-    while (avail = bistream.available()) {
+    while ((avail = bistream.available())) {
       expectedData = expectedData.concat(bistream.readByteArray(avail));
     }
     return expectedData;

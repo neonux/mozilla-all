@@ -203,12 +203,9 @@
 #include "nsDOMTouchEvent.h"
 
 #include "mozilla/Preferences.h"
-#include "nsFrame.h"
 
 #include "imgILoader.h"
-
-#include "nsDOMCaretPosition.h"
-#include "nsIDOMHTMLTextAreaElement.h"
+#include "nsWrapperCacheInlines.h"
 
 using namespace mozilla;
 using namespace mozilla::dom;
@@ -1102,8 +1099,18 @@ nsExternalResourceMap::PendingLoad::StartLoad(nsIURI* aURI,
                               nsIScriptSecurityManager::STANDARD);
   NS_ENSURE_SUCCESS(rv, rv);
   
-  rv = requestingPrincipal->CheckMayLoad(aURI, PR_TRUE);
-  NS_ENSURE_SUCCESS(rv, rv);
+  // Allow data URIs (let them skip the CheckMayLoad call), since we want
+  // to allow external resources from data URIs regardless of the difference
+  // in URI scheme.
+  bool doesInheritSecurityContext;
+  rv =
+    NS_URIChainHasFlags(aURI,
+                        nsIProtocolHandler::URI_INHERITS_SECURITY_CONTEXT,
+                        &doesInheritSecurityContext);
+  if (NS_FAILED(rv) || !doesInheritSecurityContext) {
+    rv = requestingPrincipal->CheckMayLoad(aURI, PR_TRUE);
+    NS_ENSURE_SUCCESS(rv, rv);
+  }
 
   PRInt16 shouldLoad = nsIContentPolicy::ACCEPT;
   rv = NS_CheckContentLoadPolicy(nsIContentPolicy::TYPE_OTHER,
@@ -1440,7 +1447,7 @@ nsDOMImplementation::CreateDocument(const nsAString& aNamespaceURI,
   return nsContentUtils::CreateDocument(aNamespaceURI, aQualifiedName, aDoctype,
                                         mDocumentURI, mBaseURI,
                                         mOwner->NodePrincipal(),
-                                        scriptHandlingObject, aReturn);
+                                        scriptHandlingObject, false, aReturn);
 }
 
 NS_IMETHODIMP
@@ -1472,7 +1479,7 @@ nsDOMImplementation::CreateHTMLDocument(const nsAString& aTitle,
   rv = nsContentUtils::CreateDocument(EmptyString(), EmptyString(),
                                       doctype, mDocumentURI, mBaseURI,
                                       mOwner->NodePrincipal(),
-                                      scriptHandlingObject,
+                                      scriptHandlingObject, false,
                                       getter_AddRefs(document));
   NS_ENSURE_SUCCESS(rv, rv);
   nsCOMPtr<nsIDocument> doc = do_QueryInterface(document);
@@ -1529,6 +1536,7 @@ nsDocument::nsDocument(const char* aContentType)
   : nsIDocument()
   , mAnimatingImages(PR_TRUE)
   , mIsFullScreen(PR_FALSE)
+  , mVisibilityState(eHidden)
 {
   SetContentTypeInternal(nsDependentCString(aContentType));
   
@@ -3220,7 +3228,6 @@ nsDocument::DeleteShell()
   if (IsEventHandlingEnabled()) {
     RevokeAnimationFrameNotifications();
   }
-
   mPresShell = nsnull;
 }
 
@@ -3841,6 +3848,13 @@ nsDocument::SetScriptGlobalObject(nsIScriptGlobalObject *aScriptGlobalObject)
   // having to QI every time it's asked for.
   nsCOMPtr<nsPIDOMWindow> window = do_QueryInterface(mScriptGlobalObject);
   mWindow = window;
+
+  // Set our visibility state, but do not fire the event.  This is correct
+  // because either we're coming out of bfcache (in which case IsVisible() will
+  // still test false at this point and no state change will happen) or we're
+  // doing the initial document load and don't want to fire the event for this
+  // change.
+  mVisibilityState = GetVisibilityState();
 }
 
 nsIScriptGlobalObject*
@@ -7326,6 +7340,8 @@ nsDocument::OnPageShow(bool aPersisted,
     SetImagesNeedAnimating(PR_TRUE);
   }
 
+  UpdateVisibilityState();
+
   nsCOMPtr<nsIDOMEventTarget> target = aDispatchStartTarget;
   if (!target) {
     target = do_QueryInterface(GetWindow());
@@ -7387,6 +7403,9 @@ nsDocument::OnPageHide(bool aPersisted,
   DispatchPageTransition(target, NS_LITERAL_STRING("pagehide"), aPersisted);
 
   mVisible = PR_FALSE;
+
+  UpdateVisibilityState();
+  
   EnumerateExternalResources(NotifyPageHide, &aPersisted);
   EnumerateFreezableElements(NotifyActivityChanged, nsnull);
 }
@@ -8381,58 +8400,6 @@ nsDocument::CreateTouchList(nsIVariant* aPoints,
   return NS_OK;
 }
 
-NS_IMETHODIMP
-nsDocument::CaretPositionFromPoint(float aX, float aY, nsIDOMCaretPosition** aCaretPos)
-{
-  NS_ENSURE_ARG_POINTER(aCaretPos);
-  *aCaretPos = nsnull;
-  
-  nscoord x = nsPresContext::CSSPixelsToAppUnits(aX);
-  nscoord y = nsPresContext::CSSPixelsToAppUnits(aY);
-  nsPoint pt(x, y);
-
-  nsIPresShell *ps = GetShell();
-  if (!ps) {
-    return NS_OK;
-  }
-
-  nsIFrame *rootFrame = ps->GetRootFrame();
-
-  // XUL docs, unlike HTML, have no frame tree until everything's done loading
-  if (!rootFrame) {
-    return NS_OK; // return null to premature XUL callers as a reminder to wait
-  }
-
-  nsIFrame *ptFrame = nsLayoutUtils::GetFrameForPoint(rootFrame, pt, PR_TRUE,
-                                                      PR_FALSE);
-  if (!ptFrame) {
-    return NS_OK;
-  }
-
-  nsFrame::ContentOffsets offsets = ptFrame->GetContentOffsetsFromPoint(pt);
-  nsCOMPtr<nsIDOMNode> node = do_QueryInterface(offsets.content);
-  nsIContent* ptContent = offsets.content;
-  PRInt32 offset = offsets.offset;
-  if (ptContent && ptContent->IsInNativeAnonymousSubtree()) {
-    nsIContent* nonanon = ptContent->FindFirstNonNativeAnonymous();
-    nsCOMPtr<nsIDOMHTMLInputElement> input = do_QueryInterface(nonanon);
-    nsCOMPtr<nsIDOMHTMLTextAreaElement> textArea = do_QueryInterface(nonanon);
-    bool isText;
-    if (textArea || (input &&
-                     NS_SUCCEEDED(input->MozIsTextField(PR_FALSE, &isText)) && 
-                     isText)) {
-      node = do_QueryInterface(nonanon);
-    } else {
-      node = nsnull;
-      offset = 0;
-    }
-  }
-
-  *aCaretPos = new nsDOMCaretPosition(node, offset);
-  NS_ADDREF(*aCaretPos);
-  return NS_OK;
-}
-
 PRInt64
 nsIDocument::SizeOf() const
 {
@@ -8714,3 +8681,61 @@ nsDocument::SizeOf() const
 #undef DOCUMENT_ONLY_EVENT
 #undef TOUCH_EVENT
 #undef EVENT
+
+void
+nsDocument::UpdateVisibilityState()
+{
+  VisibilityState oldState = mVisibilityState;
+  mVisibilityState = GetVisibilityState();
+  if (oldState != mVisibilityState) {
+    nsContentUtils::DispatchTrustedEvent(this, static_cast<nsIDocument*>(this),
+                                         NS_LITERAL_STRING("mozvisibilitychange"),
+                                         false, false);
+  }
+}
+
+nsDocument::VisibilityState
+nsDocument::GetVisibilityState() const
+{
+  // We have to check a few pieces of information here:
+  // 1)  Are we in bfcache (!IsVisible())?  If so, nothing else matters.
+  // 2)  Do we have an outer window?  If not, we're hidden.  Note that we don't
+  //     want to use GetWindow here because it does weird groveling for windows
+  //     in some cases.
+  // 3)  Is our outer window background?  If so, we're hidden.
+  // Otherwise, we're visible.
+  if (!IsVisible() || !mWindow || !mWindow->GetOuterWindow() ||
+      mWindow->GetOuterWindow()->IsBackground()) {
+    return eHidden;
+  }
+
+  return eVisible;
+}
+
+/* virtual */ void
+nsDocument::PostVisibilityUpdateEvent()
+{
+  nsCOMPtr<nsIRunnable> event =
+    NS_NewRunnableMethod(this, &nsDocument::UpdateVisibilityState);
+  NS_DispatchToMainThread(event);
+}
+
+NS_IMETHODIMP
+nsDocument::GetMozHidden(bool* aHidden)
+{
+  *aHidden = mVisibilityState != eVisible;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocument::GetMozVisibilityState(nsAString& aState)
+{
+  // This needs to stay in sync with the VisibilityState enum.
+  static const char states[][8] = {
+    "hidden",
+    "visible"
+  };
+  PR_STATIC_ASSERT(NS_ARRAY_LENGTH(states) == eVisibilityStateCount);
+  aState.AssignASCII(states[mVisibilityState]);
+  return NS_OK;
+}

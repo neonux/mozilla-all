@@ -203,6 +203,7 @@ static NS_DEFINE_CID(kXTFServiceCID, NS_XTFSERVICE_CID);
 #include "prdtoa.h"
 
 #include "mozilla/Preferences.h"
+#include "nsWrapperCacheInlines.h"
 
 using namespace mozilla::dom;
 using namespace mozilla::layers;
@@ -3682,11 +3683,12 @@ nsContentUtils::CreateDocument(const nsAString& aNamespaceURI,
                                nsIURI* aDocumentURI, nsIURI* aBaseURI,
                                nsIPrincipal* aPrincipal,
                                nsIScriptGlobalObject* aEventObject,
+                               bool aSVGDocument,
                                nsIDOMDocument** aResult)
 {
   nsresult rv = NS_NewDOMDocument(aResult, aNamespaceURI, aQualifiedName,
                                   aDoctype, aDocumentURI, aBaseURI, aPrincipal,
-                                  PR_TRUE, aEventObject);
+                                  PR_TRUE, aEventObject, aSVGDocument);
   NS_ENSURE_SUCCESS(rv, rv);
 
   nsCOMPtr<nsIDocument> document = do_QueryInterface(*aResult);
@@ -5802,4 +5804,36 @@ bool
 nsContentUtils::IsFullScreenKeyInputRestricted()
 {
   return sFullScreenKeyInputRestricted;
+}
+
+// static
+void
+nsContentUtils::ReleaseWrapper(nsISupports* aScriptObjectHolder,
+                               nsWrapperCache* aCache)
+{
+  if (aCache->PreservingWrapper()) {
+    DropJSObjects(aScriptObjectHolder);
+    aCache->SetPreservingWrapper(false);
+  }
+
+  aCache->ClearWrapperIfProxy();
+}
+
+// static
+void
+nsContentUtils::TraceWrapper(nsWrapperCache* aCache, TraceCallback aCallback,
+                             void *aClosure)
+{
+  if (aCache->PreservingWrapper()) {
+    aCallback(nsIProgrammingLanguage::JAVASCRIPT,
+              aCache->GetWrapperPreserveColor(),
+              "Preserved wrapper", aClosure);
+  }
+  else {
+    JSObject *expando = aCache->GetExpandoObjectPreserveColor();
+    if (expando) {
+      aCallback(nsIProgrammingLanguage::JAVASCRIPT, expando, "Expando object",
+                aClosure);
+    }
+  }
 }

@@ -1099,6 +1099,7 @@ public:
    * @param aPrincipal Prinicpal of the document. Must not be null.
    * @param aScriptObject The object from which the context for event handling
    *                      can be got.
+   * @param aSVGDocument Force SVG Document creation.
    * @param aResult [out] The document that was created.
    */
   static nsresult CreateDocument(const nsAString& aNamespaceURI, 
@@ -1108,6 +1109,7 @@ public:
                                  nsIURI* aBaseURI,
                                  nsIPrincipal* aPrincipal,
                                  nsIScriptGlobalObject* aScriptObject,
+                                 bool aSVGDocument,
                                  nsIDOMDocument** aResult);
 
   /**
@@ -1273,22 +1275,9 @@ public:
     }
   }
   static void ReleaseWrapper(nsISupports* aScriptObjectHolder,
-                             nsWrapperCache* aCache)
-  {
-    if (aCache->PreservingWrapper()) {
-      DropJSObjects(aScriptObjectHolder);
-      aCache->SetPreservingWrapper(PR_FALSE);
-    }
-  }
+                             nsWrapperCache* aCache);
   static void TraceWrapper(nsWrapperCache* aCache, TraceCallback aCallback,
-                           void *aClosure)
-  {
-    if (aCache->PreservingWrapper()) {
-      aCallback(nsIProgrammingLanguage::JAVASCRIPT,
-                aCache->GetWrapperPreserveColor(),
-                "Preserved wrapper", aClosure);
-    }
-  }
+                           void *aClosure);
 
   /**
    * Convert nsIContent::IME_STATUS_* to nsIWidget::IME_STATUS_*
