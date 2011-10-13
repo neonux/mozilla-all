@@ -328,50 +328,71 @@ function testClipboardEvents()
 {
   editor.setText("foobar");
 
-  EventUtils.synthesizeKey("a", {accelKey: true}, testWin);
+  let doCut = function() {
+    EventUtils.synthesizeKey("a", {accelKey: true}, testWin);
 
-  is(editor.getSelectedText(), "foobar",
-     "select all worked");
+    is(editor.getSelectedText(), "foobar", "select all worked");
 
-  EventUtils.synthesizeKey("x", {accelKey: true}, testWin);
+    EventUtils.synthesizeKey("x", {accelKey: true}, testWin);
+  };
 
-  ok(!editor.getText(), "cut works");
+  let onCut = function() {
+    ok(!editor.getText(), "cut works");
+    editor.setText("test--");
+    editor.setCaretOffset(5);
 
-  editor.setText("test--");
-  editor.setCaretOffset(5);
+    editor.addEventListener(SourceEditor.EVENTS.TEXT_CHANGED, onPaste1);
+    EventUtils.synthesizeKey("v", {accelKey: true}, testWin);
+  };
 
-  let paste1handler = function(aEvent) {
-    editor.removeEventListener(SourceEditor.EVENTS.TEXT_CHANGED, paste1handler);
+  let onPaste1 = function() {
+    editor.removeEventListener(SourceEditor.EVENTS.TEXT_CHANGED, onPaste1);
 
     is(editor.getText(), "test-foobar-", "paste works");
 
-    executeSoon(function() {
-      editor.setSelection(0, 4);
-      EventUtils.synthesizeKey("c", {accelKey: true}, testWin);
-
-      executeSoon(function() {
-        editor.setSelection(5, 11);
-        editor.addEventListener(SourceEditor.EVENTS.TEXT_CHANGED, paste2handler);
-        EventUtils.synthesizeKey("v", {accelKey: true}, testWin);
-      });
-    });
+    executeSoon(waitForClipboard.bind(this, "test", doCopy, onCopy, testEnd));
   };
 
-  let paste2handler = function(aEvent) {
-    editor.removeEventListener(SourceEditor.EVENTS.TEXT_CHANGED, paste2handler);
+  let doCopy = function() {
+    editor.setSelection(0, 4);
+    EventUtils.synthesizeKey("c", {accelKey: true}, testWin);
+  };
 
-    is(editor.getText(), "test-test-", "paste works after copy");
+  let onCopy = function() {
+    editor.setSelection(5, 11);
+    editor.addEventListener(SourceEditor.EVENTS.TEXT_CHANGED, onPaste2);
+    EventUtils.synthesizeKey("v", {accelKey: true}, testWin);
+  };
+
+  let pasteTextChanges = 0;
+  let removedCharCount = 0;
+  let addedCharCount = 0;
+  let onPaste2 = function(aEvent) {
+    pasteTextChanges++;
+    ok(aEvent && (pasteTextChanges == 1 || pasteTextChanges == 2),
+       "event TEXT_CHANGED fired " + pasteTextChanges + " time(s)");
 
     is(aEvent.start, 5, "event.start is correct");
-    is(aEvent.removedCharCount, 6, "event.removedCharCount is correct");
-    is(aEvent.addedCharCount, 4, "event.addedCharCount is correct");
+    if (aEvent.removedCharCount) {
+      removedCharCount = aEvent.removedCharCount;
+    }
+    if (aEvent.addedCharCount) {
+      addedCharCount = aEvent.addedCharCount;
+    }
 
-    executeSoon(testEnd);
+    if (pasteTextChanges == 2 || addedCharCount && removedCharCount) {
+      editor.removeEventListener(SourceEditor.EVENTS.TEXT_CHANGED, onPaste2);
+      executeSoon(checkPaste2Result);
+    }
   };
 
-  executeSoon(function() {
-    editor.addEventListener(SourceEditor.EVENTS.TEXT_CHANGED, paste1handler);
-    EventUtils.synthesizeKey("v", {accelKey: true}, testWin);
-  });
-}
+  let checkPaste2Result = function() {
+    is(removedCharCount, 6, "event.removedCharCount is correct");
+    is(addedCharCount, 4, "event.addedCharCount is correct");
 
+    is(editor.getText(), "test-test-", "paste works after copy");
+    testEnd();
+  };
+
+  waitForClipboard("foobar", doCut, onCut, testEnd);
+}

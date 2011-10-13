@@ -1,4 +1,3 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
@@ -12,14 +11,16 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is mozilla.org code.
+ * The Original Code is DevTools test code.
  *
  * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2001
+ * The Mozilla Foundation.
+ *
+ * Portions created by the Initial Developer are Copyright (C) 2011
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
+ *   Joe Walker <jwalker@mozilla.com> (Original author)
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -35,30 +36,32 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-#ifndef nsWWJSUtils_h__
-#define nsWWJSUtils_h__
+let tab;
+let browser;
 
-/**
- * Utility functions copied from nsJSUtils in dom/src/base.
- */
+function addTab(aURL, aCallback)
+{
+  waitForExplicitFinish();
 
-#include "nsISupports.h"
-#include "jsapi.h"
+  function onTabLoad() {
+    browser.removeEventListener("load", onTabLoad, true);
+    aCallback();
+  }
 
-class nsIScriptContext;
-class nsIScriptGlobalObject;
+  gBrowser.selectedTab = gBrowser.addTab();
+  content.location = aURL;
 
-class nsWWJSUtils {
-public:
-  static nsIScriptGlobalObject *GetStaticScriptGlobal(JSContext* aContext,
-                                                      JSObject* aObj);
+  tab = gBrowser.selectedTab;
+  browser = gBrowser.getBrowserForTab(tab);
 
-  static nsIScriptContext *GetStaticScriptContext(JSContext* aContext,
-                                                  JSObject* aObj);
+  browser.addEventListener("load", onTabLoad, true);
+}
 
-  static nsIScriptGlobalObject *GetDynamicScriptGlobal(JSContext *aContext);
+registerCleanupFunction(function tearDown() {
+  while (gBrowser.tabs.length > 1) {
+    gBrowser.removeCurrentTab();
+  }
 
-  static nsIScriptContext *GetDynamicScriptContext(JSContext *aContext);
-};
-
-#endif /* nsWWJSUtils_h__ */
+  tab = undefined;
+  browser = undefined;
+});
