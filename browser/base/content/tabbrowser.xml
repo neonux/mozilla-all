@@ -949,7 +949,7 @@
             }
 
             document.documentElement.removeAttribute("switchingtabs");
-            gURLBar.style.MozTransition = "";
+            gURLBar.style.MozTransition = "0s";
 
             if (this.mCurrentTab.selected)
               this._setCloseKeyState(!this.mCurrentTab.pinned);
