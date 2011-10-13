@@ -887,6 +887,27 @@ DrawTargetD2D::FillGlyphs(ScaledFont *aFont,
 }
 
 void
+DrawTargetD2D::Mask(const Pattern &aSource,
+                    const Pattern &aMask,
+                    const DrawOptions &aOptions)
+{
+  ID2D1RenderTarget *rt = GetRTForOperation(aOptions.mCompositionOp, aSource);
+  
+  PrepareForDrawing(rt);
+
+  RefPtr<ID2D1Brush> brush = CreateBrushForPattern(aSource, aOptions.mAlpha);
+  RefPtr<ID2D1Brush> maskBrush = CreateBrushForPattern(aMask, 1.0f);
+
+  RefPtr<ID2D1Layer> layer;
+  rt->CreateLayer(byRef(layer));
+  rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), NULL, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), 1.0f, maskBrush), layer);
+  rt->FillRectangle(D2D1::InfiniteRect(), brush);
+  rt->PopLayer();
+
+  FinalizeRTForOperation(aOptions.mCompositionOp, aSource, Rect(0, 0, (Float)mSize.width, (Float)mSize.height));
+}
+
+void
 DrawTargetD2D::PushClip(const Path *aPath)
 {
   if (aPath->GetBackendType() != BACKEND_DIRECT2D) {

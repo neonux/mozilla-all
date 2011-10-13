@@ -111,6 +111,9 @@ public:
                           const GlyphBuffer &aBuffer,
                           const Pattern &aPattern,
                           const DrawOptions &aOptions = DrawOptions());
+  virtual void Mask(const Pattern &aSource,
+                    const Pattern &aMask,
+                    const DrawOptions &aOptions = DrawOptions());
   virtual void PushClip(const Path *aPath);
   virtual void PopClip();
 

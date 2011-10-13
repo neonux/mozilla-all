@@ -618,6 +618,19 @@ public:
                           const DrawOptions &aOptions = DrawOptions()) = 0;
 
   /*
+   * This essentially takes a source pattern and a mask, and composites the
+   * source pattern onto the destination surface using the alpha channel of
+   * the mask pattern as a mask for the operation.
+   *
+   * aSource Source pattern
+   * aMask Mask pattern
+   * aOptions Drawing options
+   */
+  virtual void Mask(const Pattern &aSource,
+                    const Pattern &aMask,
+                    const DrawOptions &aOptions = DrawOptions()) = 0;
+
+  /*
    * Push a clip to the DrawTarget.
    *
    * aPath The path to clip to

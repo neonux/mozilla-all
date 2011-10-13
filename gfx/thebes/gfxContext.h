@@ -695,6 +695,8 @@ public:
     bool IsAzure() const { return !mCairo; }
 
 private:
+  friend class GeneralPattern;
+  
   struct AzureState {
     AzureState()
       : op(mozilla::gfx::OP_OVER)
@@ -725,6 +727,7 @@ private:
   void EnsureUserSpacePath();
   void EnsurePathBuilder();
   void FillAzure(mozilla::gfx::Float aOpacity);
+  void PushClipsToDT(mozilla::gfx::DrawTarget *aDT);
 
   bool mPathIsRect;
   mozilla::gfx::Rect mRect;
@@ -736,14 +739,13 @@ private:
   AzureState &CurrentState() { return mStateStack.back(); }
   const AzureState &CurrentState() const { return mStateStack.back(); }
 
+  cairo_t *mCairo;
+  cairo_t *mRefCairo;
+  nsRefPtr<gfxASurface> mSurface;
+  PRInt32 mFlags;
 
-    cairo_t *mCairo;
-    cairo_t *mRefCairo;
-    nsRefPtr<gfxASurface> mSurface;
-    PRInt32 mFlags;
-
-    mozilla::RefPtr<mozilla::gfx::DrawTarget> mDT;
-    mozilla::RefPtr<mozilla::gfx::DrawTarget> mOriginalDT;
+  mozilla::RefPtr<mozilla::gfx::DrawTarget> mDT;
+  mozilla::RefPtr<mozilla::gfx::DrawTarget> mOriginalDT;
 };
 
 /**

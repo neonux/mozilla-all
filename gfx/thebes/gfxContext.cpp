@@ -59,6 +59,37 @@
 using namespace mozilla;
 using namespace mozilla::gfx;
 
+class GeneralPattern
+{
+public:    
+  GeneralPattern(gfxContext *aContext) : mContext(aContext) {}
+
+  operator mozilla::gfx::Pattern&()
+  {
+    gfxContext::AzureState &state = mContext->CurrentState();
+
+    if (state.pattern) {
+      return *state.pattern->GetPattern(mContext->mDT);
+    } else if (state.sourceSurface) {
+      new (mSurfacePattern.addr())
+        SurfacePattern(state.sourceSurface, EXTEND_CLAMP, state.surfTransform);
+      return *mSurfacePattern.addr();
+    } else {
+      new (mColorPattern.addr())
+        ColorPattern(state.color);
+      return *mColorPattern.addr();
+    }
+  }
+
+private:
+  union {
+    mozilla::AlignedStorage2<mozilla::gfx::ColorPattern> mColorPattern;
+    mozilla::AlignedStorage2<mozilla::gfx::SurfacePattern> mSurfacePattern;
+  };
+
+  gfxContext *mContext;
+};
+
 gfxContext::gfxContext(gfxASurface *surface)
   : mSurface(surface)
   , mRefCairo(NULL)
@@ -183,27 +214,9 @@ gfxContext::Restore()
       mDT->PopClip();
     }
 
-    if (CurrentState().clipWasReset) {
-      // Tricky, we have to restore all clips -since the last time- the clip
-      // was reset. If we didn't reset the clip, just popping the clips we
-      // added was fine.
-      uint32_t lastReset = 0;
-      for (int i = mStateStack.size() - 2; i > 0; i--) {
-        if (mStateStack[i].clipWasReset) {
-          lastReset = i;
-        }
-      }
-
-      // Don't need to save the old transform, we'll be setting a new one soon!
-
-      // Push all clips from the last state on the stack where the clip was
-      // reset to the clip before ours.
-      for (int i = lastReset; i < mStateStack.size() - 1; i++) {
-        for (int c = 0; c < mStateStack[i].pushedClips.size(); c++) {
-          mDT->SetTransform(mStateStack[i].pushedClips[c].transform);
-          mDT->PushClip(mStateStack[i].pushedClips[c].path);
-        }
-      }
+    if (CurrentState().clipWasReset &&
+        CurrentState().drawTarget == mStateStack[mStateStack.size() - 2].drawTarget) {
+      PushClipsToDT(mDT);
     }
 
     mStateStack.pop_back();
@@ -277,27 +290,14 @@ gfxContext::Stroke()
   } else {
     AzureState &state = CurrentState();
     if (mPathIsRect) {
-      if (state.pattern) {
-        mDT->StrokeRect(mRect, *state.pattern->GetPattern(mDT),
-                        state.strokeOptions,
-                        DrawOptions(1.0f, state.op));
-      } else {
-        mDT->StrokeRect(mRect, ColorPattern(state.color),
-                        state.strokeOptions,
-                        DrawOptions(1.0f, state.op));
-      }
+      mDT->StrokeRect(mRect, GeneralPattern(this),
+                      state.strokeOptions,
+                      DrawOptions(1.0f, state.op));
     } else {
       EnsureUserSpacePath();
 
-      if (state.pattern) {
-        mDT->Stroke(mPath, *state.pattern->GetPattern(mDT),
-                    state.strokeOptions,
-                    DrawOptions(1.0f, state.op));
-      } else {
-        mDT->Stroke(mPath, ColorPattern(state.color),
-                    state.strokeOptions,
-                    DrawOptions(1.0f, state.op));
-      }
+      mDT->Stroke(mPath, GeneralPattern(this), state.strokeOptions,
+                  DrawOptions(1.0f, state.op));
     }
   }
 }
@@ -1276,7 +1276,7 @@ gfxContext::Mask(gfxPattern *pattern)
   if (mCairo) {
     cairo_mask(mCairo, pattern->CairoPattern());
   } else {
-    //Paint();
+    mDT->Mask(GeneralPattern(this), *pattern->GetPattern(mDT), DrawOptions(1.0f, CurrentState().op));
   }
 }
 
@@ -1286,7 +1286,14 @@ gfxContext::Mask(gfxASurface *surface, const gfxPoint& offset)
   if (mCairo) {
     cairo_mask_surface(mCairo, surface->CairoSurface(), offset.x, offset.y);
   } else {
-    //Paint();
+    RefPtr<SourceSurface> sourceSurf =
+      gfxPlatform::GetPlatform()->GetSourceSurfaceForSurface(mDT, surface);
+
+    gfxPoint pt = surface->GetDeviceOffset();
+    mDT->Mask(GeneralPattern(this), 
+              SurfacePattern(sourceSurf, EXTEND_CLAMP,
+                             Matrix(1.0f, 0, 0, 1.0f, offset.x - pt.x, offset.y - pt.y)),
+                             DrawOptions(1.0f, CurrentState().op));
   }
 }
 
@@ -1300,16 +1307,8 @@ gfxContext::Paint(gfxFloat alpha)
 
     if (state.opIsClear) {
       mDT->ClearRect(Rect(-10000, -10000, 20000, 20000));
-    } else if (state.pattern) {
-      mDT->FillRect(Rect(-10000, -10000, 20000, 20000), *state.pattern->GetPattern(mDT),
-                    DrawOptions(alpha, state.op));
-    } else if (state.sourceSurface) {
-      mDT->FillRect(Rect(-10000, -10000, 20000, 20000),
-                    SurfacePattern(state.sourceSurface, EXTEND_CLAMP,
-                                   state.surfTransform),
-                    DrawOptions(alpha, state.op));
     } else {
-      mDT->FillRect(Rect(-10000, -10000, 20000, 20000), ColorPattern(state.color),
+      mDT->FillRect(Rect(-10000, -10000, 20000, 20000), GeneralPattern(this),
                     DrawOptions(alpha, state.op));
     }
   }
@@ -1327,7 +1326,10 @@ gfxContext::PushGroup(gfxASurface::gfxContentType content)
       mDT->CreateSimilarDrawTarget(mDT->GetSize(), FormatForContent(content));
 
     Save();
+
     CurrentState().drawTarget = newDT;
+
+    PushClipsToDT(newDT);
     newDT->SetTransform(mDT->GetTransform());
     mDT = newDT;
   }
@@ -1407,8 +1409,8 @@ gfxContext::PopGroup()
 
     Matrix mat = mDT->GetTransform();
     mat.Invert();
-    CurrentState().surfTransform = mat;
-    return NULL;
+    RefPtr<SourceSurface> surf = mDT->Snapshot();
+    gfxPattern *pat = new gfxPattern(surf);
   }
 }
 
@@ -1418,9 +1420,10 @@ gfxContext::PopGroupToSource()
   if (mCairo) {
     cairo_pop_group_to_source(mCairo);
   } else {
+    RefPtr<SourceSurface> src = mDT->Snapshot();
     Restore();
+    CurrentState().sourceSurface = src;
     CurrentState().pattern = NULL;
-    CurrentState().sourceSurface = mDT->Snapshot();
 
     Matrix mat = mDT->GetTransform();
     mat.Invert();
@@ -1757,32 +1760,39 @@ gfxContext::FillAzure(Float aOpacity)
   if (mPathIsRect) {
     if (state.opIsClear) {
       mDT->ClearRect(mRect);
-    } else if (state.pattern) {
-      mDT->FillRect(mRect, *state.pattern->GetPattern(mDT),
-                    DrawOptions(aOpacity, state.op));
-    } else if (state.sourceSurface) {
-      mDT->FillRect(mRect,
-                    SurfacePattern(state.sourceSurface, EXTEND_CLAMP, state.surfTransform),
-                    DrawOptions(aOpacity, state.op));
     } else {
-      mDT->FillRect(mRect, ColorPattern(state.color),
-                    DrawOptions(aOpacity, state.op));
+      mDT->FillRect(mRect, GeneralPattern(this), DrawOptions(aOpacity, state.op));
     }
   } else {
     EnsureUserSpacePath();
 
     NS_ASSERTION(!state.opIsClear, "We shouldn't be clearing complex paths!");
 
-    if (state.pattern) {
-      mDT->Fill(mPath, *state.pattern->GetPattern(mDT),
-                DrawOptions(aOpacity, state.op));
-    } else if (state.sourceSurface) {
-      mDT->Fill(mPath,
-                SurfacePattern(state.sourceSurface, EXTEND_CLAMP, state.surfTransform),
-                DrawOptions(aOpacity, state.op));
-    } else {
-      mDT->Fill(mPath, ColorPattern(state.color),
-                DrawOptions(aOpacity, state.op));
+    mDT->Fill(mPath, GeneralPattern(this), DrawOptions(aOpacity, state.op));
+  }
+}
+
+void
+gfxContext::PushClipsToDT(DrawTarget *aDT)
+{
+  // Tricky, we have to restore all clips -since the last time- the clip
+  // was reset. If we didn't reset the clip, just popping the clips we
+  // added was fine.
+  uint32_t lastReset = 0;
+  for (int i = mStateStack.size() - 2; i > 0; i--) {
+    if (mStateStack[i].clipWasReset) {
+      lastReset = i;
+    }
+  }
+
+  // Don't need to save the old transform, we'll be setting a new one soon!
+
+  // Push all clips from the last state on the stack where the clip was
+  // reset to the clip before ours.
+  for (int i = lastReset; i < mStateStack.size() - 1; i++) {
+    for (int c = 0; c < mStateStack[i].pushedClips.size(); c++) {
+      aDT->SetTransform(mStateStack[i].pushedClips[c].transform);
+      aDT->PushClip(mStateStack[i].pushedClips[c].path);
     }
   }
 }

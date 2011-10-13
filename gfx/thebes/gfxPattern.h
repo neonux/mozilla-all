@@ -62,6 +62,7 @@ public:
     gfxPattern(gfxFloat x0, gfxFloat y0, gfxFloat x1, gfxFloat y1); // linear
     gfxPattern(gfxFloat cx0, gfxFloat cy0, gfxFloat radius0,
                gfxFloat cx1, gfxFloat cy1, gfxFloat radius1); // radial
+    gfxPattern(mozilla::gfx::SourceSurface *aSurface); // Azure
     virtual ~gfxPattern();
 
     cairo_pattern_t *CairoPattern();
@@ -132,6 +133,7 @@ protected:
     };
 
     mozilla::RefPtr<mozilla::gfx::SourceSurface> mSourceSurface;
+    mozilla::gfx::Matrix mTransform;
     mozilla::RefPtr<mozilla::gfx::GradientStops> mStops;
 };
 

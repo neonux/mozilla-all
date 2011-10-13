@@ -76,6 +76,13 @@ gfxPattern::gfxPattern(gfxFloat cx0, gfxFloat cy0, gfxFloat radius0,
                                            cx1, cy1, radius1);
 }
 
+// Azure
+gfxPattern::gfxPattern(SourceSurface *aSurface)
+  : mPattern(NULL)
+  , mSourceSurface(aSurface)
+{
+}
+
 gfxPattern::~gfxPattern()
 {
     cairo_pattern_destroy(mPattern);
@@ -90,6 +97,7 @@ gfxPattern::CairoPattern()
 void
 gfxPattern::AddColorStop(gfxFloat offset, const gfxRGBA& c)
 {
+  if (mPattern) {
     if (gfxPlatform::GetCMSMode() == eCMSMode_All) {
         gfxRGBA cms;
         gfxPlatform::TransformPixel(c, cms, gfxPlatform::GetCMSRGBTransform());
@@ -101,26 +109,40 @@ gfxPattern::AddColorStop(gfxFloat offset, const gfxRGBA& c)
     }
     else
         cairo_pattern_add_color_stop_rgba(mPattern, offset, c.r, c.g, c.b, c.a);
+  }
 }
 
 void
 gfxPattern::SetMatrix(const gfxMatrix& matrix)
 {
+  if (mPattern) {
     cairo_matrix_t mat = *reinterpret_cast<const cairo_matrix_t*>(&matrix);
     cairo_pattern_set_matrix(mPattern, &mat);
+  } else {
+    mTransform = ToMatrix(matrix);
+  }
 }
 
 gfxMatrix
 gfxPattern::GetMatrix() const
 {
+  if (mPattern) {
     cairo_matrix_t mat;
     cairo_pattern_get_matrix(mPattern, &mat);
     return gfxMatrix(*reinterpret_cast<gfxMatrix*>(&mat));
+  } else {
+    return GFXMatrix(mTransform);
+  }
 }
 
 Pattern*
 gfxPattern::GetPattern(mozilla::gfx::DrawTarget *aTarget)
 {
+  if (!mPattern) {
+    new (mSurfacePattern.addr()) SurfacePattern(mSourceSurface, EXTEND_CLAMP, mTransform);
+    return mSurfacePattern.addr();
+  }
+
   switch (cairo_pattern_get_type(mPattern)) {
   case CAIRO_PATTERN_TYPE_SURFACE:
     {
@@ -219,6 +241,7 @@ gfxPattern::GetPattern(mozilla::gfx::DrawTarget *aTarget)
 void
 gfxPattern::SetExtend(GraphicsExtend extend)
 {
+  if (mPattern) {
     if (extend == EXTEND_PAD_EDGE) {
         if (cairo_pattern_get_type(mPattern) == CAIRO_PATTERN_TYPE_SURFACE) {
             cairo_surface_t *surf = NULL;
@@ -246,24 +269,35 @@ gfxPattern::SetExtend(GraphicsExtend extend)
     }
 
     cairo_pattern_set_extend(mPattern, (cairo_extend_t)extend);
+  }
 }
 
 gfxPattern::GraphicsExtend
 gfxPattern::Extend() const
 {
+  if (mPattern) {
     return (GraphicsExtend)cairo_pattern_get_extend(mPattern);
+  } else {
+    return EXTEND_PAD;
+  }
 }
 
 void
 gfxPattern::SetFilter(GraphicsFilter filter)
 {
+  if (mPattern) {
     cairo_pattern_set_filter(mPattern, (cairo_filter_t)filter);
+  }
 }
 
 gfxPattern::GraphicsFilter
 gfxPattern::Filter() const
 {
+  if (mPattern) {
     return (GraphicsFilter)cairo_pattern_get_filter(mPattern);
+  } else {
+    return FILTER_BILINEAR;
+  }
 }
 
 bool
@@ -279,22 +313,34 @@ gfxPattern::GetSolidColor(gfxRGBA& aColor)
 already_AddRefed<gfxASurface>
 gfxPattern::GetSurface()
 {
+  if (mPattern) {
     cairo_surface_t *surf = nsnull;
 
     if (cairo_pattern_get_surface (mPattern, &surf) != CAIRO_STATUS_SUCCESS)
         return nsnull;
 
     return gfxASurface::Wrap(surf);
+  } else {
+    return NULL;
+  }
 }
 
 gfxPattern::GraphicsPatternType
 gfxPattern::GetType() const
 {
+  if (mPattern) {
     return (GraphicsPatternType) cairo_pattern_get_type(mPattern);
+  } else {
+    return PATTERN_SURFACE;
+  }
 }
 
 int
 gfxPattern::CairoStatus()
 {
+  if (mPattern) {
     return cairo_pattern_status(mPattern);
+  } else {
+    return 0;
+  }
 }
