@@ -770,13 +770,13 @@ nsGenericHTMLElement::SetInnerHTML(const nsAString& aInnerHTML)
 
   if (doc->IsHTML()) {
     PRInt32 oldChildCount = GetChildCount();
-    nsContentUtils::ParseFragmentHTML(aInnerHTML,
-                                      this,
-                                      Tag(),
-                                      GetNameSpaceID(),
-                                      doc->GetCompatibilityMode() ==
-                                          eCompatibility_NavQuirks,
-                                      PR_TRUE);
+    rv = nsContentUtils::ParseFragmentHTML(aInnerHTML,
+                                           this,
+                                           Tag(),
+                                           GetNameSpaceID(),
+                                           doc->GetCompatibilityMode() ==
+                                             eCompatibility_NavQuirks,
+                                           PR_TRUE);
     // HTML5 parser has notified, but not fired mutation events.
     FireMutationEventsForDirectParsing(doc, this, oldChildCount);
   } else {
@@ -841,6 +841,7 @@ nsGenericHTMLElement::InsertAdjacentHTML(const nsAString& aPosition,
   // Batch possible DOMSubtreeModified events.
   mozAutoSubtreeModified subtree(doc, nsnull);
 
+  nsresult rv;
   // Parse directly into destination if possible
   if (doc->IsHTML() &&
       (position == eBeforeEnd ||
@@ -855,24 +856,24 @@ nsGenericHTMLElement::InsertAdjacentHTML(const nsAString& aPosition,
       // Spec bug: http://www.w3.org/Bugs/Public/show_bug.cgi?id=12434
       contextLocal = nsGkAtoms::body;
     }
-    nsContentUtils::ParseFragmentHTML(aText,
-                                      destination,
-                                      contextLocal,
-                                      contextNs,
-                                      doc->GetCompatibilityMode() ==
-                                          eCompatibility_NavQuirks,
-                                      PR_TRUE);
+    rv = nsContentUtils::ParseFragmentHTML(aText,
+                                           destination,
+                                           contextLocal,
+                                           contextNs,
+                                           doc->GetCompatibilityMode() ==
+                                             eCompatibility_NavQuirks,
+                                           PR_TRUE);
     // HTML5 parser has notified, but not fired mutation events.
     FireMutationEventsForDirectParsing(doc, destination, oldChildCount);
-    return NS_OK;
+    return rv;
   }
 
   // couldn't parse directly
   nsCOMPtr<nsIDOMDocumentFragment> df;
-  nsresult rv = nsContentUtils::CreateContextualFragment(destination,
-                                                         aText,
-                                                         PR_TRUE,
-                                                         getter_AddRefs(df));
+  rv = nsContentUtils::CreateContextualFragment(destination,
+                                                aText,
+                                                PR_TRUE,
+                                                getter_AddRefs(df));
   nsCOMPtr<nsINode> fragment = do_QueryInterface(df);
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -3174,8 +3175,7 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(nsGenericHTMLFrameElement,
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
 NS_INTERFACE_TABLE_HEAD(nsGenericHTMLFrameElement)
-  NS_INTERFACE_TABLE_INHERITED2(nsGenericHTMLFrameElement,
-                                nsIDOMNSHTMLFrameElement,
+  NS_INTERFACE_TABLE_INHERITED1(nsGenericHTMLFrameElement,
                                 nsIFrameLoaderOwner)
   NS_INTERFACE_TABLE_TO_MAP_SEGUE_CYCLE_COLLECTION(nsGenericHTMLFrameElement)
 NS_INTERFACE_MAP_END_INHERITING(nsGenericHTMLElement)
@@ -3196,7 +3196,7 @@ nsGenericHTMLFrameElement::GetContentDocument(nsIDOMDocument** aContentDocument)
   return win->GetDocument(aContentDocument);
 }
 
-NS_IMETHODIMP
+nsresult
 nsGenericHTMLFrameElement::GetContentWindow(nsIDOMWindow** aContentWindow)
 {
   NS_PRECONDITION(aContentWindow, "Null out param");

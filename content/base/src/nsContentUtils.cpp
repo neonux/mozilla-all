@@ -200,9 +200,12 @@ static NS_DEFINE_CID(kXTFServiceCID, NS_XTFSERVICE_CID);
 #endif
 #include "nsDOMTouchEvent.h"
 #include "nsIScriptElement.h"
+#include "nsIContentViewer.h"
+
 #include "prdtoa.h"
 
 #include "mozilla/Preferences.h"
+
 #include "nsWrapperCacheInlines.h"
 
 using namespace mozilla::dom;
@@ -272,6 +275,7 @@ PRUint32 nsContentUtils::sHandlingInputTimeout = 1000;
 nsHtml5Parser* nsContentUtils::sHTMLFragmentParser = nsnull;
 nsIParser* nsContentUtils::sXMLFragmentParser = nsnull;
 nsIFragmentContentSink* nsContentUtils::sXMLFragmentSink = nsnull;
+bool nsContentUtils::sFragmentParsingActive = false;
 
 static PLDHashTable sEventListenerManagersHash;
 
@@ -3509,27 +3513,28 @@ nsContentUtils::CreateContextualFragment(nsINode* aContextNode,
       }
     }
     
+    nsresult rv;
     nsCOMPtr<nsIContent> fragment = do_QueryInterface(frag);
     if (contextAsContent && !contextAsContent->IsHTML(nsGkAtoms::html)) {
-      ParseFragmentHTML(aFragment,
-                        fragment,
-                        contextAsContent->Tag(),
-                        contextAsContent->GetNameSpaceID(),
-                        (document->GetCompatibilityMode() ==
-                            eCompatibility_NavQuirks),
-                        aPreventScriptExecution);
+      rv = ParseFragmentHTML(aFragment,
+                             fragment,
+                             contextAsContent->Tag(),
+                             contextAsContent->GetNameSpaceID(),
+                             (document->GetCompatibilityMode() ==
+                               eCompatibility_NavQuirks),
+                             aPreventScriptExecution);
     } else {
-      ParseFragmentHTML(aFragment,
-                        fragment,
-                        nsGkAtoms::body,
-                        kNameSpaceID_XHTML,
-                        (document->GetCompatibilityMode() ==
-                            eCompatibility_NavQuirks),
-                        aPreventScriptExecution);
+      rv = ParseFragmentHTML(aFragment,
+                             fragment,
+                             nsGkAtoms::body,
+                             kNameSpaceID_XHTML,
+                             (document->GetCompatibilityMode() ==
+                               eCompatibility_NavQuirks),
+                             aPreventScriptExecution);
     }
 
     frag.forget(aReturn);
-    return NS_OK;
+    return rv;
   }
 
   nsAutoTArray<nsString, 32> tagStack;
@@ -3611,7 +3616,7 @@ nsContentUtils::XPCOMShutdown()
 }
 
 /* static */
-void
+nsresult
 nsContentUtils::ParseFragmentHTML(const nsAString& aSourceBuffer,
                                   nsIContent* aTargetNode,
                                   nsIAtom* aContextLocalName,
@@ -3619,18 +3624,26 @@ nsContentUtils::ParseFragmentHTML(const nsAString& aSourceBuffer,
                                   bool aQuirks,
                                   bool aPreventScriptExecution)
 {
+  if (nsContentUtils::sFragmentParsingActive) {
+    NS_NOTREACHED("Re-entrant fragment parsing attempted.");
+    return NS_ERROR_DOM_INVALID_STATE_ERR;
+  }
+  mozilla::AutoRestore<bool> guard(nsContentUtils::sFragmentParsingActive);
+  nsContentUtils::sFragmentParsingActive = true;
   if (!sHTMLFragmentParser) {
     sHTMLFragmentParser =
       static_cast<nsHtml5Parser*>(nsHtml5Module::NewHtml5Parser().get());
     // Now sHTMLFragmentParser owns the object
   }
-  sHTMLFragmentParser->ParseHtml5Fragment(aSourceBuffer,
-                                          aTargetNode,
-                                          aContextLocalName,
-                                          aContextNamespace,
-                                          aQuirks,
-                                          aPreventScriptExecution);
+  nsresult rv =
+    sHTMLFragmentParser->ParseHtml5Fragment(aSourceBuffer,
+                                            aTargetNode,
+                                            aContextLocalName,
+                                            aContextNamespace,
+                                            aQuirks,
+                                            aPreventScriptExecution);
   sHTMLFragmentParser->Reset();
+  return rv;
 }
 
 /* static */
@@ -3641,6 +3654,12 @@ nsContentUtils::ParseFragmentXML(const nsAString& aSourceBuffer,
                                  bool aPreventScriptExecution,
                                  nsIDOMDocumentFragment** aReturn)
 {
+  if (nsContentUtils::sFragmentParsingActive) {
+    NS_NOTREACHED("Re-entrant fragment parsing attempted.");
+    return NS_ERROR_DOM_INVALID_STATE_ERR;
+  }
+  mozilla::AutoRestore<bool> guard(nsContentUtils::sFragmentParsingActive);
+  nsContentUtils::sFragmentParsingActive = true;
   if (!sXMLFragmentParser) {
     nsCOMPtr<nsIParser> parser = do_CreateInstance(kCParserCID);
     parser.forget(&sXMLFragmentParser);
