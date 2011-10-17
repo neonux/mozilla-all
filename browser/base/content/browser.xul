@@ -276,6 +276,9 @@
     <menupopup id="contentAreaContextMenu" pagemenu="start"
                onpopupshowing="if (event.target != this)
                                  return true;
+#ifdef XP_MACOSX
+                               selectContext(event);
+#endif
                                gContextMenu = new nsContextMenu(this, gBrowser, event.shiftKey);
                                if (gContextMenu.shouldDisplay)
                                  updateEditUIVisibility();
