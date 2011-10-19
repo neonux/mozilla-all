@@ -2890,40 +2890,37 @@ panel[dimmed="true"] {
 
 /* lighten active tab and toolbar */
 
-#navigator-toolbox[tabsontop=true] toolbar:not(#TabsToolbar),
-[tabsontop=true] > * > * > * > .tab-background-start[selected],
-[tabsontop=true] > * > * > * > .tab-background-middle[selected],
-[tabsontop=true] > * > * > * > .tab-background-end[selected] {
+#navigator-toolbox[tabsontop=true] toolbar:not(#TabsToolbar):not(:-moz-lwtheme),
+[tabsontop=true] > * > * > * > .tab-background-start[selected]:not(:-moz-lwtheme),
+[tabsontop=true] > * > * > * > .tab-background-middle[selected]:not(:-moz-lwtheme),
+[tabsontop=true] > * > * > * > .tab-background-end[selected]:not(:-moz-lwtheme) {
   box-shadow: 0 0 0 2em rgba(255,255,255,.3) inset;
 }
 
-#nav-bar > * > .toolbarbutton-icon,
-#nav-bar > * > * > .toolbarbutton-icon {
+#navigator-toolbox[tabsontop=true] #nav-bar > * > .toolbarbutton-icon:not(:-moz-lwtheme),
+#navigator-toolbox[tabsontop=true] #nav-bar > * > * > .toolbarbutton-icon:not(:-moz-lwtheme) {
   opacity: .85;
 }
 
-#urlbar[focused=true],
-.searchbar-textbox[focused=true] {
+#navigator-toolbox[tabsontop=true] #urlbar[focused=true]:not(:-moz-lwtheme),
+#navigator-toolbox[tabsontop=true] #searchbar > .searchbar-textbox[focused=true]:not(:-moz-lwtheme) {
   box-shadow: 0 0 1px -moz-mac-focusring inset, 0 0 2px -moz-mac-focusring,
               0 0 1px -moz-mac-focusring !important;
 }
 
 /* adjust tab internal alignment */
 
-.tab-label:not([pinned]) {
+[tabsontop=true] > * > * > * > .tab-label:not([pinned]):not(:-moz-lwtheme) {
   text-align: start;
-  -moz-margin-end: -3px !important;
+  -moz-margin-end: -3px;
 }
 
-.tab-close-button {
+[tabsontop=true] > * > * > * > .tab-close-button:not([pinned]):not(:-moz-lwtheme) {
+  -moz-margin-end: -2px;
   -moz-transition: opacity .2s ease-out;
 }
 
-.tab-close-button:not([pinned]) {
-  -moz-margin-end: -2px !important;
-}
-
-:not(:hover) > * > * > .tab-close-button:not([selected]) {
+[tabsontop=true] > :not(:hover) > * > * > .tab-close-button:not([pinned]):not([selected]):not(:-moz-lwtheme) {
   opacity: 0;
 }
 
@@ -3001,45 +2998,40 @@ panel[dimmed="true"] {
 
 /* hide tabs menu in non-overflow mode */
 
-#tabbrowser-tabs:not([overflow]) + #new-tab-button + #alltabs-button,
-#tabbrowser-tabs:not([overflow]) + #alltabs-button {
+#tabbrowser-tabs[tabsontop=true]:not([overflow]) + #new-tab-button + #alltabs-button:not(:-moz-lwtheme),
+#tabbrowser-tabs[tabsontop=true]:not([overflow]) + #alltabs-button:not(:-moz-lwtheme) {
   visibility: collapse;
 }
 
-#tabbrowser-tabs[locked]:not([overflow]) + #new-tab-button + #alltabs-button,
-#tabbrowser-tabs[locked]:not([overflow]) + #alltabs-button {
+#tabbrowser-tabs[tabsontop=true][locked]:not([overflow]) + #new-tab-button + #alltabs-button:not(:-moz-lwtheme),
+#tabbrowser-tabs[tabsontop=true][locked]:not([overflow]) + #alltabs-button:not(:-moz-lwtheme) {
   visibility: hidden;
 }
 
 /* additional stuff */
 
-.tabs-newtab-button,
-#new-tab-button {
+[tabsontop=true] > * > .tabs-newtab-button:not(:-moz-lwtheme),
+[tabsontop=true] > #new-tab-button:not(:-moz-lwtheme) {
   opacity: .7;
 }
 
-.tabs-newtab-button:hover,
-#new-tab-button:hover {
+[tabsontop=true] > * > .tabs-newtab-button:hover:not(:-moz-lwtheme),
+[tabsontop=true] > #new-tab-button:hover:not(:-moz-lwtheme) {
   opacity: .85;
   background: none !important;
 }
 
-.tabs-newtab-button {
-  margin-top: -1px;
-  margin-bottom: 1px;
+[tabsontop=true] > #new-tab-button > .toolbarbutton-icon:not(:-moz-lwtheme),
+[tabsontop=true] > #alltabs-button > .toolbarbutton-icon:not(:-moz-lwtheme),
+[tabsontop=true] > .tabbrowser-arrowscrollbox > .scrollbutton-up > .toolbarbutton-icon:not(:-moz-lwtheme),
+[tabsontop=true] > .tabbrowser-arrowscrollbox > .scrollbutton-down > .toolbarbutton-icon:not(:-moz-lwtheme) {
+  margin-bottom: -3px !important;
 }
 
-#new-tab-button > .toolbarbutton-icon,
-#alltabs-button > .toolbarbutton-icon,
-.tabbrowser-arrowscrollbox > .scrollbutton-up > .toolbarbutton-icon,
-.tabbrowser-arrowscrollbox > .scrollbutton-down > .toolbarbutton-icon {
-  margin-bottom: -2px !important;
-}
-
-#alltabs-button {
+[tabsontop=true] > #alltabs-button:not(:-moz-lwtheme) {
   min-width: 24px !important;
 }
 
-.tabbrowser-tab[fadein]:not([pinned]) {
+[tabsontop=true] > .tabbrowser-tab[fadein]:not([pinned]):not(:-moz-lwtheme) {
   min-width: 102px;
 }
