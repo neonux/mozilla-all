@@ -2885,3 +2885,161 @@ panel[dimmed="true"] {
 #highlighter-nodeinfobar-container[hide-arrow] > #highlighter-nodeinfobar {
   margin: 7px 0;
 }
+
+/* Polaris - experimental stuff that will be integrated soon */
+
+/* lighten active tab and toolbar */
+
+#navigator-toolbox[tabsontop=true] toolbar:not(#TabsToolbar),
+[tabsontop=true] > * > * > * > .tab-background-start[selected],
+[tabsontop=true] > * > * > * > .tab-background-middle[selected],
+[tabsontop=true] > * > * > * > .tab-background-end[selected] {
+  box-shadow: 0 0 0 2em rgba(255,255,255,.3) inset;
+}
+
+#nav-bar > * > .toolbarbutton-icon,
+#nav-bar > * > * > .toolbarbutton-icon {
+  opacity: .85;
+}
+
+#urlbar[focused=true],
+.searchbar-textbox[focused=true] {
+  box-shadow: 0 0 1px -moz-mac-focusring inset, 0 0 2px -moz-mac-focusring,
+              0 0 1px -moz-mac-focusring !important;
+}
+
+/* adjust tab internal alignment */
+
+.tab-label:not([pinned]) {
+  text-align: start;
+  -moz-margin-end: -3px !important;
+}
+
+.tab-close-button {
+  -moz-transition: opacity .2s ease-out;
+}
+
+.tab-close-button:not([pinned]) {
+  -moz-margin-end: -2px !important;
+}
+
+:not(:hover) > * > * > .tab-close-button:not([selected]) {
+  opacity: 0;
+}
+
+/* widen active tab and subtly theme background tabs */
+
+[tabsontop=true] > * > * > .tab-content:not([selected]):not(:-moz-lwtheme),
+[tabsontop=true] > * > .tabs-newtab-button > .toolbarbutton-icon:not(:-moz-lwtheme) {
+  -moz-border-image: none !important;
+}
+
+[tabsontop=true] > * > * > * > .tab-background:not([selected]):not(:-moz-lwtheme) {
+  background: none !important;
+}
+
+[tabsontop=true] > * > * > * > .tab-background-start:not([selected]):not(:-moz-lwtheme),
+[tabsontop=true] > * > * > * > .tab-background-end:not([selected]):not(:-moz-lwtheme) {
+  mask: none !important;
+  background: -moz-linear-gradient(#bbb,#777,#666) 4px no-repeat !important;
+  background-size: 1px auto !important;
+}
+
+[tabsontop=true] > * > * > * > .tab-background-start:-moz-window-inactive:not([selected]):not(:-moz-lwtheme),
+[tabsontop=true] > * > * > * > .tab-background-end:-moz-window-inactive:not([selected]):not(:-moz-lwtheme) {
+  background-image: -moz-linear-gradient(#ddd,#999,#888) !important;
+}
+
+@media (-moz-mac-lion-theme) {
+  [tabsontop=true] > * > * > * > .tab-background-start:not([selected]):not(:-moz-lwtheme),
+  [tabsontop=true] > * > * > * > .tab-background-end:not([selected]):not(:-moz-lwtheme) {
+    background-image: -moz-linear-gradient(#ccc,#888,#777) !important;
+  }
+  
+  [tabsontop=true] > * > * > * > .tab-background-start:-moz-window-inactive:not([selected]):not(:-moz-lwtheme),
+  [tabsontop=true] > * > * > * > .tab-background-end:-moz-window-inactive:not([selected]):not(:-moz-lwtheme) {
+    background-image: -moz-linear-gradient(#eee,#aaa,#999) !important;
+  }
+}
+
+[tabsontop=true] > * > * > * > .tab-background-start:not([selected]):-moz-locale-dir(rtl):not(:-moz-lwtheme),
+[tabsontop=true] > * > * > * > .tab-background-end:not([selected]):-moz-locale-dir(ltr):not(:-moz-lwtheme) {
+  background-position: 7px !important;
+}
+
+[tabsontop=true]:first-child > :first-child[pinned] > * > * > .tab-background-start:not([selected]):not(:-moz-lwtheme),
+[tabsontop=true]:first-child:not([overflow]) > :first-child > * > * > .tab-background-start:not([selected]):not(:-moz-lwtheme),
+[tabsontop=true][drag]:first-child > :first-child[pinned] + * > * > * > .tab-background-start:not([selected]):not(:-moz-lwtheme),
+[tabsontop=true][drag]:first-child:not([overflow]) > :first-child + * > * > * > .tab-background-start:not([selected]):not(:-moz-lwtheme) {
+  opacity: 0;
+  -moz-margin-start: -5px;
+}
+
+[tabsontop=true] > * > * > .tab-content[selected]:not(:-moz-lwtheme) {
+  -moz-margin-start: -6px !important;
+  -moz-padding-start: 1px;
+}
+
+:not([customizing]) > * > [tabsontop=true] > * > * > .tab-content[selected][pinned]:not(:-moz-lwtheme),
+:not([customizing]) > * > [tabsontop=true]:not([overflow]) > * > * > .tab-content[selected]:not(:-moz-lwtheme),
+:not([customizing]) > * > [tabsontop=true][overflow] > :not(:last-child) > * > .tab-content[selected]:not(:-moz-lwtheme) {
+  -moz-margin-end: -5px !important;
+  -moz-padding-end: 1px;
+}
+
+[tabsontop=true] > * > * > * > .tab-background-middle:not([selected]):not(:-moz-lwtheme) {
+  background: -moz-linear-gradient(rgba(255,255,255,0),rgba(255,255,255,.35));
+  margin: 0 -7px;
+  -moz-transition: opacity .2s ease-out;
+}
+
+[customizing] > * > [tabsontop=true] > * > * > * > .tab-background-start:not([selected]):not(:-moz-lwtheme),
+[tabsontop=true] > :not(:hover) > * > * > .tab-background-middle:not([selected]):not([pinned]):not(:-moz-lwtheme),
+[tabsontop=true] > :not(:hover) > * > * > .tab-background-middle:not([selected]):not([titlechanged]):not(:-moz-lwtheme) {
+  opacity: 0;
+}
+
+/* hide tabs menu in non-overflow mode */
+
+#tabbrowser-tabs:not([overflow]) + #new-tab-button + #alltabs-button,
+#tabbrowser-tabs:not([overflow]) + #alltabs-button {
+  visibility: collapse;
+}
+
+#tabbrowser-tabs[locked]:not([overflow]) + #new-tab-button + #alltabs-button,
+#tabbrowser-tabs[locked]:not([overflow]) + #alltabs-button {
+  visibility: hidden;
+}
+
+/* additional stuff */
+
+.tabs-newtab-button,
+#new-tab-button {
+  opacity: .7;
+}
+
+.tabs-newtab-button:hover,
+#new-tab-button:hover {
+  opacity: .85;
+  background: none !important;
+}
+
+.tabs-newtab-button {
+  margin-top: -1px;
+  margin-bottom: 1px;
+}
+
+#new-tab-button > .toolbarbutton-icon,
+#alltabs-button > .toolbarbutton-icon,
+.tabbrowser-arrowscrollbox > .scrollbutton-up > .toolbarbutton-icon,
+.tabbrowser-arrowscrollbox > .scrollbutton-down > .toolbarbutton-icon {
+  margin-bottom: -2px !important;
+}
+
+#alltabs-button {
+  min-width: 24px !important;
+}
+
+.tabbrowser-tab[fadein]:not([pinned]) {
+  min-width: 102px;
+}
