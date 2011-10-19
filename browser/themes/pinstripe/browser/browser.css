@@ -2890,37 +2890,40 @@ panel[dimmed="true"] {
 
 /* lighten active tab and toolbar */
 
-#navigator-toolbox[tabsontop=true] toolbar:not(#TabsToolbar):not(:-moz-lwtheme),
-[tabsontop=true] > * > * > * > .tab-background-start[selected]:not(:-moz-lwtheme),
-[tabsontop=true] > * > * > * > .tab-background-middle[selected]:not(:-moz-lwtheme),
-[tabsontop=true] > * > * > * > .tab-background-end[selected]:not(:-moz-lwtheme) {
+#navigator-toolbox[tabsontop=true] toolbar:not(#TabsToolbar),
+[tabsontop=true] > * > * > * > .tab-background-start[selected],
+[tabsontop=true] > * > * > * > .tab-background-middle[selected],
+[tabsontop=true] > * > * > * > .tab-background-end[selected] {
   box-shadow: 0 0 0 2em rgba(255,255,255,.3) inset;
 }
 
-#navigator-toolbox[tabsontop=true] #nav-bar > * > .toolbarbutton-icon:not(:-moz-lwtheme),
-#navigator-toolbox[tabsontop=true] #nav-bar > * > * > .toolbarbutton-icon:not(:-moz-lwtheme) {
+#nav-bar > * > .toolbarbutton-icon,
+#nav-bar > * > * > .toolbarbutton-icon {
   opacity: .85;
 }
 
-#navigator-toolbox[tabsontop=true] #urlbar[focused=true]:not(:-moz-lwtheme),
-#navigator-toolbox[tabsontop=true] #searchbar > .searchbar-textbox[focused=true]:not(:-moz-lwtheme) {
+#urlbar[focused=true],
+.searchbar-textbox[focused=true] {
   box-shadow: 0 0 1px -moz-mac-focusring inset, 0 0 2px -moz-mac-focusring,
               0 0 1px -moz-mac-focusring !important;
 }
 
 /* adjust tab internal alignment */
 
-[tabsontop=true] > * > * > * > .tab-label:not([pinned]):not(:-moz-lwtheme) {
+.tab-label:not([pinned]) {
   text-align: start;
-  -moz-margin-end: -3px;
+  -moz-margin-end: -3px !important;
 }
 
-[tabsontop=true] > * > * > * > .tab-close-button:not([pinned]):not(:-moz-lwtheme) {
-  -moz-margin-end: -2px;
+.tab-close-button {
   -moz-transition: opacity .2s ease-out;
 }
 
-[tabsontop=true] > :not(:hover) > * > * > .tab-close-button:not([pinned]):not([selected]):not(:-moz-lwtheme) {
+.tab-close-button:not([pinned]) {
+  -moz-margin-end: -2px !important;
+}
+
+:not(:hover) > * > * > .tab-close-button:not([selected]) {
   opacity: 0;
 }
 
@@ -2998,40 +3001,45 @@ panel[dimmed="true"] {
 
 /* hide tabs menu in non-overflow mode */
 
-#tabbrowser-tabs[tabsontop=true]:not([overflow]) + #new-tab-button + #alltabs-button:not(:-moz-lwtheme),
-#tabbrowser-tabs[tabsontop=true]:not([overflow]) + #alltabs-button:not(:-moz-lwtheme) {
+#tabbrowser-tabs:not([overflow]) + #new-tab-button + #alltabs-button,
+#tabbrowser-tabs:not([overflow]) + #alltabs-button {
   visibility: collapse;
 }
 
-#tabbrowser-tabs[tabsontop=true][locked]:not([overflow]) + #new-tab-button + #alltabs-button:not(:-moz-lwtheme),
-#tabbrowser-tabs[tabsontop=true][locked]:not([overflow]) + #alltabs-button:not(:-moz-lwtheme) {
+#tabbrowser-tabs[locked]:not([overflow]) + #new-tab-button + #alltabs-button,
+#tabbrowser-tabs[locked]:not([overflow]) + #alltabs-button {
   visibility: hidden;
 }
 
 /* additional stuff */
 
-[tabsontop=true] > * > .tabs-newtab-button:not(:-moz-lwtheme),
-[tabsontop=true] > #new-tab-button:not(:-moz-lwtheme) {
+.tabs-newtab-button,
+#new-tab-button {
   opacity: .7;
 }
 
-[tabsontop=true] > * > .tabs-newtab-button:hover:not(:-moz-lwtheme),
-[tabsontop=true] > #new-tab-button:hover:not(:-moz-lwtheme) {
+.tabs-newtab-button:hover,
+#new-tab-button:hover {
   opacity: .85;
   background: none !important;
 }
 
-[tabsontop=true] > #new-tab-button > .toolbarbutton-icon:not(:-moz-lwtheme),
-[tabsontop=true] > #alltabs-button > .toolbarbutton-icon:not(:-moz-lwtheme),
-[tabsontop=true] > .tabbrowser-arrowscrollbox > .scrollbutton-up > .toolbarbutton-icon:not(:-moz-lwtheme),
-[tabsontop=true] > .tabbrowser-arrowscrollbox > .scrollbutton-down > .toolbarbutton-icon:not(:-moz-lwtheme) {
-  margin-bottom: -3px !important;
+.tabs-newtab-button {
+  margin-top: -1px;
+  margin-bottom: 1px;
 }
 
-[tabsontop=true] > #alltabs-button:not(:-moz-lwtheme) {
+#new-tab-button > .toolbarbutton-icon,
+#alltabs-button > .toolbarbutton-icon,
+.tabbrowser-arrowscrollbox > .scrollbutton-up > .toolbarbutton-icon,
+.tabbrowser-arrowscrollbox > .scrollbutton-down > .toolbarbutton-icon {
+  margin-bottom: -2px !important;
+}
+
+#alltabs-button {
   min-width: 24px !important;
 }
 
-[tabsontop=true] > .tabbrowser-tab[fadein]:not([pinned]):not(:-moz-lwtheme) {
+.tabbrowser-tab[fadein]:not([pinned]) {
   min-width: 102px;
 }
