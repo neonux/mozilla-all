@@ -181,6 +181,7 @@ XPCOMUtils.defineLazyGetter(this, "InspectorUI", function() {
 
 let gInitialPages = [
   "about:blank",
+  "about:newtab",
   "about:privatebrowsing",
   "about:sessionrestore"
 ];
@@ -2180,10 +2181,10 @@ function BrowserOpenTab()
   if (!gBrowser) {
     // If there are no open browser windows, open a new one
     window.openDialog("chrome://browser/content/", "_blank",
-                      "chrome,all,dialog=no", "about:blank");
+                      "chrome,all,dialog=no", "about:newtab");
     return;
   }
-  gBrowser.loadOneTab("about:blank", {inBackground: false});
+  gBrowser.loadOneTab("about:newtab", {inBackground: false});
   focusAndSelectUrlBar();
 }
 
