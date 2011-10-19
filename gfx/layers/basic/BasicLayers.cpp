@@ -1336,7 +1336,7 @@ already_AddRefed<gfxContext>
 BasicLayerManager::PushGroupWithCachedSurface(gfxContext *aTarget,
                                               gfxASurface::gfxContentType aContent)
 {
-  if (mCachedSurfaceInUse) {
+  if (mCachedSurfaceInUse || aTarget->IsAzure()) {
     aTarget->PushGroup(aContent);
     nsRefPtr<gfxContext> result = aTarget;
     return result.forget();

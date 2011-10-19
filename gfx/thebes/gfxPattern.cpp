@@ -149,22 +149,22 @@ gfxPattern::GetPattern(mozilla::gfx::DrawTarget *aTarget)
       cairo_matrix_t mat;
       cairo_pattern_get_matrix(mPattern, &mat);
       gfxMatrix matrix(*reinterpret_cast<gfxMatrix*>(&mat));
-      if (mSourceSurface) {
-        Matrix newMat = ToMatrix(matrix);
-        newMat.Invert();
-        new (mSurfacePattern.addr()) SurfacePattern(mSourceSurface, EXTEND_CLAMP, newMat);
-        return mSurfacePattern.addr();
-      }
+
       cairo_surface_t *surf = NULL;
       cairo_pattern_get_surface(mPattern, &surf);
 
-      nsRefPtr<gfxASurface> gfxSurf = gfxASurface::Wrap(surf);
-      mSourceSurface =
-        gfxPlatform::GetPlatform()->GetSourceSurfaceForSurface(aTarget, gfxSurf);
+      if (!mSourceSurface) {
+        nsRefPtr<gfxASurface> gfxSurf = gfxASurface::Wrap(surf);
+        mSourceSurface =
+          gfxPlatform::GetPlatform()->GetSourceSurfaceForSurface(aTarget, gfxSurf);
+      }
 
       if (mSourceSurface) {
         Matrix newMat = ToMatrix(matrix);
         newMat.Invert();
+        double x, y;
+        cairo_surface_get_device_offset(surf, &x, &y);
+        newMat.Translate(-x, -y);
         new (mSurfacePattern.addr()) SurfacePattern(mSourceSurface, EXTEND_CLAMP, newMat);
         return mSurfacePattern.addr();
       }
@@ -172,6 +172,8 @@ gfxPattern::GetPattern(mozilla::gfx::DrawTarget *aTarget)
     }
   case CAIRO_PATTERN_TYPE_LINEAR:
     {
+      double x1, y1, x2, y2;
+      cairo_pattern_get_linear_points(mPattern, &x1, &y1, &x2, &y2);
       if (!mStops) {
         int count = 0;
         cairo_pattern_get_color_stop_count(mPattern, &count);
@@ -192,8 +194,6 @@ gfxPattern::GetPattern(mozilla::gfx::DrawTarget *aTarget)
       }
 
       if (mStops) {
-        double x1, y1, x2, y2;
-        cairo_pattern_get_linear_points(mPattern, &x1, &y1, &x2, &y2);
         new (mLinearGradientPattern.addr())
           LinearGradientPattern(Point(x1, y1), Point(x2, y2), mStops);
 

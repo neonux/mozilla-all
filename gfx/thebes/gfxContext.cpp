@@ -119,6 +119,7 @@ gfxContext::gfxContext(DrawTarget *aTarget)
 {
   mStateStack.resize(1);
   CurrentState().drawTarget = mDT;
+  mDT->SetTransform(Matrix());
 }
 
 gfxContext::~gfxContext()
@@ -266,6 +267,7 @@ void gfxContext::AppendPath(gfxPath* path)
     if (path->mPath->status == CAIRO_STATUS_SUCCESS && path->mPath->num_data != 0)
         cairo_append_path(mCairo, path->mPath);
   } else {
+    return;
   }
 }
 
@@ -528,6 +530,8 @@ gfxContext::Translate(const gfxPoint& pt)
   if (mCairo) {
     cairo_translate(mCairo, pt.x, pt.y);
   } else {
+    NS_ASSERTION(!mPathBuilder, "Cannot change transformation during an active path.");
+
     Matrix newMatrix = mDT->GetTransform();
     mDT->SetTransform(newMatrix.Translate(Float(pt.x), Float(pt.y)));
   }
@@ -539,6 +543,8 @@ gfxContext::Scale(gfxFloat x, gfxFloat y)
   if (mCairo) {
     cairo_scale(mCairo, x, y);
   } else {
+    NS_ASSERTION(!mPathBuilder, "Cannot change transformation during an active path.");
+
     Matrix newMatrix = mDT->GetTransform();
     mDT->SetTransform(newMatrix.Scale(Float(x), Float(y)));
   }
@@ -550,6 +556,10 @@ gfxContext::Rotate(gfxFloat angle)
   if (mCairo) {
     cairo_rotate(mCairo, angle);
   } else {
+    NS_ASSERTION(!mPathBuilder, "Cannot change transformation during an active path.");
+
+    Matrix rotation = Matrix::Rotation(angle);
+    mDT->SetTransform(rotation * mDT->GetTransform());
   }
 }
 
@@ -560,6 +570,8 @@ gfxContext::Multiply(const gfxMatrix& matrix)
     const cairo_matrix_t& mat = reinterpret_cast<const cairo_matrix_t&>(matrix);
     cairo_transform(mCairo, &mat);
   } else {
+    NS_ASSERTION(!mPathBuilder, "Cannot change transformation during an active path.");
+
     mDT->SetTransform(ToMatrix(matrix) * mDT->GetTransform());
   }
 }
@@ -571,6 +583,8 @@ gfxContext::SetMatrix(const gfxMatrix& matrix)
     const cairo_matrix_t& mat = reinterpret_cast<const cairo_matrix_t&>(matrix);
     cairo_set_matrix(mCairo, &mat);
   } else {
+    NS_ASSERTION(!mPathBuilder, "Cannot change transformation during an active path.");
+
     mDT->SetTransform(ToMatrix(matrix));
   }
 }
@@ -581,6 +595,8 @@ gfxContext::IdentityMatrix()
   if (mCairo) {
     cairo_identity_matrix(mCairo);
   } else {
+    NS_ASSERTION(!mPathBuilder, "Cannot change transformation during an active path.");
+
     mDT->SetTransform(Matrix());
   }
 }
@@ -1031,6 +1047,7 @@ gfxContext::SetFillRule(FillRule rule)
   if (mCairo) {
     cairo_set_fill_rule(mCairo, (cairo_fill_rule_t)rule);
   } else {
+    CurrentState().fillRule = rule == FILL_RULE_WINDING ? FILL_WINDING : FILL_EVEN_ODD;
   }
 }
 
@@ -1056,6 +1073,7 @@ gfxContext::Clip(const gfxRect& rect)
     NewPath();
     Rectangle(rect);
     Clip();
+    NewPath();
   }
 }
 
@@ -1129,6 +1147,10 @@ gfxContext::GetClipExtents()
       }
     }
 
+    Matrix mat = mDT->GetTransform();
+    mat.Invert();
+    rect = mat.TransformBounds(rect);
+
     return GFXRect(rect);
   }
 }
@@ -1179,6 +1201,7 @@ gfxContext::SetColor(const gfxRGBA& c)
         cairo_set_source_rgba(mCairo, c.r, c.g, c.b, c.a);
   } else {
     CurrentState().pattern = NULL;
+    CurrentState().sourceSurface = NULL;
 
     if (gfxPlatform::GetCMSMode() == eCMSMode_All) {
 
@@ -1262,7 +1285,16 @@ gfxContext::GetPattern()
     NS_IF_ADDREF(wrapper);
     return wrapper;
   } else {
-    nsRefPtr<gfxPattern> pat = CurrentState().pattern;
+    nsRefPtr<gfxPattern> pat;
+    
+    AzureState &state = CurrentState();
+    if (state.pattern) {
+      pat = state.pattern;
+    } else if (state.sourceSurface) {
+      NS_ASSERTION(false, "Ugh, this isn't good.");
+    } else {
+      pat = new gfxPattern(GFXRGBA(state.color));
+    }
     return pat.forget();
   }
 }
@@ -1362,7 +1394,7 @@ void
 gfxContext::PushGroupAndCopyBackground(gfxASurface::gfxContentType content)
 {
   if (mCairo) {
-    if (content == gfxASurface::CONTENT_COLOR_ALPHA &&
+    if (false && content == gfxASurface::CONTENT_COLOR_ALPHA &&
         !(GetFlags() & FLAG_DISABLE_COPY_BACKGROUND)) {
         nsRefPtr<gfxASurface> s = CurrentSurface();
         if ((s->GetAllowUseAsSource() || s->GetType() == gfxASurface::SurfaceTypeTee) &&
@@ -1391,7 +1423,7 @@ gfxContext::PushGroupAndCopyBackground(gfxASurface::gfxContentType content)
     }
     cairo_push_group_with_content(mCairo, (cairo_content_t) content);
   } else {
-    PushGroup();
+    PushGroup(content);
   }
 }
 
@@ -1720,13 +1752,17 @@ gfxContext::EnsureUserSpacePath()
 
   if (mPathBuilder) {
     mPath = mPathBuilder->Finish();
+    if (CurrentState().fillRule != mPath->GetFillRule()) {
+      mPathBuilder = mPath->CopyToBuilder(CurrentState().fillRule);
+      mPath = mPathBuilder->Finish();
+    }
     mPathBuilder = NULL;
     return;
   }
 
   EnsurePathBuilder();
-  // XXX - Deal with fillrule!
   mPath = mPathBuilder->Finish();
+  mPathBuilder = NULL;
 }
 
 void
@@ -1741,7 +1777,7 @@ gfxContext::EnsurePathBuilder()
     mPath = NULL;
   }
 
-  mPathBuilder = mDT->CreatePathBuilder();
+  mPathBuilder = mDT->CreatePathBuilder(CurrentState().fillRule);
 
   if (mPathIsRect) {
     mPathBuilder->MoveTo(mRect.TopLeft());

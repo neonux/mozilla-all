@@ -395,10 +395,13 @@ ThebesLayerD3D10::DrawRegion(nsIntRegion &aRegion, SurfaceMode aMode)
   const nsIntRect *iterRect;
   while ((iterRect = iter.Next())) {
     context->Rectangle(gfxRect(iterRect->x, iterRect->y, iterRect->width, iterRect->height));      
+    if (mDrawTarget) {
+      mDrawTarget->ClearRect(Rect(iterRect->x, iterRect->y, iterRect->width, iterRect->height));
+    }
   }
   context->Clip();
 
-  if (aMode == SURFACE_SINGLE_CHANNEL_ALPHA) {
+  if (!mDrawTarget && aMode == SURFACE_SINGLE_CHANNEL_ALPHA) {
     context->SetOperator(gfxContext::OPERATOR_CLEAR);
     context->Paint();
     context->SetOperator(gfxContext::OPERATOR_OVER);
