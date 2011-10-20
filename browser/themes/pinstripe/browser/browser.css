@@ -2899,7 +2899,7 @@ panel[dimmed="true"] {
 
 [tabsontop=true] #nav-bar > :not([disabled]) > .toolbarbutton-icon:not(:-moz-lwtheme),
 [tabsontop=true] #nav-bar > * > :not([disabled]) > .toolbarbutton-icon:not(:-moz-lwtheme) {
-  opacity: .85;
+  opacity: .9;
 }
 
 [tabsontop=true] #urlbar[focused=true],
@@ -2945,6 +2945,23 @@ panel[dimmed="true"] {
   background-size: 1px auto !important;
 }
 
+[tabsontop=true] > * > * > * > .tab-background-start:-moz-window-inactive:not([selected]),
+[tabsontop=true] > * > * > * > .tab-background-end:-moz-window-inactive:not([selected]) {
+  background-image: -moz-linear-gradient(hsla(0,0%,55%,0),hsl(0,0%,55%)) !important;
+}
+
+@media (-moz-mac-lion-theme) {
+  [tabsontop=true] > * > * > * > .tab-background-start:not([selected]),
+  [tabsontop=true] > * > * > * > .tab-background-end:not([selected]) {
+    background-image: -moz-linear-gradient(hsla(0,0%,50%,0),hsl(0,0%,50%)) !important;
+  }
+
+  [tabsontop=true] > * > * > * > .tab-background-start:-moz-window-inactive:not([selected]),
+  [tabsontop=true] > * > * > * > .tab-background-end:-moz-window-inactive:not([selected]) {
+    background-image: -moz-linear-gradient(hsla(0,0%,65%,0),hsl(0,0%,65%)) !important;
+  }
+}
+
 [tabsontop=true] > * > * > * > .tab-background-start:not([selected]):-moz-locale-dir(rtl),
 [tabsontop=true] > * > * > * > .tab-background-end:not([selected]):-moz-locale-dir(ltr) {
   background-position: 7px !important;
@@ -2971,7 +2988,7 @@ panel[dimmed="true"] {
 }
 
 [tabsontop=true] > * > * > * > .tab-background-middle:not([selected]) {
-  background: -moz-linear-gradient(rgba(255,255,255,0),rgba(255,255,255,.35));
+  background-image: -moz-linear-gradient(hsla(0,0%,100%,0),hsla(0,0%,100%,.35));
   margin: 0 -7px;
   -moz-transition: opacity .2s ease-out;
 }
