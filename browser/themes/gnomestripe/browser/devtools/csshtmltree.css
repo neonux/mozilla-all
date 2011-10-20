@@ -188,3 +188,109 @@ a.link:visited {
 .userStylesLabel {
   cursor: pointer;
 }
+
+/**
+ * CSS Rule View
+ */
+
+.ruleview {
+  background-color: #FFF;
+  color: #0F2E4C;
+  position: relative;
+  outline: 0;
+}
+
+.ruleview-rule-source {
+  background-color: #DCE2E8;
+  padding: 2px;
+}
+
+.ruleview-code {
+  font-family: monospace;
+  padding: 2px;
+}
+
+.ruleview-propertylist {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.ruleview-enableproperty {
+  height: 10px;
+  width: 10px;
+  -moz-margin-start: 2px;
+  -moz-margin-end: 0px;
+
+  visibility: hidden;
+}
+
+.ruleview-code:hover > .ruleview-propertylist > .ruleview-property > .ruleview-enableproperty {
+  visibility: visible;
+}
+
+.ruleview-expander {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: url("chrome://browser/skin/devtools/arrows.png") 24px 0;
+  cursor: pointer;
+  -moz-margin-start: 2px;
+  -moz-margin-end: 5px;
+  visibility: hidden;
+}
+
+.ruleview-expander[dir="rtl"] {
+  background-position: 16px 0;
+}
+
+.ruleview-expander.styleinspector-open {
+  background-position: 8px 0;
+}
+
+.ruleview-newproperty {
+  /* (enable checkbox width: 12px) + (expander width: 15px) */
+  -moz-margin-start: 27px;
+}
+
+.ruleview-propertyname {
+  display: inline-block;
+  padding: 1px 0 1px 0;
+  cursor: text;
+  color: #0060C0;
+  text-decoration: inherit;
+}
+
+.ruleview-propertyvalue {
+  cursor: text;
+  color: #660000;
+  text-decoration: inherit;
+}
+
+.ruleview-ruleclose {
+  outline: 0;
+}
+
+.ruleview-computedlist {
+  display: none;
+  list-style: none;
+  padding: 0;
+}
+
+.ruleview-computedlist.styleinspector-open {
+  display: block;
+}
+
+.ruleview-computed {
+  -moz-margin-start: 4em;
+}
+
+.ruleview-overridden {
+  text-decoration: line-through;
+}
+
+.styleinspector-propertyeditor {
+  border: 1px solid #CCC;
+  padding: 0;
+  -moz-box-shadow: 2px 2px 2px #CCC;
+}
