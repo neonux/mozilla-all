@@ -1365,6 +1365,9 @@ function BrowserStartup() {
 
   TabsInTitlebar.init();
 
+  document.getElementById("TabsToolbar")
+          .insertItem("new-tab-button", gBrowser.tabContainer.nextSibling);
+
   gPrivateBrowsingUI.init();
 
   DownloadsButton.initializePlaceholder();

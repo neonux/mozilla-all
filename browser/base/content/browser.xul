@@ -811,8 +811,7 @@
                      ondrop="newTabButtonObserver.onDrop(event)"
                      ondragover="newTabButtonObserver.onDragOver(event)"
                      ondragenter="newTabButtonObserver.onDragOver(event)"
-                     ondragexit="newTabButtonObserver.onDragExit(event)"
-                     removable="true"/>
+                     ondragexit="newTabButtonObserver.onDragExit(event)"/>
 
       <toolbarbutton id="downloads-button"
                      class="toolbarbutton-1 chromeclass-toolbar-additional"
