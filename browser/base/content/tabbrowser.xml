@@ -1046,6 +1046,7 @@
         <parameter name="aTab"/>
         <body>
           <![CDATA[
+            aTab.removeAttribute("blank");
             aTab.label = this.mStringBundle.getString("tabs.connecting");
             aTab.crop = "end";
             this._tabAttrModified(aTab);
@@ -1090,6 +1091,12 @@
             if (aTab.label == title &&
                 aTab.crop == crop)
               return false;
+
+            let spec = browser.currentURI.spec;
+            if (spec == "about:blank" || spec == "about:newtab")
+              aTab.setAttribute("blank", true);
+            else
+              aTab.removeAttribute("blank");
 
             aTab.label = title;
             aTab.crop = crop;
@@ -3389,7 +3396,6 @@
       <field name="_tabDefaultMaxWidth">NaN</field>
       <field name="_lastTabClosedByMouse">false</field>
       <field name="_hasTabTempMaxWidth">false</field>
-      <field name="_usingClosingTabsSpacer">false</field>
 
       <!-- Try to keep the active tab's close button under the mouse cursor -->
       <method name="_lockTabSizing">
@@ -3456,7 +3462,7 @@
         <body><![CDATA[
           let spacer = this._closingTabsSpacer;
           spacer.style.width = parseFloat(spacer.style.width) + pixels + "px";
-          this._usingClosingTabsSpacer = true;
+          this.setAttribute("hasspacer", true);
           window.addEventListener("mouseout", this);
         ]]></body>
       </method>
@@ -3470,8 +3476,8 @@
             for (let i = 0; i < tabs.length; i++)
               tabs[i].style.maxWidth = "";
           }
-          if (this._usingClosingTabsSpacer) {
-            this._usingClosingTabsSpacer = false;
+          if (this.hasAttribute("hasspacer")) {
+            this.removeAttribute("hasspacer");
             this._closingTabsSpacer.style.width = 0;
           }
         ]]></body>
