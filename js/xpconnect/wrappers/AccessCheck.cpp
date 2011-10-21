@@ -37,6 +37,8 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "mozilla/Util.h"
+
 #include "AccessCheck.h"
 
 #include "nsJSPrincipals.h"
@@ -51,6 +53,7 @@
 
 #include "jsfriendapi.h"
 
+using namespace mozilla;
 using namespace js;
 
 namespace xpc {
@@ -231,7 +234,7 @@ GetPrincipal(JSObject *obj)
     }
 
     nsIXPConnect *xpc = nsXPConnect::GetRuntimeInstance()->GetXPConnect();
-    return xpc->GetPrincipal(obj, PR_TRUE);
+    return xpc->GetPrincipal(obj, true);
 }
 
 bool
@@ -359,7 +362,7 @@ AccessCheck::isSystemOnlyAccessPermitted(JSContext *cx)
     const char *filename;
     if (fp &&
         (filename = JS_GetScriptFilename(cx, JS_GetFrameScript(cx, fp))) &&
-        !strncmp(filename, prefix, NS_ARRAY_LENGTH(prefix) - 1)) {
+        !strncmp(filename, prefix, ArrayLength(prefix) - 1)) {
         return true;
     }
 

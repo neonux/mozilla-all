@@ -43,6 +43,8 @@
 
 /* Data conversion between native and JavaScript types. */
 
+#include "mozilla/Util.h"
+
 #include "xpcprivate.h"
 #include "nsString.h"
 #include "nsIAtom.h"
@@ -55,6 +57,8 @@
 
 #include "dombindings.h"
 #include "nsWrapperCacheInlines.h"
+
+using namespace mozilla;
 
 //#define STRICT_CHECK_OF_UNICODE
 #ifdef STRICT_CHECK_OF_UNICODE
@@ -374,7 +378,7 @@ XPCConvert::NativeData2JS(XPCLazyCallContext& lccx, jsval* d, const void* s,
                 char* t;
                 for (t=p; *t && isAscii ; t++) {
                   if (ILLEGAL_CHAR_RANGE(*t))
-                      isAscii = PR_FALSE;
+                      isAscii = false;
                 }
                 NS_ASSERTION(isAscii, "passing non ASCII data");
 #endif // STRICT_CHECK_OF_UNICODE
@@ -483,7 +487,7 @@ XPCConvert::NativeData2JS(XPCLazyCallContext& lccx, jsval* d, const void* s,
                     // creating a new XPCNativeScriptableShared.
                     xpcObjectHelper helper(iface);
                     if (!NativeInterface2JSObject(lccx, d, nsnull, helper, iid,
-                                                  nsnull, PR_TRUE,
+                                                  nsnull, true,
                                                   OBJ_IS_NOT_GLOBAL, pErr))
                         return JS_FALSE;
 
@@ -708,7 +712,7 @@ XPCConvert::JSData2Native(XPCCallContext& ccx, void* d, jsval s,
             if (JSVAL_IS_VOID(s)) {
                 if (isDOMString) {
                     chars  = VOID_STRING;
-                    length = NS_ARRAY_LENGTH(VOID_STRING) - 1;
+                    length = ArrayLength(VOID_STRING) - 1;
                 } else {
                     chars = EMPTY_STRING;
                     length = 0;
@@ -764,7 +768,7 @@ XPCConvert::JSData2Native(XPCCallContext& ccx, void* d, jsval s,
 
                 if (JSVAL_IS_NULL(s) || (!isDOMString && JSVAL_IS_VOID(s))) {
                     ws->Truncate();
-                    ws->SetIsVoid(PR_TRUE);
+                    ws->SetIsVoid(true);
                 } else
                     ws->Assign(chars, length);
             }
@@ -862,12 +866,12 @@ XPCConvert::JSData2Native(XPCCallContext& ccx, void* d, jsval s,
                     if (!rs)
                         return JS_FALSE;
 
-                    rs->SetIsVoid(PR_TRUE);
+                    rs->SetIsVoid(true);
                     *((nsACString**)d) = rs;
                 } else {
                     nsCString* rs = *((nsCString**)d);
                     rs->Truncate();
-                    rs->SetIsVoid(PR_TRUE);
+                    rs->SetIsVoid(true);
                 }
                 return JS_TRUE;
             }
@@ -906,12 +910,12 @@ XPCConvert::JSData2Native(XPCCallContext& ccx, void* d, jsval s,
                     if (!rs)
                         return JS_FALSE;
 
-                    rs->SetIsVoid(PR_TRUE);
+                    rs->SetIsVoid(true);
                     *((nsACString**)d) = rs;
                 } else {
                     nsACString* rs = *((nsACString**)d);
                     rs->Truncate();
-                    rs->SetIsVoid(PR_TRUE);
+                    rs->SetIsVoid(true);
                 }
                 return JS_TRUE;
             }
@@ -1101,7 +1105,7 @@ XPCConvert::NativeInterface2JSObject(XPCLazyCallContext& lccx,
 
         if (!dest) {
             if (!flat) {
-                tryConstructSlimWrapper = PR_TRUE;
+                tryConstructSlimWrapper = true;
             } else if (IS_SLIM_WRAPPER_OBJECT(flat)) {
                 if (js::GetObjectCompartment(flat) == cx->compartment) {
                     *d = OBJECT_TO_JSVAL(flat);
@@ -1314,7 +1318,7 @@ XPCConvert::JSObject2NativeInterface(XPCCallContext& ccx,
     if (!ac.enter(cx, src)) {
        if (pErr)
            *pErr = NS_ERROR_UNEXPECTED;
-       return PR_FALSE;
+       return false;
     }
 
     *dest = nsnull;

@@ -46,6 +46,9 @@
 /* XPConnect JavaScript interactive shell. */
 
 #include <stdio.h>
+
+#include "mozilla/Util.h"
+
 #include "jsapi.h"
 #include "jscntxt.h"
 #include "jsdbgapi.h"
@@ -105,6 +108,8 @@
 #ifdef MOZ_CRASHREPORTER
 #include "nsICrashReporter.h"
 #endif
+
+using namespace mozilla;
 
 class XPCShellDirProvider : public nsIDirectoryServiceProvider2
 {
@@ -198,7 +203,7 @@ GetLocationProperty(JSContext *cx, JSObject *obj, jsid id, jsval *vp)
         nsCOMPtr<nsILocalFile> location;
         if (NS_SUCCEEDED(rv)) {
             rv = NS_NewLocalFile(filenameString,
-                                 PR_FALSE, getter_AddRefs(location));
+                                 false, getter_AddRefs(location));
         }
 
         if (!location && gWorkingDirectory) {
@@ -208,7 +213,7 @@ GetLocationProperty(JSContext *cx, JSObject *obj, jsid id, jsval *vp)
             absolutePath.Append(filenameString);
 
             rv = NS_NewLocalFile(absolutePath,
-                                 PR_FALSE, getter_AddRefs(location));
+                                 false, getter_AddRefs(location));
         }
 
         if (location) {
@@ -712,7 +717,7 @@ GetChildGlobalObject(JSContext* cx,
  * JSContext option name to flag map. The option names are in alphabetical
  * order for better reporting.
  */
-static const struct {
+static const struct JSOption {
     const char  *name;
     uint32      flag;
 } js_options[] = {
@@ -727,7 +732,7 @@ static const struct {
 static uint32
 MapContextOptionNameToFlag(JSContext* cx, const char* name)
 {
-    for (size_t i = 0; i != JS_ARRAY_LENGTH(js_options); ++i) {
+    for (size_t i = 0; i < ArrayLength(js_options); ++i) {
         if (strcmp(name, js_options[i].name) == 0)
             return js_options[i].flag;
     }
@@ -735,13 +740,13 @@ MapContextOptionNameToFlag(JSContext* cx, const char* name)
     char* msg = JS_sprintf_append(NULL,
                                   "unknown option name '%s'."
                                   " The valid names are ", name);
-    for (size_t i = 0; i != JS_ARRAY_LENGTH(js_options); ++i) {
+    for (size_t i = 0; i < ArrayLength(js_options); ++i) {
         if (!msg)
             break;
         msg = JS_sprintf_append(msg, "%s%s", js_options[i].name,
-                                (i + 2 < JS_ARRAY_LENGTH(js_options)
+                                (i + 2 < ArrayLength(js_options)
                                  ? ", "
-                                 : i + 2 == JS_ARRAY_LENGTH(js_options)
+                                 : i + 2 == ArrayLength(js_options)
                                  ? " and "
                                  : "."));
     }
@@ -781,7 +786,7 @@ Options(JSContext *cx, uintN argc, jsval *vp)
 
     names = NULL;
     found = JS_FALSE;
-    for (size_t i = 0; i != JS_ARRAY_LENGTH(js_options); i++) {
+    for (size_t i = 0; i < ArrayLength(js_options); i++) {
         if (js_options[i].flag & optset) {
             found = JS_TRUE;
             names = JS_sprintf_append(names, "%s%s",
@@ -1425,7 +1430,7 @@ NS_IMETHODIMP
 FullTrustSecMan::CanExecuteScripts(JSContext * cx, nsIPrincipal *principal,
                                    bool *_retval)
 {
-    *_retval = PR_TRUE;
+    *_retval = true;
     return NS_OK;
 }
 
@@ -1492,7 +1497,7 @@ FullTrustSecMan::RequestCapability(nsIPrincipal *principal,
 NS_IMETHODIMP
 FullTrustSecMan::IsCapabilityEnabled(const char *capability, bool *_retval)
 {
-    *_retval = PR_TRUE;
+    *_retval = true;
     return NS_OK;
 }
 
@@ -1539,7 +1544,7 @@ FullTrustSecMan::GetObjectPrincipal(JSContext * cx, JSObject * obj,
 NS_IMETHODIMP
 FullTrustSecMan::SubjectPrincipalIsSystem(bool *_retval)
 {
-    *_retval = PR_TRUE;
+    *_retval = true;
     return NS_OK;
 }
 
@@ -2040,7 +2045,7 @@ main(int argc, char **argv, char **envp)
 #ifdef MOZ_CRASHREPORTER
     // Shut down the crashreporter service to prevent leaking some strings it holds.
     if (crashReporter) {
-        crashReporter->SetEnabled(PR_FALSE);
+        crashReporter->SetEnabled(false);
         crashReporter = nsnull;
     }
 #endif
@@ -2082,11 +2087,11 @@ XPCShellDirProvider::GetFile(const char *prop, bool *persistent,
                              nsIFile* *result)
 {
     if (mGREDir && !strcmp(prop, NS_GRE_DIR)) {
-        *persistent = PR_TRUE;
+        *persistent = true;
         return mGREDir->Clone(result);
     } else if (mGREDir && !strcmp(prop, NS_APP_PREF_DEFAULTS_50_DIR)) {
         nsCOMPtr<nsIFile> file;
-        *persistent = PR_TRUE;
+        *persistent = true;
         if (NS_FAILED(mGREDir->Clone(getter_AddRefs(file))) ||
             NS_FAILED(file->AppendNative(NS_LITERAL_CSTRING("defaults"))) ||
             NS_FAILED(file->AppendNative(NS_LITERAL_CSTRING("pref"))))
