@@ -42,6 +42,7 @@ const Cc = Components.classes;
 const Ci = Components.interfaces;
 const Cu = Components.utils;
 
+Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://services-sync/constants.js");
 Cu.import("resource://services-sync/engines.js");
 Cu.import("resource://services-sync/ext/StringBundle.js");
@@ -52,6 +53,11 @@ Cu.import("resource://services-sync/main.js");
 
 const CLIENTS_TTL = 1814400; // 21 days
 const CLIENTS_TTL_REFRESH = 604800; // 7 days
+
+const TAB_STATE_COLLECTION = "sendtab";
+
+// TODO verify TTL is appropriate
+const DEFAULT_TAB_STATE_TTL = 604800; // 7 days
 
 function ClientsRec(collection, id) {
   CryptoWrapper.call(this, collection, id);
@@ -64,6 +70,22 @@ ClientsRec.prototype = {
 
 Utils.deferGetSet(ClientsRec, "cleartext", ["name", "type", "commands"]);
 
+/**
+  * This is the record for individual tab states.
+  *
+  * It is used by the send tab command. Tab states are stored in their own
+  * collection because they could be large and could exhaust space in the
+  * clients record.
+  */
+function SendTabRecord(collection, id) {
+  CryptoWrapper.call(this, collection, id);
+}
+SendTabRecord.prototype = {
+  __proto__: CryptoWrapper.prototype,
+  _logName:  "Sync.Record.SendTab",
+  ttl:       DEFAULT_TAB_STATE_TTL
+};
+Utils.deferGetSet(SendTabRecord, "cleartext", ["tabState"]);
 
 XPCOMUtils.defineLazyGetter(this, "Clients", function () {
   return new ClientEngine();
@@ -83,6 +105,14 @@ ClientEngine.prototype = {
 
   // Always sync client data as it controls other sync behavior
   get enabled() true,
+
+  /**
+   * We override the SyncEngine default because the clients collection is not
+   * wiped during a non-full server wipe.
+   */
+  get wipeCollectionNames() {
+    return [];
+  },
 
   get lastRecordUpload() {
     return Svc.Prefs.get(this.name + ".lastRecordUpload", 0);
@@ -140,6 +170,32 @@ ClientEngine.prototype = {
   get localType() Svc.Prefs.get("client.type", "desktop"),
   set localType(value) Svc.Prefs.set("client.type", value),
 
+  /**
+   * Retrieve information about remote clients.
+   *
+   * Returns an object with client IDs as keys and objects describing each
+   * client as values.
+   */
+  get remoteClients() {
+    let ret = {};
+
+    for each (let [id, record] in Iterator(this._store._remoteClients)) {
+      ret[id] = record;
+    }
+
+    return ret;
+  },
+
+  /**
+   * Obtain the URL of the tab state collection.
+   *
+   * @return string
+   *         URI to tabstate collection.
+   */
+  get tabStateURL() {
+    return this.storageURL + TAB_STATE_COLLECTION;
+  },
+
   isMobile: function isMobile(id) {
     if (this._store._remoteClients[id])
       return this._store._remoteClients[id].type == "mobile";
@@ -155,7 +211,38 @@ ClientEngine.prototype = {
     SyncEngine.prototype._syncStartup.call(this);
   },
 
-  // Always process incoming items because they might have commands
+  // We override the default implementation to additionally upload tab state
+  // records.
+  _uploadOutgoing: function _uploadOutgoing() {
+    SyncEngine.prototype._uploadOutgoing.call(this);
+
+    if (!Object.keys(this._store._outgoingSendTabRecords).length) {
+      return;
+    }
+
+    let collection = new Collection(this.tabStateURL);
+
+    // TODO limit upload to N records at a time?
+    for (let [guid, v] in Iterator(this._store._outgoingSendTabRecords)) {
+      let record = new SendTabRecord(guid, TAB_STATE_COLLECTION);
+      // TODO [gps] I thought .id was populated automagically by the ctor? The
+      // fake HTTP server doesn't like it unless the next line is defined. Huh?
+      record.id       = guid;
+      record.ttl      = v.ttl;
+      record.tabState = v.state;
+      // TODO are we missing any fields?
+
+      record.encrypt();
+      collection.pushData(record);
+    }
+
+    // TODO probably need error checking on this. What's appropriate?
+    collection.post();
+
+    this._store._outgoingSendTabRecords = {};
+  },
+
+  // Always process incoming items because they might have commands.
   _reconcile: function _reconcile() {
     return true;
   },
@@ -200,7 +287,8 @@ ClientEngine.prototype = {
     wipeAll:     { args: 0, desc: "Delete all client data for all engines" },
     wipeEngine:  { args: 1, desc: "Delete all client data for engine" },
     logout:      { args: 0, desc: "Log out client" },
-    displayURI:  { args: 2, desc: "Instruct a client to display a URI" }
+    displayURI:  { args: 2, desc: "Instruct a client to display a URI" },
+    displayTab:  { args: 1, desc: "Instruct a client to display a tab" }
   },
 
   /**
@@ -287,6 +375,9 @@ ClientEngine.prototype = {
             return false;
           case "displayURI":
             this._handleDisplayURI(args[0], args[1]);
+            break;
+          case "displayTab":
+            this._handleDisplayTab(args[0]);
             break;
           default:
             this._log.debug("Received an unknown command: " + command);
@@ -380,6 +471,294 @@ ClientEngine.prototype = {
 
     let subject = { uri: uri, client: clientId };
     Svc.Obs.notify("weave:engine:clients:display-uri", subject);
+  },
+
+  /**
+   * Sends a tab to another client as a new tab.
+   *
+   * This can be thought of as a more powerful version of
+   * sendURIToClientForDisplay(). This version takes an options
+   * argument which controls how the sending works.
+   *
+   * Calling this function with tab state will eventually result in a
+   * record in another collection being created. This record is only
+   * referenced in the command. It is protected against orphanage by a
+   * server-side expiration TTL.
+   *
+   * Tab state (as obtained from nsISessionStore) may optionally be sent
+   * with the command. Tab state may vary between application types (e.g.
+   * desktop vs. mobile). This function currently sends along the local client
+   * ID as part of the command. The receiver can infer the tab state format
+   * by looking up the sender's type by its ID.
+   *
+   * TODO The tab state record format needs to be normalized.
+   *
+   * @param uri
+   *        String URI to send to the remote client.
+   * @param client
+   *        String client ID to send the command to. Must be defined.
+   * @param options
+   *        Object containing metadata to control how sending works. Can
+   *        contain the following keys:
+   *          tabState - Tab's state (as obtained from nsISessionStore).
+   *          If not defined, no tab state is sent.
+   *
+   *          ttl - TTL for record containing tab state. If not defined, it
+   *          will default to a reasonable value.
+   */
+  sendURIToClient: function sendURIToClient(uri, client, options) {
+    this._log.info("Sending tab to client: " + uri + " -> " + client);
+
+    options = options || {};
+
+    if (!("ttl" in options)) {
+      options.ttl = DEFAULT_TAB_STATE_TTL;
+    }
+
+    let args = {
+      uri:      uri,
+      senderID: this.localID
+    };
+
+
+    // Tab states can be large and all commands are in one record, so
+    // sending many tabs could cause the client record to become quite large.
+    // We work around this problem by storing the tab state in a foreign
+    // record, outside of the clients collection.
+    let guid, outgoingRecord;
+    if ("tabState" in options) {
+      guid = Utils.makeGUID();
+      args.stateID = guid;
+      outgoingRecord = {
+        ttl:   options.ttl,
+        state: options.tabState
+      };
+
+      this._log.debug("Prepared tab state record: " + guid);
+    }
+
+    this.sendCommand("displayTab", [args], client);
+
+    // Wait until after sendCommand() to record the outgoing record in case
+    // sendCommand() throws.
+    if (guid && outgoingRecord) {
+      this._store._outgoingSendTabRecords[guid] = outgoingRecord;
+    }
+
+    Clients._tracker.score += SCORE_INCREMENT_XLARGE;
+  },
+
+  /**
+   * Send a tab to a remote client.
+   *
+   * This function assembles the tab state from the passed tab object.
+   *
+   * Currently, we only support a limited sub-set of tab state. While the
+   * state format highly resembles information from nsISessionStore, it is
+   * different. This logic may eventually make it into nsISessionStore
+   * or a similar interface. However, it lives in Sync for now.
+   *
+   * @param  tab
+   *         The tab XUL object to send.
+   * @param  clientID
+   *         The ID of the client that will receive the tab.
+   * @param  options
+   *         Additional options to control sending behavior. The following
+   *         keys are recognized:
+   *           ttl - The TTL of the tab state record, in seconds.
+   */
+  sendTabToClient: function sendTabToClient(tab, clientID, options) {
+    let uri = tab.linkedBrowser.currentURI.spec;
+
+    let outOptions = {tabState: this.getTabState(tab)};
+
+    this.sendURIToClient(uri, clientID, outOptions);
+  },
+
+  /**
+   * Obtain the tab state for a tab instance.
+   *
+   * @param  tab
+   *         XUL tab instance to obtain state for.
+   * @return object Black box object defining the Sync-normalized tab state.
+   */
+  getTabState: function getTabState(tab) {
+    let browser = tab.linkedBrowser;
+    let serializedStoreState = Svc.Session.getTabState(tab);
+    let tabState = JSON.parse(serializedStoreState);
+
+    //this._log.debug("Session State: " + serializedStoreState);
+
+    let entry;
+    if ("index" in tabState) {
+      // The stored index is 1-based, interestingly.
+      entry = tabState.entries[tabState.index - 1];
+
+      delete entry.children;
+      this._log.debug("Entry: " + JSON.stringify(entry));
+    }
+
+    let state = {
+      version:  1,
+      cookies:  [],
+      formdata: {}
+    };
+
+    if (entry && "formdata" in entry) {
+      state.formdata = entry.formdata;
+    }
+
+    let cookieList;
+    try {
+      let host = browser.currentURI.host;
+      cookieList = Services.cookies.getCookiesFromHost(host);
+    } catch (ex) {
+      this._log.warn("Unable to obtain cookie list for host: " + host);
+    }
+
+    while (cookieList && cookieList.hasMoreElements()) {
+      let cookie = cookieList.getNext().QueryInterface(Ci.nsICookie2);
+
+      // We purposefully limit to session cookies, since longer duration
+      // cookies may result in expected behavior.
+      if (!cookie.isSession) {
+        continue;
+      }
+
+      let jscookie = {
+        host:       cookie.host,
+        value:      cookie.value,
+        isSession:  true,
+        isSecure:   !!cookie.isSecure,
+        isHttpOnly: !!cookie.IsHttpOnly,
+        expiry:     cookie.expiry,
+        path:       cookie.path,
+        name:       cookie.name
+      };
+
+      state.cookies.push(jscookie);
+    }
+
+    // TODO support scroll offset... somehow.
+
+    this._log.debug("Tab state: " + JSON.stringify(state));
+
+    return state;
+  },
+
+  /**
+   * Handle received displayTab commands.
+   *
+   * After assembling all the command data, this function fires a
+   * weave:engine:clients:display-tab notification. The subject is an object
+   * containing the following fields:
+   *
+   *   uri      - string URI to display
+   *   tabState - Object defining tab state. May not be defined. The tab state
+   *              should be treated as a black box. The format is not
+   *              well-defined outside the Clients engine at this time.
+   *   senderID - ID of client that sent the tab.
+   *
+   * In Firefox, the notification is handled by BrowserGlue. The handler then
+   * calls back into this engine (restoreTab) with the subject object and a
+   * browser instance and the tab is restored. This may seem like a very
+   * roundabout way of doing things. However, the alternative is UI code would
+   * be tightly integrated with Sync, which is theoretically supposed to remain
+   * application agnostic.
+   */
+  _handleDisplayTab: function _handleDisplayTab(args) {
+    this._log.info("Received a tab for display: " + args.uri);
+
+    let state;
+
+    // Commands may or may not have tab state. If they do, it is stored in a
+    // foreign record, which we'll need to fetch.
+    if ("stateID" in args) {
+      let record = new SendTabRecord(TAB_STATE_COLLECTION, args.stateID);
+      let uri = this.tabStateURL + "/" + args.stateID;
+
+      this._log.debug("Fetching remote record from: " + uri);
+
+      // This is synchronous and spins the event loop. It also throws on
+      // some errors.
+      record.fetch(uri);
+      // TODO check record.status for 404, etc
+
+      this._log.info(JSON.stringify(record));
+
+      record.decrypt();
+      state = record.tabState;
+      this._log.debug("Received tab state record: " + args.stateID);
+
+      // TODO what do we do about the record? do we let the server auto-expire?
+      // Do we perform an async delete?
+    }
+
+    let subject = {
+      uri:      args.uri,
+      tabState: state,
+      senderID: args.senderID
+    };
+    Svc.Obs.notify("weave:engine:clients:display-tab", subject);
+  },
+
+  /**
+   * Restore tab state to a browser instance.
+   *
+   * This is the low-level function that takes a Sync tab state record and
+   * restores it to a XUL browser instance. It is the opposite of the logic
+   * in getTabState().
+   *
+   * @param browser
+   *        XUL browser instance to restore.
+   * @param record
+   *        Object passed to display-tab notification. Has uri, tabState, and
+   *        senderID fields.
+   */
+  restoreTab: function restoreTab(browser, record) {
+    let tab = browser.addTab(record.uri);
+
+    if (!record.tabState) {
+      return;
+    }
+
+    let tabState = record.tabState;
+
+    if (tabState.version != 1) {
+      this._log.warn("Unknown tab state version, ignoring: "
+                     + tabState.version);
+      return;
+    }
+
+    // We start by restoring cookies, as these impact the HTTP request issued
+    // on page load.
+    if (tabState.cookies) {
+      let service = Services.cookies;
+
+      let length = tabState.cookies.length;
+      for (let i = 0; i < length; i++) {
+        let cookie = tabState.cookies[0];
+
+        service.add(cookie.host, cookie.path, cookie.name, cookie.value,
+                    cookie.isSecure, cookie.isHttpOnly, cookie.isSession,
+                    cookie.expiry);
+      }
+    }
+
+    // Now we assemble a minimal record to be fed into nsISessionStore. We
+    // violate the opaqueness of that API. Therefore, this is prone to breakage
+    // and thus must be heavily tested for regressions when session store
+    // changes.
+    let sessionState = {
+      index:   1,
+      entries: [{
+        url:      record.uri,
+        formdata: tabState.formdata
+      }],
+      hidden: false
+    };
+
+    Svc.Session.setTabState(tab, JSON.stringify(sessionState));
   }
 };
 
@@ -389,7 +768,13 @@ function ClientStore(name) {
 ClientStore.prototype = {
   __proto__: Store.prototype,
 
-  create: function create(record) this.update(record),
+  // Holds SendTab records created by "displayTab" command which haven't
+  // yet been uploaded. Maps Record ID -> payload object.
+  _outgoingSendTabRecords: {},
+
+  create: function create(record) {
+    this.update(record);
+  },
 
   update: function update(record) {
     // Only grab commands from the server; local name/type always wins
@@ -425,7 +810,8 @@ ClientStore.prototype = {
   },
 
   wipe: function wipe() {
-    this._remoteClients = {};
+    this._remoteClients          = {};
+    this._outgoingSendTabRecords = {};
   },
 };
 
