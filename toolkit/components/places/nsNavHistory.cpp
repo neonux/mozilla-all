@@ -165,7 +165,7 @@ using namespace mozilla::places;
 
 // This is the schema version, update it at any schema change and add a
 // corresponding migrateVxx method below.
-#define DATABASE_SCHEMA_VERSION 11
+#define DATABASE_SCHEMA_VERSION 12
 
 // Filename of the database.
 #define DATABASE_FILENAME NS_LITERAL_STRING("places.sqlite")

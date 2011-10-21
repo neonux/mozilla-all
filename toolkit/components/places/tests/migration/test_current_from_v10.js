@@ -278,18 +278,6 @@ function test_place_guid_annotation_removed()
   run_next_test();
 }
 
-function test_moz_hostnames()
-{
-  // This will throw if the column does not exist
-  let stmt = DBConn().createStatement(
-    "SELECT host, frecency, page_count "
-  + "FROM moz_hostnames "
-  );
-  stmt.finalize();
-
-  run_next_test();
-}
-
 function test_final_state()
 {
   // We open a new database mostly so that we can check that the settings were
@@ -307,7 +295,6 @@ function test_final_state()
 
   do_check_true(db.indexExists("moz_bookmarks_guid_uniqueindex"));
   do_check_true(db.indexExists("moz_places_guid_uniqueindex"));
-  do_check_true(db.indexExists("moz_hostnames_frecencyindex"));
 
   do_check_eq(db.schemaVersion, CURRENT_SCHEMA_VERSION);
 
@@ -328,7 +315,6 @@ function test_final_state()
   test_place_guids_non_null,
   test_place_guid_annotation_imported,
   test_place_guid_annotation_removed,
-  test_moz_hostnames,
   test_final_state,
 ].forEach(add_test);
 
