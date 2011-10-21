@@ -278,6 +278,7 @@
         ]]></body>
       </method>
 
+      <field name="_rememberedURLs" readonly="true">({})</field>
       <method name="handleCommand">
         <parameter name="aTriggeringEvent"/>
         <body><![CDATA[
@@ -318,7 +319,12 @@
             Cu.reportError(ex);
           }
 
-          function loadCurrent() {
+          function loadCurrent(url, skipCheck) {
+            // If the url resembles a search query, search for it in the
+            // foreground, request it in the background, and notify the user if
+            // the request returns without error.
+            if (!skipCheck && resemblesSearchQuery(url))
+              url = "?" + url;
             let flags = Ci.nsIWebNavigation.LOAD_FLAGS_ALLOW_THIRD_PARTY_FIXUP;
             // Pass LOAD_FLAGS_DISALLOW_INHERIT_OWNER to prevent any loads from
             // inheriting the currently loaded document's principal, unless this
@@ -327,6 +333,72 @@
             if (!mayInheritPrincipal)
               flags |= Ci.nsIWebNavigation.LOAD_FLAGS_DISALLOW_INHERIT_OWNER;
             gBrowser.loadURIWithFlags(url, flags, null, null, postData);
+          }
+
+          let rememberedURLs = this._rememberedURLs;
+          function resemblesSearchQuery(url) {
+            // / is an alias for file:///, and ? indicates a search query.
+            if (!url || rememberedURLs[url] || /^[/?]/.test(url) || /[:@]/.test(url))
+              return false;
+
+            let components = url.split(/[/?#]/);
+            let hostname = components.shift();
+            // If the hostname is a number or a single word without a path,
+            // treat it as a search query while performing a background lookup.
+            if (!isNaN(+hostname) || !/[\.\s]/.test(hostname) && !components.length) {
+              backgroundRequest(url);
+              return true;
+            }
+            return false;
+          }
+
+          function backgroundRequest(url) {
+            let prefixedURL = "http://" + url + (/\//.test(url) ? "" : "/");
+            let notificationbox = gBrowser.getNotificationBox();
+            let selectedBrowser = gBrowser.selectedBrowser;
+            gBrowser.addTabsProgressListener({
+              onStateChange: function(browser, webProgress, request, flags, status) {
+                // If the foreground request is stopped, cancel this one too.
+                if (status && browser == selectedBrowser)
+                  gBrowser.removeTabsProgressListener(this);
+              },
+              onLocationChange: function(browser) {
+                if (browser != selectedBrowser)
+                  return;
+                gBrowser.removeTabsProgressListener(this);
+                // Wait until the tab's location is updated before starting this
+                // to prevent the notification from being auto-closed.
+                let request = Cc["@mozilla.org/xmlextras/xmlhttprequest;1"].
+                                createInstance(Ci.nsIXMLHttpRequest);
+                try {
+                  request.open("HEAD", prefixedURL, true);
+                } catch (e) { // The url was invalid, even with the prefix.
+                  return;
+                }
+                let timeout = setTimeout(function(req) req.abort(), 10000, request);
+                request.onload = function(event) {
+                  clearTimeout(timeout);
+                  // If the request was successful, provide the option to
+                  // navigate to the url and have the browser remember it.
+                  if (event.target.status == 200)
+                    notificationbox.appendNotification(
+                      "Did you mean to go to " + prefixedURL + "?",
+                      "background-request",
+                      "",
+                      notificationbox.PRIORITY_INFO_HIGH,
+                      [{
+                        label: "Yes",
+                        callback: function() {
+                          rememberedURLs[url] = true;
+                          loadCurrent(url, true);
+                        }
+                      }]
+                    );
+                };
+                request.onerror = function() clearTimeout(timeout);
+                request.send(null);
+              }
+            });
           }
 
           // Focus the content area before triggering loads, since if the load
@@ -355,7 +427,7 @@
               where = whereToOpenLink(aTriggeringEvent, false, false);
 
             if (where == "current") {
-              loadCurrent();
+              loadCurrent(url);
             } else {
               this.handleRevert();
               let params = { allowThirdPartyFixup: true, postData: postData };
@@ -364,7 +436,7 @@
               openUILinkIn(url, where, params);
             }
           } else {
-            loadCurrent();
+            loadCurrent(url);
           }
         ]]></body>
       </method>
