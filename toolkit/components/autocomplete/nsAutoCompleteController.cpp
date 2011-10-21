@@ -1410,7 +1410,7 @@ nsAutoCompleteController::CompleteDefaultIndex(PRInt32 aResultIndex)
     return NS_OK;
 
   nsAutoString resultValue;
-  if (NS_SUCCEEDED(GetDefaultCompleteValue(aSearchIndex, true, resultValue)))
+  if (NS_SUCCEEDED(GetDefaultCompleteValue(aResultIndex, true, resultValue)))
     CompleteValue(resultValue);
 
   mDefaultIndexCompleted = true;
