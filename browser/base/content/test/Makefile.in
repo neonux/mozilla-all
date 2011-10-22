@@ -41,7 +41,6 @@ VPATH		= @srcdir@
 relativesrcdir  = browser/base/content/test
 
 DIRS += \
-		newtab \
 		tabview \
 		$(NULL)
 
