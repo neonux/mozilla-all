@@ -1237,8 +1237,33 @@ function getDefaultStartPage() {
   return overridePage || startPage || "about:blank";
 }
 
+function initHomeTab(uriToLoad, defaultStartPage) {
+  // add home tab (replace the exisiting tab with this)
+  gBrowser.loadURI("about:home");
+  gBrowser.addHomeTab(gBrowser.selectedTab);
+
+  // got a uriToLoad? -- add that guy in a tab
+  if (uriToLoad) {
+    gBrowser.addTab(uriToLoad);
+  }
+  // or do our default start page stuff
+  else if (defaultStartPage) {
+    // check to see if there's an override page
+    let overridePage = Services.browserHandler.overridePage;
+    if (overridePage) {
+      gBrowser.selectedTab = gBrowser.addTab(overridePage, { skipAnimation: true });
+    } else {
+      // if there's no override page, look at startup pref
+      let choice = Services.prefs.getIntPref("browser.startup.page");
+      if (choice == 0)
+        gBrowser.selectedTab = gBrowser.addTab("about:blank", { skipAnimation: true });
+    }
+  }
+}
+
 function BrowserStartup() {
   var uriToLoad = null;
+  let defaultStartPage = false;
 
   // window.arguments[0]: URI to load (string), or an nsISupportsArray of
   //                      nsISupportsStrings to load, or a xul:tab of
@@ -1253,18 +1278,29 @@ function BrowserStartup() {
   if ("arguments" in window) { 
     // Load the default start page if the flag is passed in
     if (window.arguments[5])
-      uriToLoad = getDefaultStartPage();
+      defaultStartPage = true;
     // Otherwise, check to see if a URI to load was specified
     else if (window.arguments[0])
       uriToLoad = window.arguments[0];
   }
+
+  let homeTabEnabled = true;
+  try {
+    // Hidden pref to disable home tab for test suite
+    homeTabEnabled = Services.prefs.getBoolPref("browser.hometab.enabled");
+  } catch (e) { }
+
+  if (homeTabEnabled)
+    initHomeTab(uriToLoad, defaultStartPage);
+  else if (defaultStartPage)
+    uriToLoad = getDefaultStartPage();
 
   var isLoadingBlank = uriToLoad == "about:blank";
   var mustLoadSidebar = false;
 
   prepareForStartup();
 
-  if (uriToLoad && !isLoadingBlank) {
+  if (uriToLoad && !isLoadingBlank && !homeTabEnabled) {
     if (uriToLoad instanceof Ci.nsISupportsArray) {
       let count = uriToLoad.Count();
       let specs = [];
@@ -1590,12 +1626,6 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
   // Enable/Disable auto-hide tabbar
   gBrowser.tabContainer.updateVisibility();
 
-  gPrefService.addObserver(gHomeButton.prefDomain, gHomeButton, false);
-
-  var homeButton = document.getElementById("home-button");
-  gHomeButton.updateTooltip(homeButton);
-  gHomeButton.updatePersonalToolbarStyle(homeButton);
-
 #ifdef HAVE_SHELL_SERVICE
   // Perform default browser checking (after window opens).
   var shell = getShellService();
@@ -1851,12 +1881,6 @@ function BrowserShutdown() {
     Services.obs.removeObserver(gXPInstallObserver, "addon-install-failed");
     Services.obs.removeObserver(gXPInstallObserver, "addon-install-complete");
     Services.obs.removeObserver(gFormSubmitObserver, "invalidformsubmit");
-
-    try {
-      gPrefService.removeObserver(gHomeButton.prefDomain, gHomeButton);
-    } catch (ex) {
-      Components.utils.reportError(ex);
-    }
 
     BrowserOffline.uninit();
     OfflineApps.uninit();
@@ -2136,7 +2160,7 @@ function BrowserGoHome(aEvent) {
       aEvent.button == 2) // right-click: do nothing
     return;
 
-  var homePage = gHomeButton.getHomePage();
+  var homePage = Services.browserHandler.startPage;
   var where = whereToOpenLink(aEvent, false, true);
   var urls;
 
@@ -2563,9 +2587,11 @@ function URLBarSetURI(aURI) {
   if (value == null) {
     let uri = aURI || getWebNavigation().currentURI;
 
+    if (gBrowser.mCurrentTab.isHomeTab)
+      value = "";
     // Replace initial page URIs with an empty string
     // only if there's no opener (bug 370555).
-    if (gInitialPages.indexOf(uri.spec) != -1)
+    else if (gInitialPages.indexOf(uri.spec) != -1)
       value = content.opener ? uri.spec : "";
     else
       value = losslessDecodeURI(uri);
@@ -3137,43 +3163,6 @@ var browserDragAndDrop = {
   drop: function (aEvent, aName) Services.droppedLinkHandler.dropLink(aEvent, aName)
 };
 
-var homeButtonObserver = {
-  onDrop: function (aEvent)
-    {
-      setTimeout(openHomeDialog, 0, browserDragAndDrop.drop(aEvent, { }));
-    },
-
-  onDragOver: function (aEvent)
-    {
-      browserDragAndDrop.dragOver(aEvent);
-      aEvent.dropEffect = "link";
-    },
-  onDragExit: function (aEvent)
-    {
-    }
-}
-
-function openHomeDialog(aURL)
-{
-  var promptTitle = gNavigatorBundle.getString("droponhometitle");
-  var promptMsg   = gNavigatorBundle.getString("droponhomemsg");
-  var pressedVal  = Services.prompt.confirmEx(window, promptTitle, promptMsg,
-                          Services.prompt.STD_YES_NO_BUTTONS,
-                          null, null, null, null, {value:0});
-
-  if (pressedVal == 0) {
-    try {
-      var str = Components.classes["@mozilla.org/supports-string;1"]
-                          .createInstance(Components.interfaces.nsISupportsString);
-      str.data = aURL;
-      gPrefService.setComplexValue("browser.startup.homepage",
-                                   Components.interfaces.nsISupportsString, str);
-    } catch (ex) {
-      dump("Failed to set the home page.\n"+ex+"\n");
-    }
-  }
-}
-
 var bookmarksButtonObserver = {
   onDrop: function (aEvent)
   {
@@ -3690,7 +3679,6 @@ function BrowserToolboxCustomizeDone(aToolboxChanged) {
     gURLBar = document.getElementById("urlbar");
 
     gProxyFavIcon = document.getElementById("page-proxy-favicon");
-    gHomeButton.updateTooltip();
     gIdentityHandler._cacheElements();
     window.XULBrowserWindow.init();
 
@@ -3744,7 +3732,6 @@ function BrowserToolboxCustomizeChange(aType) {
       retrieveToolbarIconsizesFromTheme();
       break;
     default:
-      gHomeButton.updatePersonalToolbarStyle();
       BookmarksMenuButton.customizeChange();
       allTabs.readPref();
   }
@@ -4303,6 +4290,10 @@ var XULBrowserWindow = {
     // tab docshells (isAppTab will be false for app tab subframes).
     if (originalTarget != "" || !isAppTab)
       return originalTarget;
+
+    // Open links from home tab in new tabs.
+    if (linkNode.ownerDocument.documentURIObject.spec == "about:home")
+      return "_blank";
 
     // External links from within app tabs should always open in new tabs
     // instead of replacing the app tab's page (Bug 575561)
@@ -5383,61 +5374,6 @@ function fireSidebarFocusedEvent() {
   event.initEvent("SidebarFocused", true, false);
   sidebar.contentWindow.dispatchEvent(event);
 }
-
-var gHomeButton = {
-  prefDomain: "browser.startup.homepage",
-  observe: function (aSubject, aTopic, aPrefName)
-  {
-    if (aTopic != "nsPref:changed" || aPrefName != this.prefDomain)
-      return;
-
-    this.updateTooltip();
-  },
-
-  updateTooltip: function (homeButton)
-  {
-    if (!homeButton)
-      homeButton = document.getElementById("home-button");
-    if (homeButton) {
-      var homePage = this.getHomePage();
-      homePage = homePage.replace(/\|/g,', ');
-      if (homePage.toLowerCase() == "about:home")
-        homeButton.setAttribute("tooltiptext", homeButton.getAttribute("aboutHomeOverrideTooltip"));
-      else
-        homeButton.setAttribute("tooltiptext", homePage);
-    }
-  },
-
-  getHomePage: function ()
-  {
-    var url;
-    try {
-      url = gPrefService.getComplexValue(this.prefDomain,
-                                Components.interfaces.nsIPrefLocalizedString).data;
-    } catch (e) {
-    }
-
-    // use this if we can't find the pref
-    if (!url) {
-      var SBS = Cc["@mozilla.org/intl/stringbundle;1"].getService(Ci.nsIStringBundleService);
-      var configBundle = SBS.createBundle("chrome://branding/locale/browserconfig.properties");
-      url = configBundle.GetStringFromName(this.prefDomain);
-    }
-
-    return url;
-  },
-
-  updatePersonalToolbarStyle: function (homeButton)
-  {
-    if (!homeButton)
-      homeButton = document.getElementById("home-button");
-    if (homeButton)
-      homeButton.className = homeButton.parentNode.id == "PersonalToolbar"
-                               || homeButton.parentNode.parentNode.id == "PersonalToolbar" ?
-                             homeButton.className.replace("toolbarbutton-1", "bookmark-item") :
-                             homeButton.className.replace("bookmark-item", "toolbarbutton-1");
-  }
-};
 
 /**
  * Gets the selected text in the active browser. Leading and trailing
@@ -8587,7 +8523,7 @@ var TabContextMenu = {
 
     // Enable the "Close Tab" menuitem when the window doesn't close with the last tab.
     document.getElementById("context_closeTab").disabled =
-      disabled && gBrowser.tabContainer._closeWindowWithLastTab;
+      (disabled && gBrowser.tabContainer._closeWindowWithLastTab) || this.contextTab.isHomeTab;
 
     var menuItems = aPopupMenu.getElementsByAttribute("tbattr", "tabbrowser-multiple");
     for (var i = 0; i < menuItems.length; i++)
@@ -8603,6 +8539,9 @@ var TabContextMenu = {
       Cc["@mozilla.org/browser/sessionstore;1"].
       getService(Ci.nsISessionStore).
       getClosedTabCount(window) == 0;
+
+    document.getElementById("context_unpinTab").disabled = this.contextTab.isHomeTab;
+    document.getElementById("context_openTabInWindow").disabled = this.contextTab.isHomeTab || disabled;
 
     // Only one of pin/unpin should be visible
     document.getElementById("context_pinTab").hidden = this.contextTab.pinned;

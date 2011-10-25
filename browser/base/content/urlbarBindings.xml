@@ -318,6 +318,7 @@
             Cu.reportError(ex);
           }
 
+          let self = this;
           function loadCurrent() {
             let flags = Ci.nsIWebNavigation.LOAD_FLAGS_ALLOW_THIRD_PARTY_FIXUP;
             // Pass LOAD_FLAGS_DISALLOW_INHERIT_OWNER to prevent any loads from
@@ -326,7 +327,14 @@
             // keyword).
             if (!mayInheritPrincipal)
               flags |= Ci.nsIWebNavigation.LOAD_FLAGS_DISALLOW_INHERIT_OWNER;
-            gBrowser.loadURIWithFlags(url, flags, null, null, postData);
+
+            if (gBrowser.selectedTab.isHomeTab) {
+              self.handleRevert();
+              let params = { allowThirdPartyFixup: true, postData: postData, inBackground: false };
+              openUILinkIn(url, "tab", params);
+            } else {
+              gBrowser.loadURIWithFlags(url, flags, null, null, postData);
+            }
           }
 
           // Focus the content area before triggering loads, since if the load

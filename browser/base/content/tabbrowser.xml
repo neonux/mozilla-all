@@ -176,6 +176,12 @@
         ]]></getter>
       </property>
 
+      <property name="_homeTabExists" readonly="true">
+        <getter><![CDATA[
+          return this.tabs[0].isHomeTab ? 1 : 0;
+        ]]></getter>
+      </property>
+
       <method name="updateWindowResizers">
         <body><![CDATA[
           if (!window.gShowPageResizers)
@@ -222,6 +228,17 @@
             clonedItem.removeAttribute("key");
 
           parentPopup.insertBefore(clonedItem, nextItem);
+        ]]></body>
+      </method>
+
+      <method name="_setCloseCmdState">
+        <parameter name="aEnabled"/>
+        <body><![CDATA[
+          let closeCommand = document.getElementById("cmd_close");
+          if (aEnabled)
+            closeCommand.removeAttribute("disabled");
+          else
+            closeCommand.setAttribute("disabled", "true");
         ]]></body>
       </method>
 
@@ -274,6 +291,17 @@
           event.initEvent("TabUnpinned", true, false);
           aTab.dispatchEvent(event);
         ]]></body>
+      </method>
+
+      <method name="addHomeTab">
+        <parameter name="aTab"/>
+        <body>
+          <![CDATA[
+            aTab.setAttribute("hometab", "true");
+            this.pinTab(aTab);
+            this._setCloseCmdState(false);
+          ]]>
+        </body>
       </method>
 
       <method name="previewTab">
@@ -946,8 +974,10 @@
             if (backForwardContainer)
               backForwardContainer.removeAttribute("switchingtabs");
 
-            if (this.mCurrentTab.selected)
+            if (this.mCurrentTab.selected) {
               this._setCloseKeyState(!this.mCurrentTab.pinned);
+              this._setCloseCmdState(!this.mCurrentTab.isHomeTab);
+            }
 
             // TabSelect events are suppressed during preview mode to avoid confusing extensions and other bits of code
             // that might rely upon the other changes suppressed.
@@ -2952,7 +2982,7 @@
           // Keep the dragged tab visually within the region of like tabs.
           let tabs = this.tabbrowser.visibleTabs;
           let numPinned = this.tabbrowser._numPinnedTabs;
-          let leftmostTab = draggedTab.pinned ? tabs[0] : tabs[numPinned];
+          let leftmostTab = draggedTab.pinned ? this.tabbrowser._homeTabExists : tabs[numPinned];
           let rightmostTab = draggedTab.pinned ? tabs[numPinned-1] : tabs[tabs.length-1];
           let tabWidth = draggedTab.getBoundingClientRect().width;
           let ltr = (window.getComputedStyle(this).direction == "ltr");
@@ -3628,6 +3658,15 @@
         <parameter name="event"/>
         <parameter name="draggedTab"/>
         <body><![CDATA[
+          // Don't drop tabs to the left of the home tab.
+          return this._getUnadjustedDropIndex(event, draggedTab) || this.tabbrowser._homeTabExists;
+        ]]></body>
+      </method>
+
+      <method name="_getUnadjustedDropIndex">
+        <parameter name="event"/>
+        <parameter name="draggedTab"/>
+        <body><![CDATA[
           function compare(a, b, lessThan) lessThan ? a < b : a > b;
           let ltr = (window.getComputedStyle(this).direction == "ltr");
           let eX = event.screenX;
@@ -3820,7 +3859,7 @@
         if (this.draggedTab)
           return;
         var tab = this._getDragTargetTab(event);
-        if (!tab || !tab._fullyOpen || tab.closing)
+        if (!tab || !tab._fullyOpen || tab.closing || tab.isHomeTab)
           return;
 
 #ifdef XP_MACOSX
@@ -4031,6 +4070,11 @@
       <property name="hidden" readonly="true">
         <getter>
           return this.getAttribute("hidden") == "true";
+        </getter>
+      </property>
+      <property name="isHomeTab" readonly="true">
+        <getter>
+          return this.getAttribute("hometab") == "true";
         </getter>
       </property>
 
