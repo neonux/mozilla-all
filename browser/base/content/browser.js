@@ -1204,6 +1204,39 @@ let gGestureSupport = {
   },
 };
 
+function getDefaultStartPage() {
+  // This will return "" if there is no override page
+  let overridePage = Services.browserHandler.overridePage;
+
+  // If we have a session to restore, don't load any unnecessary pages
+  let sessionToRestore = Cc["@mozilla.org/browser/sessionstartup;1"].
+                         getService(Ci.nsISessionStartup).doRestore();
+  if (sessionToRestore) {
+    if (overridePage)
+      return overridePage;
+    else
+      return "about:blank";
+  }
+
+  let startPage = "";
+  try {
+    let choice = Services.prefs.getIntPref("browser.startup.page");
+    if (choice == 1 || choice == 3) {
+      startPage = Services.browserHandler.startPage;
+      if (startPage == "about:blank")
+        startPage = "";
+    }
+  } catch (e) {
+    Cu.reportError(e);
+  }
+
+  // If there's an override page and a start page, load both
+  if (overridePage && startPage)
+    return overridePage + "|" + startPage;
+
+  return overridePage || startPage || "about:blank";
+}
+
 function BrowserStartup() {
   var uriToLoad = null;
 
@@ -1216,8 +1249,15 @@ function BrowserStartup() {
   //                 [2]: referrer (nsIURI)
   //                 [3]: postData (nsIInputStream)
   //                 [4]: allowThirdPartyFixup (bool)
-  if ("arguments" in window && window.arguments[0])
-    uriToLoad = window.arguments[0];
+  //                 [5]: use default start page (bool)
+  if ("arguments" in window) { 
+    // Load the default start page if the flag is passed in
+    if (window.arguments[5])
+      uriToLoad = getDefaultStartPage();
+    // Otherwise, check to see if a URI to load was specified
+    else if (window.arguments[0])
+      uriToLoad = window.arguments[0];
+  }
 
   var isLoadingBlank = uriToLoad == "about:blank";
   var mustLoadSidebar = false;
@@ -1250,7 +1290,7 @@ function BrowserStartup() {
 
       gBrowser.swapBrowsersAndCloseOther(gBrowser.selectedTab, uriToLoad);
     }
-    else if (window.arguments.length >= 3) {
+    else if (window.arguments.length >= 3 && !window.arguments[5]) {
       loadURI(uriToLoad, window.arguments[2], window.arguments[3] || null,
               window.arguments[4] || false);
       content.focus();
@@ -3555,9 +3595,6 @@ function toOpenWindowByType(inType, uri, features)
 function OpenBrowserWindow()
 {
   var charsetArg = new String();
-  var handler = Components.classes["@mozilla.org/browser/clh;1"]
-                          .getService(Components.interfaces.nsIBrowserHandler);
-  var defaultArgs = handler.defaultArgs;
   var wintype = document.documentElement.getAttribute('windowtype');
 
   // if and only if the current window is a browser window and it has a document with a character
@@ -3570,11 +3607,13 @@ function OpenBrowserWindow()
     charsetArg = "charset="+DocCharset;
 
     //we should "inherit" the charset menu setting in a new window
-    win = window.openDialog("chrome://browser/content/", "_blank", "chrome,all,dialog=no", defaultArgs, charsetArg);
+    win = window.openDialog("chrome://browser/content/", "_blank", "chrome,all,dialog=no",
+                            "", charsetArg, null, null, null, true);
   }
   else // forget about the charset information.
   {
-    win = window.openDialog("chrome://browser/content/", "_blank", "chrome,all,dialog=no", defaultArgs);
+    win = window.openDialog("chrome://browser/content/", "_blank", "chrome,all,dialog=no",
+                            "", null, null, null, null, true);
   }
 
   return win;
