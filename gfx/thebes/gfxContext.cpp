@@ -457,6 +457,18 @@ gfxContext::Rectangle(const gfxRect& rect, bool snapToPixels)
     cairo_rectangle(mCairo, rect.X(), rect.Y(), rect.Width(), rect.Height());
   } else {
     Rect rec = ToRect(rect);
+
+    if (snapToPixels) {
+      gfxRect newRect(rect);
+      if (UserToDevicePixelSnapped(newRect, PR_TRUE)) {
+        Matrix mat = mDT->GetTransform();
+        mat.Invert();
+
+        // We need the user space rect.
+        rec = mat.TransformBounds(ToRect(newRect));
+      }
+    }
+
     if (!mPathBuilder && !mPathIsRect) {
       mPathIsRect = true;
       mRect = rec;
@@ -738,109 +750,105 @@ gfxContext::UserToDevice(const gfxRect& rect) const
 bool
 gfxContext::UserToDevicePixelSnapped(gfxRect& rect, bool ignoreScale) const
 {
-  if (mCairo) {
-    if (GetFlags() & FLAG_DISABLE_SNAPPING)
-        return PR_FALSE;
+  if (GetFlags() & FLAG_DISABLE_SNAPPING)
+      return PR_FALSE;
 
-    // if we're not at 1.0 scale, don't snap, unless we're
-    // ignoring the scale.  If we're not -just- a scale,
-    // never snap.
-    const gfxFloat epsilon = 0.0000001;
+  // if we're not at 1.0 scale, don't snap, unless we're
+  // ignoring the scale.  If we're not -just- a scale,
+  // never snap.
+  const gfxFloat epsilon = 0.0000001;
 #define WITHIN_E(a,b) (fabs((a)-(b)) < epsilon)
+  if (mCairo) {
     cairo_matrix_t mat;
     cairo_get_matrix(mCairo, &mat);
     if (!ignoreScale &&
         (!WITHIN_E(mat.xx,1.0) || !WITHIN_E(mat.yy,1.0) ||
-         !WITHIN_E(mat.xy,0.0) || !WITHIN_E(mat.yx,0.0)))
+          !WITHIN_E(mat.xy,0.0) || !WITHIN_E(mat.yx,0.0)))
         return PR_FALSE;
+  } else {
+    Matrix mat = mDT->GetTransform();
+    if (!ignoreScale &&
+        (!WITHIN_E(mat._11,1.0) || !WITHIN_E(mat._22,1.0) ||
+          !WITHIN_E(mat._12,0.0) || !WITHIN_E(mat._21,0.0)))
+        return PR_FALSE;
+  }
 #undef WITHIN_E
 
-    gfxPoint p1 = UserToDevice(rect.TopLeft());
-    gfxPoint p2 = UserToDevice(rect.TopRight());
-    gfxPoint p3 = UserToDevice(rect.BottomRight());
+  gfxPoint p1 = UserToDevice(rect.TopLeft());
+  gfxPoint p2 = UserToDevice(rect.TopRight());
+  gfxPoint p3 = UserToDevice(rect.BottomRight());
 
-    // Check that the rectangle is axis-aligned. For an axis-aligned rectangle,
-    // two opposite corners define the entire rectangle. So check if
-    // the axis-aligned rectangle with opposite corners p1 and p3
-    // define an axis-aligned rectangle whose other corners are p2 and p4.
-    // We actually only need to check one of p2 and p4, since an affine
-    // transform maps parallelograms to parallelograms.
-    if (p2 == gfxPoint(p1.x, p3.y) || p2 == gfxPoint(p3.x, p1.y)) {
-        p1.Round();
-        p3.Round();
+  // Check that the rectangle is axis-aligned. For an axis-aligned rectangle,
+  // two opposite corners define the entire rectangle. So check if
+  // the axis-aligned rectangle with opposite corners p1 and p3
+  // define an axis-aligned rectangle whose other corners are p2 and p4.
+  // We actually only need to check one of p2 and p4, since an affine
+  // transform maps parallelograms to parallelograms.
+  if (p2 == gfxPoint(p1.x, p3.y) || p2 == gfxPoint(p3.x, p1.y)) {
+      p1.Round();
+      p3.Round();
 
-        rect.MoveTo(gfxPoint(NS_MIN(p1.x, p3.x), NS_MIN(p1.y, p3.y)));
-        rect.SizeTo(gfxSize(NS_MAX(p1.x, p3.x) - rect.X(),
-                            NS_MAX(p1.y, p3.y) - rect.Y()));
-        return PR_TRUE;
-    }
-
-    return PR_FALSE;
-  } else {
-    return PR_FALSE;
+      rect.MoveTo(gfxPoint(NS_MIN(p1.x, p3.x), NS_MIN(p1.y, p3.y)));
+      rect.SizeTo(gfxSize(NS_MAX(p1.x, p3.x) - rect.X(),
+                          NS_MAX(p1.y, p3.y) - rect.Y()));
+      return PR_TRUE;
   }
+
+  return PR_FALSE;
 }
 
 bool
 gfxContext::UserToDevicePixelSnapped(gfxPoint& pt, bool ignoreScale) const
 {
-  if (mCairo) {
-    if (GetFlags() & FLAG_DISABLE_SNAPPING)
-        return PR_FALSE;
+  if (GetFlags() & FLAG_DISABLE_SNAPPING)
+      return PR_FALSE;
 
-    // if we're not at 1.0 scale, don't snap, unless we're
-    // ignoring the scale.  If we're not -just- a scale,
-    // never snap.
+  // if we're not at 1.0 scale, don't snap, unless we're
+  // ignoring the scale.  If we're not -just- a scale,
+  // never snap.
+  const gfxFloat epsilon = 0.0000001;
+#define WITHIN_E(a,b) (fabs((a)-(b)) < epsilon)
+  if (mCairo) {
     cairo_matrix_t mat;
     cairo_get_matrix(mCairo, &mat);
-    if ((!ignoreScale && (mat.xx != 1.0 || mat.yy != 1.0)) ||
-        (mat.xy != 0.0 || mat.yx != 0.0))
+    if (!ignoreScale &&
+        (!WITHIN_E(mat.xx,1.0) || !WITHIN_E(mat.yy,1.0) ||
+          !WITHIN_E(mat.xy,0.0) || !WITHIN_E(mat.yx,0.0)))
         return PR_FALSE;
-
-    pt = UserToDevice(pt);
-    pt.Round();
-    return PR_TRUE;
   } else {
-    return PR_TRUE;
+    Matrix mat = mDT->GetTransform();
+    if (!ignoreScale &&
+        (!WITHIN_E(mat._11,1.0) || !WITHIN_E(mat._22,1.0) ||
+          !WITHIN_E(mat._12,0.0) || !WITHIN_E(mat._21,0.0)))
+        return PR_FALSE;
   }
+#undef WITHIN_E
+
+  pt = UserToDevice(pt);
+  pt.Round();
+  return PR_TRUE;
 }
 
 void
 gfxContext::PixelSnappedRectangleAndSetPattern(const gfxRect& rect,
                                                gfxPattern *pattern)
 {
-  if (mCairo) {
-    gfxRect r(rect);
+  gfxRect r(rect);
 
-    // Bob attempts to pixel-snap the rectangle, and returns true if
-    // the snapping succeeds.  If it does, we need to set up an
-    // identity matrix, because the rectangle given back is in device
-    // coordinates.
-    //
-    // We then have to call a translate to dr.pos afterwards, to make
-    // sure the image lines up in the right place with our pixel
-    // snapped rectangle.
-    //
-    // If snapping wasn't successful, we just translate to where the
-    // pattern would normally start (in app coordinates) and do the
-    // same thing.
-
-    gfxMatrix mat = CurrentMatrix();
-    if (UserToDevicePixelSnapped(r)) {
-        IdentityMatrix();
-    }
-
-    Translate(r.TopLeft());
-    r.MoveTo(gfxPoint(0, 0));
-    Rectangle(r);
-    SetPattern(pattern);
-
-    SetMatrix(mat);
-  } else {
-    SetPattern(pattern);
-
-    Rectangle(rect);
-  }
+  // Bob attempts to pixel-snap the rectangle, and returns true if
+  // the snapping succeeds.  If it does, we need to set up an
+  // identity matrix, because the rectangle given back is in device
+  // coordinates.
+  //
+  // We then have to call a translate to dr.pos afterwards, to make
+  // sure the image lines up in the right place with our pixel
+  // snapped rectangle.
+  //
+  // If snapping wasn't successful, we just translate to where the
+  // pattern would normally start (in app coordinates) and do the
+  // same thing.
+  Rectangle(r, true);
+  SetPattern(pattern);
 }
 
 void
