@@ -40,10 +40,6 @@ srcdir		= @srcdir@
 VPATH		= @srcdir@
 relativesrcdir  = browser/base/content/test
 
-DIRS += \
-		newtab \
-		$(NULL)
-
 include $(DEPTH)/config/autoconf.mk
 include $(topsrcdir)/config/rules.mk
 
@@ -238,7 +234,6 @@ _BROWSER_FILES = \
                  file_bug550565_popup.html \
                  file_bug550565_favicon.ico \
                  browser_aboutHome.js \
-                 browser_homeTab.js \
                  app_bug575561.html \
                  app_subframe_bug575561.html \
                  browser_contentAreaClick.js \
