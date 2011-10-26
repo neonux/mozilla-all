@@ -1,0 +1,293 @@
+body {
+  padding-top: 106px;
+  font-family: MetaBold;
+  -moz-user-select: none;
+}
+
+input[type=button],
+input[type=button]::-moz-focus-inner {
+  padding: 0;
+  border: 0 none;
+  cursor: pointer;
+}
+
+.locked {
+  pointer-events: none;
+}
+
+/* TOOLBAR */
+#toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 13px;
+  height: 30px;
+  padding: 0;
+  margin: 0;
+  list-style-type: none;
+}
+
+body[dir=rtl] #toolbar {
+  top: 8px;
+  left: 8px;
+  right: 0;
+}
+
+#toolbar input[type=button] {
+  position: absolute;
+  cursor: pointer;
+  background-color: transparent;
+  background-image: url(chrome://browser/skin/newtab/toolbar.png);
+}
+
+#btn-show {
+  width: 11px;
+  height: 11px;
+  opacity: 0;
+  pointer-events: none;
+  background-position: -10px 0;
+  -moz-transition: opacity 200ms ease-out;
+}
+
+#btn-show:hover {
+  background-position: -10px -12px;
+}
+
+#btn-show:active {
+  background-position: -10px -24px;
+}
+
+#btn-hide {
+  width: 10px;
+  height: 10px;
+  -moz-transition: opacity 200ms ease-out;
+}
+
+#btn-hide:hover {
+  background-position: 0 -12px;
+}
+
+#btn-hide:active {
+  background-position: 0 -24px;
+}
+
+#btn-refresh {
+  top: 17px;
+  width: 11px;
+  height: 12px;
+  background-position: -21px 0;
+  opacity: 0;
+  pointer-events: none;
+  -moz-transition: opacity 200ms ease-out;
+}
+
+#btn-refresh:hover {
+  background-position: -21px -12px;
+}
+
+#btn-refresh:active {
+  background-position: -21px -24px;
+}
+
+.modified #btn-refresh {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.disabled #btn-show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.disabled #btn-hide, .disabled #btn-refresh {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* CONTENT */
+#grid {
+  display: block;
+  width: 637px;
+  height: 411px;
+  padding: 0;
+  margin: 0 auto;
+  overflow: hidden;
+  opacity: 1;
+  list-style-type: none;
+  -moz-transition: opacity 200ms ease-out;
+}
+
+.disabled #grid {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cell {
+  float: left;
+  width: 201px;
+  height: 127px;
+  margin: 0 16px 15px 0;
+}
+
+body[dir=rtl] .cell {
+  float: right;
+  margin: 0 0 15px 16px;
+}
+
+.cell:nth-child(3n+3) {
+  margin-right: 0;
+}
+
+body[dir=rtl] .cell:nth-child(3n+3) {
+  margin-left: 0;
+}
+
+.site {
+  display: block;
+  position: relative;
+  width: 201px;
+  height: 127px;
+  outline: none;
+  box-shadow: 0 0 0 #000;
+  -moz-transition: 200ms ease-out;
+  -moz-transition-property: top, left, box-shadow;
+}
+
+.img {
+  opacity: 0.75;
+  -moz-transition: opacity 200ms ease-out;
+}
+
+.site:hover .img {
+  opacity: 1;
+}
+
+.site.loading .img, .site.loading:hover .img {
+  opacity: 0;
+}
+
+.title {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 189px;
+  height: 29px;
+  padding: 0 6px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 11px;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  background: rgba(0, 0, 0, 0.8);
+  border: solid transparent;
+  border-width: 6px 0;
+  overflow: hidden;
+}
+
+/* BLACK STRIP */
+.strip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 195px;
+  height: 17px;
+  padding: 3px;
+  overflow: hidden;
+  border: solid rgba(30, 30, 30, 0.8);
+  border-width: 1px 0;
+  background: rgba(0, 0, 0, 0.8);
+  opacity: 0;
+  -moz-transition: opacity 200ms ease-out;
+}
+
+.site:hover .strip {
+  opacity: 1;
+}
+
+.strip input[type=button] {
+  width: 17px;
+  height: 17px;
+  background-color: transparent;
+  background-image: url(chrome://browser/content/newtab/strip.png);
+}
+
+.strip .btn-pin {
+  float: left;
+}
+
+body[dir=rtl] .strip .btn-pin {
+  float: right;
+}
+
+.strip .btn-pin:hover {
+  background-position: 0 -17px;
+}
+
+.strip .btn-pin:active,
+.site.pinned .strip .btn-pin {
+  background-position: 0 -34px;
+}
+
+.strip .btn-block {
+  float: right;
+  background-position: -17px 0;
+}
+
+body[dir=rtl] .strip .btn-block {
+  float: left;
+}
+
+.strip .btn-block:hover {
+  background-position: -17px -17px;
+}
+
+.strip .btn-block:active {
+  background-position: -17px -34px;
+}
+
+/* ANIMATIONS */
+.anim-fadein {
+  -moz-animation-duration: 200ms;
+  -moz-animation-name: fadein;
+}
+
+@-moz-keyframes fadein {
+  from { opacity: 0 }
+  to { opacity: 1 }
+}
+
+.anim-fadeout {
+  -moz-animation-duration: 200ms;
+  -moz-animation-name: fadeout;
+}
+
+@-moz-keyframes fadeout {
+  from { opacity: 1 }
+  to { opacity: 0 }
+}
+
+/* DRAG & DROP */
+.drag-img {
+  width: 1px;
+  height: 1px;
+  background: #000;
+}
+
+.site.ontop {
+  z-index: 10;
+  box-shadow: 0 1px 4px #000;
+}
+
+.site.ontop .img {
+  opacity: 1;
+}
+
+/* transition only the box-shadow, we want top and left immediately set */
+.site.dragged {
+  -moz-transition-property: box-shadow;
+}
+
+/* while dragging, disable all pointer events on sites */
+.dragging .site {
+  pointer-events: none;
+}

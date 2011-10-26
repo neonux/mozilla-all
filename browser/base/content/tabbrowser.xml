@@ -1095,7 +1095,7 @@
                 }
               }
 
-              if (title && title != "about:blank") {
+              if (title && title != "about:blank" && title != "about:newtab") {
                 // At this point, we now have a URI.
                 // Let's try to unescape it using a character set
                 // in case the URI is not ASCII.
@@ -1267,7 +1267,7 @@
 
             var blank = !aURI || (aURI == "about:blank");
 
-            if (blank)
+            if (blank || aURI == "about:newtab")
               t.setAttribute("label", this.mStringBundle.getString("tabs.emptyTabTitle"));
             else
               t.setAttribute("label", aURI);
@@ -1617,7 +1617,7 @@
             aTab.closing = true;
             this._removingTabs.push(aTab);
             if (newTab)
-              this.addTab("about:blank", {skipAnimation: true});
+              this.addTab("about:newtab", {skipAnimation: true});
             else
               this.tabContainer.updateVisibility();
 
