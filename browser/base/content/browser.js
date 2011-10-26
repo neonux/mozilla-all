@@ -4182,7 +4182,8 @@ var XULBrowserWindow = {
   startTime: 0,
   statusText: "",
   isBusy: false,
-  inContentWhitelist: ["about:addons", "about:permissions"],
+  inContentWhitelist: ["about:addons", "about:permissions",
+                       "chrome://browser/content/places/places.xul"],
 
   QueryInterface: function (aIID) {
     if (aIID.equals(Ci.nsIWebProgressListener) ||
@@ -4562,7 +4563,7 @@ var XULBrowserWindow = {
 
   hideChromeForLocation: function(aLocation) {
     return this.inContentWhitelist.some(function(aSpec) {
-      return aSpec == aLocation;
+      return aSpec == aLocation || !aLocation.indexOf(aSpec + "#");
     });
   },
 
@@ -8460,16 +8461,18 @@ var LightWeightThemeWebInstaller = {
  *        If no suitable window is found, a new one will be opened.
  * @return True if an existing tab was found, false otherwise
  */
-function switchToTabHavingURI(aURI, aOpenNew) {
+function switchToTabHavingURI(aURI, aOpenNew, aIgnoreRef) {
   // This will switch to the tab in aWindow having aURI, if present.
   function switchIfURIInWindow(aWindow) {
     let browsers = aWindow.gBrowser.browsers;
     for (let i = 0; i < browsers.length; i++) {
       let browser = browsers[i];
-      if (browser.currentURI.equals(aURI)) {
+      if (browser.currentURI[aIgnoreRef ? "equalsExceptRef" : "equals"](aURI)) {
         // Focus the matching window & tab
         aWindow.focus();
         aWindow.gBrowser.tabContainer.selectedIndex = i;
+        if (aIgnoreRef && !browser.currentURI.equals(aURI))
+          browser.loadURI(aURI instanceof Ci.nsIURI ? aURI.spec : aURI);
         return true;
       }
     }

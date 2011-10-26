@@ -74,8 +74,20 @@ var PlacesOrganizer = {
     var leftPaneSelection = "AllBookmarks"; // default to all-bookmarks
     if (window.arguments && window.arguments[0])
       leftPaneSelection = window.arguments[0];
+    else if (location.hash.length > 1)
+      leftPaneSelection = location.hash.slice(1);
 
     this.selectLeftPaneQuery(leftPaneSelection);
+
+    window.addEventListener("hashchange", this, true);
+
+    if (!window.arguments) { // in-content UI
+      document.documentElement.setAttribute("in-content", true);
+      let keysets = document.getElementsByTagName("keyset");
+      for (let i = 0; i < keysets.length; i++)
+        keysets[i].setAttribute("disabled", true);
+    }
+
     // clear the back-stack
     this._backHistory.splice(0, this._backHistory.length);
     document.getElementById("OrganizerCommand:Back").setAttribute("disabled", true);
@@ -128,6 +140,9 @@ var PlacesOrganizer = {
   },
 
   handleEvent: function PO_handleEvent(aEvent) {
+    if (aEvent.type == "hashchange" && location.hash.length > 1)
+      PlacesOrganizer.selectLeftPaneQuery(location.hash.slice(1));
+
     if (aEvent.type != "AppCommand")
       return;
 
