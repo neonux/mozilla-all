@@ -2982,7 +2982,7 @@
           // Keep the dragged tab visually within the region of like tabs.
           let tabs = this.tabbrowser.visibleTabs;
           let numPinned = this.tabbrowser._numPinnedTabs;
-          let leftmostTab = draggedTab.pinned ? this.tabbrowser._homeTabExists : tabs[numPinned];
+          let leftmostTab = draggedTab.pinned ? tabs[this.tabbrowser._homeTabExists] : tabs[numPinned];
           let rightmostTab = draggedTab.pinned ? tabs[numPinned-1] : tabs[tabs.length-1];
           let tabWidth = draggedTab.getBoundingClientRect().width;
           let ltr = (window.getComputedStyle(this).direction == "ltr");
@@ -3198,6 +3198,9 @@
             // swapBrowsersAndCloseOther, so that the updateCurrentBrowser
             // it triggers will correctly update our URL bar.
             that.selectedItem = newTab;
+
+            if (this.tabbrowser._homeTabExists && this.childElementCount == 1)
+              window.closeWindow(true);
             return;
           } while (false);
 
@@ -3206,7 +3209,7 @@
             this._tabDragPanel.clientWidth / 2, draggedTab._dragData._dragOffsetY);
           this._endTabDrag();
 
-          if (this.childElementCount == 1) {
+          if (this.childElementCount - this.tabbrowser._homeTabExists == 1) {
             // Resize _before_ move to ensure the window fits the new screen. If
             // the window is too large for its screen, the window manager may do
             // automatic repositioning.

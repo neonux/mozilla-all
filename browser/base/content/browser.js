@@ -1238,27 +1238,20 @@ function getDefaultStartPage() {
 }
 
 function initHomeTab(uriToLoad, defaultStartPage) {
-  // add home tab (replace the exisiting tab with this)
-  gBrowser.loadURI("about:home");
-  gBrowser.addHomeTab(gBrowser.selectedTab);
-
-  // got a uriToLoad? -- add that guy in a tab
-  if (uriToLoad) {
-    gBrowser.addTab(uriToLoad);
+  let tab = gBrowser.selectedTab;
+  if (!uriToLoad && defaultStartPage) {
+    loadURI("about:home");
+    // open override page or blank page if startup pref calls for it
+    let uri = Services.browserHandler.overridePage ||
+               !Services.prefs.getIntPref("browser.startup.page") && "about:blank";
+    if (uri)
+      gBrowser.selectedTab = gBrowser.addTab(uri, {skipAnimation: true});
+  } else {
+    tab = gBrowser.addTab("about:home", {skipAnimation: true});
+    gBrowser.pinTab(tab);
+    gBrowser.moveTabTo(tab, 0);
   }
-  // or do our default start page stuff
-  else if (defaultStartPage) {
-    // check to see if there's an override page
-    let overridePage = Services.browserHandler.overridePage;
-    if (overridePage) {
-      gBrowser.selectedTab = gBrowser.addTab(overridePage, { skipAnimation: true });
-    } else {
-      // if there's no override page, look at startup pref
-      let choice = Services.prefs.getIntPref("browser.startup.page");
-      if (choice == 0)
-        gBrowser.selectedTab = gBrowser.addTab("about:blank", { skipAnimation: true });
-    }
-  }
+  gBrowser.addHomeTab(tab);
 }
 
 function BrowserStartup() {
@@ -1290,9 +1283,7 @@ function BrowserStartup() {
     homeTabEnabled = Services.prefs.getBoolPref("browser.hometab.enabled");
   } catch (e) { }
 
-  if (homeTabEnabled)
-    initHomeTab(uriToLoad, defaultStartPage);
-  else if (defaultStartPage)
+  if (!homeTabEnabled && defaultStartPage)
     uriToLoad = getDefaultStartPage();
 
   var isLoadingBlank = uriToLoad == "about:blank";
@@ -1300,7 +1291,7 @@ function BrowserStartup() {
 
   prepareForStartup();
 
-  if (uriToLoad && !isLoadingBlank && !homeTabEnabled) {
+  if (uriToLoad && !isLoadingBlank) {
     if (uriToLoad instanceof Ci.nsISupportsArray) {
       let count = uriToLoad.Count();
       let specs = [];
@@ -1336,6 +1327,9 @@ function BrowserStartup() {
     else
       loadOneOrMoreURIs(uriToLoad);
   }
+
+  if (homeTabEnabled)
+    initHomeTab(uriToLoad, defaultStartPage);
 
   if (window.opener && !window.opener.closed) {
     let openerSidebarBox = window.opener.document.getElementById("sidebar-box");

@@ -169,7 +169,8 @@ function onSearchSubmit(aEvent)
     for (let key in SEARCH_TOKENS) {
       url = url.replace(key, SEARCH_TOKENS[key]);
     }
-    window.location.href = url;
+    window.open(url);
+    document.getElementById("searchForm").reset();
   }
 
   aEvent.preventDefault();
@@ -286,7 +287,7 @@ function activateSnippetsButtonClick(aElt) {
     document.getElementById("snippets")
             .addEventListener("click", function(aEvent) {
       if (aEvent.target.nodeName != "a")
-        window.location = links[0].href;
+        window.open(links[0].href);
     }, false);
   }
 }
