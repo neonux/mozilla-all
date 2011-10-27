@@ -69,7 +69,7 @@ NewTabUtils.Storage = {
               .getService(Ci.nsIDOMStorageManager);
 
     delete this._storage;
-    this._storage = dsm.getLocalStorageForPrincipal(principal, "");
+    return this._storage = dsm.getLocalStorageForPrincipal(principal, "");
   },
 
   get: function NTU_Storage_get(aName, aDefault) {

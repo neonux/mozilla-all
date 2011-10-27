@@ -162,6 +162,10 @@ body[dir=rtl] .cell:nth-child(3n+3) {
   opacity: 1;
 }
 
+.site.loading .img, .site.loading:hover .img {
+  opacity: 0;
+}
+
 .title {
   position: absolute;
   left: 0;

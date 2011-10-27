@@ -43,9 +43,12 @@ let Ci = Components.interfaces;
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/Geometry.jsm");
+Cu.import("resource:///modules/ThumbnailUtils.jsm");
 Cu.import("resource:///modules/NewTabUtils.jsm");
 
 const PREF_NEWTAB_ENABLED = "browser.newtab.enabled";
+const THUMB_WIDTH = 201;
+const THUMB_HEIGHT = 127;
 
 #include animations.js
 #include transformations.js
@@ -66,18 +69,22 @@ function trace(aMsg) {
 
 // TODO
 function extend(aParent, aObject) {
-  for (let name in aParent) {
-    let getter, setter;
+  function copy(aSource, aDest) {
+    for (let name in aSource) {
+      let getter, setter;
 
-    if (getter = aParent.__lookupGetter__(name))
-      aObject.__defineGetter__(name, getter);
-    else if (setter = aParent.__lookupSetter__(name))
-      aObject.__defineSetter__(name, setter);
-    else
-     aObject[name] = aParent[name];
+      if (getter = aSource.__lookupGetter__(name))
+        aDest.__defineGetter__(name, getter);
+      else if (setter = aSource.__lookupSetter__(name))
+        aDest.__defineSetter__(name, setter);
+      else
+       aDest[name] = aSource[name];
+    }
+
+    return aDest;
   }
 
-  return aObject;
+  return copy(aObject, copy(aParent, {}));
 }
 
 // TODO
@@ -216,8 +223,8 @@ let Grid = {
     site.setAttribute("draggable", "true");
 
     site.innerHTML =
-      '<img class="img" width="201" height="127" ' +
-      ' src="chrome://browser/content/newtab/thumb.png" alt=""/>' +
+      '<img class="img" width="' + THUMB_WIDTH +'" ' +
+      ' height="' + THUMB_HEIGHT + '" alt=""/>' +
       '<span class="title"/>' +
       '<span class="strip">' +
       '  <input class="btn-pin" type="button"/>' +
@@ -368,9 +375,23 @@ Site.prototype = {
   _fillNode: function Site__fillNode() {
     let {url, title} = this;
 
-    this.node.setAttribute("href", url);
-    this._querySelector(".img").setAttribute("alt", title);
+    let node = this.node;
+    node.setAttribute("href", url);
+    node.classList.add("loading");
+
     this._querySelector(".title").textContent = title;
+
+    let img = this._querySelector(".img")
+    img.setAttribute("alt", title);
+
+    // wait until the image has loaded
+    img.addEventListener("load", function onLoad() {
+      img.removeEventListener("load", onLoad, false);
+      node.classList.remove("loading");
+    }, false);
+
+    let thumbUri = ThumbnailUtils.getThumbnailUri(url, THUMB_WIDTH, THUMB_HEIGHT);
+    img.setAttribute("src", thumbUri.spec);
 
     if (this.isPinned())
       this.node.classList.add("pinned");
