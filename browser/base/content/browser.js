@@ -4176,7 +4176,7 @@ var XULBrowserWindow = {
   startTime: 0,
   statusText: "",
   isBusy: false,
-  inContentWhitelist: ["about:addons", "about:permissions",
+  inContentWhitelist: ["about:addons", "about:permissions", "about:sync-progress",
                        "chrome://browser/content/places/places.xul"],
 
   QueryInterface: function (aIID) {

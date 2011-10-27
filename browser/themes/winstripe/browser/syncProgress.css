@@ -1,4 +1,3 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
@@ -12,15 +11,15 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is mozilla.org code.
+ * The Original Code is Firefox Sync.
  *
  * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
+ * the Mozilla Foundation.
+ * Portions created by the Initial Developer are Copyright (C) 2011
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
- *   John Fairhurst <john_fairhurst@iname.com>
+ *   Allison Naaktgeboren <ally@mozilla.com>
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -35,30 +34,46 @@
  * the terms of any one of the MPL, the GPL or the LGPL.
  *
  * ***** END LICENSE BLOCK ***** */
+@import url(chrome://global/skin/inContentUI.css);
 
-#ifndef TOOLKIT_H      
-#define TOOLKIT_H
+:root {
+  height: 100%;
+  width: 100%;
+  padding: 0;
+}
 
-#include "nsIToolkit.h"
+body {
+  margin: 0;
+  padding: 0 2em;
+}
 
-/**
- * Wrapper around the thread running the message pump.
- * The toolkit abstraction is necessary because the message pump must
- * execute within the same thread that created the widget under Win32.
- */ 
+#floatingBox {
+  margin: 4em auto;
+  max-width: 40em;
+  min-width: 23em;
+  padding: 1em 1.5em;
+  position: relative;
+  text-align: center;
+}
 
-class nsToolkit : public nsIToolkit
-{
+#successLogo {
+  margin: 1em 2em;
+}
 
-  public:
+#loadingText {
+  margin: 2em 6em;
+}
 
-            NS_DECL_ISUPPORTS
+#progressBar {
+  margin: 2em 10em;
+}
 
-                            nsToolkit();
-            NS_IMETHOD      Init(PRThread *aThread);
+#uploadProgressBar{
+  width: 100%;
+}
 
-private:
-                            ~nsToolkit();
-};
-
-#endif  // TOOLKIT_H
+#bottomRow {
+  margin-top: 2em;
+  padding: 0;
+  text-align: end;
+}
