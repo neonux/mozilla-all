@@ -39,12 +39,11 @@
 
 interface nsICommandLine;
 
-[scriptable, uuid(14b3db5d-a7ca-4ef6-bde0-8f018148bc9b)]
+[scriptable, uuid(8D3F5A9D-118D-4548-A137-CF7718679069)]
 interface nsIBrowserHandler : nsISupports
 {
   attribute AUTF8String startPage;
   attribute AUTF8String defaultArgs;
-  attribute AUTF8String overridePage;
 
   /**
    * Extract the width and height specified on the command line, if present.

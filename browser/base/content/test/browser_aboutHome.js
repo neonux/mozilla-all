@@ -121,12 +121,12 @@ function test()
   waitForExplicitFinish();
 
   // browser-chrome test harness inits browser specifying an hardcoded page
-  // and this causes nsIBrowserHandler.overridePage to not be evaluated since
+  // and this causes nsIBrowserHandler.defaultArgs to not be evaluated since
   // there is a predefined argument.
   // About:home localStorage is populated with overridden homepage, that is
-  // setup in the overridePage getter.
-  // Thus to populate about:home we need to get overridePage manually.
-  Services.browserHandler.overridePage;
+  // setup in the defaultArgs getter.
+  // Thus to populate about:home we need to get defaultArgs manually.
+  Cc["@mozilla.org/browser/clh;1"].getService(Ci.nsIBrowserHandler).defaultArgs;
 
   // Ensure that by default we don't try to check for remote snippets since that
   // could be tricky due to network bustages or slowness.

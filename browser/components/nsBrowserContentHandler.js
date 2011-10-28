@@ -55,6 +55,7 @@ const nsIFileURL             = Components.interfaces.nsIFileURL;
 const nsIHttpProtocolHandler = Components.interfaces.nsIHttpProtocolHandler;
 const nsIInterfaceRequestor  = Components.interfaces.nsIInterfaceRequestor;
 const nsINetUtil             = Components.interfaces.nsINetUtil;
+const nsIPrefBranch          = Components.interfaces.nsIPrefBranch;
 const nsIPrefLocalizedString = Components.interfaces.nsIPrefLocalizedString;
 const nsISupportsString      = Components.interfaces.nsISupportsString;
 const nsIURIFixup            = Components.interfaces.nsIURIFixup;
@@ -127,10 +128,10 @@ const OVERRIDE_NEW_BUILD_ID = 3;
  *                        same Gecko milestone (i.e. after a nightly upgrade).
  *  OVERRIDE_NONE otherwise.
  */
-function needHomepageOverride() {
+function needHomepageOverride(prefb) {
   var savedmstone = null;
   try {
-    savedmstone = Services.prefs.getCharPref("browser.startup.homepage_override.mstone");
+    savedmstone = prefb.getCharPref("browser.startup.homepage_override.mstone");
   } catch (e) {}
 
   if (savedmstone == "ignore")
@@ -141,7 +142,7 @@ function needHomepageOverride() {
 
   var savedBuildID = null;
   try {
-    savedBuildID = Services.prefs.getCharPref("browser.startup.homepage_override.buildID");
+    savedBuildID = prefb.getCharPref("browser.startup.homepage_override.buildID");
   } catch (e) {}
 
   var buildID =  Components.classes["@mozilla.org/xre/app-info;1"]
@@ -153,15 +154,15 @@ function needHomepageOverride() {
     // about:rights we've removed the EULA stuff and default pref, but we need
     // a way to make existing profiles retain the default that we removed.
     if (savedmstone)
-      Services.prefs.setBoolPref("browser.rights.3.shown", true);
+      prefb.setBoolPref("browser.rights.3.shown", true);
     
-    Services.prefs.setCharPref("browser.startup.homepage_override.mstone", mstone);
-    Services.prefs.setCharPref("browser.startup.homepage_override.buildID", buildID);
+    prefb.setCharPref("browser.startup.homepage_override.mstone", mstone);
+    prefb.setCharPref("browser.startup.homepage_override.buildID", buildID);
     return (savedmstone ? OVERRIDE_NEW_MSTONE : OVERRIDE_NEW_PROFILE);
   }
 
   if (buildID != savedBuildID) {
-    Services.prefs.setCharPref("browser.startup.homepage_override.buildID", buildID);
+    prefb.setCharPref("browser.startup.homepage_override.buildID", buildID);
     return OVERRIDE_NEW_BUILD_ID;
   }
 
@@ -240,6 +241,21 @@ function copyPrefOverride() {
 const NO_EXTERNAL_URIS = 1;
 
 function openWindow(parent, url, target, features, args, noExternalArgs) {
+  var wwatch = Components.classes["@mozilla.org/embedcomp/window-watcher;1"]
+                         .getService(nsIWindowWatcher);
+
+  if (noExternalArgs == NO_EXTERNAL_URIS) {
+    // Just pass in the defaultArgs directly
+    var argstring;
+    if (args) {
+      argstring = Components.classes["@mozilla.org/supports-string;1"]
+                            .createInstance(nsISupportsString);
+      argstring.data = args;
+    }
+
+    return wwatch.openWindow(parent, url, target, features, argstring);
+  }
+  
   // Pass an array to avoid the browser "|"-splitting behavior.
   var argArray = Components.classes["@mozilla.org/supports-array;1"]
                     .createInstance(Components.interfaces.nsISupportsArray);
@@ -274,15 +290,7 @@ function openWindow(parent, url, target, features, args, noExternalArgs) {
   argArray.AppendElement(null); // postData
   argArray.AppendElement(null); // allowThirdPartyFixup
 
-  if (noExternalArgs == NO_EXTERNAL_URIS) {
-    // Just pass a flag to indicate that default start pages should open
-    var sbool = Components.classes["@mozilla.org/supports-PRBool;1"]
-                          .createInstance(Components.interfaces.nsISupportsPRBool);
-    sbool.data = true;
-    argArray.AppendElement(sbool); // defaultArgs
-  }
-
-  return Services.ww.openWindow(parent, url, target, features, argArray);
+  return wwatch.openWindow(parent, url, target, features, argArray);
 }
 
 function openPreferences() {
@@ -364,7 +372,9 @@ nsBrowserContentHandler.prototype = {
       return this.mChromeURL;
     }
 
-    this.mChromeURL = Services.prefs.getCharPref("browser.chromeURL");
+    var prefb = Components.classes["@mozilla.org/preferences-service;1"]
+                          .getService(nsIPrefBranch);
+    this.mChromeURL = prefb.getCharPref("browser.chromeURL");
 
     return this.mChromeURL;
   },
@@ -569,14 +579,13 @@ nsBrowserContentHandler.prototype = {
   /* nsIBrowserHandler */
 
   get defaultArgs() {
-    return "";
-  },
+    var prefb = Components.classes["@mozilla.org/preferences-service;1"]
+                          .getService(nsIPrefBranch);
 
-  //XXX Should the about:home logic in here be moved somewhere else?
-  get overridePage() {
     var overridePage = "";
+    var haveUpdateSession = false;
     try {
-      let override = needHomepageOverride();
+      let override = needHomepageOverride(prefb);
       if (override != OVERRIDE_NONE) {
         // Setup the default search engine to about:home page.
         AboutHomeUtils.loadDefaultSearchEngine();
@@ -591,8 +600,13 @@ nsBrowserContentHandler.prototype = {
             // Existing profile, new milestone build.
             copyPrefOverride();
 
+            // Check whether we have a session to restore. If we do, we assume
+            // that this is an "update" session.
+            var ss = Components.classes["@mozilla.org/browser/sessionstartup;1"]
+                               .getService(Components.interfaces.nsISessionStartup);
+            haveUpdateSession = ss.doRestore();
             overridePage = Services.urlFormatter.formatURLPref("startup.homepage_override_url");
-            if (Services.prefs.prefHasUserValue("app.update.postupdate"))
+            if (prefb.prefHasUserValue("app.update.postupdate"))
               overridePage = getPostUpdateOverridePage(overridePage);
             break;
         }
@@ -607,7 +621,26 @@ nsBrowserContentHandler.prototype = {
     } catch (ex) {}
 
     // formatURLPref might return "about:blank" if getting the pref fails
-    return overridePage == "about:blank" ? "" : overridePage;
+    if (overridePage == "about:blank")
+      overridePage = "";
+
+    var startPage = "";
+    try {
+      var choice = prefb.getIntPref("browser.startup.page");
+      if (choice == 1 || choice == 3)
+        startPage = this.startPage;
+    } catch (e) {
+      Components.utils.reportError(e);
+    }
+
+    if (startPage == "about:blank")
+      startPage = "";
+
+    // Only show the startPage if we're not restoring an update session.
+    if (overridePage && startPage && !haveUpdateSession)
+      return overridePage + "|" + startPage;
+
+    return overridePage || startPage || "about:blank";
   },
 
   get startPage() {
