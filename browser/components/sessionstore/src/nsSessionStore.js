@@ -1677,11 +1677,13 @@ SessionStoreService.prototype = {
     var tabbrowser = aWindow.gBrowser;
     var tabs = tabbrowser.tabs;
     var tabsData = this._windows[aWindow.__SSi].tabs = [];
-    
-    for (var i = 0; i < tabs.length; i++)
+
+    // don't remember the home tab
+    for (var i = tabbrowser._homeTabExists; i < tabs.length; i++)
       tabsData.push(this._collectTabData(tabs[i]));
-    
-    this._windows[aWindow.__SSi].selected = tabbrowser.mTabBox.selectedIndex + 1;
+
+    // shift the selected index over if the home tab exists
+    this._windows[aWindow.__SSi].selected = tabbrowser.mTabBox.selectedIndex + 1 - tabbrowser._homeTabExists;
   },
 
   /**
@@ -2604,7 +2606,8 @@ SessionStoreService.prototype = {
     }
 
     var tabbrowser = aWindow.gBrowser;
-    var openTabCount = aOverwriteTabs ? tabbrowser.browsers.length : -1;
+    // don't include the home tab in the open tab count
+    var openTabCount = aOverwriteTabs ? tabbrowser.browsers.length - tabbrowser._homeTabExists : -1;
     var newTabCount = winData.tabs.length;
     var tabs = [];
 
@@ -2615,18 +2618,20 @@ SessionStoreService.prototype = {
 
     // unpin all tabs to ensure they are not reordered in the next loop
     if (aOverwriteTabs) {
-      for (let t = tabbrowser._numPinnedTabs - 1; t > -1; t--)
+      // leave the home tab alone
+      for (let t = tabbrowser._numPinnedTabs - 1; t > tabbrowser._homeTabExists - 1; t--)
         tabbrowser.unpinTab(tabbrowser.tabs[t]);
     }
 
     // make sure that the selected tab won't be closed in order to
     // prevent unnecessary flickering
-    if (aOverwriteTabs && tabbrowser.selectedTab._tPos >= newTabCount)
+    if (aOverwriteTabs && tabbrowser.selectedTab._tPos >= newTabCount && !tabbrowser.selectedTab.isHomeTab)
       tabbrowser.moveTabTo(tabbrowser.selectedTab, newTabCount - 1);
 
     for (var t = 0; t < newTabCount; t++) {
       tabs.push(t < openTabCount ?
-                tabbrowser.tabs[t] :
+                // shift tabs over if the home tab exists
+                tabbrowser.tabs[t + tabbrowser._homeTabExists] :
                 tabbrowser.addTab("about:blank", {skipAnimation: true}));
       // when resuming at startup: add additionally requested pages to the end
       if (!aOverwriteTabs && root._firstTabs) {
@@ -2647,7 +2652,8 @@ SessionStoreService.prototype = {
     // tabs will be rebuilt and marked if they need to be restored after loading
     // state (in restoreHistoryPrecursor).
     if (aOverwriteTabs) {
-      for (let i = 0; i < tabbrowser.tabs.length; i++) {
+      // don't overwrite the home tab
+      for (let i = tabbrowser._homeTabExists; i < tabbrowser.tabs.length; i++) {
         if (tabbrowser.browsers[i].__SS_restoreState)
           this._resetTabRestoringState(tabbrowser.tabs[i]);
       }
