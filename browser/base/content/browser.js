@@ -1619,12 +1619,6 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
   // Enable/Disable auto-hide tabbar
   gBrowser.tabContainer.updateVisibility();
 
-  gPrefService.addObserver(gHomeButton.prefDomain, gHomeButton, false);
-
-  var homeButton = document.getElementById("home-button");
-  gHomeButton.updateTooltip(homeButton);
-  gHomeButton.updatePersonalToolbarStyle(homeButton);
-
 #ifdef HAVE_SHELL_SERVICE
   // Perform default browser checking (after window opens).
   var shell = getShellService();
@@ -1891,12 +1885,6 @@ function BrowserShutdown() {
     Services.obs.removeObserver(gXPInstallObserver, "addon-install-failed");
     Services.obs.removeObserver(gXPInstallObserver, "addon-install-complete");
     Services.obs.removeObserver(gFormSubmitObserver, "invalidformsubmit");
-
-    try {
-      gPrefService.removeObserver(gHomeButton.prefDomain, gHomeButton);
-    } catch (ex) {
-      Components.utils.reportError(ex);
-    }
 
     BrowserOffline.uninit();
     OfflineApps.uninit();
@@ -2168,39 +2156,6 @@ function BrowserReloadSkipCache() {
   // Bypass proxy and cache.
   const reloadFlags = nsIWebNavigation.LOAD_FLAGS_BYPASS_PROXY | nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE;
   BrowserReloadWithFlags(reloadFlags);
-}
-
-var BrowserHome = BrowserGoHome;
-function BrowserGoHome(aEvent) {
-  if (aEvent && "button" in aEvent &&
-      aEvent.button == 2) // right-click: do nothing
-    return;
-
-  var homePage = gHomeButton.getHomePage();
-  var where = whereToOpenLink(aEvent, false, true);
-  var urls;
-
-  // Home page should open in a new tab when current tab is an app tab
-  if (where == "current" &&
-      gBrowser &&
-      gBrowser.selectedTab.pinned)
-    where = "tab";
-
-  // openUILinkIn in utilityOverlay.js doesn't handle loading multiple pages
-  switch (where) {
-  case "current":
-    loadOneOrMoreURIs(homePage);
-    break;
-  case "tabshifted":
-  case "tab":
-    urls = homePage.split("|");
-    var loadInBackground = getBoolPref("browser.tabs.loadBookmarksInBackground", false);
-    gBrowser.loadTabs(urls, loadInBackground);
-    break;
-  case "window":
-    OpenBrowserWindow();
-    break;
-  }
 }
 
 function loadOneOrMoreURIs(aURIString)
@@ -3187,43 +3142,6 @@ var browserDragAndDrop = {
   drop: function (aEvent, aName) Services.droppedLinkHandler.dropLink(aEvent, aName)
 };
 
-var homeButtonObserver = {
-  onDrop: function (aEvent)
-    {
-      setTimeout(openHomeDialog, 0, browserDragAndDrop.drop(aEvent, { }));
-    },
-
-  onDragOver: function (aEvent)
-    {
-      browserDragAndDrop.dragOver(aEvent);
-      aEvent.dropEffect = "link";
-    },
-  onDragExit: function (aEvent)
-    {
-    }
-}
-
-function openHomeDialog(aURL)
-{
-  var promptTitle = gNavigatorBundle.getString("droponhometitle");
-  var promptMsg   = gNavigatorBundle.getString("droponhomemsg");
-  var pressedVal  = Services.prompt.confirmEx(window, promptTitle, promptMsg,
-                          Services.prompt.STD_YES_NO_BUTTONS,
-                          null, null, null, null, {value:0});
-
-  if (pressedVal == 0) {
-    try {
-      var str = Components.classes["@mozilla.org/supports-string;1"]
-                          .createInstance(Components.interfaces.nsISupportsString);
-      str.data = aURL;
-      gPrefService.setComplexValue("browser.startup.homepage",
-                                   Components.interfaces.nsISupportsString, str);
-    } catch (ex) {
-      dump("Failed to set the home page.\n"+ex+"\n");
-    }
-  }
-}
-
 var bookmarksButtonObserver = {
   onDrop: function (aEvent)
   {
@@ -3749,7 +3667,6 @@ function BrowserToolboxCustomizeDone(aToolboxChanged) {
     gURLBar = document.getElementById("urlbar");
 
     gProxyFavIcon = document.getElementById("page-proxy-favicon");
-    gHomeButton.updateTooltip();
     gIdentityHandler._cacheElements();
     window.XULBrowserWindow.init();
 
@@ -3803,7 +3720,6 @@ function BrowserToolboxCustomizeChange(aType) {
       retrieveToolbarIconsizesFromTheme();
       break;
     default:
-      gHomeButton.updatePersonalToolbarStyle();
       BookmarksMenuButton.customizeChange();
       allTabs.readPref();
   }
@@ -5557,61 +5473,6 @@ function fireSidebarFocusedEvent() {
   event.initEvent("SidebarFocused", true, false);
   sidebar.contentWindow.dispatchEvent(event);
 }
-
-var gHomeButton = {
-  prefDomain: "browser.startup.homepage",
-  observe: function (aSubject, aTopic, aPrefName)
-  {
-    if (aTopic != "nsPref:changed" || aPrefName != this.prefDomain)
-      return;
-
-    this.updateTooltip();
-  },
-
-  updateTooltip: function (homeButton)
-  {
-    if (!homeButton)
-      homeButton = document.getElementById("home-button");
-    if (homeButton) {
-      var homePage = this.getHomePage();
-      homePage = homePage.replace(/\|/g,', ');
-      if (homePage.toLowerCase() == "about:home")
-        homeButton.setAttribute("tooltiptext", homeButton.getAttribute("aboutHomeOverrideTooltip"));
-      else
-        homeButton.setAttribute("tooltiptext", homePage);
-    }
-  },
-
-  getHomePage: function ()
-  {
-    var url;
-    try {
-      url = gPrefService.getComplexValue(this.prefDomain,
-                                Components.interfaces.nsIPrefLocalizedString).data;
-    } catch (e) {
-    }
-
-    // use this if we can't find the pref
-    if (!url) {
-      var SBS = Cc["@mozilla.org/intl/stringbundle;1"].getService(Ci.nsIStringBundleService);
-      var configBundle = SBS.createBundle("chrome://branding/locale/browserconfig.properties");
-      url = configBundle.GetStringFromName(this.prefDomain);
-    }
-
-    return url;
-  },
-
-  updatePersonalToolbarStyle: function (homeButton)
-  {
-    if (!homeButton)
-      homeButton = document.getElementById("home-button");
-    if (homeButton)
-      homeButton.className = homeButton.parentNode.id == "PersonalToolbar"
-                               || homeButton.parentNode.parentNode.id == "PersonalToolbar" ?
-                             homeButton.className.replace("toolbarbutton-1", "bookmark-item") :
-                             homeButton.className.replace("bookmark-item", "toolbarbutton-1");
-  }
-};
 
 /**
  * Gets the selected text in the active browser. Leading and trailing
