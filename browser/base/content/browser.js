@@ -4474,6 +4474,10 @@ var XULBrowserWindow = {
     if (originalTarget != "" || !isAppTab)
       return originalTarget;
 
+    // Open links from home tab in new tabs.
+    if (linkNode.ownerDocument.documentURIObject.spec == "about:home")
+      return "_blank";
+
     // External links from within app tabs should always open in new tabs
     // instead of replacing the app tab's page (Bug 575561)
     let linkHost;
