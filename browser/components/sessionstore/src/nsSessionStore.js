@@ -1642,7 +1642,7 @@ SessionStoreService.prototype = {
     // comparison to home pages. If all the tabs are home pages then we'll end
     // up overwriting all of them. Otherwise we'll just close the tabs that
     // match home pages.
-    let homePages = Services.browserHandler.startPage.split("|");
+    let homePages = aWindow.gHomeButton.getHomePage().split("|");
     let removableTabs = [];
     let tabbrowser = aWindow.gBrowser;
     let normalTabsLen = tabbrowser.tabs.length - tabbrowser._numPinnedTabs;
@@ -1677,13 +1677,11 @@ SessionStoreService.prototype = {
     var tabbrowser = aWindow.gBrowser;
     var tabs = tabbrowser.tabs;
     var tabsData = this._windows[aWindow.__SSi].tabs = [];
-
-    // don't remember the home tab
-    for (var i = tabbrowser._homeTabExists; i < tabs.length; i++)
+    
+    for (var i = 0; i < tabs.length; i++)
       tabsData.push(this._collectTabData(tabs[i]));
-
-    // shift the selected index over if the home tab exists
-    this._windows[aWindow.__SSi].selected = tabbrowser.mTabBox.selectedIndex + 1 - tabbrowser._homeTabExists;
+    
+    this._windows[aWindow.__SSi].selected = tabbrowser.mTabBox.selectedIndex + 1;
   },
 
   /**
@@ -2594,8 +2592,7 @@ SessionStoreService.prototype = {
     }
 
     var tabbrowser = aWindow.gBrowser;
-    // don't include the home tab in the open tab count
-    var openTabCount = aOverwriteTabs ? tabbrowser.browsers.length - tabbrowser._homeTabExists : -1;
+    var openTabCount = aOverwriteTabs ? tabbrowser.browsers.length : -1;
     var newTabCount = winData.tabs.length;
     var tabs = [];
 
@@ -2606,20 +2603,18 @@ SessionStoreService.prototype = {
 
     // unpin all tabs to ensure they are not reordered in the next loop
     if (aOverwriteTabs) {
-      // leave the home tab alone
-      for (let t = tabbrowser._numPinnedTabs - 1; t > tabbrowser._homeTabExists - 1; t--)
+      for (let t = tabbrowser._numPinnedTabs - 1; t > -1; t--)
         tabbrowser.unpinTab(tabbrowser.tabs[t]);
     }
 
     // make sure that the selected tab won't be closed in order to
     // prevent unnecessary flickering
-    if (aOverwriteTabs && tabbrowser.selectedTab._tPos >= newTabCount && !tabbrowser.selectedTab.isHomeTab)
+    if (aOverwriteTabs && tabbrowser.selectedTab._tPos >= newTabCount)
       tabbrowser.moveTabTo(tabbrowser.selectedTab, newTabCount - 1);
 
     for (var t = 0; t < newTabCount; t++) {
       tabs.push(t < openTabCount ?
-                // shift tabs over if the home tab exists
-                tabbrowser.tabs[t + tabbrowser._homeTabExists] :
+                tabbrowser.tabs[t] :
                 tabbrowser.addTab("about:blank", {skipAnimation: true}));
       // when resuming at startup: add additionally requested pages to the end
       if (!aOverwriteTabs && root._firstTabs) {
@@ -2640,8 +2635,7 @@ SessionStoreService.prototype = {
     // tabs will be rebuilt and marked if they need to be restored after loading
     // state (in restoreHistoryPrecursor).
     if (aOverwriteTabs) {
-      // don't overwrite the home tab
-      for (let i = tabbrowser._homeTabExists; i < tabbrowser.tabs.length; i++) {
+      for (let i = 0; i < tabbrowser.tabs.length; i++) {
         if (tabbrowser.browsers[i].__SS_restoreState)
           this._resetTabRestoringState(tabbrowser.tabs[i]);
       }
