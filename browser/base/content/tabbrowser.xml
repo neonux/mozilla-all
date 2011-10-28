@@ -176,6 +176,22 @@
         ]]></getter>
       </property>
 
+      <field name="_homeTab">
+        null
+      </field>
+
+      <property name="homeTab" readonly="true">
+        <getter><![CDATA[
+          return this._homeTab;
+        ]]></getter>
+      </property>
+
+      <property name="_homeTabExists" readonly="true">
+        <getter><![CDATA[
+          return this._homeTab ? 1 : 0;
+        ]]></getter>
+      </property>
+
       <method name="updateWindowResizers">
         <body><![CDATA[
           if (!window.gShowPageResizers)
@@ -225,8 +241,20 @@
         ]]></body>
       </method>
 
+      <method name="_setCloseCmdState">
+        <parameter name="aEnabled"/>
+        <body><![CDATA[
+          let closeCommand = document.getElementById("cmd_close");
+          if (aEnabled)
+            closeCommand.removeAttribute("disabled");
+          else
+            closeCommand.setAttribute("disabled", "true");
+        ]]></body>
+      </method>
+
       <method name="pinTab">
         <parameter name="aTab"/>
+        <parameter name="aIsHomeTab"/>
         <body><![CDATA[
           if (aTab.pinned)
             return;
@@ -274,6 +302,21 @@
           event.initEvent("TabUnpinned", true, false);
           aTab.dispatchEvent(event);
         ]]></body>
+      </method>
+
+      <method name="addHomeTab">
+        <parameter name="aTab"/>
+        <body>
+          <![CDATA[
+            if (this.mHomeTab)
+              return;
+
+            this.mHomeTab = aTab;
+            this.pinTab(aTab, true);
+            aTab.setAttribute("hometab", "true");
+            this._setCloseCmdState(false);
+          ]]>
+        </body>
       </method>
 
       <method name="previewTab">
@@ -946,8 +989,10 @@
             if (backForwardContainer)
               backForwardContainer.removeAttribute("switchingtabs");
 
-            if (this.mCurrentTab.selected)
+            if (this.mCurrentTab.selected) {
               this._setCloseKeyState(!this.mCurrentTab.pinned);
+              this._setCloseCmdState(!this.mCurrentTab.isHomeTab);
+            }
 
             // TabSelect events are suppressed during preview mode to avoid confusing extensions and other bits of code
             // that might rely upon the other changes suppressed.
@@ -3135,6 +3180,14 @@
       <method name="_getDropIndex">
         <parameter name="event"/>
         <body><![CDATA[
+          // Don't drop tabs to the left of the home tab.
+          return this._getUnadjustedDropIndex(event) || this.tabbrowser._homeTabExists;
+        ]]></body>
+      </method>
+
+      <method name="_getUnadjustedDropIndex">
+        <parameter name="event"/>
+        <body><![CDATA[
           var tabs = this.childNodes;
           var tab = this._getDragTargetTab(event);
           if (window.getComputedStyle(this, null).direction == "ltr") {
@@ -3335,7 +3388,7 @@
 
       <handler event="dragstart"><![CDATA[
         var tab = this._getDragTargetTab(event);
-        if (!tab)
+        if (!tab || tab.isHomeTab)
           return;
 
         let dt = event.dataTransfer;
@@ -3751,6 +3804,11 @@
           return this.getAttribute("hidden") == "true";
         </getter>
       </property>
+      <property name="isHomeTab" readonly="true">
+        <getter>
+          return this.getAttribute("hometab") == "true";
+        </getter>
+      </property> 
 
       <field name="mOverCloseButton">false</field>
       <field name="mCorrespondingMenuitem">null</field>

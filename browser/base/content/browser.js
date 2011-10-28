@@ -1237,8 +1237,26 @@ function getDefaultStartPage() {
   return overridePage || startPage || "about:blank";
 }
 
+function initHomeTab(uriToLoad, defaultStartPage) {
+  let tab = gBrowser.selectedTab;
+  if (!uriToLoad && defaultStartPage) {
+    loadURI("about:home");
+    // open override page or blank page if startup pref calls for it
+    let uri = Services.browserHandler.overridePage ||
+               !Services.prefs.getIntPref("browser.startup.page") && "about:blank";
+    if (uri)
+      gBrowser.selectedTab = gBrowser.addTab(uri, {skipAnimation: true});
+  } else {
+    tab = gBrowser.addTab("about:home", {skipAnimation: true});
+    gBrowser.pinTab(tab);
+    gBrowser.moveTabTo(tab, 0);
+  }
+  gBrowser.addHomeTab(tab);
+}
+
 function BrowserStartup() {
   var uriToLoad = null;
+  let defaultStartPage = false;
 
   // window.arguments[0]: URI to load (string), or an nsISupportsArray of
   //                      nsISupportsStrings to load, or a xul:tab of
@@ -1253,11 +1271,20 @@ function BrowserStartup() {
   if ("arguments" in window) { 
     // Load the default start page if the flag is passed in
     if (window.arguments[5])
-      uriToLoad = getDefaultStartPage();
+      defaultStartPage = true;
     // Otherwise, check to see if a URI to load was specified
     else if (window.arguments[0])
       uriToLoad = window.arguments[0];
   }
+
+  let homeTabEnabled = true;
+  try {
+    // Hidden pref to disable home tab for test suite
+    homeTabEnabled = Services.prefs.getBoolPref("browser.hometab.enabled");
+  } catch (e) { }
+
+  if (!homeTabEnabled && defaultStartPage)
+    uriToLoad = getDefaultStartPage();
 
   var isLoadingBlank = uriToLoad == "about:blank";
   var mustLoadSidebar = false;
@@ -1300,6 +1327,9 @@ function BrowserStartup() {
     else
       loadOneOrMoreURIs(uriToLoad);
   }
+
+  if (homeTabEnabled)
+    initHomeTab(uriToLoad, defaultStartPage);
 
   if (window.opener && !window.opener.closed) {
     let openerSidebarBox = window.opener.document.getElementById("sidebar-box");
@@ -2573,9 +2603,11 @@ function URLBarSetURI(aURI) {
   if (value == null) {
     let uri = aURI || getWebNavigation().currentURI;
 
+    if (gBrowser.mCurrentTab.isHomeTab)
+      value = "";
     // Replace initial page URIs with an empty string
     // only if there's no opener (bug 370555).
-    if (gInitialPages.indexOf(uri.spec) != -1)
+    else if (gInitialPages.indexOf(uri.spec) != -1)
       value = content.opener ? uri.spec : "";
     else
       value = losslessDecodeURI(uri);
@@ -8780,7 +8812,7 @@ var TabContextMenu = {
 
     // Enable the "Close Tab" menuitem when the window doesn't close with the last tab.
     document.getElementById("context_closeTab").disabled =
-      disabled && gBrowser.tabContainer._closeWindowWithLastTab;
+      (disabled && gBrowser.tabContainer._closeWindowWithLastTab) || this.contextTab.isHomeTab;
 
     var menuItems = aPopupMenu.getElementsByAttribute("tbattr", "tabbrowser-multiple");
     for (var i = 0; i < menuItems.length; i++)
@@ -8796,6 +8828,9 @@ var TabContextMenu = {
       Cc["@mozilla.org/browser/sessionstore;1"].
       getService(Ci.nsISessionStore).
       getClosedTabCount(window) == 0;
+
+    document.getElementById("context_unpinTab").disabled = this.contextTab.isHomeTab;
+    document.getElementById("context_openTabInWindow").disabled = this.contextTab.isHomeTab || disabled;
 
     // Only one of pin/unpin should be visible
     document.getElementById("context_pinTab").hidden = this.contextTab.pinned;
