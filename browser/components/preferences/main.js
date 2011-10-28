@@ -48,10 +48,6 @@ var gMainPane = {
   {
     this._pane = document.getElementById("paneMain");
 
-    // set up the "use current page" label-changing listener
-    this._updateUseCurrentButton();
-    window.addEventListener("focus", this._updateUseCurrentButton, false);
-
     this.updateBrowserStartupLastSession();
     this.startupPagePrefChanged();
 
@@ -66,14 +62,12 @@ var gMainPane = {
   /*
    * Preferences:
    *
-   * browser.startup.homepage
-   * - the user's home page, as a string; if the home page is a set of tabs,
-   *   this will be those URLs separated by the pipe character "|"
+   * browser.startup.homepage (DEPRECATED)
    * browser.startup.page
    * - what page(s) to show when the user starts the application, as an integer:
    *
    *     0: a blank page
-   *     1: the home page (as set by the browser.startup.homepage pref)
+   *     1: the home tab
    *     2: the last page the user visited (DEPRECATED)
    *     3: windows and tabs from the last session (a.k.a. session restore)
    *
@@ -90,130 +84,6 @@ var gMainPane = {
     let startupPref = document.getElementById("browser.startup.page");
     let restoreOnDemandPref = document.getElementById("browser.sessionstore.restore_on_demand");
     restoreOnDemandPref.disabled = startupPref.value != 3;
-  },
-
-  syncFromHomePref: function ()
-  {
-    let homePref = document.getElementById("browser.startup.homepage");
-
-    // If the pref is set to about:home, set the value to "" to show the
-    // placeholder text (about:home title).
-    if (homePref.value.toLowerCase() == "about:home")
-      return "";
-
-    // If the pref is actually "", show about:blank.  The actual home page
-    // loading code treats them the same, and we don't want the placeholder text
-    // to be shown.
-    if (homePref.value == "")
-      return "about:blank";
-
-    // Otherwise, show the actual pref value.
-    return undefined;
-  },
-
-  syncToHomePref: function (value)
-  {
-    // If the value is "", use about:home.
-    if (value == "")
-      return "about:home";
-
-    // Otherwise, use the actual textbox value.
-    return undefined;
-  },
-
-  /**
-   * Sets the home page to the current displayed page (or frontmost tab, if the
-   * most recent browser window contains multiple tabs), updating preference
-   * window UI to reflect this.
-   */
-  setHomePageToCurrent: function ()
-  {
-    var win;
-    if (document.documentElement.instantApply) {
-      // If we're in instant-apply mode, use the most recent browser window
-      var wm = Components.classes["@mozilla.org/appshell/window-mediator;1"]
-                         .getService(Components.interfaces.nsIWindowMediator);
-      win = wm.getMostRecentWindow("navigator:browser");
-    }
-    else
-      win = window.opener;
-
-    if (win) {
-      var homePage = document.getElementById("browser.startup.homepage");
-      var tabs = win.gBrowser.visibleTabs;
-      function getTabURI(t) t.linkedBrowser.currentURI.spec;
-      // FIXME Bug 244192: using dangerous "|" joiner!
-      homePage.value = tabs.map(getTabURI).join("|");
-    }
-  },
-
-  /**
-   * Displays a dialog in which the user can select a bookmark to use as home
-   * page.  If the user selects a bookmark, that bookmark's name is displayed in
-   * UI and the bookmark's address is stored to the home page preference.
-   */
-  setHomePageToBookmark: function ()
-  {
-    var rv = { urls: null, names: null };
-    document.documentElement.openSubDialog("chrome://browser/content/preferences/selectBookmark.xul",
-                                           "resizable", rv);  
-    if (rv.urls && rv.names) {
-      var homePage = document.getElementById("browser.startup.homepage");
-
-      // XXX still using dangerous "|" joiner!
-      homePage.value = rv.urls.join("|");
-    }
-  },
-
-  /**
-   * Switches the "Use Current Page" button between its singular and plural
-   * forms.
-   */
-  _updateUseCurrentButton: function () {
-    var useCurrent = document.getElementById("useCurrent");
-
-    var windowIsPresent;
-    var win;
-    if (document.documentElement.instantApply) {
-      const Cc = Components.classes, Ci = Components.interfaces;
-      // If we're in instant-apply mode, use the most recent browser window
-      var wm = Cc["@mozilla.org/appshell/window-mediator;1"]
-                 .getService(Ci.nsIWindowMediator);
-      win = wm.getMostRecentWindow("navigator:browser");
-    }
-    else
-      win = window.opener;
-
-    if (win && win.document.documentElement
-                  .getAttribute("windowtype") == "navigator:browser") {
-      windowIsPresent = true;
-
-      var tabbrowser = win.document.getElementById("content");
-      if (tabbrowser.browsers.length > 1)
-        useCurrent.label = useCurrent.getAttribute("label2");
-      else
-        useCurrent.label = useCurrent.getAttribute("label1");
-    }
-    else {
-      windowIsPresent = false;
-      useCurrent.label = useCurrent.getAttribute("label1");
-    }
-
-    // In this case, the button's disabled state is set by preferences.xml.
-    if (document.getElementById
-        ("pref.browser.homepage.disable_button.current_page").locked)
-      return;
-
-    useCurrent.disabled = !windowIsPresent;
-  },
-
-  /**
-   * Restores the default home page as the user's home page.
-   */
-  restoreDefaultHomePage: function ()
-  {
-    var homePage = document.getElementById("browser.startup.homepage");
-    homePage.value = homePage.defaultValue;
   },
 
   // DOWNLOADS
@@ -506,7 +376,7 @@ var gMainPane = {
     if (pbAutoStartPref.value) {
       option.setAttribute("disabled", "true");
       if (option.selected) {
-        menu.selectedItem = document.getElementById("browserStartupHomePage");
+        menu.selectedItem = document.getElementById("browserStartupHomeTab");
       }
     } else {
       option.removeAttribute("disabled");
