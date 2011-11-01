@@ -488,7 +488,7 @@
              toolbarname="&navbarCmd.label;" accesskey="&navbarCmd.accesskey;"
              fullscreentoolbar="true" mode="icons" customizable="true"
              iconsize="large"
-             defaultset="unified-back-forward-button,urlbar-container,reload-button,stop-button,search-container,bookmarks-menu-button-container,fullscreenflex,window-controls"
+             defaultset="unified-back-forward-button,urlbar-container,reload-button,stop-button,search-container,home-button,bookmarks-menu-button-container,fullscreenflex,window-controls"
              context="toolbar-context-menu">
 
       <toolbaritem id="unified-back-forward-button" class="chromeclass-toolbar-additional"
@@ -616,6 +616,16 @@
                    flex="100" persist="width" removable="true">
         <searchbar id="searchbar" flex="1"/>
       </toolbaritem>
+
+      <toolbarbutton id="home-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
+                     persist="class" removable="true"
+                     label="&homeButton.label;"
+                     ondragover="homeButtonObserver.onDragOver(event)"
+                     ondragenter="homeButtonObserver.onDragOver(event)"
+                     ondrop="homeButtonObserver.onDrop(event)"
+                     ondragexit="homeButtonObserver.onDragExit(event)"
+                     onclick="BrowserGoHome(event);"
+                     aboutHomeOverrideTooltip="&abouthome.pageTitle;"/>
 
       <toolbaritem id="bookmarks-menu-button-container"
                    class="chromeclass-toolbar-additional"

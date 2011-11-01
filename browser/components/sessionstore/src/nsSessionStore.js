@@ -1642,7 +1642,7 @@ SessionStoreService.prototype = {
     // comparison to home pages. If all the tabs are home pages then we'll end
     // up overwriting all of them. Otherwise we'll just close the tabs that
     // match home pages.
-    let homePages = Services.browserHandler.startPage.split("|");
+    let homePages = aWindow.gHomeButton.getHomePage().split("|");
     let removableTabs = [];
     let tabbrowser = aWindow.gBrowser;
     let normalTabsLen = tabbrowser.tabs.length - tabbrowser._numPinnedTabs;

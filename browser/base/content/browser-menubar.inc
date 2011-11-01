@@ -362,6 +362,12 @@
 #endif
                           command="Browser:ForwardOrForwardDuplicate"
                           onclick="checkForMiddleClick(this, event);"/>
+                <menuitem id="historyMenuHome"
+                          class="show-only-for-keyboard"
+                          label="&historyHomeCmd.label;"
+                          oncommand="BrowserGoHome(event);"
+                          onclick="checkForMiddleClick(this, event);"
+                          key="goHome"/>
                 <menuseparator id="historyMenuHomeSeparator"
                                class="show-only-for-keyboard"/>
                 <menuitem id="menu_showAllHistory"

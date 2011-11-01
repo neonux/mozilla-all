@@ -157,12 +157,8 @@ function startNewSession() {
   var prefBranch = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefBranch);
   if (prefBranch.getIntPref("browser.startup.page") == 0)
     getBrowserWindow().gBrowser.loadURI("about:blank");
-  else {
-    let gBrowser = getBrowserWindow().gBrowser;
-    let tab = gBrowser.selectedTab;
-    gBrowser.selectedTab = gBrowser.homeTab;
-    gBrowser.removeTab(tab);
-  }
+  else
+    getBrowserWindow().BrowserHome();
 }
 
 function onListClick(aEvent) {
