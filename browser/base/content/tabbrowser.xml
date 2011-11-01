@@ -3513,9 +3513,6 @@
           // swapBrowsersAndCloseOther, so that the updateCurrentBrowser
           // it triggers will correctly update our URL bar.
           this.tabbrowser.selectedTab = newTab;
-
-          if (that.childElementCount == 1 && that.tabbrowser._homeTabExists)
-            that.tabbrowser.removeCurrentTab();
         } else {
           let url = browserDragAndDrop.drop(event, { });
 
@@ -3597,7 +3594,7 @@
         delete draggedTab._dragOffsetX;
         delete draggedTab._dragOffsetY;
 
-        if (this.childElementCount - this.tabbrowser._homeTabExists == 1) {
+        if (this.tabbrowser.tabs.length == 1) {
           // resize _before_ move to ensure the window fits the new screen.  if
           // the window is too large for its screen, the window manager may do
           // automatic repositioning.
