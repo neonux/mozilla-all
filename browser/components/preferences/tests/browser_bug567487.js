@@ -21,7 +21,7 @@ function runTest(win) {
   let startupPref = doc.getElementById("browser.startup.page");
   let menu = doc.getElementById("browserStartupPage");
   let option = doc.getElementById("browserStartupLastSession");
-  let defOption = doc.getElementById("browserStartupHomeTab");
+  let defOption = doc.getElementById("browserStartupHomePage");
   let otherOption = doc.getElementById("browserStartupBlank");
 
   ok(!pbAutoStartPref.value, "Sanity check");
