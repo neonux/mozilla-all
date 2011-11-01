@@ -69,6 +69,19 @@
       <preference id="browser.sessionstore.restore_on_demand"
                   name="browser.sessionstore.restore_on_demand"
                   type="bool"/>
+      <preference id="browser.startup.homepage"
+                  name="browser.startup.homepage"
+                  type="wstring"/>
+
+      <preference id="pref.browser.homepage.disable_button.current_page"
+                  name="pref.browser.homepage.disable_button.current_page"
+                  type="bool"/>
+      <preference id="pref.browser.homepage.disable_button.bookmark_page"
+                  name="pref.browser.homepage.disable_button.bookmark_page"
+                  type="bool"/>
+      <preference id="pref.browser.homepage.disable_button.restore_default"
+                  name="pref.browser.homepage.disable_button.restore_default"
+                  type="bool"/>
 
       <preference id="browser.privatebrowsing.autostart"
                   name="browser.privatebrowsing.autostart"
@@ -105,7 +118,7 @@
                control="browserStartupPage"/>
         <menulist id="browserStartupPage" preference="browser.startup.page">
           <menupopup>
-            <menuitem label="&startupHomeTab.label;"      value="1" id="browserStartupHomeTab"/>
+            <menuitem label="&startupHomePage.label;"     value="1" id="browserStartupHomePage"/>
             <menuitem label="&startupBlankPage.label;"    value="0" id="browserStartupBlank"/>
             <menuitem label="&startupLastSession.label;"  value="3" id="browserStartupLastSession"/>
           </menupopup>
@@ -117,6 +130,32 @@
                   accesskey="&restoreOnDemand.accesskey;"
                   class="indent"
                   preference="browser.sessionstore.restore_on_demand"/>
+      </hbox>
+      <separator class="thin"/>
+      <hbox align="center">
+        <label value="&homepage.label;" accesskey="&homepage.accesskey;" control="browserHomePage"/>
+        <textbox id="browserHomePage" class="padded uri-element" flex="1"
+                 type="autocomplete" autocompletesearch="history"
+                 onsyncfrompreference="return gMainPane.syncFromHomePref();"
+                 onsynctopreference="return gMainPane.syncToHomePref(this.value);"
+                 placeholder="&abouthome.pageTitle;"
+                 preference="browser.startup.homepage"/>
+      </hbox>
+      <hbox align="center" pack="end">
+        <button label="" accesskey="&useCurrentPage.accesskey;"
+                label1="&useCurrentPage.label;"
+                label2="&useMultiple.label;"
+                oncommand="gMainPane.setHomePageToCurrent();"
+                id="useCurrent"
+                preference="pref.browser.homepage.disable_button.current_page"/>
+        <button label="&chooseBookmark.label;" accesskey="&chooseBookmark.accesskey;"
+                oncommand="gMainPane.setHomePageToBookmark();"
+                id="useBookmark"
+                preference="pref.browser.homepage.disable_button.bookmark_page"/>
+        <button label="&restoreDefault.label;" accesskey="&restoreDefault.accesskey;"
+                oncommand="gMainPane.restoreDefaultHomePage();"
+                id="restoreDefaultHomePage"
+                preference="pref.browser.homepage.disable_button.restore_default"/>
       </hbox>
     </groupbox>
 
