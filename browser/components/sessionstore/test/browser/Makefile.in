@@ -47,7 +47,6 @@ include $(topsrcdir)/config/rules.mk
 
 # browser_506482.js is disabled because of frequent failures (bug 538672)
 # browser_526613.js is disabled because of frequent failures (bug 534489)
-# browser_480893.js is disabled until about:sessionrestore or the test is fixed to deal with the home tab
 
 _BROWSER_TEST_FILES = \
 	head.js \
@@ -103,6 +102,7 @@ _BROWSER_TEST_FILES = \
 	browser_466937_sample.html \
 	browser_477657.js \
 	browser_480148.js \
+	browser_480893.js \
 	browser_483330.js \
 	browser_485482.js \
 	browser_485482_sample.html \
