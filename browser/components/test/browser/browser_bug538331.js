@@ -31,7 +31,7 @@ const XML_SUFFIX = "><patch type=\"complete\" URL=\"http://example.com/\" " +
                    "\"6232cd43a1c77e30191c53a329a3f99d\" size=\"775\" " +
                    "selected=\"true\" state=\"succeeded\"/></update></updates>";
 
-// nsBrowserContentHandler.js overridePage tests
+// nsBrowserContentHandler.js defaultArgs tests
 const BCH_TESTS = [
   {
     description: "no mstone change and no update",
@@ -126,7 +126,7 @@ function test()
     gOriginalOverrideURL = gPrefService.getCharPref(PREF_OVERRIDE_URL);
   }
 
-  testOverridePage();
+  testDefaultArgs();
 }
 
 var gWindowCatcher = {
@@ -196,13 +196,13 @@ function finish_test()
   finish();
 }
 
-// Test the overridePage returned by nsBrowserContentHandler after an update
-function testOverridePage()
+// Test the defaultArgs returned by nsBrowserContentHandler after an update
+function testDefaultArgs()
 {
-  // Clear any pre-existing override in overridePage that is hanging around.
+  // Clear any pre-existing override in defaultArgs that are hanging around.
   // This will also set the browser.startup.homepage_override.mstone preference
   // if it isn't already set.
-  Cc["@mozilla.org/browser/clh;1"].getService(Ci.nsIBrowserHandler).overridePage;
+  Cc["@mozilla.org/browser/clh;1"].getService(Ci.nsIBrowserHandler).defaultArgs;
 
   let originalMstone = gPrefService.getCharPref(PREF_MSTONE);
 
@@ -227,11 +227,20 @@ function testOverridePage()
 
     reloadUpdateManagerData();
 
-    let expectedOverridePage = "";
+    let noOverrideArgs = Cc["@mozilla.org/browser/clh;1"].
+                         getService(Ci.nsIBrowserHandler).defaultArgs;
+
+    let overrideArgs = "";
     if (test.prefURL) {
-      expectedOverridePage = test.prefURL;
+      overrideArgs = test.prefURL;
     } else if (test.openURL) {
-      expectedOverridePage = test.openURL;
+      overrideArgs = test.openURL;
+    }
+
+    if (overrideArgs == "" && noOverrideArgs) {
+      overrideArgs = noOverrideArgs;
+    } else if (noOverrideArgs) {
+      overrideArgs += "|" + noOverrideArgs;
     }
 
     if (test.noMstoneChange === undefined) {
@@ -242,9 +251,9 @@ function testOverridePage()
       gPrefService.setBoolPref(PREF_POSTUPDATE, true);
     }
 
-    let overridePage = Cc["@mozilla.org/browser/clh;1"].
-                       getService(Ci.nsIBrowserHandler).overridePage;
-    is(overridePage, expectedOverridePage, "correct value returned by overridePage");
+    let defaultArgs = Cc["@mozilla.org/browser/clh;1"].
+                      getService(Ci.nsIBrowserHandler).defaultArgs;
+    is(defaultArgs, overrideArgs, "correct value returned by defaultArgs");
 
     if (test.noMstoneChange === undefined || test.noMstoneChange != true) {
       let newMstone = gPrefService.getCharPref(PREF_MSTONE);
