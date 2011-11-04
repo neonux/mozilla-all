@@ -3114,8 +3114,9 @@ panel[dimmed="true"] {
   -moz-margin-end: -3px;
 }
 
+.tab-close-button:-moz-window-inactive,
 :not(:hover) > * > [tabsontop=true] > * > * > * > .tab-close-button:not([selected]) {
-  opacity: 0;
+  visibility: hidden;
 }
 
 [tabsontop=true] > [blank] > * > * > .tab-throbber:not([pinned]),
