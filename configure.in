@@ -1192,6 +1192,7 @@ fi # COMPILE_ENVIRONMENT
 dnl clang prior to 2.9 (including Xcode 4) does not support all the
 dnl constructs required by the libtheora inline asm. This is used to
 dnl detect and disable it
+AC_MSG_CHECKING([whether the C compiler is clang older than version 2.9])
 AC_LANG_SAVE
 AC_LANG_C
 AC_TRY_COMPILE([
@@ -1202,14 +1203,28 @@ AC_TRY_COMPILE([
 #endif
                ],
                [],
-               result="yes",
-               result="no")
-if test "$result" = "no"; then
-    AC_DEFINE(HAVE_OLD_CLANG)
-    HAVE_OLD_CLANG=1
-fi
+               result="no",
+               result="yes")
 AC_LANG_RESTORE
-AC_SUBST(HAVE_OLD_CLANG)
+AC_MSG_RESULT([$result])
+if test "$result" = "yes"; then
+  MOZ_NO_THEORA_ASM=1
+fi
+dnl XCode 4.2 also shipped an llvm-gcc which couldn't compile
+dnl the libtheora inline asm.
+AC_MSG_CHECKING([bad gcc versions])
+if `$CC --version | grep -q "Apple Inc. build 5658"`; then
+  AC_MSG_RESULT([Apple build 5658])
+  MOZ_NO_THEORA_ASM=1
+else
+  AC_MSG_RESULT([we're ok])
+fi
+
+AC_SUBST(MOZ_NO_THEORA_ASM)
+
+if test "x$MOZ_NO_THEORA_ASM" = x1; then
+  AC_MSG_WARN([Disabling libtheora inline assembly])
+fi
 
 if test -n "$MAKE"; then
   if test `echo $MAKE | grep -c make.py` != 1; then
@@ -4266,7 +4281,7 @@ MOZ_ARG_WITH_BOOL(system-nss,
     _USE_SYSTEM_NSS=1 )
 
 if test -n "$_USE_SYSTEM_NSS"; then
-    AM_PATH_NSS(3.12.10, [MOZ_NATIVE_NSS=1], [AC_MSG_ERROR([you don't have NSS installed or your version is too old])])
+    AM_PATH_NSS(3.13.1, [MOZ_NATIVE_NSS=1], [AC_MSG_ERROR([you don't have NSS installed or your version is too old])])
 fi
 
 if test -n "$MOZ_NATIVE_NSS"; then
@@ -4558,7 +4573,6 @@ MOZ_PLACES=1
 MOZ_PREF_EXTENSIONS=1
 MOZ_PROFILELOCKING=1
 MOZ_PSM=1
-MOZ_RDF=1
 MOZ_REFLOW_PERF=
 MOZ_SAFE_BROWSING=
 MOZ_HELP_VIEWER=
@@ -6187,18 +6201,6 @@ dnl SVG Display Lists
 dnl ========================================================
 if test -n "$MOZ_SVG_DLISTS"; then
   AC_DEFINE(MOZ_SVG_DLISTS)
-fi
-
-dnl ========================================================
-dnl SMIL
-dnl ========================================================
-MOZ_SMIL=1
-MOZ_ARG_DISABLE_BOOL(smil,
-[  --disable-smil          Disable SMIL animation support],
-    MOZ_SMIL=,
-    MOZ_SMIL=1 )
-if test -n "$MOZ_SMIL"; then
-  AC_DEFINE(MOZ_SMIL)
 fi
 
 dnl ========================================================
@@ -8137,18 +8139,6 @@ if test "$MOZ_PROFILELOCKING"; then
 fi
 
 dnl ========================================================
-dnl disable rdf services
-dnl ========================================================
-MOZ_ARG_DISABLE_BOOL(rdf,
-[  --disable-rdf           Disable RDF],
-    MOZ_RDF= )
-if test "$MOZ_RDF"; then
-  AC_DEFINE(MOZ_RDF)
-fi
-
-AC_SUBST(MOZ_RDF)
-
-dnl ========================================================
 dnl necko configuration options
 dnl ========================================================
 
@@ -8293,7 +8283,6 @@ AC_SUBST(MOZ_AUTH_EXTENSION)
 AC_SUBST(MOZ_PERMISSIONS)
 AC_SUBST(MOZ_XTF)
 AC_SUBST(MOZ_PREF_EXTENSIONS)
-AC_SUBST(MOZ_SMIL)
 AC_SUBST(MOZ_JS_LIBS)
 AC_SUBST(MOZ_PSM)
 AC_SUBST(MOZ_DEBUG)

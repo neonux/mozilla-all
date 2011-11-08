@@ -1125,6 +1125,7 @@
           <![CDATA[
             var aFromExternal;
             var aRelatedToCurrent;
+            var aIsUTF8;
             if (arguments.length == 2 &&
                 typeof arguments[1] == "object" &&
                 !(arguments[1] instanceof Ci.nsIURI)) {
@@ -1136,6 +1137,7 @@
               aAllowThirdPartyFixup = params.allowThirdPartyFixup;
               aFromExternal         = params.fromExternal;
               aRelatedToCurrent     = params.relatedToCurrent;
+              aIsUTF8               = params.isUTF8;
             }
 
             var bgLoad = (aLoadInBackground != null) ? aLoadInBackground :
@@ -1148,7 +1150,8 @@
                                   ownerTab: owner,
                                   allowThirdPartyFixup: aAllowThirdPartyFixup,
                                   fromExternal: aFromExternal,
-                                  relatedToCurrent: aRelatedToCurrent});
+                                  relatedToCurrent: aRelatedToCurrent,
+                                  isUTF8: aIsUTF8});
             if (!bgLoad)
               this.selectedTab = tab;
 
@@ -1221,6 +1224,7 @@
             var aFromExternal;
             var aRelatedToCurrent;
             var aSkipAnimation;
+            var aIsUTF8;
             if (arguments.length == 2 &&
                 typeof arguments[1] == "object" &&
                 !(arguments[1] instanceof Ci.nsIURI)) {
@@ -1233,6 +1237,7 @@
               aFromExternal         = params.fromExternal;
               aRelatedToCurrent     = params.relatedToCurrent;
               aSkipAnimation        = params.skipAnimation;
+              aIsUTF8               = params.isUTF8;
             }
 
             this._browsers = null; // invalidate cache
@@ -1380,6 +1385,8 @@
                 flags |= Ci.nsIWebNavigation.LOAD_FLAGS_ALLOW_THIRD_PARTY_FIXUP;
               if (aFromExternal)
                 flags |= Ci.nsIWebNavigation.LOAD_FLAGS_FROM_EXTERNAL;
+              if (aIsUTF8)
+                flags |= Ci.nsIWebNavigation.LOAD_FLAGS_URI_IS_UTF8;
               try {
                 b.loadURIWithFlags(aURI, flags, aReferrerURI, aCharset, aPostData);
               } catch (ex) {
@@ -2456,7 +2463,7 @@
 #else
           if (aEvent.ctrlKey && !aEvent.shiftKey && !aEvent.metaKey &&
               aEvent.keyCode == KeyEvent.DOM_VK_F4 &&
-              this.mTabBox.handleCtrlPageUpDown) {
+              !this.mCurrentTab.pinned) {
             this.removeCurrentTab({animate: true});
             aEvent.stopPropagation();
             aEvent.preventDefault();

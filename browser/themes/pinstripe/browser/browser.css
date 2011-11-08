@@ -28,6 +28,7 @@
  *   Stephen Horlander (stephen@noved.org)
  *   Drew Willcoxon (adw@mozilla.com)
  *   Paul Rouget (paul@mozilla.com)
+ *   Rob Campbell (rcampbell@mozilla.com)
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -46,6 +47,10 @@
 @import url("chrome://global/skin/");
 
 %include shared.inc
+%filter substitution
+%define forwardTransitionLength 150ms
+%define conditionalForwardWithUrlbar window:not([chromehidden~=toolbar]) #navigator-toolbox[iconsize=large][mode=icons] > :-moz-any(#nav-bar[currentset*="unified-back-forward-button,urlbar-container"],#nav-bar:not([currentset])) > #unified-back-forward-button
+%define conditionalForwardWithUrlbarWidth 27
 
 @namespace url("http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul");
 @namespace html url("http://www.w3.org/1999/xhtml");
@@ -574,6 +579,71 @@ toolbar[mode="icons"] #forward-button {
   mask: url(chrome://browser/content/browser.xul#pinstripe-keyhole-forward-mask);
 }
 
+@conditionalForwardWithUrlbar@ > #forward-button:not(:-moz-lwtheme) {
+  -moz-appearance: none;
+  -moz-padding-start: 2px;
+  background: -moz-linear-gradient(hsl(0,0%,99%), hsl(0,0%,67%)) padding-box;
+  border: 1px solid;
+  border-color: hsl(0,0%,31%) hsla(0,0%,29%,.6) hsl(0,0%,27%);
+  box-shadow: inset 0 1px 0 hsla(0,0%,100%,.35),
+              0 1px 0 hsla(0,0%,100%,.2);
+}
+
+@conditionalForwardWithUrlbar@ > #forward-button {
+  border-radius: 0;
+  -moz-margin-end: 0;
+}
+
+@conditionalForwardWithUrlbar@ > #forward-button:-moz-lwtheme {
+  -moz-padding-start: 2px;
+  -moz-padding-end: 0;
+}
+
+@conditionalForwardWithUrlbar@:not([switchingtabs]) > #forward-button {
+  -moz-transition: opacity @forwardTransitionLength@ ease-out;
+}
+
+@conditionalForwardWithUrlbar@ > #forward-button:hover:active:not(:-moz-lwtheme) {
+  background-image: -moz-linear-gradient(hsl(0,0%,74%), hsl(0,0%,61%));
+  box-shadow: inset rgba(0,0,0,.3) 0 -6px 10px,
+              inset #000 0 1px 3px,
+              inset rgba(0,0,0,.2) 0 1px 3px,
+              0 1px 0 hsla(0,0%,100%,.2);
+}
+
+@conditionalForwardWithUrlbar@ > #forward-button:-moz-window-inactive:not(:-moz-lwtheme) {
+  border-color: hsl(0,0%,64%) hsl(0,0%,65%) hsl(0,0%,66%);
+  background-image: -moz-linear-gradient(hsl(0,0%,99%), hsl(0,0%,82%));
+  box-shadow: inset 0 1px 0 hsla(0,0%,100%,.35);
+}
+
+@conditionalForwardWithUrlbar@:not(:hover) > #forward-button[disabled] {
+  opacity: 0;
+}
+
+@media (-moz-mac-lion-theme) {
+  @conditionalForwardWithUrlbar@ > #forward-button:not(:-moz-lwtheme) {
+    background-image: -moz-linear-gradient(hsla(0,0%,100%,.73), hsla(0,0%,100%,.05) 85%);
+    border-color: hsla(0,0%,0%,.35) hsla(0,0%,0%,.25) hsla(0,0%,0%,.2);
+    box-shadow: inset 0 1px 0 hsla(0,0%,100%,.2),
+                inset 0 0 1px hsla(0,0%,100%,.1),
+                0 1px 0 hsla(0,0%,100%,.2);
+  }
+
+  @conditionalForwardWithUrlbar@ > #forward-button:hover:active:not(:-moz-lwtheme) {
+    background-image: -moz-linear-gradient(hsla(0,0%,60%,.37), hsla(0,0%,100%,.35) 95%);
+    border-color: hsla(0,0%,0%,.43) hsla(0,0%,0%,.25) hsla(0,0%,0%,.37);
+    box-shadow: inset 0 1px 0 hsla(0,0%,0%,.02),
+                inset 0 1px 2px hsla(0,0%,0%,.2),
+                0 1px 0 hsla(0,0%,100%,.2);
+  }
+
+  @conditionalForwardWithUrlbar@ > #forward-button:-moz-window-inactive:not(:-moz-lwtheme) {
+    background-image: none;
+    border-color: hsla(0,0%,0%,.2);
+  }
+}
+
 #navigator-toolbox[iconsize="small"][mode="icons"] > #nav-bar #forward-button {
   width: 27px;
 }
@@ -901,6 +971,57 @@ toolbar[mode="icons"] #zoom-in-button {
   border-radius: @toolbarbuttonCornerRadius@;
 }
 
+@conditionalForwardWithUrlbar@ + #urlbar-container {
+  padding-left: @conditionalForwardWithUrlbarWidth@px;
+  -moz-margin-start: -@conditionalForwardWithUrlbarWidth@px;
+  position: relative;
+  pointer-events: none;
+}
+
+@conditionalForwardWithUrlbar@ + #urlbar-container > #urlbar {
+  -moz-border-start: none;
+  margin-left: 0;
+  pointer-events: all;
+}
+
+@conditionalForwardWithUrlbar@:not([switchingtabs]) + #urlbar-container > #urlbar {
+  -moz-transition: margin-left @forwardTransitionLength@ ease-out;
+}
+
+@conditionalForwardWithUrlbar@ + #urlbar-container > #urlbar:-moz-locale-dir(ltr) {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+@conditionalForwardWithUrlbar@ + #urlbar-container > #urlbar:-moz-locale-dir(rtl) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+@conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container {
+  mask: url("chrome://browser/content/browser.xul#pinstripe-urlbar-back-button-mask");
+}
+
+@conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar {
+  margin-left: -@conditionalForwardWithUrlbarWidth@px;
+}
+
+@conditionalForwardWithUrlbar@[forwarddisabled]:hover:not([switchingtabs]) + #urlbar-container > #urlbar {
+  /* delay the hiding of the forward button when hovered to avoid accidental clicks on the url bar */
+  -moz-transition-delay: 100s;
+}
+
+@conditionalForwardWithUrlbar@[forwarddisabled]:not(:hover) + #urlbar-container > #urlbar {
+  /* when not hovered anymore, trigger a new transition to hide the forward button immediately */
+  margin-left: -@conditionalForwardWithUrlbarWidth@.01px;
+}
+
+@conditionalForwardWithUrlbar@ + #urlbar-container:-moz-locale-dir(rtl),
+@conditionalForwardWithUrlbar@ + #urlbar-container > #urlbar:-moz-locale-dir(rtl) {
+  /* let pinstripe-urlbar-back-button-mask clip the urlbar's right side for RTL */
+  -moz-transform: scaleX(-1);
+}
+
 #identity-box {
   background-image: -moz-linear-gradient(hsl(0,0%,98%), hsl(0,0%,92%));
   box-shadow: 0 1px 0 hsla(0,0%,0%,.05) inset;
@@ -917,6 +1038,38 @@ toolbar[mode="icons"] #zoom-in-button {
 #identity-box:-moz-locale-dir(rtl) {
   border-top-right-radius: 2px;
   border-bottom-right-radius: 2px;
+}
+
+#notification-popup-box:not([hidden]) + #identity-box {
+  -moz-padding-start: 10px;
+  border-radius: 0;
+}
+
+@conditionalForwardWithUrlbar@ + #urlbar-container > #urlbar > #identity-box {
+  border-radius: 0;
+}
+
+@conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(ltr) {
+  -moz-transition: 0s padding-left;
+  padding-left: 10px;
+}
+
+@conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(rtl) {
+  -moz-transition: 0s padding-right;
+  padding-right: 10px;
+}
+
+@conditionalForwardWithUrlbar@[forwarddisabled]:hover:not([switchingtabs]) + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box {
+  /* delay the hiding of the forward button when hovered to avoid accidental clicks on the url bar */
+  -moz-transition-delay: 100s;
+}
+
+@conditionalForwardWithUrlbar@[forwarddisabled]:not(:hover) + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(ltr) {
+  padding-left: 10.01px;
+}
+
+@conditionalForwardWithUrlbar@[forwarddisabled]:not(:hover) + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(rtl) {
+  padding-right: 10.01px;
 }
 
 #identity-box:active:hover,
@@ -2214,9 +2367,8 @@ toolbarbutton.chevron > .toolbarbutton-menu-dropmarker {
   -moz-margin-end: -8px;
 }
 
-#notification-popup-box:not([hidden]) + #identity-box {
-  -moz-padding-start: 10px;
-  border-radius: 0;
+@conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box {
+  padding-left: 7px;
 }
 
 #notification-popup-box:-moz-locale-dir(rtl),
@@ -2528,6 +2680,13 @@ panel[dimmed="true"] {
   padding-right: 0;
 }
 
+#addon-bar[customizing] > #status-bar {
+  opacity: .5;
+  background-image: -moz-repeating-linear-gradient(-45deg,
+                                                   rgba(255,255,255,.3), rgba(255,255,255,.3) 5px,
+                                                   rgba(0,0,0,.3) 5px, rgba(0,0,0,.3) 10px);
+}
+
 #status-bar > statusbarpanel {
   border-width: 0;
   -moz-appearance: none;
@@ -2627,8 +2786,27 @@ panel[dimmed="true"] {
   padding: 0 0 4px;
 }
 
+#devtools-sidebar-toolbar {
+  -moz-appearance: none;
+  padding: 4px 3px;
+  box-shadow: 0 1px 0 0 hsla(210, 16%, 76%, .2) inset;
+  background-image: -moz-linear-gradient(top, hsl(210,11%,36%), hsl(210,11%,18%));
+}
+
+#devtools-side-splitter {
+  background-image: none !important;
+  border: 0;
+  -moz-border-start: 1px solid #242b33;
+  min-width: 0;
+  width: 3px;
+  background-color: transparent;
+  -moz-margin-end: -3px;
+  position: relative;
+}
+
 #inspector-inspect-toolbutton,
-#inspector-tools > toolbarbutton {
+#inspector-tools > toolbarbutton,
+#devtools-sidebar-toolbar > toolbarbutton {
   -moz-appearance: none;
   min-width: 78px;
   min-height: 22px;
@@ -2641,19 +2819,22 @@ panel[dimmed="true"] {
 }
 
 #inspector-inspect-toolbutton > .toolbarbutton-text ,
-#inspector-tools > toolbarbutton  > .toolbarbutton-text {
+#inspector-tools > toolbarbutton  > .toolbarbutton-text,
+#devtools-sidebar-toolbar > toolbarbutton > .toolbarbutton-text {
   margin: 1px 6px;
 }
 
 #inspector-inspect-toolbutton:not([checked]):hover:active,
-#inspector-tools > toolbarbutton:not([checked]):hover:active {
+#inspector-tools > toolbarbutton:not([checked]):hover:active,
+#devtools-sidebar-toolbar > toolbarbutton:not([checked]):hover:active {
   border-color: hsla(210,8%,5%,.6);
   background: -moz-linear-gradient(hsla(220,6%,10%,.3), hsla(212,7%,57%,.15) 65%, hsla(212,7%,57%,.3));
   box-shadow: 0 0 3px hsla(210,8%,5%,.25) inset, 0 1px 3px hsla(210,8%,5%,.25) inset, 0 1px 0 hsla(210,16%,76%,.15);
 }
 
 #inspector-inspect-toolbutton[checked],
-#inspector-tools > toolbarbutton[checked] {
+#inspector-tools > toolbarbutton[checked],
+#devtools-sidebar-toolbar > toolbarbutton[checked] {
   color: hsl(208,100%,60%) !important;
   border-color: hsla(210,8%,5%,.6);
   background: -moz-linear-gradient(hsla(220,6%,10%,.6), hsla(210,11%,18%,.45) 75%, hsla(210,11%,30%,.4));
@@ -2661,7 +2842,8 @@ panel[dimmed="true"] {
 }
 
 #inspector-inspect-toolbutton[checked]:hover:active,
-#inspector-tools > toolbarbutton[checked]:hover:active {
+#inspector-tools > toolbarbutton[checked]:hover:active,
+#devtools-sidebar-toolbar > toolbarbutton[checked]:hover:active {
   background-color: hsla(210,8%,5%,.2);
 }
 

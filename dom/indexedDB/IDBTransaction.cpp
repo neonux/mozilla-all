@@ -363,122 +363,6 @@ IDBTransaction::AddStatement(bool aCreate,
 }
 
 already_AddRefed<mozIStorageStatement>
-IDBTransaction::DeleteStatement(bool aAutoIncrement)
-{
-  if (aAutoIncrement) {
-    return GetCachedStatement(
-      "DELETE FROM ai_object_data "
-      "WHERE id = :key_value "
-      "AND object_store_id = :osid"
-    );
-  }
-  return GetCachedStatement(
-    "DELETE FROM object_data "
-    "WHERE key_value = :key_value "
-    "AND object_store_id = :osid"
-  );
-}
-
-already_AddRefed<mozIStorageStatement>
-IDBTransaction::GetStatement(bool aAutoIncrement)
-{
-  if (aAutoIncrement) {
-    return GetCachedStatement(
-      "SELECT data "
-      "FROM ai_object_data "
-      "WHERE id = :id "
-      "AND object_store_id = :osid"
-    );
-  }
-  return GetCachedStatement(
-    "SELECT data "
-    "FROM object_data "
-    "WHERE key_value = :id "
-    "AND object_store_id = :osid"
-  );
-}
-
-already_AddRefed<mozIStorageStatement>
-IDBTransaction::IndexGetStatement(bool aUnique,
-                                  bool aAutoIncrement)
-{
-  if (aAutoIncrement) {
-    if (aUnique) {
-      return GetCachedStatement(
-        "SELECT ai_object_data_id "
-        "FROM ai_unique_index_data "
-        "WHERE index_id = :index_id "
-        "AND value = :value"
-      );
-    }
-    return GetCachedStatement(
-      "SELECT ai_object_data_id "
-      "FROM ai_index_data "
-      "WHERE index_id = :index_id "
-      "AND value = :value"
-    );
-  }
-  if (aUnique) {
-    return GetCachedStatement(
-      "SELECT object_data_key "
-      "FROM unique_index_data "
-      "WHERE index_id = :index_id "
-      "AND value = :value"
-    );
-  }
-  return GetCachedStatement(
-    "SELECT object_data_key "
-    "FROM index_data "
-    "WHERE index_id = :index_id "
-    "AND value = :value"
-  );
-}
-
-already_AddRefed<mozIStorageStatement>
-IDBTransaction::IndexGetObjectStatement(bool aUnique,
-                                        bool aAutoIncrement)
-{
-  if (aAutoIncrement) {
-    if (aUnique) {
-      return GetCachedStatement(
-        "SELECT data "
-        "FROM ai_object_data "
-        "INNER JOIN ai_unique_index_data "
-        "ON ai_object_data.id = ai_unique_index_data.ai_object_data_id "
-        "WHERE index_id = :index_id "
-        "AND value = :value"
-      );
-    }
-    return GetCachedStatement(
-      "SELECT data "
-      "FROM ai_object_data "
-      "INNER JOIN ai_index_data "
-      "ON ai_object_data.id = ai_index_data.ai_object_data_id "
-      "WHERE index_id = :index_id "
-      "AND value = :value"
-    );
-  }
-  if (aUnique) {
-    return GetCachedStatement(
-      "SELECT data "
-      "FROM object_data "
-      "INNER JOIN unique_index_data "
-      "ON object_data.id = unique_index_data.object_data_id "
-      "WHERE index_id = :index_id "
-      "AND value = :value"
-    );
-  }
-  return GetCachedStatement(
-    "SELECT data "
-    "FROM object_data "
-    "INNER JOIN index_data "
-    "ON object_data.id = index_data.object_data_id "
-    "WHERE index_id = :index_id "
-    "AND value = :value"
-  );
-}
-
-already_AddRefed<mozIStorageStatement>
 IDBTransaction::IndexUpdateStatement(bool aAutoIncrement,
                                      bool aUnique,
                                      bool aOverwrite)
@@ -608,7 +492,6 @@ IDBTransaction::GetOrCreateObjectStore(const nsAString& aName,
                                        ObjectStoreInfo* aObjectStoreInfo)
 {
   NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
-  NS_ASSERTION(!aName.IsEmpty(), "Empty name!");
   NS_ASSERTION(aObjectStoreInfo, "Null pointer!");
 
   nsRefPtr<IDBObjectStore> retval;
@@ -712,10 +595,7 @@ IDBTransaction::GetObjectStoreNames(nsIDOMDOMStringList** aObjectStores)
   nsTArray<nsString>* arrayOfNames;
 
   if (mMode == IDBTransaction::VERSION_CHANGE) {
-    DatabaseInfo* info;
-    if (!DatabaseInfo::Get(mDatabase->Id(), &info)) {
-      NS_ERROR("This should never fail!");
-    }
+    DatabaseInfo* info = mDatabase->Info();
 
     if (!info->GetObjectStoreNames(stackArray)) {
       NS_ERROR("Out of memory!");
@@ -752,7 +632,7 @@ IDBTransaction::ObjectStore(const nsAString& aName,
 
   if (mMode == nsIIDBTransaction::VERSION_CHANGE ||
       mObjectStoreNames.Contains(aName)) {
-    ObjectStoreInfo::Get(mDatabase->Id(), aName, &info);
+    mDatabase->Info()->GetObjectStore(aName, &info);
   }
 
   if (!info) {
@@ -951,10 +831,7 @@ CommitHelper::Run()
         NS_ASSERTION(mTransaction->Mode() == nsIIDBTransaction::VERSION_CHANGE,
                      "Bad transaction type!");
 
-        DatabaseInfo* dbInfo;
-        if (!DatabaseInfo::Get(mTransaction->Database()->Id(), &dbInfo)) {
-          NS_ERROR("This should never fail!");
-        }
+        DatabaseInfo* dbInfo = mTransaction->Database()->Info();
 
         if (NS_FAILED(IDBFactory::UpdateDatabaseMetadata(dbInfo, mOldVersion,
                                                          mOldObjectStores))) {
