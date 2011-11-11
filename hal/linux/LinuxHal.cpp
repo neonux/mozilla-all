@@ -66,7 +66,6 @@ GetCurrentBatteryInformation(hal::BatteryInformation* aBatteryInfo)
 {
   aBatteryInfo->level() = dom::battery::kDefaultLevel;
   aBatteryInfo->charging() = dom::battery::kDefaultCharging;
-  aBatteryInfo->remainingTime() = dom::battery::kUnknownRemainingTime;
 }
 #endif // !MOZ_ENABLE_DBUS
 

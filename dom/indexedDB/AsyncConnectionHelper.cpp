@@ -50,6 +50,9 @@
 #include "IndexedDatabaseManager.h"
 #include "TransactionThreadPool.h"
 
+using mozilla::TimeStamp;
+using mozilla::TimeDuration;
+
 USING_INDEXEDDB_NAMESPACE
 
 namespace {
@@ -57,6 +60,7 @@ namespace {
 IDBTransaction* gCurrentTransaction = nsnull;
 
 const PRUint32 kProgressHandlerGranularity = 1000;
+const PRUint32 kDefaultTimeoutMS = 30000;
 
 NS_STACK_CLASS
 class TransactionPoolEventTarget : public nsIEventTarget
@@ -166,6 +170,7 @@ AsyncConnectionHelper::AsyncConnectionHelper(IDBDatabase* aDatabase,
                                              IDBRequest* aRequest)
 : HelperBase(aRequest),
   mDatabase(aDatabase),
+  mTimeoutDuration(TimeDuration::FromMilliseconds(kDefaultTimeoutMS)),
   mResultCode(NS_OK),
   mDispatched(false)
 {
@@ -177,6 +182,7 @@ AsyncConnectionHelper::AsyncConnectionHelper(IDBTransaction* aTransaction,
 : HelperBase(aRequest),
   mDatabase(aTransaction->mDatabase),
   mTransaction(aTransaction),
+  mTimeoutDuration(TimeDuration::FromMilliseconds(kDefaultTimeoutMS)),
   mResultCode(NS_OK),
   mDispatched(false)
 {
@@ -266,13 +272,12 @@ AsyncConnectionHelper::Run()
     }
   }
 
-  bool setProgressHandler = false;
   if (connection) {
     rv = connection->SetProgressHandler(kProgressHandlerGranularity, this,
                                         getter_AddRefs(mOldProgressHandler));
     NS_WARN_IF_FALSE(NS_SUCCEEDED(rv), "SetProgressHandler failed!");
     if (NS_SUCCEEDED(rv)) {
-      setProgressHandler = true;
+      mStartTime = TimeStamp::Now();
     }
   }
 
@@ -317,16 +322,18 @@ AsyncConnectionHelper::Run()
     }
   }
 
-  if (setProgressHandler) {
+  if (!mStartTime.IsNull()) {
     nsCOMPtr<mozIStorageProgressHandler> handler;
     rv = connection->RemoveProgressHandler(getter_AddRefs(handler));
     NS_WARN_IF_FALSE(NS_SUCCEEDED(rv), "RemoveProgressHandler failed!");
 #ifdef DEBUG
     if (NS_SUCCEEDED(rv)) {
-      NS_ASSERTION(SameCOMIdentity(handler, static_cast<nsIRunnable*>(this)),
-                   "Mismatch!");
+      nsCOMPtr<nsISupports> handlerSupports(do_QueryInterface(handler));
+      nsCOMPtr<nsISupports> thisSupports = do_QueryObject(this);
+      NS_ASSERTION(thisSupports == handlerSupports, "Mismatch!");
     }
 #endif
+    mStartTime = TimeStamp();
   }
 
   return NS_DispatchToMainThread(this, NS_DISPATCH_NORMAL);
@@ -338,6 +345,12 @@ AsyncConnectionHelper::OnProgress(mozIStorageConnection* aConnection,
 {
   if (mDatabase && mDatabase->IsInvalidated()) {
     // Someone is trying to delete the database file. Exit lightningfast!
+    *_retval = true;
+    return NS_OK;
+  }
+
+  TimeDuration elapsed = TimeStamp::Now() - mStartTime;
+  if (elapsed >= mTimeoutDuration) {
     *_retval = true;
     return NS_OK;
   }

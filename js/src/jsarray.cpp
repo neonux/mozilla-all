@@ -2151,7 +2151,8 @@ sort_compare(void *arg, const void *a, const void *b, int *result)
     if (!ag.pushed() && !cx->stack.pushInvokeArgs(cx, 2, &ag))
         return JS_FALSE;
         
-    ag.setCallee(ca->fval);
+    ag.calleeHasBeenReset();
+    ag.calleev() = ca->fval;
     ag.thisv() = UndefinedValue();
     ag[0] = *av;
     ag[1] = *bv;
@@ -3359,7 +3360,8 @@ array_readonlyCommon(JSContext *cx, CallArgs &args)
         if (!kNotPresent) {
             if (!ag.pushed() && !cx->stack.pushInvokeArgs(cx, 3, &ag))
                 return false;
-            ag.setCallee(ObjectValue(*callable));
+            ag.calleeHasBeenReset();
+            ag.calleev() = ObjectValue(*callable);
             ag.thisv() = thisv;
             ag[0] = kValue;
             ag[1] = NumberValue(k);
@@ -3460,7 +3462,8 @@ array_map(JSContext *cx, uintN argc, Value *vp)
         if (!kNotPresent) {
             if (!ag.pushed() && !cx->stack.pushInvokeArgs(cx, 3, &ag))
                 return false;
-            ag.setCallee(ObjectValue(*callable));
+            ag.calleeHasBeenReset();
+            ag.calleev() = ObjectValue(*callable);
             ag.thisv() = thisv;
             ag[0] = kValue;
             ag[1] = NumberValue(k);
@@ -3539,7 +3542,8 @@ array_filter(JSContext *cx, uintN argc, Value *vp)
         if (!kNotPresent) {
             if (!ag.pushed() && !cx->stack.pushInvokeArgs(cx, 3, &ag))
                 return false;
-            ag.setCallee(ObjectValue(*callable));
+            ag.calleeHasBeenReset();
+            ag.calleev() = ObjectValue(*callable);
             ag.thisv() = thisv;
             ag[0] = kValue;
             ag[1] = NumberValue(k);
@@ -3657,7 +3661,8 @@ array_reduceCommon(JSContext *cx, CallArgs &args)
         if (!kNotPresent) {
             if (!ag.pushed() && !cx->stack.pushInvokeArgs(cx, 4, &ag))
                 return false;
-            ag.setCallee(ObjectValue(*callable));
+            ag.calleeHasBeenReset();
+            ag.calleev() = ObjectValue(*callable);
             ag.thisv() = UndefinedValue();
             ag[0] = accumulator;
             ag[1] = kValue;

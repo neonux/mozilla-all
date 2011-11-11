@@ -53,6 +53,7 @@
 #define ERROR_EVT_STR "error"
 #define COMPLETE_EVT_STR "complete"
 #define ABORT_EVT_STR "abort"
+#define TIMEOUT_EVT_STR "timeout"
 #define VERSIONCHANGE_EVT_STR "versionchange"
 #define BLOCKED_EVT_STR "blocked"
 #define UPGRADENEEDED_EVT_STR "upgradeneeded"

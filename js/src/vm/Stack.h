@@ -208,9 +208,8 @@ class CallReceiver
         return argv_ - 1;
     }
 
-    void setCallee(Value calleev) {
+    void calleeHasBeenReset() const {
         clearUsedRval();
-        this->calleev() = calleev;
     }
 };
 

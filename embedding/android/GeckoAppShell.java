@@ -114,7 +114,7 @@ public class GeckoAppShell
 
     public static native void processNextNativeEvent();
 
-    public static native void notifyBatteryChange(double aLevel, boolean aCharging, double aRemainingTime);
+    public static native void notifyBatteryChange(float aLevel, boolean aCharging);
 
     // A looper thread, accessed by GeckoAppShell.getHandler
     private static class LooperThread extends Thread {
@@ -1628,7 +1628,7 @@ public class GeckoAppShell
         GeckoBatteryManager.disableNotifications();
     }
 
-    public static double[] getCurrentBatteryInformation() {
+    public static float[] getCurrentBatteryInformation() {
         return GeckoBatteryManager.getCurrentInformation();
     }
 }

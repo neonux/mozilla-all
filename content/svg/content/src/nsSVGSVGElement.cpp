@@ -62,7 +62,6 @@
 #include "nsSVGSVGElement.h"
 #include "nsContentErrors.h" // For NS_PROPTABLE_PROP_OVERWRITTEN
 #include "nsContentUtils.h"
-#include "nsStyleUtil.h"
 
 #include "nsEventDispatcher.h"
 #include "nsSMILTimeContainer.h"
@@ -667,17 +666,7 @@ nsSVGSVGElement::CreateSVGTransformFromMatrix(nsIDOMSVGMatrix *matrix,
 NS_IMETHODIMP
 nsSVGSVGElement::GetElementById(const nsAString & elementId, nsIDOMElement **_retval)
 {
-  NS_ENSURE_ARG_POINTER(_retval);
-  *_retval = nsnull;
-
-  nsresult rv = NS_OK;
-  nsAutoString selector(NS_LITERAL_STRING("#"));
-  nsStyleUtil::AppendEscapedCSSIdent(PromiseFlatString(elementId), selector);
-  nsIContent* element = nsGenericElement::doQuerySelector(this, selector, &rv);
-  if (NS_SUCCEEDED(rv) && element) {
-    return CallQueryInterface(element, _retval);
-  }
-  return rv;
+  return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 //----------------------------------------------------------------------

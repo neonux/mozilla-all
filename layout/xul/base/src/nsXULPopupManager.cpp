@@ -137,8 +137,9 @@ void nsMenuChainItem::Detach(nsMenuChainItem** aRoot)
   }
 }
 
-NS_IMPL_ISUPPORTS3(nsXULPopupManager,
+NS_IMPL_ISUPPORTS4(nsXULPopupManager,
                    nsIDOMEventListener,
+                   nsIMenuRollup,
                    nsITimerCallback,
                    nsIObserver)
 
@@ -206,14 +207,15 @@ nsXULPopupManager::GetInstance()
   return sInstance;
 }
 
-nsIContent*
-nsXULPopupManager::Rollup(PRUint32 aCount, bool aGetLastRolledUp)
+NS_IMETHODIMP
+nsXULPopupManager::Rollup(PRUint32 aCount, nsIContent** aLastRolledUp)
 {
-  nsIContent* lastRolledUpPopup = nsnull;
+  if (aLastRolledUp)
+    *aLastRolledUp = nsnull;
 
   nsMenuChainItem* item = GetTopVisibleMenu();
   if (item) {
-    if (aGetLastRolledUp) {
+    if (aLastRolledUp) {
       // we need to get the popup that will be closed last, so that
       // widget can keep track of it so it doesn't reopen if a mouse
       // down event is going to processed.
@@ -225,7 +227,7 @@ nsXULPopupManager::Rollup(PRUint32 aCount, bool aGetLastRolledUp)
       nsMenuChainItem* first = item;
       while (first->GetParent())
         first = first->GetParent();
-      lastRolledUpPopup = first->Content();
+      NS_ADDREF(*aLastRolledUp = first->Content());
     }
 
     // if a number of popups to close has been specified, determine the last
@@ -243,33 +245,35 @@ nsXULPopupManager::Rollup(PRUint32 aCount, bool aGetLastRolledUp)
 
     HidePopup(item->Content(), true, true, false, lastPopup);
   }
-
-  return lastRolledUpPopup;
+  return NS_OK;
 }
 
 ////////////////////////////////////////////////////////////////////////
-bool nsXULPopupManager::ShouldRollupOnMouseWheelEvent()
+NS_IMETHODIMP nsXULPopupManager::ShouldRollupOnMouseWheelEvent(bool *aShouldRollup) 
 {
   // should rollup only for autocomplete widgets
   // XXXndeakin this should really be something the popup has more control over
 
+  *aShouldRollup = false;
   nsMenuChainItem* item = GetTopVisibleMenu();
   if (!item)
-    return false;
+    return NS_OK;
 
   nsIContent* content = item->Frame()->GetContent();
-  if (!content)
-    return false;
+  if (content) {
+    nsAutoString value;
+    content->GetAttr(kNameSpaceID_None, nsGkAtoms::type, value);
+    *aShouldRollup = StringBeginsWith(value, NS_LITERAL_STRING("autocomplete"));
+  }
 
-  nsAutoString value;
-  content->GetAttr(kNameSpaceID_None, nsGkAtoms::type, value);
-  return StringBeginsWith(value, NS_LITERAL_STRING("autocomplete"));
+  return NS_OK;
 }
 
 // a menu should not roll up if activated by a mouse activate message (eg. X-mouse)
-bool nsXULPopupManager::ShouldRollupOnMouseActivate()
+NS_IMETHODIMP nsXULPopupManager::ShouldRollupOnMouseActivate(bool *aShouldRollup) 
 {
-  return false;
+  *aShouldRollup = false;
+  return NS_OK;
 }
 
 PRUint32
@@ -1616,7 +1620,7 @@ nsXULPopupManager::SetCaptureState(nsIContent* aOldPopup)
     return;
 
   if (mWidget) {
-    mWidget->CaptureRollupEvents(this, false, false);
+    mWidget->CaptureRollupEvents(this, this, false, false);
     mWidget = nsnull;
   }
 
@@ -1625,7 +1629,8 @@ nsXULPopupManager::SetCaptureState(nsIContent* aOldPopup)
     nsCOMPtr<nsIWidget> widget;
     popup->GetWidget(getter_AddRefs(widget));
     if (widget) {
-      widget->CaptureRollupEvents(this, true, popup->ConsumeOutsideClicks());
+      widget->CaptureRollupEvents(this, this, true,
+                                  popup->ConsumeOutsideClicks());
       mWidget = widget;
       popup->AttachedDismissalListener();
     }
@@ -2177,7 +2182,7 @@ nsXULPopupManager::KeyDown(nsIDOMKeyEvent* aKeyEvent)
         // The access key just went down and no other
         // modifiers are already down.
         if (mPopups)
-          Rollup(0);
+          Rollup(nsnull, nsnull);
         else if (mActiveMenuBar)
           mActiveMenuBar->MenuClosed();
       }
@@ -2256,7 +2261,7 @@ nsXULPopupManager::KeyPress(nsIDOMKeyEvent* aKeyEvent)
   ) {
     // close popups or deactivate menubar when Tab or F10 are pressed
     if (item)
-      Rollup(0);
+      Rollup(nsnull, nsnull);
     else if (mActiveMenuBar)
       mActiveMenuBar->MenuClosed();
   }
@@ -2374,5 +2379,14 @@ nsXULMenuCommandEvent::Run()
   if (popup && mCloseMenuMode != CloseMenuMode_None)
     pm->HidePopup(popup, mCloseMenuMode == CloseMenuMode_Auto, true, false);
 
+  return NS_OK;
+}
+
+nsresult
+NS_NewXULPopupManager(nsISupports** aResult)
+{
+  nsXULPopupManager* pm = nsXULPopupManager::GetInstance();
+  NS_IF_ADDREF(pm);
+  *aResult = static_cast<nsIMenuRollup *>(pm);
   return NS_OK;
 }

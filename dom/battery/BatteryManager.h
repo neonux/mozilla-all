@@ -93,18 +93,11 @@ private:
    */
   void UpdateFromBatteryInfo(const hal::BatteryInformation& aBatteryInfo);
 
-  double mLevel;
-  bool   mCharging;
-  /**
-   * Represents the discharging time or the charging time, dpending on the
-   * current battery status (charging or not).
-   */
-  double mRemainingTime;
+  float mLevel;
+  bool  mCharging;
 
   nsRefPtr<nsDOMEventListenerWrapper> mOnLevelChangeListener;
   nsRefPtr<nsDOMEventListenerWrapper> mOnChargingChangeListener;
-  nsRefPtr<nsDOMEventListenerWrapper> mOnDischargingTimeChangeListener;
-  nsRefPtr<nsDOMEventListenerWrapper> mOnChargingTimeChangeListener;
 };
 
 } // namespace battery

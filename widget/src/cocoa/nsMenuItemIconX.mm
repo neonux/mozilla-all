@@ -559,9 +559,3 @@ nsMenuItemIconX::OnDiscard(imgIRequest* aRequest)
 {
   return NS_OK;
 }
-
-NS_IMETHODIMP
-nsMenuItemIconX::OnImageIsAnimated(imgIRequest* aRequest)
-{
-  return NS_OK;
-}

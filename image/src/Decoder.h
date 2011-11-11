@@ -218,7 +218,6 @@ private:
   bool mInitialized;
   bool mSizeDecode;
   bool mInFrame;
-  bool mIsAnimated;
 };
 
 } // namespace imagelib

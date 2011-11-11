@@ -141,12 +141,6 @@ struct Parser : private AutoGCRooter
         return allocator.allocNode();
     }
 
-    /*
-     * Create a parse node with the given kind and op using the current token's
-     * atom.
-     */
-    ParseNode *atomNode(ParseNodeKind kind, JSOp op);
-
   public:
     ParseNode *freeTree(ParseNode *pn) { return allocator.freeTree(pn); }
     void prepareNodeForMutation(ParseNode *pn) { return allocator.prepareNodeForMutation(pn); }
@@ -224,11 +218,9 @@ struct Parser : private AutoGCRooter
 
     ParseNode *functionDef(PropertyName *name, FunctionType type, FunctionSyntaxKind kind);
 
-    ParseNode *unaryOpExpr(ParseNodeKind kind, JSOp op);
-
     ParseNode *condition();
     ParseNode *comprehensionTail(ParseNode *kid, uintN blockid, bool isGenexp,
-                                 ParseNodeKind kind = PNK_SEMI, JSOp op = JSOP_NOP);
+                                 TokenKind type = TOK_SEMI, JSOp op = JSOP_NOP);
     ParseNode *generatorExpr(ParseNode *kid);
     JSBool argumentList(ParseNode *listNode);
     ParseNode *bracketedExpr();
@@ -244,8 +236,9 @@ struct Parser : private AutoGCRooter
     ParseNode *qualifiedIdentifier();
     ParseNode *attributeIdentifier();
     ParseNode *xmlExpr(JSBool inTag);
+    ParseNode *xmlAtomNode();
     ParseNode *xmlNameExpr();
-    ParseNode *xmlTagContent(ParseNodeKind tagkind, JSAtom **namep);
+    ParseNode *xmlTagContent(TokenKind tagtype, JSAtom **namep);
     JSBool xmlElementContent(ParseNode *pn);
     ParseNode *xmlElementOrList(JSBool allowList);
     ParseNode *xmlElementOrListRoot(JSBool allowList);

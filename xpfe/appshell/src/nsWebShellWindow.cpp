@@ -320,7 +320,8 @@ nsWebShellWindow::HandleEvent(nsGUIEvent *aEvent)
       case NS_MOVE: {
         // Adjust any child popups so that their widget offsets and coordinates
         // are correct with respect to the new position of the window
-        nsXULPopupManager* pm = nsXULPopupManager::GetInstance();
+        nsCOMPtr<nsIMenuRollup> pm =
+          do_GetService("@mozilla.org/xul/xul-popup-manager;1");
         if (pm) {
           nsCOMPtr<nsPIDOMWindow> window = do_GetInterface(docShell);
           pm->AdjustPopupsOnWindowChange(window);
@@ -332,7 +333,8 @@ nsWebShellWindow::HandleEvent(nsGUIEvent *aEvent)
         break;
       }
       case NS_SIZE: {
-        nsXULPopupManager* pm = nsXULPopupManager::GetInstance();
+        nsCOMPtr<nsIMenuRollup> pm =
+          do_GetService("@mozilla.org/xul/xul-popup-manager;1");
         if (pm) {
           nsCOMPtr<nsPIDOMWindow> window = do_GetInterface(docShell);
           pm->AdjustPopupsOnWindowChange(window);

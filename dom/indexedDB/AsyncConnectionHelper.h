@@ -47,11 +47,13 @@
 
 #include "mozIStorageProgressHandler.h"
 #include "nsIRunnable.h"
+#include "nsIThread.h"
 
 #include "nsDOMEvent.h"
 
+#include "mozilla/TimeStamp.h"
+
 class mozIStorageConnection;
-class nsIEventTarget;
 
 BEGIN_INDEXEDDB_NAMESPACE
 
@@ -148,6 +150,14 @@ protected:
   virtual ~AsyncConnectionHelper();
 
   /**
+   * Set the timeout duration in milliseconds.
+   */
+  void SetTimeoutMS(PRUint32 aTimeoutMS)
+  {
+    mTimeoutDuration = TimeDuration::FromMilliseconds(aTimeoutMS);
+  }
+
+  /**
    * This is called on the main thread after Dispatch is called but before the
    * runnable is actually dispatched to the database thread. Allows the subclass
    * to initialize itself.
@@ -209,6 +219,10 @@ protected:
 
 private:
   nsCOMPtr<mozIStorageProgressHandler> mOldProgressHandler;
+
+  mozilla::TimeStamp mStartTime;
+  mozilla::TimeDuration mTimeoutDuration;
+
   nsresult mResultCode;
   bool mDispatched;
 };

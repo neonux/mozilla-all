@@ -471,7 +471,7 @@ jsds_NotifyPendingDeadScripts (JSContext *cx)
     if (jsds) {
         NS_ADDREF(jsds);
         jsds->GetScriptHook (getter_AddRefs(hook));
-        jsds->DoPause(nsnull, true);
+        jsds->Pause(nsnull);
     }
 
     DeadScript *deadScripts = gDeadScripts;
@@ -506,7 +506,7 @@ jsds_NotifyPendingDeadScripts (JSContext *cx)
     }
 
     if (jsds) {
-        jsds->DoUnPause(nsnull, true);
+        jsds->UnPause(nsnull);
         NS_RELEASE(jsds);
     }
 }
@@ -583,9 +583,9 @@ jsds_ErrorHookProc (JSDContext *jsdc, JSContext *cx, const char *message,
         errnum   = 0;
     }
     
-    gJsds->DoPause(nsnull, true);
+    gJsds->Pause(nsnull);
     hook->OnError (nsDependentCString(message), fileName, line, pos, flags, errnum, val, &rval);
-    gJsds->DoUnPause(nsnull, true);
+    gJsds->UnPause(nsnull);
     
     running = false;
     if (!rval)
@@ -626,9 +626,9 @@ jsds_CallHookProc (JSDContext* jsdc, JSDThreadState* jsdthreadstate,
     nsCOMPtr<jsdIStackFrame> frame =
         getter_AddRefs(jsdStackFrame::FromPtr(jsdc, jsdthreadstate,
                                               native_frame));
-    gJsds->DoPause(nsnull, true);
+    gJsds->Pause(nsnull);
     hook->OnCall(frame, type);    
-    gJsds->DoUnPause(nsnull, true);
+    gJsds->UnPause(nsnull);
     jsdStackFrame::InvalidateAll();
 
     return JS_TRUE;
@@ -688,13 +688,13 @@ jsds_ExecutionHookProc (JSDContext* jsdc, JSDThreadState* jsdthreadstate,
     nsCOMPtr<jsdIStackFrame> frame =
         getter_AddRefs(jsdStackFrame::FromPtr(jsdc, jsdthreadstate,
                                               native_frame));
-    gJsds->DoPause(nsnull, true);
+    gJsds->Pause(nsnull);
     jsdIValue *inout_rv = js_rv;
     NS_IF_ADDREF(inout_rv);
     hook->OnExecute (frame, type, &inout_rv, &hook_rv);
     js_rv = inout_rv;
     NS_IF_RELEASE(inout_rv);
-    gJsds->DoUnPause(nsnull, true);
+    gJsds->UnPause(nsnull);
     jsdStackFrame::InvalidateAll();
         
     if (hook_rv == JSD_HOOK_RETURN_RET_WITH_VAL ||
@@ -734,9 +734,9 @@ jsds_ScriptHookProc (JSDContext* jsdc, JSDScript* jsdscript, JSBool creating,
 #ifdef CAUTIOUS_SCRIPTHOOK
         JS_UNKEEP_ATOMS(rt);
 #endif
-        gJsds->DoPause(nsnull, true);
+        gJsds->Pause(nsnull);
         hook->OnScriptCreated (script);
-        gJsds->DoUnPause(nsnull, true);
+        gJsds->UnPause(nsnull);
 #ifdef CAUTIOUS_SCRIPTHOOK
         JS_KEEP_ATOMS(rt);
 #endif
@@ -763,9 +763,9 @@ jsds_ScriptHookProc (JSDContext* jsdc, JSDScript* jsdscript, JSBool creating,
             JS_UNKEEP_ATOMS(rt);
 #endif
                 
-            gJsds->DoPause(nsnull, true);
+            gJsds->Pause(nsnull);
             hook->OnScriptDestroyed (jsdis);
-            gJsds->DoUnPause(nsnull, true);
+            gJsds->UnPause(nsnull);
 #ifdef CAUTIOUS_SCRIPTHOOK
             JS_KEEP_ATOMS(rt);
 #endif
@@ -2546,12 +2546,21 @@ jsdService::AsyncOn (jsdIActivationCallback *activationCallback)
 {
     nsresult  rv;
 
+    /* get JS things from the CallContext */
     nsCOMPtr<nsIXPConnect> xpc = do_GetService(nsIXPConnect::GetCID(), &rv);
+    if (NS_FAILED(rv)) return rv;
+
+    nsAXPCNativeCallContext *cc = nsnull;
+    rv = xpc->GetCurrentNativeCallContext(&cc);
+    if (NS_FAILED(rv)) return rv;
+
+    JSContext *cx;
+    rv = cc->GetJSContext (&cx);
     if (NS_FAILED(rv)) return rv;
 
     mActivationCallback = activationCallback;
     
-    return xpc->SetDebugModeWhenPossible(true, true);
+    return xpc->SetDebugModeWhenPossible(true);
 }
 
 NS_IMETHODIMP
@@ -2697,7 +2706,7 @@ jsdService::Off (void)
     if (NS_FAILED(rv))
         return rv;
 
-    xpc->SetDebugModeWhenPossible(false, true);
+    xpc->SetDebugModeWhenPossible(false);
 
     return NS_OK;
 }
@@ -2713,12 +2722,6 @@ jsdService::GetPauseDepth(PRUint32 *_rval)
 NS_IMETHODIMP
 jsdService::Pause(PRUint32 *_rval)
 {
-    return DoPause(_rval, false);
-}
-
-nsresult
-jsdService::DoPause(PRUint32 *_rval, bool internalCall)
-{
     if (!mCx)
         return NS_ERROR_NOT_INITIALIZED;
 
@@ -2731,15 +2734,6 @@ jsdService::DoPause(PRUint32 *_rval, bool internalCall)
         JSD_ClearTopLevelHook (mCx);
         JSD_ClearFunctionHook (mCx);
         JSD_DebuggerPause (mCx);
-
-        nsresult rv;
-        nsCOMPtr<nsIXPConnect> xpc = do_GetService(nsIXPConnect::GetCID(), &rv);
-        if (NS_FAILED(rv)) return rv;
-
-        if (!internalCall) {
-            rv = xpc->SetDebugModeWhenPossible(false, false);
-            NS_ENSURE_SUCCESS(rv, rv);
-        }
     }
 
     if (_rval)
@@ -2750,12 +2744,6 @@ jsdService::DoPause(PRUint32 *_rval, bool internalCall)
 
 NS_IMETHODIMP
 jsdService::UnPause(PRUint32 *_rval)
-{
-    return DoUnPause(_rval, false);
-}
-
-nsresult
-jsdService::DoUnPause(PRUint32 *_rval, bool internalCall)
 {
     if (!mCx)
         return NS_ERROR_NOT_INITIALIZED;
@@ -2786,15 +2774,6 @@ jsdService::DoUnPause(PRUint32 *_rval, bool internalCall)
             JSD_SetFunctionHook (mCx, jsds_CallHookProc, NULL);
         else
             JSD_ClearFunctionHook (mCx);
-
-        nsresult rv;
-        nsCOMPtr<nsIXPConnect> xpc = do_GetService(nsIXPConnect::GetCID(), &rv);
-        if (NS_FAILED(rv)) return rv;
-
-        if (!internalCall) {
-            rv = xpc->SetDebugModeWhenPossible(true, false);
-            NS_ENSURE_SUCCESS(rv, rv);
-        }
     }
     
     if (_rval)
@@ -3131,9 +3110,9 @@ jsdService::EnterNestedEventLoop (jsdINestCallback *callback, PRUint32 *_rval)
 
     if (NS_SUCCEEDED(stack->Push(nsnull))) {
         if (callback) {
-            DoPause(nsnull, true);
+            Pause(nsnull);
             rv = callback->OnNest();
-            DoUnPause(nsnull, true);
+            UnPause(nsnull);
         }
         
         while (NS_SUCCEEDED(rv) && mNestedLoopLevel >= nestLevel) {

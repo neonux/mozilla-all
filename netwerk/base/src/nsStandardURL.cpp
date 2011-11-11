@@ -67,6 +67,7 @@ nsICharsetConverterManager *nsStandardURL::gCharsetMgr = nsnull;
 bool nsStandardURL::gInitialized = false;
 bool nsStandardURL::gEscapeUTF8 = true;
 bool nsStandardURL::gAlwaysEncodeInUTF8 = true;
+bool nsStandardURL::gEncodeQueryInUTF8 = true;
 
 #if defined(PR_LOGGING)
 //
@@ -143,6 +144,7 @@ end:
 #define NS_NET_PREF_ESCAPEUTF8         "network.standard-url.escape-utf8"
 #define NS_NET_PREF_ENABLEIDN          "network.enableIDN"
 #define NS_NET_PREF_ALWAYSENCODEINUTF8 "network.standard-url.encode-utf8"
+#define NS_NET_PREF_ENCODEQUERYINUTF8  "network.standard-url.encode-query-utf8"
 
 NS_IMPL_ISUPPORTS1(nsStandardURL::nsPrefObserver, nsIObserver)
 
@@ -271,7 +273,8 @@ nsSegmentEncoder::InitUnicodeEncoder()
     GET_SEGMENT_ENCODER_INTERNAL(name, gAlwaysEncodeInUTF8)
 
 #define GET_QUERY_ENCODER(name) \
-    GET_SEGMENT_ENCODER_INTERNAL(name, false)
+    GET_SEGMENT_ENCODER_INTERNAL(name, gAlwaysEncodeInUTF8 && \
+                                 gEncodeQueryInUTF8)
 
 //----------------------------------------------------------------------------
 // nsStandardURL <public>
@@ -347,6 +350,7 @@ nsStandardURL::InitGlobalObjects()
         nsCOMPtr<nsIObserver> obs( new nsPrefObserver() );
         prefBranch->AddObserver(NS_NET_PREF_ESCAPEUTF8, obs.get(), false);
         prefBranch->AddObserver(NS_NET_PREF_ALWAYSENCODEINUTF8, obs.get(), false);
+        prefBranch->AddObserver(NS_NET_PREF_ENCODEQUERYINUTF8, obs.get(), false);
         prefBranch->AddObserver(NS_NET_PREF_ENABLEIDN, obs.get(), false);
 
         PrefsChanged(prefBranch, nsnull);
@@ -951,6 +955,12 @@ nsStandardURL::PrefsChanged(nsIPrefBranch *prefs, const char *pref)
         if (GOT_PREF(NS_NET_PREF_ALWAYSENCODEINUTF8, val))
             gAlwaysEncodeInUTF8 = val;
         LOG(("encode in UTF-8 %s\n", gAlwaysEncodeInUTF8 ? "enabled" : "disabled"));
+    }
+
+    if (PREF_CHANGED(NS_NET_PREF_ENCODEQUERYINUTF8)) {
+        if (GOT_PREF(NS_NET_PREF_ENCODEQUERYINUTF8, val))
+            gEncodeQueryInUTF8 = val;
+        LOG(("encode query in UTF-8 %s\n", gEncodeQueryInUTF8 ? "enabled" : "disabled"));
     }
 #undef PREF_CHANGED
 #undef GOT_PREF

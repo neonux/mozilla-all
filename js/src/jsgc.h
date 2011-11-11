@@ -1492,10 +1492,6 @@ class GCHelperThread {
         backgroundAllocation = false;
     }
 
-    PRThread *getThread() const {
-        return thread;
-    }
-
     /*
      * Outside the GC lock may give true answer when in fact the sweeping has
      * been done.

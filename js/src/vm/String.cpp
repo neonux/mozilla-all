@@ -295,7 +295,7 @@ js_ConcatStrings(JSContext *cx, JSString *left, JSString *right)
 JSFixedString *
 JSDependentString::undepend(JSContext *cx)
 {
-    JS_ASSERT(JSString::isDependent());
+    JS_ASSERT(isDependent());
 
     size_t n = length();
     size_t size = (n + 1) * sizeof(jschar);

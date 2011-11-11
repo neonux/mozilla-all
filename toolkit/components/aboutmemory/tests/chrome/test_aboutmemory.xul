@@ -367,10 +367,11 @@ Other Measurements\n\
     SimpleTest.finish();
   }
 
-  function checkClipboard(actual, expected) {
-    if (actual != expected) {
+  function check(actual, expected) {
+    var a = actual.QueryInterface(Ci.nsISupportsString).data;
+    if (a != expected) {
       dump("*******ACTUAL*******\n");
-      dump(actual);
+      dump(a);
       dump("******EXPECTED******\n");
       dump(expected);
       dump("********************\n");
@@ -392,8 +393,7 @@ Other Measurements\n\
 
     SimpleTest.executeSoon(function() {
       document.querySelector("#" + aFrame).focus();
-      SimpleTest.waitForClipboard(
-        function(actual) { return checkClipboard(actual, aExpectedText) },
+      SimpleTest.waitForClipboard(function(actual) { return check(actual, aExpectedText) },
         function() {
           synthesizeKey("A", {accelKey: true});
           synthesizeKey("C", {accelKey: true});

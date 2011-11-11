@@ -74,7 +74,7 @@ extern "C" {
     NS_EXPORT void JNICALL Java_org_mozilla_gecko_GeckoAppShell_onChangeNetworkLinkStatus(JNIEnv *, jclass, jstring status);
     NS_EXPORT void JNICALL Java_org_mozilla_gecko_GeckoAppShell_reportJavaCrash(JNIEnv *, jclass, jstring stack);
     NS_EXPORT void JNICALL Java_org_mozilla_gecko_GeckoAppShell_executeNextRunnable(JNIEnv *, jclass);
-    NS_EXPORT void JNICALL Java_org_mozilla_gecko_GeckoAppShell_notifyBatteryChange(JNIEnv* jenv, jclass, jdouble, jboolean, jdouble);
+    NS_EXPORT void JNICALL Java_org_mozilla_gecko_GeckoAppShell_notifyBatteryChange(JNIEnv* jenv, jclass, jfloat, jboolean);
 }
 
 
@@ -191,30 +191,27 @@ Java_org_mozilla_gecko_GeckoAppShell_executeNextRunnable(JNIEnv *, jclass)
 
 NS_EXPORT void JNICALL
 Java_org_mozilla_gecko_GeckoAppShell_notifyBatteryChange(JNIEnv* jenv, jclass,
-                                                         jdouble aLevel,
-                                                         jboolean aCharging,
-                                                         jdouble aRemainingTime)
+                                                         jfloat aLevel,
+                                                         jboolean aCharging)
 {
     class NotifyBatteryChangeRunnable : public nsRunnable {
     public:
-      NotifyBatteryChangeRunnable(double aLevel, bool aCharging, double aRemainingTime)
+      NotifyBatteryChangeRunnable(float aLevel, bool aCharging)
         : mLevel(aLevel)
         , mCharging(aCharging)
-        , mRemainingTime(aRemainingTime)
       {}
 
       NS_IMETHODIMP Run() {
-        hal::NotifyBatteryChange(hal::BatteryInformation(mLevel, mCharging, mRemainingTime));
+        hal::NotifyBatteryChange(hal::BatteryInformation(mLevel, mCharging));
         return NS_OK;
       }
 
     private:
-      double mLevel;
-      bool   mCharging;
-      double mRemainingTime;
+      float mLevel;
+      bool  mCharging;
     };
 
-    nsCOMPtr<nsIRunnable> runnable = new NotifyBatteryChangeRunnable(aLevel, aCharging, aRemainingTime);
+    nsCOMPtr<nsIRunnable> runnable = new NotifyBatteryChangeRunnable(aLevel, aCharging);
     NS_DispatchToMainThread(runnable);
 }
 

@@ -436,6 +436,9 @@ gfxRect
 nsSVGForeignObjectFrame::GetBBoxContribution(const gfxMatrix &aToBBoxUserspace,
                                              PRUint32 aFlags)
 {
+  NS_ASSERTION(!(GetStateBits() & NS_STATE_SVG_NONDISPLAY_CHILD),
+               "Should not be calling this on a non-display child");
+
   nsSVGForeignObjectElement *content =
     static_cast<nsSVGForeignObjectElement*>(mContent);
 

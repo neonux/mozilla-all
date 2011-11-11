@@ -44,9 +44,8 @@ namespace mozilla {
 
 namespace hal {
   struct BatteryInformation {
-    double level;
-    bool   charging;
-    double remainingTime;
+    float level;
+    bool  charging;
   };
 }
 

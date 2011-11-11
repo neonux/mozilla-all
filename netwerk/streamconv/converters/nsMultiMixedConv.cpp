@@ -463,29 +463,7 @@ nsMultiMixedConv::AsyncConvertData(const char *aFromType, const char *aToType,
     return NS_OK;
 }
 
-// AutoFree implementation to prevent memory leaks
-class AutoFree
-{
-public:
-  AutoFree() : mBuffer(NULL) {}
-
-  AutoFree(char *buffer) : mBuffer(buffer) {}
-
-  ~AutoFree() {
-    free(mBuffer);
-  }
-
-  AutoFree& operator=(char *buffer) {
-    mBuffer = buffer;
-    return *this;
-  }
-
-  operator char*() const {
-    return mBuffer;
-  }
-private:
-  char *mBuffer;
-};
+#define ERR_OUT { free(buffer); return rv; }
 
 // nsIStreamListener implementation
 NS_IMETHODIMP
@@ -496,7 +474,7 @@ nsMultiMixedConv::OnDataAvailable(nsIRequest *request, nsISupports *context,
         return NS_ERROR_FAILURE;
 
     nsresult rv = NS_OK;
-    AutoFree buffer = nsnull;
+    char *buffer = nsnull;
     PRUint32 bufLen = 0, read = 0;
 
     NS_ASSERTION(request, "multimixed converter needs a request");
@@ -570,12 +548,12 @@ nsMultiMixedConv::OnDataAvailable(nsIRequest *request, nsISupports *context,
         // us in the previous OnDataAvailable callback.
         bool done = false;
         rv = ParseHeaders(channel, cursor, bufLen, &done);
-        if (NS_FAILED(rv)) return rv;
+        if (NS_FAILED(rv)) ERR_OUT
 
         if (done) {
             mProcessingHeaders = false;
             rv = SendStart(channel);
-            if (NS_FAILED(rv)) return rv;
+            if (NS_FAILED(rv)) ERR_OUT
         }
     }
 
@@ -585,6 +563,7 @@ nsMultiMixedConv::OnDataAvailable(nsIRequest *request, nsISupports *context,
         if (*(token+mTokenLen+1) == '-') {
             // This was the last delimiter so we can stop processing
             rv = SendData(cursor, LengthToToken(cursor, token));
+            free(buffer);
             if (NS_FAILED(rv)) return rv;
             return SendStop(NS_OK);
         }
@@ -594,7 +573,7 @@ nsMultiMixedConv::OnDataAvailable(nsIRequest *request, nsISupports *context,
             NS_ASSERTION(!mProcessingHeaders, "we should be pushing raw data");
             rv = SendData(cursor, LengthToToken(cursor, token));
             bufLen -= token - cursor;
-            if (NS_FAILED(rv)) return rv;
+            if (NS_FAILED(rv)) ERR_OUT
         }
         // XXX else NS_ASSERTION(token == cursor, "?");
         token += mTokenLen;
@@ -607,10 +586,10 @@ nsMultiMixedConv::OnDataAvailable(nsIRequest *request, nsISupports *context,
             cursor = token;
             bool done = false; 
             rv = ParseHeaders(channel, cursor, bufLen, &done);
-            if (NS_FAILED(rv)) return rv;
+            if (NS_FAILED(rv)) ERR_OUT
             if (done) {
                 rv = SendStart(channel);
-                if (NS_FAILED(rv)) return rv;
+                if (NS_FAILED(rv)) ERR_OUT
             }
             else {
                 // we haven't finished processing header info.
@@ -630,7 +609,7 @@ nsMultiMixedConv::OnDataAvailable(nsIRequest *request, nsISupports *context,
             mByteRangeEnd = 0;
             
             rv = SendStop(NS_OK);
-            if (NS_FAILED(rv)) return rv;
+            if (NS_FAILED(rv)) ERR_OUT
             // reset the token to front. this allows us to treat
             // the token as a starting token.
             token -= mTokenLen + tokenLinefeed;
@@ -660,15 +639,16 @@ nsMultiMixedConv::OnDataAvailable(nsIRequest *request, nsISupports *context,
 
     if (bufAmt) {
         rv = BufferData(cursor + (bufLen - bufAmt), bufAmt);
-        if (NS_FAILED(rv)) return rv;
+        if (NS_FAILED(rv)) ERR_OUT
         bufLen -= bufAmt;
     }
 
     if (bufLen) {
         rv = SendData(cursor, bufLen);
-        if (NS_FAILED(rv)) return rv;
+        if (NS_FAILED(rv)) ERR_OUT
     }
 
+    free(buffer);
     return rv;
 }
 

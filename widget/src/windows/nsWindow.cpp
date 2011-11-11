@@ -129,6 +129,7 @@
 #include "imgIContainer.h"
 #include "nsIFile.h"
 #include "nsIRollupListener.h"
+#include "nsIMenuRollup.h"
 #include "nsIServiceManager.h"
 #include "nsIClipboard.h"
 #include "nsIMM32Handler.h"
@@ -205,8 +206,6 @@
 #include "nsCrashOnException.h"
 #include "nsIXULRuntime.h"
 
-#include "nsIContent.h"
-
 using namespace mozilla::widget;
 using namespace mozilla::layers;
 using namespace mozilla;
@@ -254,6 +253,7 @@ UINT            nsWindow::sHookTimerId            = 0;
 
 // Rollup Listener
 nsIRollupListener* nsWindow::sRollupListener      = nsnull;
+nsIMenuRollup*  nsWindow::sMenuRollup             = nsnull;
 nsIWidget*      nsWindow::sRollupWidget           = nsnull;
 bool            nsWindow::sRollupConsumeEvent     = false;
 
@@ -331,9 +331,6 @@ bool            gDisableNativeTheme               = false;
 
 // Global used in Show window enumerations.
 static bool     gWindowsVisible                   = false;
-
-// True if we have sent a notification that we are suspending/sleeping.
-static bool     gIsSleepMode                      = false;
 
 static NS_DEFINE_CID(kCClipboardCID, NS_CLIPBOARD_CID);
 
@@ -3080,6 +3077,7 @@ NS_METHOD nsWindow::CaptureMouse(bool aCapture)
  **************************************************************/
 
 NS_IMETHODIMP nsWindow::CaptureRollupEvents(nsIRollupListener * aListener,
+                                            nsIMenuRollup * aMenuRollup,
                                             bool aDoCapture,
                                             bool aConsumeRollupEvent)
 {
@@ -3090,7 +3088,10 @@ NS_IMETHODIMP nsWindow::CaptureRollupEvents(nsIRollupListener * aListener,
     NS_ASSERTION(!sRollupWidget, "rollup widget reassigned before release");
     sRollupConsumeEvent = aConsumeRollupEvent;
     NS_IF_RELEASE(sRollupWidget);
+    NS_IF_RELEASE(sMenuRollup);
     sRollupListener = aListener;
+    sMenuRollup = aMenuRollup;
+    NS_IF_ADDREF(aMenuRollup);
     sRollupWidget = this;
     NS_ADDREF(this);
     if (!sMsgFilterHook && !sCallProcHook && !sCallMouseHook) {
@@ -3099,6 +3100,7 @@ NS_IMETHODIMP nsWindow::CaptureRollupEvents(nsIRollupListener * aListener,
     sProcessHook = true;
   } else {
     sRollupListener = nsnull;
+    NS_IF_RELEASE(sMenuRollup);
     NS_IF_RELEASE(sRollupWidget);
     sProcessHook = false;
     UnregisterSpecialDropdownHooks();
@@ -4869,16 +4871,20 @@ bool nsWindow::ProcessMessage(UINT msg, WPARAM &wParam, LPARAM &lParam,
     break;
 
     case WM_POWERBROADCAST:
-      switch (wParam)
-      {
-        case PBT_APMSUSPEND:
-          PostSleepWakeNotification(true);
-          break;
-        case PBT_APMRESUMEAUTOMATIC:
-        case PBT_APMRESUMECRITICAL:
-        case PBT_APMRESUMESUSPEND:
-          PostSleepWakeNotification(false);
-          break;
+      // only hidden window handle this
+      // to prevent duplicate notification
+      if (mWindowType == eWindowType_invisible) {
+        switch (wParam)
+        {
+          case PBT_APMSUSPEND:
+            PostSleepWakeNotification("sleep_notification");
+            break;
+          case PBT_APMRESUMEAUTOMATIC:
+          case PBT_APMRESUMECRITICAL:
+          case PBT_APMRESUMESUSPEND:
+            PostSleepWakeNotification("wake_notification");
+            break;
+        }
       }
       break;
 
@@ -5720,18 +5726,12 @@ nsWindow::ClientMarginHitTestPoint(PRInt32 mx, PRInt32 my)
   return testResult;
 }
 
-void nsWindow::PostSleepWakeNotification(const bool aIsSleepMode)
+void nsWindow::PostSleepWakeNotification(const char* aNotification)
 {
-  if (aIsSleepMode == gIsSleepMode)
-    return;
-
-  gIsSleepMode = aIsSleepMode;
-
   nsCOMPtr<nsIObserverService> observerService =
     mozilla::services::GetObserverService();
   if (observerService)
-    observerService->NotifyObservers(nsnull,
-      aIsSleepMode ? "sleep_notification" : "wake_notification", nsnull);
+    observerService->NotifyObservers(nsnull, aNotification, nsnull);
 }
 
 // RemoveNextCharMessage() should be called by WM_KEYDOWN or WM_SYSKEYDOWM
@@ -7413,8 +7413,8 @@ void nsWindow::OnDestroy()
   // turn off capture.
   if ( this == sRollupWidget ) {
     if ( sRollupListener )
-      sRollupListener->Rollup(0);
-    CaptureRollupEvents(nsnull, false, true);
+      sRollupListener->Rollup(nsnull, nsnull);
+    CaptureRollupEvents(nsnull, nsnull, false, true);
   }
 
   // Restore the IM context.
@@ -8717,7 +8717,7 @@ nsWindow::DealWithPopups(HWND inWnd, UINT inMsg, WPARAM inWParam, LPARAM inLPara
 
       if (rollup && (inMsg == WM_MOUSEWHEEL || inMsg == WM_MOUSEHWHEEL))
       {
-        rollup = sRollupListener->ShouldRollupOnMouseWheelEvent();
+        sRollupListener->ShouldRollupOnMouseWheelEvent(&rollup);
         *outResult = true;
       }
 
@@ -8725,9 +8725,9 @@ nsWindow::DealWithPopups(HWND inWnd, UINT inMsg, WPARAM inWParam, LPARAM inLPara
       // want to rollup if the click is in a parent menu of the current submenu.
       PRUint32 popupsToRollup = PR_UINT32_MAX;
       if (rollup) {
-        if ( sRollupListener ) {
+        if ( sMenuRollup ) {
           nsAutoTArray<nsIWidget*, 5> widgetChain;
-          PRUint32 sameTypeCount = sRollupListener->GetSubmenuWidgetChain(&widgetChain);
+          PRUint32 sameTypeCount = sMenuRollup->GetSubmenuWidgetChain(&widgetChain);
           for ( PRUint32 i = 0; i < widgetChain.Length(); ++i ) {
             nsIWidget* widget = widgetChain[i];
             if ( nsWindow::EventIsInsideWindow(inMsg, (nsWindow*)widget) ) {
@@ -8763,7 +8763,7 @@ nsWindow::DealWithPopups(HWND inWnd, UINT inMsg, WPARAM inWParam, LPARAM inLPara
           {
             // WM_MOUSEACTIVATE cause by moving the mouse - X-mouse (eg. TweakUI)
             // must be enabled in Windows.
-            rollup = sRollupListener->ShouldRollupOnMouseActivate();
+            sRollupListener->ShouldRollupOnMouseActivate(&rollup);
             if (!rollup)
             {
               *outResult = MA_NOACTIVATE;
@@ -8778,9 +8778,7 @@ nsWindow::DealWithPopups(HWND inWnd, UINT inMsg, WPARAM inWParam, LPARAM inLPara
         // nsIRollupListener::Rollup.
         bool consumeRollupEvent = sRollupConsumeEvent;
         // only need to deal with the last rollup for left mouse down events.
-        NS_ASSERTION(!mLastRollup, "mLastRollup is null");
-        mLastRollup = sRollupListener->Rollup(popupsToRollup, inMsg == WM_LBUTTONDOWN);
-        NS_IF_ADDREF(mLastRollup);
+        sRollupListener->Rollup(popupsToRollup, inMsg == WM_LBUTTONDOWN ? &mLastRollup : nsnull);
 
         // Tell hook to stop processing messages
         sProcessHook = false;

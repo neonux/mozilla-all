@@ -326,10 +326,6 @@ class RegExpPrivate
     bool compile(JSContext *cx, TokenStream *ts);
     static inline void checkMatchPairs(JSString *input, int *buf, size_t matchItemCount);
 
-    static RegExpPrivate *
-    createUncached(JSContext *cx, JSLinearString *source, RegExpFlag flags,
-                   TokenStream *tokenStream);
-
   public:
     static AlreadyIncRefed<RegExpPrivate>
     create(JSContext *cx, JSLinearString *source, RegExpFlag flags, TokenStream *ts);

@@ -42,7 +42,6 @@
 #include "nsContentUtils.h"
 #include "nsString.h"
 #include "nsSVGUtils.h"
-#include "nsCharSeparatedTokenizer.h"
 #include "string.h"
 
 namespace mozilla {
@@ -86,23 +85,32 @@ SVGLengthList::SetValueFromString(const nsAString& aValue)
 {
   SVGLengthList temp;
 
-  nsCharSeparatedTokenizerTemplate<IsSVGWhitespace>
-    tokenizer(aValue, ',', nsCharSeparatedTokenizer::SEPARATOR_OPTIONAL);
+  NS_ConvertUTF16toUTF8 value(aValue);
+  char* start = SkipWhitespace(value.BeginWriting());
 
-  nsCAutoString str;  // outside loop to minimize memory churn
+  // We can't use strtok with SVG_COMMA_WSP_DELIM because to correctly handle
+  // invalid input in the form of two commas without a value between them, we
+  // would need to know if strtok overwrote a comma or not.
 
-  while (tokenizer.hasMoreTokens()) {
+  while (*start != '\0') {
+    int end = strcspn(start, SVG_COMMA_WSP_DELIM);
+    if (end == 0) {
+      // found comma in an invalid location
+      return NS_ERROR_DOM_SYNTAX_ERR;
+    }
     SVGLength length;
-    if (!length.SetValueFromString(tokenizer.nextToken())) {
+    if (!length.SetValueFromString(NS_ConvertUTF8toUTF16(start, PRUint32(end)))) {
       return NS_ERROR_DOM_SYNTAX_ERR;
     }
     if (!temp.AppendItem(length)) {
       return NS_ERROR_OUT_OF_MEMORY;
     }
+    start = SkipWhitespace(start + end);
+    if (*start == ',') {
+      start = SkipWhitespace(start + 1);
+    }
   }
-  if (tokenizer.lastTokenEndedWithSeparator()) {
-    return NS_ERROR_DOM_SYNTAX_ERR; // trailing comma
-  }
+
   return CopyFrom(temp);
 }
 

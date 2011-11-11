@@ -2862,10 +2862,10 @@ nsXPConnect::Base64Decode(JSContext *cx, jsval val, jsval *out)
 }
 
 NS_IMETHODIMP
-nsXPConnect::SetDebugModeWhenPossible(bool mode, bool allowSyncDisable)
+nsXPConnect::SetDebugModeWhenPossible(bool mode)
 {
     gDesiredDebugMode = mode;
-    if (!mode && allowSyncDisable)
+    if (!mode)
         CheckForDebugMode(mRuntime->GetJSRuntime());
     return NS_OK;
 }

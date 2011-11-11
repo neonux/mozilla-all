@@ -1,3 +1,4 @@
+/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
@@ -15,17 +16,14 @@
  *
  * The Initial Developer of the Original Code is
  * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2011
+ * Portions created by the Initial Developer are Copyright (C) 1998
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
- *   Dave Hyatt <hyatt@mozilla.org> (Original Author)
- *   Jan Varga <varga@ku.sk>
- *   Scott Johnson <sjohnson@mozilla.com>, Mozilla Corporation
  *
  * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * either of the GNU General Public License Version 2 or later (the "GPL"),
+ * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
  * in which case the provisions of the GPL or the LGPL are applicable instead
  * of those above. If you wish to allow use of your version of this file only
  * under the terms of either the GPL or the LGPL, and not to allow others to
@@ -37,28 +35,42 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-#ifndef nsITreeImageListener_h__
-#define nsITreeImageListener_h__
 
-// The interface for our image listener.
-// {90586540-2D50-403e-8DCE-981CAA778444}
-#define NS_ITREEIMAGELISTENER_IID \
-{ 0x90586540, 0x2d50, 0x403e, { 0x8d, 0xce, 0x98, 0x1c, 0xaa, 0x77, 0x84, 0x44 } }
+#ifndef nsIMenuRollup_h___
+#define nsIMenuRollup_h___
 
-class nsITreeImageListener : public nsISupports
-{
-public:
-  NS_DECLARE_STATIC_IID_ACCESSOR(NS_ITREEIMAGELISTENER_IID)
+#include "nsISupports.h"
+#include "nsTArray.h"
 
-  NS_IMETHOD AddCell(PRInt32 aIndex, nsITreeColumn* aCol) = 0;
+class nsIWidget;
+class nsIContent;
+class nsPIDOMWindow;
+
+#define NS_IMENUROLLUP_IID \
+  {0xa707b588, 0xa564, 0x488d, \
+    { 0x87, 0xb6, 0xdb, 0x71, 0x2d, 0x78, 0x9d, 0x4c }}
+
+class nsIMenuRollup : public nsISupports {
+ public: 
+
+  NS_DECLARE_STATIC_IID_ACCESSOR(NS_IMENUROLLUP_IID)
+
+  /*
+   * Retrieve the widgets for open menus are store them in the array
+   * aWidgetChain. The number of menus of the same type should be returned,
+   * for example, if a context menu is open, return only the number of menus
+   * that are part of the context menu chain. This allows closing up only
+   * those menus in different situations.
+   */
+  virtual PRUint32 GetSubmenuWidgetChain(nsTArray<nsIWidget*> *aWidgetChain) = 0;
 
   /**
-   * Clear the internal frame pointer to prevent dereferencing an object
-   * that no longer exists.
-   */
-  NS_IMETHOD ClearFrame() = 0;
+   * Adjust the position of open panels when a window is moved or resized.
+   */ 
+  virtual void AdjustPopupsOnWindowChange(nsPIDOMWindow* aWindow) = 0;
+
 };
 
-NS_DEFINE_STATIC_IID_ACCESSOR(nsITreeImageListener, NS_ITREEIMAGELISTENER_IID)
+  NS_DEFINE_STATIC_IID_ACCESSOR(nsIMenuRollup, NS_IMENUROLLUP_IID)
 
 #endif

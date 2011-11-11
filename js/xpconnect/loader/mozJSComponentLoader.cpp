@@ -48,9 +48,6 @@
 #include <stdarg.h>
 
 #include "prlog.h"
-#ifdef ANDROID
-#include <android/log.h>
-#endif
 
 #include "nsCOMPtr.h"
 #include "nsAutoPtr.h"
@@ -207,11 +204,7 @@ Dump(JSContext *cx, uintN argc, jsval *vp)
     if (!chars)
         return JS_FALSE;
 
-    NS_ConvertUTF16toUTF8 utf8str(reinterpret_cast<const PRUnichar*>(chars));
-#ifdef ANDROID
-    __android_log_print(ANDROID_LOG_INFO, "Gecko", utf8str.get());
-#endif
-    fputs(utf8str.get(), stdout);
+    fputs(NS_ConvertUTF16toUTF8(reinterpret_cast<const PRUnichar*>(chars)).get(), stdout);
     fflush(stdout);
     return JS_TRUE;
 }

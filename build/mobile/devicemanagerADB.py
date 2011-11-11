@@ -256,11 +256,11 @@ class DeviceManagerADB(DeviceManager):
   #  failure: None
   def killProcess(self, appname):
     procs = self.getProcessList()
-    for (pid, name, user) in procs:
-      if name == appname:
-        p = self.runCmdAs(["shell", "kill", pid])
+    for proc in procs:
+      if (proc[1] == appname):
+        p = self.runCmd(["shell", "ps"])
         return p.stdout.read()
-    return None
+      return None
 
   # external function
   # returns:
@@ -505,12 +505,6 @@ class DeviceManagerADB(DeviceManager):
   def runCmd(self, args):
     args.insert(0, "adb")
     return subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-  def runCmdAs(self, args):
-    if self.useRunAs:
-      args.insert(1, "run-as")
-      args.insert(2, self.packageName)
-    return self.runCmd(args)
 
   def checkCmd(self, args):
     args.insert(0, "adb")

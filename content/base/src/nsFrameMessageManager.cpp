@@ -52,10 +52,6 @@
 #include "nsIConsoleService.h"
 #include "nsIProtocolHandler.h"
 
-#ifdef ANDROID
-#include <android/log.h>
-#endif
-
 static bool
 IsChromeProcess()
 {
@@ -283,9 +279,6 @@ nsFrameMessageManager::SendAsyncMessage(const nsAString& aMessageName,
 NS_IMETHODIMP
 nsFrameMessageManager::Dump(const nsAString& aStr)
 {
-#ifdef ANDROID
-  __android_log_print(ANDROID_LOG_INFO, "Gecko", NS_ConvertUTF16toUTF8(aStr).get());
-#endif
   fputs(NS_ConvertUTF16toUTF8(aStr).get(), stdout);
   fflush(stdout);
   return NS_OK;

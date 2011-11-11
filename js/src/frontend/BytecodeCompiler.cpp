@@ -295,7 +295,7 @@ frontend::CompileScript(JSContext *cx, JSObject *scopeChain, StackFrame *callerF
             goto out;
 
 #if JS_HAS_XML_SUPPORT
-        if (!pn->isKind(PNK_SEMI) || !pn->pn_kid || !pn->pn_kid->isXMLItem())
+        if (!pn->isKind(TOK_SEMI) || !pn->pn_kid || !TreeTypeIsXML(pn->pn_kid->getKind()))
             onlyXML = false;
 #endif
         bce.freeTree(pn);
@@ -403,7 +403,8 @@ frontend::CompileFunctionBody(JSContext *cx, JSFunction *fun, JSPrincipals *prin
         return false;
 
     /* FIXME: make Function format the source for a function definition. */
-    ParseNode *fn = FunctionNode::create(PNK_NAME, &funbce);
+    tokenStream.mungeCurrentToken(TOK_NAME);
+    ParseNode *fn = FunctionNode::create(&funbce);
     if (fn) {
         fn->pn_body = NULL;
         fn->pn_cookie.makeFree();
@@ -450,7 +451,7 @@ frontend::CompileFunctionBody(JSContext *cx, JSFunction *fun, JSPrincipals *prin
             pn = NULL;
         } else {
             if (fn->pn_body) {
-                JS_ASSERT(fn->pn_body->isKind(PNK_ARGSBODY));
+                JS_ASSERT(fn->pn_body->isKind(TOK_ARGSBODY));
                 fn->pn_body->append(pn);
                 fn->pn_body->pn_pos = pn->pn_pos;
                 pn = fn->pn_body;

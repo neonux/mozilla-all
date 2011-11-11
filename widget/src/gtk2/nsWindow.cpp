@@ -51,6 +51,7 @@
 #include "nsWindow.h"
 #include "nsGTKToolkit.h"
 #include "nsIRollupListener.h"
+#include "nsIMenuRollup.h"
 #include "nsIDOMNode.h"
 
 #include "nsWidgetsCID.h"
@@ -331,6 +332,7 @@ static bool              gRaiseWindows         = true;
 static nsWindow         *gPluginFocusWindow    = NULL;
 
 static nsIRollupListener*          gRollupListener;
+static nsIMenuRollup*              gMenuRollup;
 static nsWeakPtr                   gRollupWindow;
 static bool                        gConsumeRollupEvent;
 
@@ -770,7 +772,8 @@ nsWindow::Destroy(void)
     nsCOMPtr<nsIWidget> rollupWidget = do_QueryReferent(gRollupWindow);
     if (static_cast<nsIWidget *>(this) == rollupWidget.get()) {
         if (gRollupListener)
-            gRollupListener->Rollup(0);
+            gRollupListener->Rollup(nsnull, nsnull);
+        NS_IF_RELEASE(gMenuRollup);
         gRollupWindow = nsnull;
         gRollupListener = nsnull;
     }
@@ -1864,6 +1867,7 @@ nsWindow::CaptureMouse(bool aCapture)
 
 NS_IMETHODIMP
 nsWindow::CaptureRollupEvents(nsIRollupListener *aListener,
+                              nsIMenuRollup     *aMenuRollup,
                               bool               aDoCapture,
                               bool               aConsumeRollupEvent)
 {
@@ -1879,6 +1883,9 @@ nsWindow::CaptureRollupEvents(nsIRollupListener *aListener,
     if (aDoCapture) {
         gConsumeRollupEvent = aConsumeRollupEvent;
         gRollupListener = aListener;
+        NS_IF_RELEASE(gMenuRollup);
+        gMenuRollup = aMenuRollup;
+        NS_IF_ADDREF(aMenuRollup);
         gRollupWindow = do_GetWeakReference(static_cast<nsIWidget*>
                                                        (this));
         // real grab is only done when there is no dragging
@@ -1896,6 +1903,7 @@ nsWindow::CaptureRollupEvents(nsIRollupListener *aListener,
         // was not added to this widget.
         gtk_grab_remove(widget);
         gRollupListener = nsnull;
+        NS_IF_RELEASE(gMenuRollup);
         gRollupWindow = nsnull;
     }
 
@@ -5349,16 +5357,16 @@ check_for_rollup(GdkWindow *aWindow, gdouble aMouseX, gdouble aMouseY,
         if (aAlwaysRollup || !is_mouse_in_window(currentPopup, aMouseX, aMouseY)) {
             bool rollup = true;
             if (aIsWheel) {
-                rollup = gRollupListener->ShouldRollupOnMouseWheelEvent();
+                gRollupListener->ShouldRollupOnMouseWheelEvent(&rollup);
                 retVal = true;
             }
             // if we're dealing with menus, we probably have submenus and
             // we don't want to rollup if the click is in a parent menu of
             // the current submenu
             PRUint32 popupsToRollup = PR_UINT32_MAX;
-            if (!aAlwaysRollup) {
+            if (gMenuRollup && !aAlwaysRollup) {
                 nsAutoTArray<nsIWidget*, 5> widgetChain;
-                PRUint32 sameTypeCount = gRollupListener->GetSubmenuWidgetChain(&widgetChain);
+                PRUint32 sameTypeCount = gMenuRollup->GetSubmenuWidgetChain(&widgetChain);
                 for (PRUint32 i=0; i<widgetChain.Length(); ++i) {
                     nsIWidget* widget = widgetChain[i];
                     GdkWindow* currWindow =
@@ -5382,7 +5390,7 @@ check_for_rollup(GdkWindow *aWindow, gdouble aMouseX, gdouble aMouseY,
 
             // if we've determined that we should still rollup, do it.
             if (rollup) {
-                gRollupListener->Rollup(popupsToRollup);
+                gRollupListener->Rollup(popupsToRollup, nsnull);
                 if (popupsToRollup == PR_UINT32_MAX) {
                     retVal = true;
                 }
@@ -5391,6 +5399,7 @@ check_for_rollup(GdkWindow *aWindow, gdouble aMouseX, gdouble aMouseY,
     } else {
         gRollupWindow = nsnull;
         gRollupListener = nsnull;
+        NS_IF_RELEASE(gMenuRollup);
     }
 
     return retVal;

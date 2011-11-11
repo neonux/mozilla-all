@@ -102,9 +102,7 @@ SVGNumberList::SetValueFromString(const nsAString& aValue)
     if (*end != '\0' || !NS_finite(num)) {
       return NS_ERROR_DOM_SYNTAX_ERR;
     }
-    if (!temp.AppendItem(num)) {
-      return NS_ERROR_OUT_OF_MEMORY;
-    }
+    temp.AppendItem(num);
   }
   if (tokenizer.lastTokenEndedWithSeparator()) {
     return NS_ERROR_DOM_SYNTAX_ERR; // trailing comma

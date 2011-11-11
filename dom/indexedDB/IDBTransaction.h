@@ -95,7 +95,8 @@ public:
   Create(IDBDatabase* aDatabase,
          nsTArray<nsString>& aObjectStoreNames,
          PRUint16 aMode,
-         bool aDispatchDelayed);
+         PRUint32 aTimeout,
+         bool aDispatchDelayed = false);
 
   // nsIDOMEventTarget
   virtual nsresult PreHandleEvent(nsEventChainPreVisitor& aVisitor);
@@ -172,6 +173,7 @@ private:
   nsTArray<nsString> mObjectStoreNames;
   PRUint16 mReadyState;
   PRUint16 mMode;
+  PRUint32 mTimeout;
   PRUint32 mPendingRequests;
   PRUint32 mCreatedRecursionDepth;
 
@@ -179,6 +181,7 @@ private:
   nsRefPtr<nsDOMEventListenerWrapper> mOnErrorListener;
   nsRefPtr<nsDOMEventListenerWrapper> mOnCompleteListener;
   nsRefPtr<nsDOMEventListenerWrapper> mOnAbortListener;
+  nsRefPtr<nsDOMEventListenerWrapper> mOnTimeoutListener;
 
   nsInterfaceHashtable<nsCStringHashKey, mozIStorageStatement>
     mCachedStatements;
