@@ -3773,7 +3773,6 @@
 
           this.tabbrowser.moveTabTo(newTab, newIndex);
 
-          let that = draggedTab.parentNode;
           this.tabbrowser.swapBrowsersAndCloseOther(newTab, draggedTab);
 
           // We need to select the tab after we've done
