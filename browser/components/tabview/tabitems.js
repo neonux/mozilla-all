@@ -205,8 +205,6 @@ TabItem.prototype = Utils.extend(new Item(), new Subscribable(), {
     this.$cachedThumb.attr("src", this._cachedImageData).show();
     this.$canvas.css({opacity: 0});
     this.$tabTitle.text(tabData.title ? tabData.title : "");
-    if ("_originalTitle" in tabData)
-      this._originalTitle = tabData._originalTitle;
 
     this._sendToSubscribers("showingCachedData");
   },
@@ -230,8 +228,6 @@ TabItem.prototype = Utils.extend(new Item(), new Subscribable(), {
       groupID: (this.parent ? this.parent.id : 0),
       title: this.tab.label
     };
-    if (this.tab._originalTitle != undefined)
-      data["_originalTitle"] = this.tab._originalTitle;
     if (this.parent && this.parent.getActiveTab() == this)
       data.active = true;
 
