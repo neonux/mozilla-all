@@ -649,14 +649,13 @@ array_length_setter(JSContext *cx, JSObject *obj, jsid id, JSBool strict, Value 
          * the initialized capacity.
          */
         jsuint oldcap = obj->getDenseArrayCapacity();
+        jsuint oldinit = obj->getDenseArrayInitializedLength();
+        if (oldinit > newlen)
+            obj->setDenseArrayInitializedLength(newlen);
         if (oldcap > newlen)
             obj->shrinkDenseArrayElements(cx, newlen);
-        jsuint oldinit = obj->getDenseArrayInitializedLength();
-        if (oldinit > newlen) {
-            obj->setDenseArrayInitializedLength(newlen);
-            if (!cx->typeInferenceEnabled())
-                obj->backfillDenseArrayHoles(cx);
-        }
+        if (oldinit > newlen && !cx->typeInferenceEnabled())
+            obj->backfillDenseArrayHoles(cx);
     } else if (oldlen - newlen < (1 << 24)) {
         do {
             --oldlen;
@@ -1340,8 +1339,11 @@ JSObject::makeDenseArraySlow(JSContext *cx)
 
     /* Create a native scope. */
     gc::AllocKind kind = getAllocKind();
-    if (!InitScopeForObject(cx, this, &SlowArrayClass, getProto()->getNewType(cx), kind))
+    js::EmptyShape *empty = InitScopeForObject(cx, this, &SlowArrayClass,
+                                               getProto()->getNewType(cx), kind);
+    if (!empty)
         return false;
+    setMap(empty);
 
     backfillDenseArrayHoles(cx);
 
@@ -1367,10 +1369,10 @@ JSObject::makeDenseArraySlow(JSContext *cx)
      * Root all values in the array during conversion, as SlowArrayClass only
      * protects up to its slot span.
      */
-    AutoValueArray autoArray(cx, slots, arrayInitialized);
+    AutoValueArray autoArray(cx, Valueify(slots), arrayInitialized);
 
     /* The initialized length is used iff this is a dense array. */
-    initializedLength = 0;
+    initializedLength() = 0;
     JS_ASSERT(newType == NULL);
 
     /*
@@ -1380,7 +1382,7 @@ JSObject::makeDenseArraySlow(JSContext *cx)
     if (!AddLengthProperty(cx, this)) {
         setMap(oldMap);
         capacity = arrayCapacity;
-        initializedLength = arrayInitialized;
+        initializedLength() = arrayInitialized;
         clasp = &ArrayClass;
         return false;
     }
@@ -1398,12 +1400,21 @@ JSObject::makeDenseArraySlow(JSContext *cx)
         if (slots[i].isMagic(JS_ARRAY_HOLE))
             continue;
 
-        setSlot(next, slots[i]);
+        /*
+         * No barrier is needed here because the set of reachable objects before
+         * and after slowification is the same. During slowification, the
+         * autoArray rooter guarantees that all slots will be marked.
+         *
+         * It's important that we avoid a barrier here because the fixed slots
+         * of a dense array can be garbage; a write barrier after the switch to
+         * a slow array could cause a crash.
+         */
+        initSlotUnchecked(next, slots[i]);
 
         if (!addDataProperty(cx, id, next, JSPROP_ENUMERATE)) {
             setMap(oldMap);
             capacity = arrayCapacity;
-            initializedLength = arrayInitialized;
+            initializedLength() = arrayInitialized;
             clasp = &ArrayClass;
             return false;
         }
@@ -2497,7 +2508,7 @@ NewbornArrayPushImpl(JSContext *cx, JSObject *obj, const Value &v)
     if (cx->typeInferenceEnabled())
         obj->setDenseArrayInitializedLength(length + 1);
     obj->setDenseArrayLength(length + 1);
-    obj->setDenseArrayElementWithType(cx, length, v);
+    obj->initDenseArrayElementWithType(cx, length, v);
     return true;
 }
 
@@ -2893,15 +2904,15 @@ array_splice(JSContext *cx, uintN argc, Value *vp)
             /* Steps 12(a)-(b). */
             obj->moveDenseArrayElements(targetIndex, sourceIndex, len - sourceIndex);
 
-            /* Steps 12(c)-(d). */
-            obj->shrinkDenseArrayElements(cx, finalLength);
-
             /*
-             * The array's initialized length is now out of sync with the array
-             * elements: resynchronize it.
+             * Update the initialized length. Do so before shrinking so that we
+             * can apply the write barrier to the old slots.
              */
             if (cx->typeInferenceEnabled())
                 obj->setDenseArrayInitializedLength(finalLength);
+
+            /* Steps 12(c)-(d). */
+            obj->shrinkDenseArrayElements(cx, finalLength);
 
             /* Fix running enumerators for the deleted items. */
             if (!js_SuppressDeletedElements(cx, obj, finalLength, len))
@@ -3019,10 +3030,12 @@ mjit::stubs::ArrayConcatTwoArrays(VMFrame &f)
     if (!result->ensureSlots(f.cx, len))
         THROW();
 
-    result->copyDenseArrayElements(0, obj1->getDenseArrayElements(), initlen1);
-    result->copyDenseArrayElements(initlen1, obj2->getDenseArrayElements(), initlen2);
-
+    JS_ASSERT(!result->getDenseArrayInitializedLength());
     result->setDenseArrayInitializedLength(len);
+
+    result->initDenseArrayElements(0, obj1->getDenseArrayElements(), initlen1);
+    result->initDenseArrayElements(initlen1, obj2->getDenseArrayElements(), initlen2);
+
     result->setDenseArrayLength(len);
 }
 #endif /* JS_METHODJIT */
@@ -3920,7 +3933,7 @@ NewDenseCopiedArray(JSContext *cx, uint32 length, const Value *vp, JSObject *pro
         obj->setDenseArrayInitializedLength(vp ? length : 0);
 
     if (vp)
-        obj->copyDenseArrayElements(0, vp, length);
+        obj->initDenseArrayElements(0, vp, length);
 
     return obj;
 }

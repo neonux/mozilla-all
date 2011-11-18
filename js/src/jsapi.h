@@ -2698,6 +2698,7 @@ typedef void
 (* JSTraceCallback)(JSTracer *trc, void *thing, JSGCTraceKind kind);
 
 struct JSTracer {
+    JSRuntime           *runtime;
     JSContext           *context;
     JSTraceCallback     callback;
     JSTraceNamePrinter  debugPrinter;
@@ -2798,6 +2799,7 @@ JS_CallTracer(JSTracer *trc, void *thing, JSGCTraceKind kind);
  */
 # define JS_TRACER_INIT(trc, cx_, callback_)                                  \
     JS_BEGIN_MACRO                                                            \
+        (trc)->runtime = (cx_)->runtime;                                      \
         (trc)->context = (cx_);                                               \
         (trc)->callback = (callback_);                                        \
         (trc)->debugPrinter = NULL;                                           \
@@ -2840,6 +2842,88 @@ extern JS_PUBLIC_API(JSBool)
 JS_DumpHeap(JSContext *cx, FILE *fp, void* startThing, JSGCTraceKind kind,
             void *thingToFind, size_t maxDepth, void *thingToIgnore);
 
+#endif
+
+/*
+ * Write barrier API.
+ *
+ * This API is used to inform SpiderMonkey of pointers to JS GC things in the
+ * malloc heap. There is no need to use this API unless incremental GC is
+ * enabled. When they are, the requirements for using the API are as follows:
+ *
+ * All pointers to JS GC things from the malloc heap must be registered and
+ * unregistered with the API functions below. This is *in addition* to the
+ * normal rooting and tracing that must be done normally--these functions will
+ * not take care of rooting for you.
+ *
+ * Besides registration, the JS_ModifyReference function must be called to
+ * change the value of these references. You should not change them using
+ * assignment.
+ *
+ * To avoid the headache of using these API functions, the JSBarrieredObjectPtr
+ * C++ class is provided--simply replace your JSObject* with a
+ * JSBarrieredObjectPtr. It will take care of calling the registration and
+ * modification APIs.
+ *
+ * For more explanation, see the comment in gc/Barrier.h.
+ */
+
+/* These functions are to be used for objects and strings. */
+extern JS_PUBLIC_API(void)
+JS_RegisterReference(void **ref);
+
+extern JS_PUBLIC_API(void)
+JS_ModifyReference(void **ref, void *newval);
+
+extern JS_PUBLIC_API(void)
+JS_UnregisterReference(void **ref);
+
+/* These functions are for values. */
+extern JS_PUBLIC_API(void)
+JS_RegisterValue(jsval *val);
+
+extern JS_PUBLIC_API(void)
+JS_ModifyValue(jsval *val, jsval newval);
+
+extern JS_PUBLIC_API(void)
+JS_UnregisterValue(jsval *val);
+
+extern JS_PUBLIC_API(JSTracer *)
+JS_GetIncrementalGCTracer(JSRuntime *rt);
+
+#ifdef __cplusplus
+JS_END_EXTERN_C
+
+namespace JS {
+
+class HeapPtrObject
+{
+    JSObject *value;
+
+  public:
+    HeapPtrObject() : value(NULL) { JS_RegisterReference((void **) &value); }
+
+    HeapPtrObject(JSObject *obj) : value(obj) { JS_RegisterReference((void **) &value); }
+
+    ~HeapPtrObject() { JS_UnregisterReference((void **) &value); }
+
+    void init(JSObject *obj) { value = obj; }
+
+    JSObject *get() const { return value; }
+
+    HeapPtrObject &operator=(JSObject *obj) {
+        JS_ModifyReference((void **) &value, obj);
+        return *this;
+    }
+
+    JSObject &operator*() const { return *value; }
+    JSObject *operator->() const { return value; }
+    operator JSObject *() const { return value; }
+};
+
+} /* namespace JS */
+
+JS_BEGIN_EXTERN_C
 #endif
 
 /*
@@ -3045,9 +3129,7 @@ struct JSClass {
                                                    object in prototype chain
                                                    passed in via *objp in/out
                                                    parameter */
-#define JSCLASS_CONSTRUCT_PROTOTYPE     (1<<6)  /* call constructor on class
-                                                   prototype */
-#define JSCLASS_DOCUMENT_OBSERVER       (1<<7)  /* DOM document observer */
+#define JSCLASS_DOCUMENT_OBSERVER       (1<<6)  /* DOM document observer */
 
 /*
  * To reserve slots fetched and stored via JS_Get/SetReservedSlot, bitwise-or
@@ -3115,10 +3197,11 @@ struct JSClass {
 #define JSCLASS_NO_INTERNAL_MEMBERS     0,{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}
 #define JSCLASS_NO_OPTIONAL_MEMBERS     0,0,0,0,0,0,0,JSCLASS_NO_INTERNAL_MEMBERS
 
-struct JSIdArray {
-    jsint length;
-    jsid  vector[1];    /* actually, length jsid words */
-};
+extern JS_PUBLIC_API(jsint)
+JS_IdArrayLength(JSContext *cx, JSIdArray *ida);
+
+extern JS_PUBLIC_API(jsid)
+JS_IdArrayGet(JSContext *cx, JSIdArray *ida, jsint index);
 
 extern JS_PUBLIC_API(void)
 JS_DestroyIdArray(JSContext *cx, JSIdArray *ida);
@@ -4888,50 +4971,6 @@ JS_IsConstructing(JSContext *cx, const jsval *vp)
 #endif
 
     return JSVAL_IS_MAGIC_IMPL(JSVAL_TO_IMPL(vp[1]));
-}
-
-/*
- * In the case of a constructor called from JS_ConstructObject and
- * JS_InitClass where the class has the JSCLASS_CONSTRUCT_PROTOTYPE flag set,
- * the JS engine passes the constructor a non-standard 'this' object. In such
- * cases, the following query provides the additional information of whether a
- * special 'this' was supplied. E.g.:
- *
- *   JSBool foo_native(JSContext *cx, uintN argc, jsval *vp) {
- *     JSObject *maybeThis;
- *     if (JS_IsConstructing_PossiblyWithGivenThisObject(cx, vp, &maybeThis)) {
- *       // native called as a constructor
- *       if (maybeThis)
- *         // native called as a constructor with maybeThis as 'this'
- *     } else {
- *       // native called as function, maybeThis is still uninitialized
- *     }
- *   }
- *
- * Note that embeddings do not need to use this query unless they use the
- * aforementioned API/flags.
- */
-static JS_ALWAYS_INLINE JSBool
-JS_IsConstructing_PossiblyWithGivenThisObject(JSContext *cx, const jsval *vp,
-                                              JSObject **maybeThis)
-{
-    jsval_layout l;
-    JSBool isCtor;
-
-#ifdef DEBUG
-    JSObject *callee = JSVAL_TO_OBJECT(JS_CALLEE(cx, vp));
-    if (JS_ObjectIsFunction(cx, callee)) {
-        JSFunction *fun = JS_ValueToFunction(cx, JS_CALLEE(cx, vp));
-        JS_ASSERT((JS_GetFunctionFlags(fun) & JSFUN_CONSTRUCTOR) != 0);
-    } else {
-        JS_ASSERT(JS_GET_CLASS(cx, callee)->construct != NULL);
-    }
-#endif
-
-    isCtor = JSVAL_IS_MAGIC_IMPL(JSVAL_TO_IMPL(vp[1]));
-    if (isCtor)
-        *maybeThis = MAGIC_JSVAL_TO_OBJECT_OR_NULL_IMPL(l);
-    return isCtor;
 }
 
 /*
