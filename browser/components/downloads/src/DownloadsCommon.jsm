@@ -494,25 +494,6 @@ const DownloadsData = {
   },
 
   /**
-   * Called after shutdown, deletes from the database all the downloads that
-   * have not been loaded in memory yet.
-   */
-  deleteOldPersistentData: function DD_deleteOldPersistentData()
-  {
-    let loadedDownloadIds = [dataItem.downloadId
-                             for each (dataItem in this.dataItems)
-                             if (dataItem)];
-
-    // Since we are shutting down, we must execute this operation synchronously,
-    // otherwise the connection will be closed while the statement is running.
-    let statement = Services.downloads.DBConnection.createStatement(
-                    "DELETE FROM moz_downloads" +
-                    " WHERE id NOT IN (" + loadedDownloadIds.join(",") + ")");
-    statement.execute();
-    statement.finalize();
-  },
-
-  /**
    * Cancels any pending data access and ensures views are notified.
    */
   _terminateDataAccess: function DD_terminateDataAccess()

@@ -59,20 +59,20 @@ Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 XPCOMUtils.defineLazyModuleGetter(this, "DownloadsCommon",
                                   "resource:///modules/DownloadsCommon.jsm");
 
-XPCOMUtils.defineLazyServiceGetter(this, "gSessionStore",
-                                   "@mozilla.org/browser/sessionstore;1",
-                                   "nsISessionStore");
+XPCOMUtils.defineLazyServiceGetter(this, "gSessionStartup",
+                                   "@mozilla.org/browser/sessionstartup;1",
+                                   "nsISessionStartup");
 
 XPCOMUtils.defineLazyServiceGetter(this, "gPrivateBrowsingService",
                                    "@mozilla.org/privatebrowsing;1",
                                    "nsIPrivateBrowsingService");
 
 const kObservedTopics = [
-  "sessionstore-state-read",
   "sessionstore-windows-restored",
   "sessionstore-browser-state-restored",
   "download-manager-initialized",
   "private-browsing-transition-complete",
+  "browser-lastwindow-close-granted",
   "quit-application",
 ];
 
@@ -108,27 +108,16 @@ DownloadsStartup.prototype = {
                                            this._downloadsUIContractId, null);
         break;
 
-      case "sessionstore-state-read":
-        this._sessionStateWasAvailable = true;
-        break;
-
       case "sessionstore-windows-restored":
       case "sessionstore-browser-state-restored":
-        // Delay so that canRestoreLastSession has the correct value.
-        this._executeSoon(function() {
-          // The earliest point at which we can detect whether the session has
-          // been actually restored is just after the browser state restore
-          // process completed.  If we are not waiting for a deferred session
-          // restore, and session state was available at startup, then the
-          // session has already been restored.  This condition is not relevant
-          // if we are operating in Private Browsing Mode.
-          if (this._sessionStateWasAvailable &&
-              !gPrivateBrowsingService.privateBrowsingEnabled &&
-              !gSessionStore.canRestoreLastSession) {
-            this._sessionWasRestored = true;
-          }
-          this._ensureDataLoaded();
-        });
+        // Unless there is no saved session, there is a chance that we are
+        // starting up after a restart or a crash.  We should check the disk
+        // database to see if there are completed downloads to recover and show
+        // in the panel, in addition to in-progress downloads.
+        if (gSessionStartup.sessionType != Ci.nsISessionStartup.NO_SESSION) {
+          this._recoverAllDownloads = true;
+        }
+        this._ensureDataLoaded();
         break;
 
       case "download-manager-initialized":
@@ -158,6 +147,14 @@ DownloadsStartup.prototype = {
         this._ensureDataLoaded();
         break;
 
+      case "browser-lastwindow-close-granted":
+        // When using the panel interface, downloads that are already completed
+        // should be removed when the last full browser window is closed.
+        if (!DownloadsCommon.useWindowUI) {
+          Services.downloads.cleanUp();
+        }
+        break;
+
       case "quit-application":
         this._shuttingDown = true;
 
@@ -169,34 +166,21 @@ DownloadsStartup.prototype = {
           DownloadsCommon.data.terminateDataLink();
         }
 
-        // Stop if we need the behavior associated with the window interface.
-        if (DownloadsCommon.useWindowUI) {
-          break;
+        // When using the panel interface, downloads that are already completed
+        // should be removed when quitting the application.  Even if the
+        // Download Manager service is not initialized, we might have some
+        // downloads to remove from the disk database because the previous quit
+        // was an application restart.  Note that, when "quit-application" is
+        // invoked, we've already exited Private Browsing Mode, thus we are
+        // always working on the disk database.
+        if (!DownloadsCommon.useWindowUI && aData != "restart") {
+          // Delay so that the Download Manager service, if already initialized,
+          // has a chance to pause or cancel in-progress downloads.
+          this._executeSoon(function() {
+            Services.downloads.cleanUp();
+          });
         }
 
-        // If we restored the previous session, the list of downloads in the
-        // database match the list of downloads in memory, and we should keep
-        // all of them in the database, to allow restoring them in the next
-        // session.
-        if (this._sessionWasRestored) {
-          break;
-        }
-
-        // If we never initialized the Download Manager service and didn't
-        // restore the previous session, we should delete all the inactive
-        // downloads from the database.
-        if (!this._downloadsServiceInitialized) {
-          Services.downloads.cleanUp();
-          break;
-        }
-
-        // We need to delete from the database all the downloads from the
-        // previous session, i.e. downloads that we didn't load in memory.
-        // Downloads that started during this session should be kept in the
-        // database, to allow restoring them in the next session.  Note that,
-        // when "quit-application" is invoked, we've already exited Private
-        // Browsing Mode, thus we are always working on the disk database.
-        DownloadsCommon.data.deleteOldPersistentData();
         break;
     }
   },
@@ -215,14 +199,9 @@ DownloadsStartup.prototype = {
   get _downloadsUIContractId() "@mozilla.org/download-manager-ui;1",
 
   /**
-   * Indicates whether a session state file was available during startup.
+   * Indicates whether we should load completed items from the previous session.
    */
-  _sessionStateWasAvailable: false,
-
-  /**
-   * Indicates whether the previous browsing session has been restored.
-   */
-  _sessionWasRestored: false,
+  _recoverAllDownloads: false,
 
   /**
    * Indicates whether the Download Manager service has been initialized.  This
@@ -250,7 +229,7 @@ DownloadsStartup.prototype = {
     // If the previous session has been already restored, then we ensure that
     // all the downloads are loaded.  Otherwise, we only ensure that the active
     // downloads from the previous session are loaded.
-    DownloadsCommon.data.ensurePersistentDataLoaded(!this._sessionWasRestored);
+    DownloadsCommon.data.ensurePersistentDataLoaded(!this._recoverAllDownloads);
   },
 
   /**
