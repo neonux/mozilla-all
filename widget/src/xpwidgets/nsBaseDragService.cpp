@@ -408,10 +408,20 @@ nsBaseDragService::FireDragEventAtSource(PRUint32 aMsg)
     if (doc) {
       nsCOMPtr<nsIPresShell> presShell = doc->GetShell();
       if (presShell) {
+        nsCOMPtr<nsIWidget> widget;
+        nsCOMPtr<nsIViewManager> viewManager = presShell->GetViewManager();
+
+        if (viewManager)
+          viewManager->GetRootWidget(getter_AddRefs(widget));
+
         nsEventStatus status = nsEventStatus_eIgnore;
-        nsDragEvent event(true, aMsg, nsnull);
+        nsDragEvent event(true, aMsg, widget);
         event.inputSource = mInputSource;
-        if (aMsg == NS_DRAGDROP_END) {
+        if (aMsg == NS_DRAGDROP_DRAG) {
+          event.refPoint.x = mCurrentDragPoint.x;
+          event.refPoint.y = mCurrentDragPoint.y;
+        }
+        else if (aMsg == NS_DRAGDROP_END) {
           event.refPoint.x = mEndDragPoint.x;
           event.refPoint.y = mEndDragPoint.y;
           event.userCancelled = mUserCancelled;

@@ -3597,6 +3597,8 @@ nsWindow::OnDragMotionEvent(GtkWidget *aWidget,
     // notify the drag service that we are starting a drag motion.
     dragSessionGTK->TargetStartDragMotion();
 
+    // set current drag position and fire drag event
+    ((nsDragService *)dragService.get())->SetCurrentDragPoint(nsIntPoint(retx, rety));
     dragService->FireDragEventAtSource(NS_DRAGDROP_DRAG);
 
     nsDragEvent event(true, NS_DRAGDROP_OVER, innerMostWidget);
