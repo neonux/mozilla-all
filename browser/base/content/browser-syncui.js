@@ -55,6 +55,11 @@ let gSyncUI = {
 
   _unloaded: false,
 
+  /**
+   * Holds flag saying whether a sync has been performed.
+   */
+  syncPerformed: false,
+
   init: function SUI_init() {
     // Proceed to set up the UI if Sync has already started up.
     // Otherwise we'll do it when Sync is firing up.
@@ -206,6 +211,8 @@ let gSyncUI = {
   },
 
   onLoginFinish: function SUI_onLoginFinish() {
+    this.syncPerformed = true;
+
     // Clear out any login failure notifications
     let title = this._stringBundle.GetStringFromName("error.login.title");
     this.clearError(title);
@@ -359,6 +366,19 @@ let gSyncUI = {
     openPreferences("paneSync");
   },
 
+  /**
+   * Open the "Add a Device" dialog in a new windows.
+   */
+  openAddDevice: function openAddDevice() {
+    let win = Services.wm.getMostRecentWindow("Sync:AddDevice");
+    if (win) {
+      win.focus();
+    } else {
+      window.openDialog("chrome://browser/content/syncAddDevice.xul",
+                        "syncAddDevice", "centerscreen,chrome,resizable=no");
+    }
+  },
+
 
   // Helpers
   _updateLastSyncTime: function SUI__updateLastSyncTime() {
@@ -481,6 +501,13 @@ let gSyncUI = {
     }
 
     this.updateUI();
+  },
+
+  /**
+   * Sends a tab
+   */
+  sendTabToClient: function sendTabToClient(tab, clientID) {
+    Weave.Clients.sendTabToClient(tab, clientID);
   },
 
   observe: function SUI_observe(subject, topic, data) {

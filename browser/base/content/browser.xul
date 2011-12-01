@@ -60,6 +60,7 @@
 <?xul-overlay href="chrome://global/content/editMenuOverlay.xul"?>
 <?xul-overlay href="chrome://browser/content/baseMenuOverlay.xul"?>
 <?xul-overlay href="chrome://browser/content/places/placesOverlay.xul"?>
+<?xul-overlay href="chrome://browser/content/downloads/downloadsOverlay.xul"?>
 
 # All DTD information is stored in a separate file so that it can be shared by
 # hiddenWindow.xul.
@@ -137,6 +138,23 @@
                 accesskey="&moveToNewWindow.accesskey;"
                 tbattr="tabbrowser-multiple"
                 oncommand="gBrowser.replaceTabWithWindow(TabContextMenu.contextTab);"/>
+      <menu id="context_sendTabToDevice"
+                label="&sendTabToDevice.label;">
+        <menupopup id="context_sendTabToDevicePopup"
+                   onpopupshowing="if (event.target == this) TabView.updateSendTabPopup(event);">
+          <menuitem id="context_tabViewSendTabNoSync"
+                    label="&sendTabToDeviceConfigureSync.label;"
+                    hidden="true"
+                    oncommand="gSyncUI.openSetup()"/>
+          <menuitem id="context_tabViewSendTabNotReady"
+                    label="&sendTabToDeviceNotReady.label;"
+                    hidden="true"/>
+          <menuitem id="context_tabViewSendTabNoClients"
+                    label="&sendTabToDeviceSetUpDevice.label;"
+                    hidden="true"
+                    oncommand="gSyncUI.openAddDevice()"/>
+        </menupopup>
+      </menu>
       <menuseparator/>
       <menuitem id="context_reloadAllTabs" label="&reloadAllTabs.label;" accesskey="&reloadAllTabs.accesskey;"
                 tbattr="tabbrowser-multiple-visible"
@@ -275,6 +293,9 @@
     <menupopup id="contentAreaContextMenu" pagemenu="start"
                onpopupshowing="if (event.target != this)
                                  return true;
+#ifdef XP_MACOSX
+                               selectContext(event);
+#endif
                                gContextMenu = new nsContextMenu(this, gBrowser, event.shiftKey);
                                if (gContextMenu.shouldDisplay)
                                  updateEditUIVisibility();
@@ -773,9 +794,9 @@
              aria-label="&tabsToolbar.label;"
              context="toolbar-context-menu"
 #ifdef APPMENU_ON_TABBAR
-             defaultset="appmenu-toolbar-button,tabbrowser-tabs,new-tab-button,alltabs-button,tabs-closebutton"
+             defaultset="appmenu-toolbar-button,tabbrowser-tabs,new-tab-button,alltabs-button,tabs-closebutton,downloads-button"
 #else
-             defaultset="tabbrowser-tabs,new-tab-button,alltabs-button,tabs-closebutton"
+             defaultset="tabbrowser-tabs,new-tab-button,alltabs-button,tabs-closebutton,downloads-button"
 #endif
              collapsed="true">
 
@@ -807,7 +828,12 @@
                      ondrop="newTabButtonObserver.onDrop(event)"
                      ondragover="newTabButtonObserver.onDragOver(event)"
                      ondragenter="newTabButtonObserver.onDragOver(event)"
-                     ondragexit="newTabButtonObserver.onDragExit(event)"
+                     ondragexit="newTabButtonObserver.onDragExit(event)"/>
+
+      <toolbarbutton id="downloads-button"
+                     class="toolbarbutton-1 chromeclass-toolbar-additional"
+                     label="&downloads.label;"
+                     tooltiptext="&downloads.tooltip;"
                      removable="true"/>
 
       <toolbarbutton id="alltabs-button"
@@ -853,15 +879,6 @@
                    mousethrough="always">
         <image/>
       </toolbaritem>
-
-      <toolbarbutton id="downloads-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
-                     observes="Tools:Downloads"
-                     ondrop="DownloadsButtonDNDObserver.onDrop(event)"
-                     ondragover="DownloadsButtonDNDObserver.onDragOver(event)"
-                     ondragenter="DownloadsButtonDNDObserver.onDragOver(event)"
-                     ondragexit="DownloadsButtonDNDObserver.onDragExit(event)"
-                     label="&downloads.label;"
-                     tooltiptext="&downloads.tooltip;"/>
 
       <toolbarbutton id="history-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
                      observes="viewHistorySidebar" label="&historyButton.label;"
