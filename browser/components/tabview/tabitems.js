@@ -206,11 +206,7 @@ TabItem.prototype = Utils.extend(new Item(), new Subscribable(), {
     this._cachedImageData = imageData;
     this.$cachedThumb.attr("src", this._cachedImageData).show();
     this.$canvas.css({opacity: 0});
-<<<<<<< local
     this.$tabTitle.text(tabData.title ? tabData.title : "");
-    if ("_originalTitle" in tabData)
-      this._originalTitle = tabData._originalTitle;
-=======
     let label = "";
     let title;
     if (tabData.title) {
@@ -220,7 +216,8 @@ TabItem.prototype = Utils.extend(new Item(), new Subscribable(), {
       title = tabData.url;
     }
     this.$tabTitle.text(label).attr("title", title);
->>>>>>> other
+    if ("_originalTitle" in tabData)
+      this._originalTitle = tabData._originalTitle;
 
     this._sendToSubscribers("showingCachedData");
   },

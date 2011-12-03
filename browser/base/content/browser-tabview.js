@@ -452,15 +452,6 @@ let TabView = {
     }
   },
 
-<<<<<<< local
-  /**
-   * Update the send tab to device popup menu.
-   *
-   * This is called right before the menu is rendered.
-   */
-  updateSendTabPopup: function TabView_updateSendTabPopup(event) {
-    let popup = event.target;
-=======
   // ----------
   // Function: fillInTooltip
   // Fills in the tooltip text.
@@ -468,9 +459,31 @@ let TabView = {
     let retVal = false;
     let titleText = null;
     let direction = tipElement.ownerDocument.dir;
->>>>>>> other
 
-<<<<<<< local
+    while (!titleText && tipElement) {
+      if (tipElement.nodeType == Node.ELEMENT_NODE)
+        titleText = tipElement.getAttribute("title");
+      tipElement = tipElement.parentNode;
+    }
+    let tipNode = document.getElementById("tab-view-tooltip");
+    tipNode.style.direction = direction;
+
+    if (titleText) {
+      tipNode.setAttribute("label", titleText);
+      retVal = true;
+    }
+
+    return retVal;
+  }
+
+  /**
+   * Update the send tab to device popup menu.
+   *
+   * This is called right before the menu is rendered.
+   */
+  updateSendTabPopup: function TabView_updateSendTabPopup(event) {
+    let popup = event.target;
+
     // Wipe out existing clients list.
     let children = popup.childNodes;
     let removeElements = [];
@@ -479,26 +492,10 @@ let TabView = {
       if (node.id == "context_tabViewSendTabNoSync") continue;
       if (node.id == "context_tabViewSendTabNotReady") continue;
       if (node.id == "context_tabViewSendTabNoClients") continue;
-=======
-    while (!titleText && tipElement) {
-      if (tipElement.nodeType == Node.ELEMENT_NODE)
-        titleText = tipElement.getAttribute("title");
-      tipElement = tipElement.parentNode;
-    }
-    let tipNode = document.getElementById("tab-view-tooltip");
-    tipNode.style.direction = direction;
->>>>>>> other
 
-<<<<<<< local
       removeElements.push(node);
-=======
-    if (titleText) {
-      tipNode.setAttribute("label", titleText);
-      retVal = true;
->>>>>>> other
     }
 
-<<<<<<< local
     for each (let element in removeElements) {
       popup.removeChild(element);
     }
@@ -540,8 +537,5 @@ let TabView = {
 
       popup.appendChild(menuItem);
     }
-=======
-    return retVal;
->>>>>>> other
   }
 };
