@@ -59,6 +59,11 @@ var EXPORTED_SYMBOLS = [
  * an existing nsIDownload from the Download Manager, or provides the same
  * information read directly from the downloads database, with the possibility
  * of querying the nsIDownload lazily, for performance reasons.
+ *
+ * DownloadsIndicatorData
+ * This object registers itself with DownloadsData as a view, and transforms the
+ * notifications it receives into overall status data, that is then broadcast to
+ * the registered download status indicators.
  */
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -182,7 +187,15 @@ const DownloadsCommon = {
    * This does not need to be a lazy getter, since no initialization is required
    * at present.
    */
-  get data() DownloadsData
+  get data() DownloadsData,
+
+  /**
+   * Returns a reference to the DownloadsData singleton.
+   *
+   * This does not need to be a lazy getter, since no initialization is required
+   * at present.
+   */
+  get indicatorData() DownloadsIndicatorData
 };
 
 /**
@@ -849,3 +862,359 @@ DownloadsDataItem.prototype = {
     }
   }
 };
+
+////////////////////////////////////////////////////////////////////////////////
+//// DownloadsIndicatorData
+
+/**
+ * This object registers itself with DownloadsData as a view, and transforms the
+ * notifications it receives into overall status data, that is then broadcast to
+ * the registered download status indicators.
+ *
+ * Note that using this object does not automatically start the Download Manager
+ * service.  Consumers will see an empty list of downloads until the service is
+ * actually started.  This is useful to display a neutral progress indicator in
+ * the main browser window until the autostart timeout elapses.
+ */
+const DownloadsIndicatorData = {
+  //////////////////////////////////////////////////////////////////////////////
+  //// Registration of views
+
+  /**
+   * Array of view objects that should be notified when the available status
+   * data changes.
+   */
+  _views: [],
+
+  /**
+   * Adds an object to be notified when the available status data changes.
+   * The specified object is initialized with the currently available status.
+   *
+   * @param aView
+   *        DownloadsIndicatorView object to be added.  This reference must be
+   *        passed to removeView before termination.
+   */
+  addView: function DIV_addView(aView)
+  {
+    // Start receiving events when the first of our views is registered.
+    if (!this._views.length) {
+      DownloadsCommon.data.addView(this);
+    }
+
+    this._views.push(aView);
+
+    // Update immediately even if we are still loading data asynchronously.
+    this._refreshProperties();
+    this._updateView(aView);
+  },
+
+  /**
+   * Removes an object previously added using addView.
+   *
+   * @param aView
+   *        DownloadsIndicatorView object to be removed.
+   */
+  removeView: function DIV_removeView(aView)
+  {
+    let index = this._views.indexOf(aView);
+    if (index != -1) {
+      this._views.splice(index, 1);
+    }
+
+    // Stop receiving events when the last of our views is unregistered.
+    if (!this._views.length) {
+      DownloadsCommon.data.removeView(this);
+      this._itemCount = 0;
+    }
+  },
+
+  //////////////////////////////////////////////////////////////////////////////
+  //// Callback functions from DownloadsData
+
+  /**
+   * Indicates whether we are still loading downloads data asynchronously.
+   */
+  _loading: false,
+
+  /**
+   * Called before multiple downloads are about to be loaded.
+   */
+  onDataLoadStarting: function DIV_onDataLoadStarting()
+  {
+    this._loading = true;
+  },
+
+  /**
+   * Called after data loading finished.
+   */
+  onDataLoadCompleted: function DIV_onDataLoadCompleted()
+  {
+    this._loading = false;
+    this._updateViews();
+  },
+
+  /**
+   * Called when the downloads database becomes unavailable (for example, we
+   * entered Private Browsing Mode and the database backend changed).
+   * References to existing data should be discarded.
+   */
+  onDataInvalidated: function DIV_onDataInvalidated()
+  {
+    this._itemCount = 0;
+  },
+
+  /**
+   * Called when a new download data item is available, either during the
+   * asynchronous data load or when a new download is started.
+   *
+   * @param aDataItem
+   *        DownloadsDataItem object that was just added.
+   * @param aNewest
+   *        When true, indicates that this item is the most recent and should be
+   *        added in the topmost position.  This happens when a new download is
+   *        started.  When false, indicates that the item is the least recent
+   *        with regard to the items that have been already added. The latter
+   *        generally happens during the asynchronous data load.
+   */
+  onDataItemAdded: function DIV_onDataItemAdded(aDataItem, aNewest)
+  {
+    this._itemCount++;
+    this._updateViews();
+  },
+
+  /**
+   * Called when a data item is removed, ensures that the widget associated with
+   * the view item is removed from the user interface.
+   *
+   * @param aDataItem
+   *        DownloadsDataItem object that is being removed.
+   */
+  onDataItemRemoved: function DIV_onDataItemRemoved(aDataItem)
+  {
+    this._itemCount--;
+    this._updateViews();
+  },
+
+  /**
+   * Returns the view item associated with the provided data item for this view.
+   *
+   * @param aDataItem
+   *        DownloadsDataItem object for which the view item is requested.
+   *
+   * @return Object that can be used to notify item status events.
+   */
+  getViewItem: function DIV_getViewItem(aDataItem)
+  {
+    return {
+      onStateChange: function DIVI_onStateChange()
+      {
+        if (aDataItem.state == nsIDM.DOWNLOAD_FINISHED ||
+            aDataItem.state == nsIDM.DOWNLOAD_FAILED) {
+          DownloadsIndicatorData.attention = true;
+        }
+
+        // Since the state of a download changed, reset the estimated time left.
+        DownloadsIndicatorData._lastRawTimeLeft = -1;
+        DownloadsIndicatorData._lastTimeLeft = -1;
+
+        DownloadsIndicatorData._updateViews();
+      },
+      onProgressChange: function DIVI_onProgressChange()
+      {
+        DownloadsIndicatorData._updateViews();
+      }
+    };
+  },
+
+  //////////////////////////////////////////////////////////////////////////////
+  //// Propagation of properties to our views
+
+  // The following properties are updated by _refreshProperties and are then
+  // propagated to the views.  See _refreshProperties for details.
+  _hasDownloads: false,
+  _counter: "",
+  _percentComplete: -1,
+
+  /**
+   * Indicates whether the download indicators should be highlighted.
+   */
+  set attention(aValue)
+  {
+    this._attention = aValue;
+    this._updateViews();
+    return aValue;
+  },
+  _attention: false,
+
+  /**
+   * Indicates whether the user is interacting with downloads, thus the
+   * attention indication should not be shown even if requested.
+   */
+  set attentionSuppressed(aValue)
+  {
+    this._attentionSuppressed = aValue;
+    this._attention = false;
+    this._updateViews();
+    return aValue;
+  },
+  _attentionSuppressed: false,
+
+  /**
+   * Computes aggregate values and propagates the changes to our views.
+   */
+  _updateViews: function DIV_updateViews()
+  {
+    // Do not update the status indicators during batch loads of download items.
+    if (this._loading) {
+      return;
+    }
+
+    this._refreshProperties();
+    for each (let view in this._views) {
+      this._updateView(view);
+    }
+  },
+
+  /**
+   * Updates the specified view with the current aggregate values.
+   *
+   * @param aView
+   *        DownloadsIndicatorView object to be updated.
+   */
+  _updateView: function DIV_updateView(aView)
+  {
+    aView.hasDownloads = this._hasDownloads;
+    aView.counter = this._counter;
+    aView.percentComplete = this._percentComplete;
+    aView.attention = this._attention && !this._attentionSuppressed;
+  },
+
+  //////////////////////////////////////////////////////////////////////////////
+  //// Property updating based on current download status
+
+  /**
+   * Number of download items that are available to be displayed.
+   */
+  _itemCount: 0,
+
+  /**
+   * Floating point value indicating the last number of seconds estimated until
+   * the longest download will finish.  We need to store this value so that we
+   * don't continuously apply smoothing if the actual download state has not
+   * changed.  This is set to -1 if the previous value is unknown.
+   */
+  _lastRawTimeLeft: -1,
+
+  /**
+   * Last number of seconds estimated until all in-progress downloads with a
+   * known size and speed will finish.  This value is stored to allow smoothing
+   * in case of small variations.  This is set to -1 if the previous value is
+   * unknown.
+   */
+  _lastTimeLeft: -1,
+
+  /**
+   * Update the estimated time until all in-progress downloads will finish.
+   *
+   * @param aSeconds
+   *        Current raw estimate on number of seconds left for all downloads.
+   *        This is a floating point value to help get sub-second accuracy for
+   *        current and future estimates.
+   */
+  _updateTimeLeft: function DIV_updateTimeLeft(aSeconds)
+  {
+    // We apply an algorithm similar to the DownloadUtils.getTimeLeft function,
+    // though tailored to a single time estimation for all downloads.  We never
+    // apply sommothing if the new value is less than half the previous value.
+    let shouldApplySmoothing = this._lastTimeLeft >= 0 &&
+                               aSeconds > this._lastTimeLeft / 2;
+    if (shouldApplySmoothing) {
+      // Apply hysteresis to favor downward over upward swings.  Trust only 30%
+      // of the new value if lower, and 10% if higher (exponential smoothing).
+      let (diff = aSeconds - this._lastTimeLeft) {
+        aSeconds = this._lastTimeLeft + (diff < 0 ? .3 : .1) * diff;
+      }
+
+      // If the new time is similar, reuse something close to the last time
+      // left, but subtract a little to provide forward progress.
+      let diff = aSeconds - this._lastTimeLeft;
+      let diffPercent = diff / this._lastTimeLeft * 100;
+      if (Math.abs(diff) < 5 || Math.abs(diffPercent) < 5) {
+        aSeconds = this._lastTimeLeft - (diff < 0 ? .4 : .2);
+      }
+    }
+
+    // In the last few seconds of downloading, we are always subtracting and
+    // never adding to the time left.  Ensure that we never fall below one
+    // second left until all downloads are actually finished.
+    this._lastTimeLeft = Math.max(aSeconds, 1);
+  },
+
+  /**
+   * Computes aggregate values based on the current state of downloads.
+   */
+  _refreshProperties: function DIV_refreshProperties()
+  {
+    // Obtain the statistics for the active downloads.
+    let numActive = 0;
+    let numScanning = 0;
+    let totalSize = 0;
+    let totalTransferred = 0;
+    let rawTimeLeft = -1;
+
+    // Only access the Download Manager if at least one download was loaded.
+    if (this._itemCount > 0) {
+      let downloads = Services.downloads.activeDownloads;
+      while (downloads.hasMoreElements()) {
+        let download = downloads.getNext().QueryInterface(Ci.nsIDownload);
+        numActive++;
+        switch (download.state) {
+          case nsIDM.DOWNLOAD_SCANNING:
+            numScanning++;
+            break;
+          case nsIDM.DOWNLOAD_DOWNLOADING:
+            if (download.size > 0 && download.speed > 0) {
+              let sizeLeft = download.size - download.amountTransferred;
+              rawTimeLeft = Math.max(rawTimeLeft, sizeLeft / download.speed);
+            }
+            break;
+        }
+        // Only add to total values if we actually know the download size.
+        if (download.size > 0) {
+          totalSize += download.size;
+          totalTransferred += download.amountTransferred;
+        }
+      }
+    }
+
+    // Determine if the indicator should be shown or get attention.
+    this._hasDownloads = (this._itemCount > 0);
+
+    if (numActive == 0) {
+      // Display an indication based on whether we have any donwloads.
+      this._percentComplete = (this._itemCount > 0) ? 100 : 0;
+    } else if (totalSize == 0 || numActive == numScanning) {
+      // There are active downloads, but we don't have any information about
+      // download sizes, thus display an indeterminate indicator.
+      this._percentComplete = -1;
+    } else {
+      // Display the current progress.
+      this._percentComplete = (totalTransferred / totalSize) * 100;
+    }
+
+    // Display the estimated time left, if present.
+    if (rawTimeLeft == -1) {
+      // There are no downloads with a known time left.
+      this._lastRawTimeLeft = -1;
+      this._lastTimeLeft = -1;
+      this._counter = "";
+    } else {
+      // Compute the new time left only if state actually changed.
+      if (this._lastRawTimeLeft != rawTimeLeft) {
+        this._lastRawTimeLeft = rawTimeLeft;
+        this._updateTimeLeft(rawTimeLeft);
+      }
+      this._counter = DownloadsCommon.formatTimeLeft(this._lastTimeLeft);
+    }
+  }
+}

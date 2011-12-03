@@ -816,11 +816,6 @@
 
       <toolbarbutton id="downloads-button"
                      class="toolbarbutton-1 chromeclass-toolbar-additional"
-                     oncommand="BrowserDownloadsUI();"
-                     ondrop="DownloadsButtonDNDObserver.onDrop(event)"
-                     ondragover="DownloadsButtonDNDObserver.onDragOver(event)"
-                     ondragenter="DownloadsButtonDNDObserver.onDragOver(event)"
-                     ondragleave="DownloadsButtonDNDObserver.onDragLeave(event)"
                      label="&downloads.label;"
                      tooltiptext="&downloads.tooltip;"
                      removable="true"/>
