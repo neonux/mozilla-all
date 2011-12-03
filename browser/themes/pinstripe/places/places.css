@@ -193,16 +193,3 @@ treechildren::-moz-tree-image(cutting) {
 treechildren::-moz-tree-cell-text(cutting) {
   opacity: 0.7;
 }
-
-/* In-Content UI */
-
-#places[in-content] > #placesToolbox > #placesToolbar {
-  -moz-appearance: none;
-  padding-top: 2px;
-  border-bottom: 1px solid #404040;
-  background-image: -moz-linear-gradient(#dbdbdb, #c2c2c2);
-}
-
-#places[in-content] > #placesToolbox > #placesToolbar:-moz-window-inactive {
-  background-image: -moz-linear-gradient(#efefef, #e3e3e3);
-}

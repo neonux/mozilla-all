@@ -78,7 +78,6 @@ public:
   NS_DECL_NSIDRAGSERVICE
   NS_DECL_NSIDRAGSESSION
 
-  void SetCurrentDragPoint(nsIntPoint aCurrentDragPoint) { mCurrentDragPoint = aCurrentDragPoint; }
   void SetDragEndPoint(nsIntPoint aEndDragPoint) { mEndDragPoint = aEndDragPoint; }
 
   PRUint16 GetInputSource() { return mInputSource; }
@@ -169,9 +168,6 @@ protected:
   // supplied so the screen position is not known
   PRInt32 mScreenX;
   PRInt32 mScreenY;
-
-  // the screen position of the current drag
-  nsIntPoint mCurrentDragPoint;
 
   // the screen position where the drag ended
   nsIntPoint mEndDragPoint;

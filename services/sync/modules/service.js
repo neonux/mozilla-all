@@ -861,9 +861,9 @@ WeaveSvc.prototype = {
                       "is stale after successful upload.");
       throw new Error("Symmetric key upload failed.");
     }
-
+    
     // Doesn't matter if the timestamp is ahead.
-
+    
     // Download and install them.
     let cryptoKeys = new CryptoWrapper(CRYPTO_COLLECTION, KEYS_WBO);
     let cryptoResp = cryptoKeys.fetch(this.cryptoKeysURL).response;
@@ -1590,8 +1590,9 @@ WeaveSvc.prototype = {
     Records.set(this.metaURL, meta);
 
     // Wipe everything we know about except meta because we just uploaded it
-    let names = Clients.allCollectionNames.concat(Engines.allCollectionNames);
-    this.wipeServer(names);
+    let collections = [Clients].concat(Engines.getAll()).map(function(engine) {
+      return engine.name;
+    });
 
     // Generate, upload, and download new keys. Do this last so we don't wipe
     // them...
@@ -1690,13 +1691,7 @@ WeaveSvc.prototype = {
       this.resetClient(engines);
 
       // Clear out any server data.
-      let collections = [];
-      for each (let engine in engines) {
-        for each (let collection in Engines.get(engine).allCollectionNames) {
-          collections.push(collection);
-        }
-      }
-      this.wipeServer(collections);
+      this.wipeServer(engines);
 
       // Only wipe the engines provided.
       if (engines) {

@@ -62,7 +62,6 @@ PARALLEL_DIRS = \
   about \
   certerror \
   dirprovider \
-  downloads \
   feeds \
   places \
   preferences \
@@ -72,7 +71,6 @@ PARALLEL_DIRS = \
   shell \
   sidebar/src \
   tabview \
-  thumbnails \
   migration \
   $(NULL)
 

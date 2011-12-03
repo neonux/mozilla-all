@@ -19,7 +19,3 @@ toolbarpaletteitem .bookmarks-toolbar-customize {
 menupopup[placespopup="true"] {
   -moz-binding: url("chrome://browser/content/places/menu.xml#places-popup-base");
 }
-
-#places[in-content] > #main-menubar {
-  display: none;
-}

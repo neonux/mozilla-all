@@ -488,7 +488,16 @@ var PlacesCommandHook = {
    *          UnfiledBookmarks and Tags.
    */
   showPlacesOrganizer: function PCH_showPlacesOrganizer(aLeftPaneRoot) {
-    switchToTabHavingURI("chrome://browser/content/places/places.xul#" + aLeftPaneRoot, true, true);
+    var organizer = Services.wm.getMostRecentWindow("Places:Organizer");
+    if (!organizer) {
+      // No currently open places window, so open one with the specified mode.
+      openDialog("chrome://browser/content/places/places.xul", 
+                 "", "chrome,toolbar=yes,dialog=no,resizable", aLeftPaneRoot);
+    }
+    else {
+      organizer.PlacesOrganizer.selectLeftPaneQuery(aLeftPaneRoot);
+      organizer.focus();
+    }
   }
 };
 

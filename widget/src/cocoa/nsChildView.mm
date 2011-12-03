@@ -4386,17 +4386,10 @@ NSEvent* gLastDragMouseDownEvent = nil;
   if (aMessage == NS_DRAGDROP_ENTER)
     mDragService->StartDragSession();
 
-  // Convert event from gecko global coords to gecko view coords.
-  NSPoint localPoint = [self convertPoint:[aSender draggingLocation] fromView:nil];
-
   nsCOMPtr<nsIDragSession> dragSession;
   mDragService->GetCurrentSession(getter_AddRefs(dragSession));
   if (dragSession) {
     if (aMessage == NS_DRAGDROP_OVER) {
-      // set current drag position
-      nsDragService* dragService = static_cast<nsDragService *>(mDragService);
-      dragService->SetCurrentDragPoint(nsIntPoint(NSToIntRound(localPoint.x), NSToIntRound(localPoint.y)));
-
       // fire the drag event at the source. Just ignore whether it was
       // cancelled or not as there isn't actually a means to stop the drag
       mDragService->FireDragEventAtSource(NS_DRAGDROP_DRAG);
@@ -4435,6 +4428,8 @@ NSEvent* gLastDragMouseDownEvent = nil;
   [self convertGenericCocoaEvent:[NSApp currentEvent] toGeckoEvent:&geckoEvent];
 
   // Use our own coordinates in the gecko event.
+  // Convert event from gecko global coords to gecko view coords.
+  NSPoint localPoint = [self convertPoint:[aSender draggingLocation] fromView:nil];
   geckoEvent.refPoint.x = static_cast<nscoord>(localPoint.x);
   geckoEvent.refPoint.y = static_cast<nscoord>(localPoint.y);
 

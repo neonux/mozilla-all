@@ -27,7 +27,6 @@
 #   Ehsan Akhgari <ehsan.akhgari@gmail.com>
 #   Nils Maier <maierman@web.de>
 #   Robert Strong <robert.bugzilla@gmail.com>
-#   Paolo Amadini <http://www.amadzone.org/>
 #
 # Alternatively, the contents of this file may be used under the terms of
 # either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -156,20 +155,6 @@ BrowserGlue.prototype = {
     Cu.import("resource://services-sync/main.js");
     Weave.SyncScheduler.delayedAutoConnect(delay);
   },
-
-  /**
-   * Handle a display-tab Sync command receipt notification.
-   *
-   * This simply calls into the Sync Clients engine instance to perform all the
-   * heavy lifting.
-   */
-  _onSyncDisplayTab: function BG__onSyncDisplayTab(subject) {
-    // Sync's Svc.Obs performs wrapping of a native JS Object type.
-    let obj = subject.wrappedJSObject.object;
-    let browser = this.getMostRecentBrowserWindow().gBrowser;
-
-    Weave.Clients.restoreTab(browser, obj);
-  },
 #endif
 
   // nsIObserver implementation 
@@ -217,9 +202,6 @@ BrowserGlue.prototype = {
 #ifdef MOZ_SERVICES_SYNC
       case "weave:service:ready":
         this._setSyncAutoconnectDelay();
-        break;
-      case "weave:engine:clients:display-tab":
-        this._onSyncDisplayTab(subject);
         break;
 #endif
       case "session-save":
@@ -307,7 +289,6 @@ BrowserGlue.prototype = {
 #endif
 #ifdef MOZ_SERVICES_SYNC
     os.addObserver(this, "weave:service:ready", false);
-    os.addObserver(this, "weave:engine:clients:display-tab", false);
 #endif
     os.addObserver(this, "session-save", false);
     os.addObserver(this, "places-init-complete", false);
@@ -334,8 +315,7 @@ BrowserGlue.prototype = {
     os.removeObserver(this, "browser-lastwindow-close-granted");
 #endif
 #ifdef MOZ_SERVICES_SYNC
-    os.removeObserver(this, "weave:service:ready");
-    os.removeObserver(this, "weave:engine:clients:display-tab");
+    os.removeObserver(this, "weave:service:ready", false);
 #endif
     os.removeObserver(this, "session-save");
     if (this._isIdleObserver)
@@ -1120,7 +1100,7 @@ BrowserGlue.prototype = {
   },
 
   _migrateUI: function BG__migrateUI() {
-    const UI_VERSION = 6;
+    const UI_VERSION = 5;
     const BROWSER_DOCURL = "chrome://browser/content/browser.xul#";
     let currentUIVersion = 0;
     try {
@@ -1239,20 +1219,6 @@ BrowserGlue.prototype = {
         if (toolbarIsCustomized || getToolbarFolderCount() > 3) {
           this._setPersist(toolbarResource, collapsedResource, "false");
         }
-      }
-    }
-
-    if (currentUIVersion < 6) {
-      // This code adds the customizable downloads buttons.
-      let currentsetResource = this._rdf.GetResource("currentset");
-      let toolbarResource = this._rdf.GetResource(BROWSER_DOCURL + "TabsToolbar");
-      let currentset = this._getPersist(toolbarResource, currentsetResource);
-
-      // Need to migrate only if toolbar is customized and the element is not found.
-      if (currentset &&
-          currentset.indexOf("downloads-button") == -1) {
-        currentset += ",downloads-button";
-        this._setPersist(toolbarResource, currentsetResource, currentset);
       }
     }
 
