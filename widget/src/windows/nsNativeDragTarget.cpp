@@ -346,6 +346,17 @@ nsNativeDragTarget::DragOver(DWORD   grfKeyState,
     mDropTargetHelper->DragOver(&pt, *pdwEffect);
   }
 
+  // Use GetMessagePos to get the position of the mouse at the last message
+  // seen by the event loop. (Bug 489729)
+  DWORD pos = ::GetMessagePos();
+  POINT cpos;
+  cpos.x = GET_X_LPARAM(pos);
+  cpos.y = GET_Y_LPARAM(pos);
+
+  // set current drag position and fire drag event
+  nsDragService* winDragService = static_cast<nsDragService*>(mDragService);
+  winDragService->SetCurrentDragPoint(nsIntPoint(cpos.x, cpos.y));
+
   mDragService->FireDragEventAtSource(NS_DRAGDROP_DRAG);
   // Now process the native drag state and then dispatch the event
   ProcessDrag(NS_DRAGDROP_OVER, grfKeyState, ptl, pdwEffect);
