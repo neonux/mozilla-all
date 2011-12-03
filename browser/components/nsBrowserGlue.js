@@ -27,7 +27,6 @@
 #   Ehsan Akhgari <ehsan.akhgari@gmail.com>
 #   Nils Maier <maierman@web.de>
 #   Robert Strong <robert.bugzilla@gmail.com>
-#   Paolo Amadini <http://www.amadzone.org/>
 #
 # Alternatively, the contents of this file may be used under the terms of
 # either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -1101,7 +1100,7 @@ BrowserGlue.prototype = {
   },
 
   _migrateUI: function BG__migrateUI() {
-    const UI_VERSION = 6;
+    const UI_VERSION = 5;
     const BROWSER_DOCURL = "chrome://browser/content/browser.xul#";
     let currentUIVersion = 0;
     try {
@@ -1220,20 +1219,6 @@ BrowserGlue.prototype = {
         if (toolbarIsCustomized || getToolbarFolderCount() > 3) {
           this._setPersist(toolbarResource, collapsedResource, "false");
         }
-      }
-    }
-
-    if (currentUIVersion < 6) {
-      // This code adds the customizable downloads buttons.
-      let currentsetResource = this._rdf.GetResource("currentset");
-      let toolbarResource = this._rdf.GetResource(BROWSER_DOCURL + "TabsToolbar");
-      let currentset = this._getPersist(toolbarResource, currentsetResource);
-
-      // Need to migrate only if toolbar is customized and the element is not found.
-      if (currentset &&
-          currentset.indexOf("downloads-button") == -1) {
-        currentset += ",downloads-button";
-        this._setPersist(toolbarResource, currentsetResource, currentset);
       }
     }
 

@@ -173,12 +173,6 @@ XPCOMUtils.defineLazyGetter(this, "PopupNotifications", function () {
   }
 });
 
-XPCOMUtils.defineLazyGetter(this, "NewTabUtils", function() {
-  let tmp = {};
-  Cu.import("resource:///modules/NewTabUtils.jsm", tmp);
-  return tmp.NewTabUtils;
-});
-
 XPCOMUtils.defineLazyGetter(this, "InspectorUI", function() {
   let tmp = {};
   Cu.import("resource:///modules/inspector.jsm", tmp);
@@ -187,7 +181,6 @@ XPCOMUtils.defineLazyGetter(this, "InspectorUI", function() {
 
 let gInitialPages = [
   "about:blank",
-  "about:newtab",
   "about:privatebrowsing",
   "about:sessionrestore"
 ];
@@ -1370,12 +1363,7 @@ function BrowserStartup() {
 
   TabsInTitlebar.init();
 
-  document.getElementById("TabsToolbar")
-          .insertItem("new-tab-button", gBrowser.tabContainer.nextSibling);
-
   gPrivateBrowsingUI.init();
-
-  DownloadsButton.initializePlaceholder();
 
   retrieveToolbarIconsizesFromTheme();
 
@@ -1660,11 +1648,6 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
     }
   }, 10000);
 
-  // We can initialize the downloads indicator here in delayedStartup() because
-  // it is initially invisible, at least until the download manager is started,
-  // thus no flickering occurs when we set its position.
-  DownloadsButton.initializeIndicator();
-
 #ifndef XP_MACOSX
   updateEditUIVisibility();
   let placesContext = document.getElementById("placesContext");
@@ -1705,7 +1688,6 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
   gSyncUI.init();
 #endif
 
-  NewTabUtils.init();
   TabView.init();
 
   // Enable Inspector?
@@ -2211,10 +2193,10 @@ function BrowserOpenTab()
   if (!gBrowser) {
     // If there are no open browser windows, open a new one
     window.openDialog("chrome://browser/content/", "_blank",
-                      "chrome,all,dialog=no", "about:newtab");
+                      "chrome,all,dialog=no", "about:blank");
     return;
   }
-  gBrowser.loadOneTab("about:newtab", {inBackground: false});
+  gBrowser.loadOneTab("about:blank", {inBackground: false});
   focusAndSelectUrlBar();
 }
 
@@ -3249,6 +3231,29 @@ var newWindowButtonObserver = {
   }
 }
 
+var DownloadsButtonDNDObserver = {
+  onDragOver: function (aEvent)
+  {
+    var types = aEvent.dataTransfer.types;
+    if (types.contains("text/x-moz-url") ||
+        types.contains("text/uri-list") ||
+        types.contains("text/plain"))
+      aEvent.preventDefault();
+  },
+
+  onDragExit: function (aEvent)
+  {
+  },
+
+  onDrop: function (aEvent)
+  {
+    let name = { };
+    let url = browserDragAndDrop.drop(aEvent, name);
+    if (url)
+      saveURL(url, name, null, true, true);
+  }
+}
+
 const DOMLinkHandler = {
   handleEvent: function (event) {
     switch (event.type) {
@@ -3652,7 +3657,6 @@ function BrowserCustomizeToolbar()
 
   PlacesToolbarHelper.customizeStart();
   BookmarksMenuButton.customizeStart();
-  DownloadsButton.customizeStart();
 
   TabsInTitlebar.allowedBy("customizing-toolbars", false);
 
@@ -3719,7 +3723,6 @@ function BrowserToolboxCustomizeDone(aToolboxChanged) {
 
   PlacesToolbarHelper.customizeDone();
   BookmarksMenuButton.customizeDone();
-  DownloadsButton.customizeDone();
 
   // The url bar splitter state is dependent on whether stop/reload
   // and the location bar are combined, so we need this ordering
