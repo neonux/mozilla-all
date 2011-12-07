@@ -71,6 +71,7 @@ PARALLEL_DIRS = \
   shell \
   sidebar/src \
   tabview \
+  thumbnails \
   migration \
   $(NULL)
 
