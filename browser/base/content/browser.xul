@@ -56,6 +56,7 @@
 <?xml-stylesheet href="chrome://browser/content/places/places.css" type="text/css"?>
 <?xml-stylesheet href="chrome://browser/skin/devtools/webconsole.css" type="text/css"?>
 <?xml-stylesheet href="chrome://browser/skin/" type="text/css"?>
+<?xul-overlay href="chrome://browser/content/downloads/downloadsOverlay.xul"?>
 
 <?xul-overlay href="chrome://global/content/editMenuOverlay.xul"?>
 <?xul-overlay href="chrome://browser/content/baseMenuOverlay.xul"?>
@@ -776,9 +777,9 @@
              aria-label="&tabsToolbar.label;"
              context="toolbar-context-menu"
 #ifdef APPMENU_ON_TABBAR
-             defaultset="appmenu-toolbar-button,tabbrowser-tabs,new-tab-button,alltabs-button,tabs-closebutton"
+             defaultset="appmenu-toolbar-button,tabbrowser-tabs,new-tab-button,alltabs-button,tabs-closebutton,downloads-button"
 #else
-             defaultset="tabbrowser-tabs,new-tab-button,alltabs-button,tabs-closebutton"
+             defaultset="tabbrowser-tabs,new-tab-button,alltabs-button,tabs-closebutton,downloads-button"
 #endif
              collapsed="true">
 
@@ -811,6 +812,17 @@
                      ondragover="newTabButtonObserver.onDragOver(event)"
                      ondragenter="newTabButtonObserver.onDragOver(event)"
                      ondragexit="newTabButtonObserver.onDragExit(event)"
+                     removable="true"/>
+
+      <toolbarbutton id="downloads-button"
+                     class="toolbarbutton-1 chromeclass-toolbar-additional"
+                     oncommand="BrowserDownloadsUI();"
+                     ondrop="DownloadsButtonDNDObserver.onDrop(event)"
+                     ondragover="DownloadsButtonDNDObserver.onDragOver(event)"
+                     ondragenter="DownloadsButtonDNDObserver.onDragOver(event)"
+                     ondragleave="DownloadsButtonDNDObserver.onDragLeave(event)"
+                     label="&downloads.label;"
+                     tooltiptext="&downloads.tooltip;"
                      removable="true"/>
 
       <toolbarbutton id="alltabs-button"
@@ -856,15 +868,6 @@
                    mousethrough="always">
         <image/>
       </toolbaritem>
-
-      <toolbarbutton id="downloads-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
-                     observes="Tools:Downloads"
-                     ondrop="DownloadsButtonDNDObserver.onDrop(event)"
-                     ondragover="DownloadsButtonDNDObserver.onDragOver(event)"
-                     ondragenter="DownloadsButtonDNDObserver.onDragOver(event)"
-                     ondragexit="DownloadsButtonDNDObserver.onDragExit(event)"
-                     label="&downloads.label;"
-                     tooltiptext="&downloads.tooltip;"/>
 
       <toolbarbutton id="history-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
                      observes="viewHistorySidebar" label="&historyButton.label;"
