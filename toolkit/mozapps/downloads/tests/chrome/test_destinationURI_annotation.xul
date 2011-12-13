@@ -150,15 +150,11 @@ function endTest() {
     .getMostRecentWindow("Download:Manager")
     .close();
 
-  Cc["@mozilla.org/browser/nav-history-service;1"]
-    .getService(Ci.nsINavHistoryService)
-    .removeAllPages();
-
   Cc["@mozilla.org/preferences-service;1"].
     getService(Ci.nsIPrefBranch).
     clearUserPref("browser.download.manager.useWindowUI");
 
-  SimpleTest.finish();
+  waitForClearHistory(SimpleTest.finish);
 }
 
   ]]>
