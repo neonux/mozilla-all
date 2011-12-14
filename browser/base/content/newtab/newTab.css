@@ -1,0 +1,286 @@
+body {
+  position: relative;
+  min-width: 673px;
+  margin: 0;
+  padding-top: 106px;
+  font-family: -moz-window, sans-serif;
+  -moz-user-select: none;
+}
+
+.button, .button::-moz-focus-inner {
+  padding: 0;
+  border: 0 none;
+  cursor: pointer;
+}
+
+/* TOOLBAR */
+#toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 13px;
+  height: 30px;
+  padding: 0;
+  margin: 0;
+  list-style-type: none;
+}
+
+body[dir=rtl] #toolbar {
+  left: 8px;
+  right: auto;
+}
+
+.toolbar-button {
+  position: absolute;
+  cursor: pointer;
+  background-color: transparent;
+}
+
+#toolbar-button-show {
+  width: 11px;
+  height: 11px;
+  opacity: 0;
+  pointer-events: none;
+  background-position: -10px 0;
+  -moz-transition: opacity 200ms ease-out;
+}
+
+#toolbar-button-show:hover {
+  background-position: -10px -12px;
+}
+
+#toolbar-button-show:active {
+  background-position: -10px -24px;
+}
+
+#toolbar-button-hide {
+  width: 10px;
+  height: 10px;
+  -moz-transition: opacity 200ms ease-out;
+}
+
+#toolbar-button-hide:hover {
+  background-position: 0 -12px;
+}
+
+#toolbar-button-hide:active {
+  background-position: 0 -24px;
+}
+
+#toolbar-button-reset {
+  top: 17px;
+  width: 11px;
+  height: 12px;
+  opacity: 0;
+  pointer-events: none;
+  background-position: -21px 0;
+  -moz-transition: opacity 200ms ease-out;
+}
+
+#toolbar-button-reset:hover {
+  background-position: -21px -12px;
+}
+
+#toolbar-button-reset:active {
+  background-position: -21px -24px;
+}
+
+#toolbar-button-reset[modified], #toolbar-button-show[page-disabled] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#toolbar-button-hide[page-disabled], #toolbar-button-reset[page-disabled] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* GRID */
+#grid {
+  display: block;
+  width: 637px;
+  height: 411px;
+  padding: 0;
+  margin: 0 auto;
+  overflow: hidden;
+  opacity: 1;
+  list-style-type: none;
+  -moz-transition: opacity 200ms ease-out;
+}
+
+#grid[page-disabled] {
+  opacity: 0;
+}
+
+#grid[page-disabled], #grid[locked] {
+  pointer-events: none;
+}
+
+/* CELLS */
+.cell {
+  float: left;
+  width: 201px;
+  height: 127px;
+  margin-bottom: 15px;
+  -moz-margin-end: 16px;
+}
+
+body[dir=rtl] .cell {
+  float: right;
+}
+
+.cell:nth-child(3n+3) {
+  -moz-margin-end: 0;
+}
+
+/* SITES */
+.site {
+  display: block;
+  position: relative;
+  width: 201px;
+  height: 127px;
+  outline: none;
+  background-color: #ececec;
+  -moz-transition: 200ms ease-out;
+  -moz-transition-property: top, left, box-shadow;
+}
+
+.site[frozen] {
+  position: absolute;
+  pointer-events: none;
+}
+
+.site[hidden] {
+  visibility: hidden;
+}
+
+.site[dragged] {
+  -moz-transition-property: box-shadow;
+}
+
+.site[ontop] {
+  z-index: 10;
+  box-shadow: 0 1px 4px #000;
+}
+
+/* SITE IMAGE */
+.site-img {
+  opacity: 0.75;
+  -moz-transition: opacity 200ms ease-out;
+}
+
+.site:hover .site-img, .site[ontop] .site-img {
+  opacity: 1;
+}
+
+.site-img[loading] {
+  visibility: hidden;
+}
+
+/* SITE TITLE */
+.site-title {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 189px;
+  height: 2.4em;
+  padding: 0 6px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 70%;
+  text-decoration: none;
+  line-height: 1.2em;
+  background-color: rgba(0,0,0,0.8);
+  border: solid transparent;
+  border-width: 6px 0;
+  overflow: hidden;
+}
+
+/* SITE STRIP */
+.site-strip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 195px;
+  height: 17px;
+  padding: 3px;
+  overflow: hidden;
+  border: solid rgba(30,30,30,0.8);
+  border-width: 1px 0;
+  background-color: rgba(0,0,0,0.8);
+  opacity: 0;
+  -moz-transition: opacity 200ms ease-out;
+}
+
+.site:hover:not([frozen]) .site-strip {
+  opacity: 1;
+}
+
+.strip-button {
+  width: 17px;
+  height: 17px;
+  background-color: transparent;
+  background-image: url(chrome://browser/content/newtab/strip.png);
+}
+
+.strip-button-pin {
+  float: left;
+}
+
+body[dir=rtl] .strip-button-pin {
+  float: right;
+}
+
+.strip-button-pin:hover {
+  background-position: 0 -17px;
+}
+
+.strip-button-pin:active, .site-pinned .strip-button-pin {
+  background-position: 0 -34px;
+}
+
+.strip-button-block {
+  float: right;
+  background-position: -17px 0;
+}
+
+body[dir=rtl] .strip-button-block {
+  float: left;
+}
+
+.strip-button-block:hover {
+  background-position: -17px -17px;
+}
+
+.strip-button-block:active {
+  background-position: -17px -34px;
+}
+
+/* ANIMATIONS */
+.anim-fadein {
+  -moz-animation-duration: 200ms;
+  -moz-animation-name: fadein;
+}
+
+@-moz-keyframes fadein {
+  from { opacity: 0 }
+  to { opacity: 1 }
+}
+
+.anim-fadeout {
+  -moz-animation-duration: 200ms;
+  -moz-animation-name: fadeout;
+}
+
+@-moz-keyframes fadeout {
+  from { opacity: 1 }
+  to { opacity: 0 }
+}
+
+/* DRAG & DROP */
+.drag-element {
+  width: 1px;
+  height: 1px;
+  background-color: #fff;
+  opacity: 0.01;
+}
