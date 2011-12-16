@@ -538,12 +538,6 @@
                onkeypress="gIdentityHandler.handleIdentityButtonEvent(event);"
                ondragstart="gIdentityHandler.onDragStart(event);">
             <hbox id="identity-box-inner" align="center">
-              <stack id="page-proxy-stack"
-                     onclick="PageProxyClickHandler(event);">
-                <image id="page-proxy-favicon" validate="never"
-                       pageproxystate="invalid"
-                       onerror="this.removeAttribute('src');"/>
-              </stack>
               <hbox id="identity-icon-labels">
                 <label id="identity-icon-label" class="plain" flex="1"/>
                 <label id="identity-icon-country-label" class="plain"/>
@@ -562,7 +556,8 @@
 
             <image id="star-button"
                    class="urlbar-icon"
-                   onclick="PlacesStarButton.onClick(event);"/>
+                   onclick="PlacesStarButton.onClick(event);"
+                   ondragstart="gIdentityHandler.onDragStart(event);"/>
             <image id="go-button"
                    class="urlbar-icon"
                    tooltiptext="&goEndCap.tooltip;"
