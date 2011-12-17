@@ -946,6 +946,7 @@ pref("services.sync.prefs.sync.browser.safebrowsing.enabled", true);
 pref("services.sync.prefs.sync.browser.safebrowsing.malware.enabled", true);
 pref("services.sync.prefs.sync.browser.search.selectedEngine", true);
 pref("services.sync.prefs.sync.browser.search.update", true);
+pref("services.sync.prefs.sync.browser.sessionstore.restore_on_demand", true);
 pref("services.sync.prefs.sync.browser.startup.homepage", true);
 pref("services.sync.prefs.sync.browser.startup.page", true);
 pref("services.sync.prefs.sync.browser.tabs.autoHide", true);
@@ -1012,6 +1013,12 @@ pref("devtools.inspector.htmlHeight", 112);
 
 // Enable the style inspector
 pref("devtools.styleinspector.enabled", true);
+
+// Enable the Tilt inspector
+pref("devtools.tilt.enabled", true);
+
+// Enable the Tilt inspector even if WebGL capabilities are not detected
+pref("devtools.tilt.force-enabled", false);
 
 // Enable the rules view
 pref("devtools.ruleview.enabled", true);
