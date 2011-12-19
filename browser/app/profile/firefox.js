@@ -1095,8 +1095,5 @@ pref("prompts.tab_modal.enabled", true);
 // Whether the Panorama should animate going in/out of tabs
 pref("browser.panorama.animate_zoom", true);
 
-// Enable the New Tab Page (about:newtab)
-pref("browser.newtab.enabled", true);
-
 // Enable the DOM full-screen API.
 pref("full-screen-api.enabled", true);

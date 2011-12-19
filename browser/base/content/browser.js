@@ -173,9 +173,6 @@ XPCOMUtils.defineLazyGetter(this, "PopupNotifications", function () {
   }
 });
 
-XPCOMUtils.defineLazyModuleGetter(this, "NewTabUtils",
-  "resource:///modules/NewTabUtils.jsm");
-
 XPCOMUtils.defineLazyGetter(this, "InspectorUI", function() {
   let tmp = {};
   Cu.import("resource:///modules/inspector.jsm", tmp);
@@ -190,7 +187,6 @@ XPCOMUtils.defineLazyGetter(this, "Tilt", function() {
 
 let gInitialPages = [
   "about:blank",
-  "about:newtab",
   "about:privatebrowsing",
   "about:sessionrestore"
 ];
@@ -1712,7 +1708,6 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
   gSyncUI.init();
 #endif
 
-  NewTabUtils.init();
   TabView.init();
 
   // Enable Inspector?
@@ -2218,10 +2213,10 @@ function BrowserOpenTab()
   if (!gBrowser) {
     // If there are no open browser windows, open a new one
     window.openDialog("chrome://browser/content/", "_blank",
-                      "chrome,all,dialog=no", "about:newtab");
+                      "chrome,all,dialog=no", "about:blank");
     return;
   }
-  gBrowser.loadOneTab("about:newtab", {inBackground: false});
+  gBrowser.loadOneTab("about:blank", {inBackground: false});
   focusAndSelectUrlBar();
 }
 
