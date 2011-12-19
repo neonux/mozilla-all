@@ -57,6 +57,7 @@
 <?xml-stylesheet href="chrome://browser/content/places/places.css" type="text/css"?>
 <?xml-stylesheet href="chrome://browser/skin/devtools/webconsole.css" type="text/css"?>
 <?xml-stylesheet href="chrome://browser/skin/" type="text/css"?>
+<?xul-overlay href="chrome://browser/content/downloads/downloadsOverlay.xul"?>
 
 <?xul-overlay href="chrome://global/content/editMenuOverlay.xul"?>
 <?xul-overlay href="chrome://browser/content/baseMenuOverlay.xul"?>
@@ -276,6 +277,9 @@
     <menupopup id="contentAreaContextMenu" pagemenu="start"
                onpopupshowing="if (event.target != this)
                                  return true;
+#ifdef XP_MACOSX
+                               selectContext(event);
+#endif
                                gContextMenu = new nsContextMenu(this, gBrowser, event.shiftKey);
                                if (gContextMenu.shouldDisplay)
                                  updateEditUIVisibility();
@@ -535,12 +539,6 @@
                onkeypress="gIdentityHandler.handleIdentityButtonEvent(event);"
                ondragstart="gIdentityHandler.onDragStart(event);">
             <hbox id="identity-box-inner" align="center">
-              <stack id="page-proxy-stack"
-                     onclick="PageProxyClickHandler(event);">
-                <image id="page-proxy-favicon" validate="never"
-                       pageproxystate="invalid"
-                       onerror="this.removeAttribute('src');"/>
-              </stack>
               <hbox id="identity-icon-labels">
                 <label id="identity-icon-label" class="plain" flex="1"/>
                 <label id="identity-icon-country-label" class="plain"/>
@@ -559,7 +557,8 @@
 
             <image id="star-button"
                    class="urlbar-icon"
-                   onclick="PlacesStarButton.onClick(event);"/>
+                   onclick="PlacesStarButton.onClick(event);"
+                   ondragstart="gIdentityHandler.onDragStart(event);"/>
             <image id="go-button"
                    class="urlbar-icon"
                    tooltiptext="&goEndCap.tooltip;"
@@ -775,9 +774,9 @@
              aria-label="&tabsToolbar.label;"
              context="toolbar-context-menu"
 #ifdef APPMENU_ON_TABBAR
-             defaultset="appmenu-toolbar-button,tabbrowser-tabs,new-tab-button,alltabs-button,tabs-closebutton"
+             defaultset="appmenu-toolbar-button,tabbrowser-tabs,new-tab-button,alltabs-button,tabs-closebutton,downloads-button"
 #else
-             defaultset="tabbrowser-tabs,new-tab-button,alltabs-button,tabs-closebutton"
+             defaultset="tabbrowser-tabs,new-tab-button,alltabs-button,tabs-closebutton,downloads-button"
 #endif
              collapsed="true">
 
@@ -810,6 +809,12 @@
                      ondragover="newTabButtonObserver.onDragOver(event)"
                      ondragenter="newTabButtonObserver.onDragOver(event)"
                      ondragexit="newTabButtonObserver.onDragExit(event)"
+                     removable="true"/>
+
+      <toolbarbutton id="downloads-button"
+                     class="toolbarbutton-1 chromeclass-toolbar-additional"
+                     label="&downloads.label;"
+                     tooltiptext="&downloads.tooltip;"
                      removable="true"/>
 
       <toolbarbutton id="alltabs-button"
@@ -855,15 +860,6 @@
                    mousethrough="always">
         <image/>
       </toolbaritem>
-
-      <toolbarbutton id="downloads-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
-                     observes="Tools:Downloads"
-                     ondrop="DownloadsButtonDNDObserver.onDrop(event)"
-                     ondragover="DownloadsButtonDNDObserver.onDragOver(event)"
-                     ondragenter="DownloadsButtonDNDObserver.onDragOver(event)"
-                     ondragexit="DownloadsButtonDNDObserver.onDragExit(event)"
-                     label="&downloads.label;"
-                     tooltiptext="&downloads.tooltip;"/>
 
       <toolbarbutton id="history-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
                      observes="viewHistorySidebar" label="&historyButton.label;"
