@@ -42,6 +42,11 @@ VPATH		= @srcdir@
 
 include $(DEPTH)/config/autoconf.mk
 
+EXTRA_COMPONENTS = \
+  BrowserPageThumbs.manifest \
+  PageThumbsProtocol.js \
+  $(NULL)
+
 EXTRA_PP_JS_MODULES = \
   PageThumbs.jsm \
   $(NULL)
