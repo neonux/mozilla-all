@@ -52,7 +52,6 @@ EXTRA_JS_MODULES = \
 	openLocationLastURL.jsm \
 	NetworkPrioritizer.jsm \
 	offlineAppCache.jsm \
-	NewTabUtils.jsm \
 	$(NULL)
 
 ifeq ($(MOZ_WIDGET_TOOLKIT),windows) 
