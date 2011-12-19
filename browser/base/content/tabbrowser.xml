@@ -538,7 +538,7 @@
                 if (aWebProgress.DOMWindow == this.mBrowser.contentWindow)
                   this.mBrowser.userTypedClear += 2;
 
-                if (!this.mBlank) {
+                if (!this.mBlank && this.mBrowser.userTypedValue != BROWSER_NEW_TAB_URL) {
                   if (!(aStateFlags & nsIWebProgressListener.STATE_RESTORING)) {
                     this.mTab.setAttribute("busy", "true");
                     this.mTabBrowser.setTabTitleLoading(this.mTab);
@@ -1602,7 +1602,7 @@
             aTab.closing = true;
             this._removingTabs.push(aTab);
             if (newTab)
-              this.addTab("about:blank", {skipAnimation: true});
+              this.addTab(BROWSER_NEW_TAB_URL, {skipAnimation: true});
             else
               this.tabContainer.updateVisibility();
 
