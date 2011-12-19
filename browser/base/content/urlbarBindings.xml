@@ -69,10 +69,6 @@
         </xul:hbox>
         <children includes="hbox"/>
       </xul:hbox>
-      <xul:dropmarker anonid="historydropmarker"
-                      class="autocomplete-history-dropmarker urlbar-history-dropmarker"
-                      allowevents="true"
-                      xbl:inherits="open,enablehistory,parentfocused=focused"/>
       <xul:popupset anonid="popupset"
                     class="autocomplete-result-popupset"/>
       <children includes="toolbarbutton"/>

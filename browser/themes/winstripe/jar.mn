@@ -48,7 +48,6 @@ browser.jar:
         skin/classic/browser/monitor_16-10.png
         skin/classic/browser/urlbar-arrow.png
         skin/classic/browser/urlbar-popup-blocked.png
-        skin/classic/browser/urlbar-history-dropmarker.png
         skin/classic/browser/downloads/buttons.png                   (downloads/buttons.png)
         skin/classic/browser/downloads/buttons-inverted.png          (downloads/buttons-inverted.png)
         skin/classic/browser/downloads/download-glow.png             (downloads/download-glow.png)
@@ -210,7 +209,6 @@ browser.jar:
         skin/classic/aero/browser/monitor_16-10.png
         skin/classic/aero/browser/urlbar-arrow.png
         skin/classic/aero/browser/urlbar-popup-blocked.png
-        skin/classic/aero/browser/urlbar-history-dropmarker.png
         skin/classic/aero/browser/downloads/buttons.png              (downloads/buttons-aero.png)
         skin/classic/aero/browser/downloads/buttons-inverted.png     (downloads/buttons-inverted.png)
         skin/classic/aero/browser/downloads/download-glow.png        (downloads/download-glow-aero.png)

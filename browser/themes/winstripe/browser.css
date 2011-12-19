@@ -1462,33 +1462,6 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
   -moz-margin-end: 3px;
 }
 
-/* Location bar dropmarker */
-
-.urlbar-history-dropmarker {
-  -moz-appearance: none;
-  padding: 0 3px;
-  background-color: transparent;
-  border: none;
-  width: auto;
-  list-style-image: url("chrome://browser/skin/urlbar-history-dropmarker.png");
-  -moz-image-region: rect(0px, 11px, 14px, 0px);
-}
-
-.urlbar-history-dropmarker:-moz-system-metric(touch-enabled) {
-  min-width: 6.4mozmm;
-}
-
-.urlbar-history-dropmarker:hover {
-  background-image: -moz-radial-gradient(center, circle closest-side, hsla(205,100%,70%,.3), hsla(205,100%,70%,0));
-  -moz-image-region: rect(0px, 22px, 14px, 11px);
-}
-
-.urlbar-history-dropmarker:hover:active,
-.urlbar-history-dropmarker[open="true"] {
-  background-image: -moz-radial-gradient(center, circle closest-side, hsla(205,100%,70%,.1), hsla(205,100%,70%,0));
-  -moz-image-region: rect(0px, 33px, 14px, 22px);
-}
-
 /* autocomplete */
 
 #treecolAutoCompleteImage {

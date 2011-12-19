@@ -1137,18 +1137,6 @@ toolbar[mode="icons"] #zoom-in-button {
   padding: 3px 0 2px;
 }
 
-.urlbar-history-dropmarker {
-  padding: 0 3px;
-  list-style-image: url("chrome://browser/skin/urlbar-history-dropmarker.png");
-  -moz-image-region: rect(0px, 11px, 14px, 0px);
-}
-
-.urlbar-history-dropmarker[open="true"],
-.urlbar-history-dropmarker:hover:active {
-  -moz-image-region: rect(0px, 22px, 14px, 11px);
-  background-image: -moz-radial-gradient(center, circle closest-side, hsla(205,100%,70%,.3), hsla(205,100%,70%,0));
-}
-
 #urlbar-icons {
   -moz-box-align: center;
 }
