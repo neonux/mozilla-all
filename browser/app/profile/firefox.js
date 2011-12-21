@@ -394,6 +394,7 @@ pref("browser.tabs.loadBookmarksInBackground", false);
 pref("browser.tabs.tabClipWidth", 140);
 pref("browser.tabs.animate", true);
 pref("browser.tabs.drawInTitlebar", true);
+pref("browser.tabs.cropRedundancyInTitles", true);
 
 // Where to show tab close buttons:
 // 0  on active tab only
@@ -1099,6 +1100,12 @@ pref("browser.menu.showCharacterEncoding", "chrome://browser/locale/browser.prop
 pref("prompts.tab_modal.enabled", true);
 // Whether the Panorama should animate going in/out of tabs
 pref("browser.panorama.animate_zoom", true);
+
+// Defines the url to be used for new tabs.
+pref("browser.newtab.url", "about:newtab");
+
+// Toggles the content of 'about:newtab'. Shows the grid when enabled.
+pref("browser.newtabpage.enabled", true);
 
 // Enable the DOM full-screen API.
 pref("full-screen-api.enabled", true);
