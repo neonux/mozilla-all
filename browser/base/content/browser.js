@@ -81,7 +81,6 @@ const nsIWebNavigation = Ci.nsIWebNavigation;
 var gCharsetMenu = null;
 var gLastBrowserCharset = null;
 var gPrevCharset = null;
-var gProxyFavIcon = null;
 var gLastValidURLStr = "";
 var gInPrintPreviewMode = false;
 var gDownloadMgr = null;
@@ -174,6 +173,13 @@ XPCOMUtils.defineLazyGetter(this, "PopupNotifications", function () {
   }
 });
 
+XPCOMUtils.defineLazyGetter(this, "BROWSER_NEW_TAB_URL", function () {
+  return gPrefService.getCharPref("browser.newtab.url", "about:blank");
+});
+
+XPCOMUtils.defineLazyModuleGetter(this, "NewTabUtils",
+  "resource:///modules/NewTabUtils.jsm");
+
 XPCOMUtils.defineLazyGetter(this, "InspectorUI", function() {
   let tmp = {};
   Cu.import("resource:///modules/inspector.jsm", tmp);
@@ -188,6 +194,7 @@ XPCOMUtils.defineLazyGetter(this, "Tilt", function() {
 
 let gInitialPages = [
   "about:blank",
+  "about:newtab",
   "about:privatebrowsing",
   "about:sessionrestore"
 ];
@@ -196,6 +203,7 @@ let gInitialPages = [
 #include browser-places.js
 #include browser-tabPreviews.js
 #include browser-tabview.js
+#include browser-thumbnails.js
 
 #ifdef MOZ_SERVICES_SYNC
 #include browser-syncui.js
@@ -1356,6 +1364,13 @@ function BrowserStartup() {
     goSetCommandEnabled("cmd_newNavigatorTab", false);
   }
 
+  let (id = "new-tab-button", tc = gBrowser.tabContainer)
+    document.getElementById("TabsToolbar").insertItem(id, tc.nextSibling) |
+    document.getElementById(id).removeAttribute("removable") |
+    tc.__defineGetter__("_usingClosingTabsSpacer", function() !!this.__ucts) |
+    tc.__defineSetter__("_usingClosingTabsSpacer",
+      function(val) this.setAttribute("hasspacer", this.__ucts = !!val));
+
 #ifdef MENUBAR_CAN_AUTOHIDE
   updateAppButtonDisplay();
 #endif
@@ -1371,6 +1386,8 @@ function BrowserStartup() {
   TabsInTitlebar.init();
 
   gPrivateBrowsingUI.init();
+
+  DownloadsButton.initializePlaceholder();
 
   retrieveToolbarIconsizesFromTheme();
 
@@ -1655,6 +1672,11 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
     }
   }, 10000);
 
+  // We can initialize the downloads indicator here in delayedStartup() because
+  // it is initially invisible, at least until the download manager is started,
+  // thus no flickering occurs when we set its position.
+  DownloadsButton.initializeIndicator();
+
 #ifndef XP_MACOSX
   updateEditUIVisibility();
   let placesContext = document.getElementById("placesContext");
@@ -1695,6 +1717,8 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
   gSyncUI.init();
 #endif
 
+  Thumbnails.init();
+  NewTabUtils.init();
   TabView.init();
 
   // Enable Inspector?
@@ -2179,7 +2203,7 @@ function openLocation() {
     else {
       // If there are no open browser windows, open a new one
       win = window.openDialog("chrome://browser/content/", "_blank",
-                              "chrome,all,dialog=no", "about:blank");
+                              "chrome,all,dialog=no", BROWSER_NEW_TAB_URL);
       win.addEventListener("load", openLocationCallback, false);
     }
     return;
@@ -2197,7 +2221,7 @@ function openLocationCallback()
 
 function BrowserOpenTab()
 {
-  openUILinkIn("about:blank", "tab");
+  openUILinkIn(BROWSER_NEW_TAB_URL, "tab");
 }
 
 /* Called from the openLocation dialog. This allows that dialog to instruct
@@ -2612,39 +2636,16 @@ function SetPageProxyState(aState)
   if (!gURLBar)
     return;
 
-  if (!gProxyFavIcon)
-    gProxyFavIcon = document.getElementById("page-proxy-favicon");
-
   gURLBar.setAttribute("pageproxystate", aState);
-  gProxyFavIcon.setAttribute("pageproxystate", aState);
 
   // the page proxy state is set to valid via OnLocationChange, which
   // gets called when we switch tabs.
   if (aState == "valid") {
     gLastValidURLStr = gURLBar.value;
     gURLBar.addEventListener("input", UpdatePageProxyState, false);
-
-    PageProxySetIcon(gBrowser.getIcon());
   } else if (aState == "invalid") {
     gURLBar.removeEventListener("input", UpdatePageProxyState, false);
-    PageProxyClearIcon();
   }
-}
-
-function PageProxySetIcon (aURL)
-{
-  if (!gProxyFavIcon)
-    return;
-
-  if (!aURL)
-    PageProxyClearIcon();
-  else if (gProxyFavIcon.getAttribute("src") != aURL)
-    gProxyFavIcon.setAttribute("src", aURL);
-}
-
-function PageProxyClearIcon ()
-{
-  gProxyFavIcon.removeAttribute("src");
 }
 
 function PageProxyClickHandler(aEvent)
@@ -2831,7 +2832,7 @@ function getMeOutOfHere() {
   // Get the start page from the *default* pref branch, not the user's
   var prefs = Cc["@mozilla.org/preferences-service;1"]
              .getService(Ci.nsIPrefService).getDefaultBranch(null);
-  var url = "about:blank";
+  var url = BROWSER_NEW_TAB_URL;
   try {
     url = prefs.getComplexValue("browser.startup.homepage",
                                 Ci.nsIPrefLocalizedString).data;
@@ -3207,29 +3208,6 @@ var newWindowButtonObserver = {
       // allow third-party services to fixup this URL
       openNewWindowWith(url, null, postData.value, true);
     }
-  }
-}
-
-var DownloadsButtonDNDObserver = {
-  onDragOver: function (aEvent)
-  {
-    var types = aEvent.dataTransfer.types;
-    if (types.contains("text/x-moz-url") ||
-        types.contains("text/uri-list") ||
-        types.contains("text/plain"))
-      aEvent.preventDefault();
-  },
-
-  onDragExit: function (aEvent)
-  {
-  },
-
-  onDrop: function (aEvent)
-  {
-    let name = { };
-    let url = browserDragAndDrop.drop(aEvent, name);
-    if (url)
-      saveURL(url, name, null, true, true);
   }
 }
 
@@ -3655,6 +3633,7 @@ function BrowserCustomizeToolbar()
 
   PlacesToolbarHelper.customizeStart();
   BookmarksMenuButton.customizeStart();
+  DownloadsButton.customizeStart();
 
   TabsInTitlebar.allowedBy("customizing-toolbars", false);
 
@@ -3703,7 +3682,6 @@ function BrowserToolboxCustomizeDone(aToolboxChanged) {
   if (aToolboxChanged) {
     gURLBar = document.getElementById("urlbar");
 
-    gProxyFavIcon = document.getElementById("page-proxy-favicon");
     gHomeButton.updateTooltip();
     gIdentityHandler._cacheElements();
     window.XULBrowserWindow.init();
@@ -3721,6 +3699,7 @@ function BrowserToolboxCustomizeDone(aToolboxChanged) {
 
   PlacesToolbarHelper.customizeDone();
   BookmarksMenuButton.customizeDone();
+  DownloadsButton.customizeDone();
 
   // The url bar splitter state is dependent on whether stop/reload
   // and the location bar are combined, so we need this ordering
@@ -4501,11 +4480,6 @@ var XULBrowserWindow = {
     return "_blank";
   },
 
-  onLinkIconAvailable: function (aIconURL) {
-    if (gProxyFavIcon && gBrowser.userTypedValue === null)
-      PageProxySetIcon(aIconURL); // update the favicon in the URL bar
-  },
-
   onProgressChange: function (aWebProgress, aRequest,
                               aCurSelfProgress, aMaxSelfProgress,
                               aCurTotalProgress, aMaxTotalProgress) {
@@ -5145,7 +5119,7 @@ nsBrowserAccess.prototype = {
       case Ci.nsIBrowserDOMWindow.OPEN_NEWWINDOW :
         // FIXME: Bug 408379. So how come this doesn't send the
         // referrer like the other loads do?
-        var url = aURI ? aURI.spec : "about:blank";
+        var url = aURI ? aURI.spec : BROWSER_NEW_TAB_URL;
         // Pass all params to openDialog to ensure that "url" isn't passed through
         // loadOneOrMoreURIs, which splits based on "|"
         newWindow = openDialog(getBrowserURL(), "_blank", "all,dialog=no", url, null, null, null);
@@ -5178,7 +5152,7 @@ nsBrowserAccess.prototype = {
         let loadInBackground = gPrefService.getBoolPref("browser.tabs.loadDivertedInBackground");
         let referrer = aOpener ? makeURI(aOpener.location.href) : null;
 
-        let tab = win.gBrowser.loadOneTab(aURI ? aURI.spec : "about:blank", {
+        let tab = win.gBrowser.loadOneTab(aURI ? aURI.spec : BROWSER_NEW_TAB_URL, {
                                           referrerURI: referrer,
                                           fromExternal: isExternal,
                                           inBackground: loadInBackground});
@@ -7719,9 +7693,11 @@ function undoCloseWindow(aIndex) {
  */
 function isTabEmpty(aTab) {
   let browser = aTab.linkedBrowser;
+  let uri = browser.currentURI.spec;
+  let body = browser.contentDocument.body;
   return browser.sessionHistory.count < 2 &&
-         browser.currentURI.spec == "about:blank" &&
-         !browser.contentDocument.body.hasChildNodes() &&
+         (uri == "about:blank" || uri == BROWSER_NEW_TAB_URL) &&
+         (!body || !body.hasChildNodes()) &&
          !aTab.hasAttribute("busy");
 }
 
@@ -8146,16 +8122,72 @@ var gIdentityHandler = {
     if (gURLBar.getAttribute("pageproxystate") != "valid")
       return;
 
-    var value = content.location.href;
-    var urlString = value + "\n" + content.document.title;
-    var htmlString = "<a href=\"" + value + "\">" + value + "</a>";
+    let value = content.location.href;
+    let urlString = value + "\n" + content.document.title;
+    let htmlString = "<a href=\"" + value + "\">" + value + "</a>";
 
-    var dt = event.dataTransfer;
+    let dt = event.dataTransfer;
     dt.setData("text/x-moz-url", urlString);
     dt.setData("text/uri-list", value);
     dt.setData("text/plain", value);
     dt.setData("text/html", htmlString);
-    dt.setDragImage(gProxyFavIcon, 16, 16);
+
+    const HTML_NS = "http://www.w3.org/1999/xhtml";
+    // XXX I need to see how necessary these calls to .save() are.
+    let canvas = document.createElementNS(HTML_NS, "canvas");
+    let ctx = canvas.getContext("2d");
+
+    // XXX I'm not happy with the hardcoded styling here.
+    ctx.font = "12px Segoe UI, Helvetica, sans-serif";
+    let text = content.document.title ? content.document.title : content.document.location;
+    let textWidth = ctx.measureText(text).width;
+    let textOffset = 20;
+    const iconAndPaddingWidth = 24;
+    const dragImageWidth = textWidth + iconAndPaddingWidth;
+    canvas.setAttribute("width", dragImageWidth);
+    canvas.setAttribute("height", 20);
+
+    ctx.fillStyle = "-moz-Dialog";
+    ctx.fillRect(0, 0, dragImageWidth, 20);
+    ctx.save();
+
+    var ioService = Cc["@mozilla.org/network/io-service;1"]
+                      .getService(Ci.nsIIOService);
+    try {
+      let iconURL = ioService.newURI(gBrowser.getIcon(), null, null);
+      let faviconService = Cc["@mozilla.org/browser/favicon-service;1"]
+                             .getService(Ci.nsIFaviconService);
+      // XXX This is broken for chrome:// URLs.
+      let iconAsDataURL = faviconService.getFaviconDataAsDataURL(iconURL);
+      dump("\n\n" + iconAsDataURL + "\n\n");
+      let favicon = new Image();
+      favicon.src = iconAsDataURL;
+      // XXX For some reason, the favicon doesn't get drawn to the canvas the
+      // first (and sometimes second) time that this function is called on a page,
+      // although the data URL is exactly the same each time. The third and subsequent
+      // times this function is called will result in the favicon being drawn.
+      ctx.drawImage(favicon, 2, 2, 16, 16);
+      ctx.save();
+    } catch (e) {
+      //if (e == "NS_ERROR_NOT_AVAILABLE") {
+      //  iconURL = ioService.newURI(faviconService.defaultFavicon, null, null);
+      //  iconAsDataURL = faviconService.getFaviconDataAsDataURL(iconURL);
+      //}
+      const reducedDragImageWidth = dragImageWidth - 18;
+      textOffset -= 18;
+      canvas.setAttribute("width", reducedDragImageWidth);
+      ctx.fillStyle = "-moz-Dialog";
+      ctx.fillRect(0, 0, reducedDragImageWidth, 20);
+      ctx.save();
+    }
+
+    ctx.fillStyle = "GrayText";
+    // XXX I'm not happy with the hardcoded styling here.
+    ctx.font = "12px Segoe UI, Helvetica, sans-serif";
+    ctx.fillText(text, textOffset, 16);
+    ctx.save();
+
+    dt.setDragImage(canvas, 16, 16);
   }
 };
 

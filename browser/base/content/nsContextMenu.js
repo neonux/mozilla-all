@@ -1481,3 +1481,44 @@ nsContextMenu.prototype = {
     return "";
   }
 };
+
+#ifdef XP_MACOSX
+function selectContext(event) {
+  // Keep existing selection only if click is inside it.
+  let box = gBrowser.selectedBrowser.boxObject;
+  let x = event.screenX - box.screenX, y = event.screenY - box.screenY;
+  let clickIsInside = function(rect)
+    x >= rect.left && x <= rect.left + rect.width &&
+    y >= rect.top && y <= rect.top + rect.height;
+  let selection = document.commandDispatcher.focusedWindow.getSelection();
+  for (let i = 0; i < selection.rangeCount; ++i)
+    if (Array.some(selection.getRangeAt(i).getClientRects(), clickIsInside))
+      return;
+  selection.removeAllRanges();
+
+  // If click is on text, select word(s).
+  let node = document.popupNode, range = document.createRange();
+  if (function clickIsOnText(node) {
+    if (node.nodeType == Node.TEXT_NODE) {
+      range.selectNodeContents(node);
+      return Array.some(range.getClientRects(), clickIsInside);
+    }
+    return Array.some(node.childNodes, clickIsOnText);
+  }(node)) {
+    // If click is on text in link, select link contents.
+    do {
+      if (node instanceof HTMLAnchorElement && node.href) {
+        range.selectNodeContents(node);
+        selection.addRange(range);
+        return;
+      }
+    } while (node = node.parentNode);
+    addEventListener("mousedown", function suppressHandlers(event) {
+      removeEventListener("mousedown", suppressHandlers, true);
+      event.stopPropagation();
+    }, true);
+    QueryInterface(Ci.nsIInterfaceRequestor).getInterface(Ci.nsIDOMWindowUtils).
+    sendMouseEvent("mousedown", event.clientX, event.clientY, 0, 2, 0);
+  }
+}
+#endif
