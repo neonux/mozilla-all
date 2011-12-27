@@ -299,7 +299,7 @@ function openLinkIn(url, where, params) {
   else
     w.gBrowser.selectedBrowser.focus();
 
-  if (!loadInBackground && (url == "about:blank" || url == BROWSER_NEW_TAB_URL))
+  if (!loadInBackground && url == "about:blank")
     w.focusAndSelectUrlBar();
 }
 
