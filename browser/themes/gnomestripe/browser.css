@@ -948,6 +948,10 @@ toolbar[iconsize="small"] #feed-button {
   -moz-box-align: stretch;
 }
 
+.urlbar-history-dropmarker {
+  -moz-appearance: toolbarbutton-dropdown;
+}
+
 #urlbar-container {
   -moz-box-orient: horizontal;
   -moz-box-align: stretch;
