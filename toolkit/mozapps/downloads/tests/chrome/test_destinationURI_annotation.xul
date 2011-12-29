@@ -97,6 +97,12 @@ let downloadListener = {
 };
 
 function init() {
+  // Ensure that the download manager callbacks always display the window UI
+  // instead of the panel in the browser's window
+  Cc["@mozilla.org/preferences-service;1"].
+    getService(Ci.nsIPrefBranch).
+    setBoolPref("browser.download.manager.useWindowUI", true);
+
   ww.registerNotification(windowObserver);
   PlacesUtils.annotations.addObserver(annoObserver, false);
   dm.addListener(downloadListener);
@@ -143,6 +149,10 @@ function endTest() {
     .getService(Ci.nsIWindowMediator)
     .getMostRecentWindow("Download:Manager")
     .close();
+
+  Cc["@mozilla.org/preferences-service;1"].
+    getService(Ci.nsIPrefBranch).
+    clearUserPref("browser.download.manager.useWindowUI");
 
   waitForClearHistory(SimpleTest.finish);
 }

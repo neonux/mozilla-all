@@ -39,10 +39,6 @@ function testPopupUI(win) {
   isnot(doc.getElementById("Browser:OpenLocation").getAttribute("disabled"), "true",
      "'open location' command is not disabled in the popup");
 
-  let historyButton = doc.getAnonymousElementByAttribute(win.gURLBar, "anonid",
-                                                         "historydropmarker");
-  is(historyButton.clientWidth, 0, "history dropdown button is hidden in the popup");
-
   EventUtils.synthesizeKey("t", { accelKey: true }, win);
   is(win.gBrowser.browsers.length, 1, "Accel+T doesn't open a new tab in the popup");
 
