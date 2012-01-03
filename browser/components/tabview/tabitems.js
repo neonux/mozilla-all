@@ -215,8 +215,6 @@ TabItem.prototype = Utils.extend(new Item(), new Subscribable(), {
       title = tabData.url;
     }
     this.$tabTitle.text(label).attr("title", title);
-    if ("_originalTitle" in tabData)
-      this._originalTitle = tabData._originalTitle;
 
     this._sendToSubscribers("showingCachedData");
   },
@@ -240,8 +238,6 @@ TabItem.prototype = Utils.extend(new Item(), new Subscribable(), {
       groupID: (this.parent ? this.parent.id : 0),
       title: this.tab.label
     };
-    if (this.tab._originalTitle != undefined)
-      data["_originalTitle"] = this.tab._originalTitle;
     if (this.parent && this.parent.getActiveTab() == this)
       data.active = true;
 
