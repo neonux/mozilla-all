@@ -360,14 +360,6 @@ interface nsIEditor  : nsISupports
   /** sets the document selection to the end of the document */
   void endOfDocument();
 
-   /* ------------ Drag/Drop methods -------------- */
-
-   /** 
-    * insertFromDrop looks for a dragsession and inserts the
-    * relevant data in response to a drop.
-    */
-  void insertFromDrop(in nsIDOMEvent aEvent);
-
   /* ------------ Node manipulation methods -------------- */
 
   /**

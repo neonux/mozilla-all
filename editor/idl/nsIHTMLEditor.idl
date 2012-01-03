@@ -199,14 +199,6 @@ interface nsIHTMLEditor : nsISupports
    */
   void decreaseFontSize();
 
-  /* ------------ Drag/Drop methods -------------- */
-
-  /** 
-   * insertFromDrop looks for a dragsession and inserts the
-   * relevant data in response to a drop.
-   */
-  void insertFromDrop(in nsIDOMEvent aEvent);
-
   /* ------------ HTML content methods -------------- */
 
   /**
