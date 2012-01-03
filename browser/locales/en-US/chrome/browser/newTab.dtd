@@ -1,5 +1,0 @@
-<!ENTITY % brandDTD
-    SYSTEM "chrome://branding/locale/brand.dtd">
-  %brandDTD;
-
-<!-- These strings are used in the about:newtab page -->
