@@ -81,6 +81,7 @@ const nsIWebNavigation = Ci.nsIWebNavigation;
 var gCharsetMenu = null;
 var gLastBrowserCharset = null;
 var gPrevCharset = null;
+var gProxyFavIcon = null;
 var gLastValidURLStr = "";
 var gInPrintPreviewMode = false;
 var gDownloadMgr = null;
@@ -2636,16 +2637,39 @@ function SetPageProxyState(aState)
   if (!gURLBar)
     return;
 
+  if (!gProxyFavIcon)
+    gProxyFavIcon = document.getElementById("page-proxy-favicon");
+
   gURLBar.setAttribute("pageproxystate", aState);
+  gProxyFavIcon.setAttribute("pageproxystate", aState);
 
   // the page proxy state is set to valid via OnLocationChange, which
   // gets called when we switch tabs.
   if (aState == "valid") {
     gLastValidURLStr = gURLBar.value;
     gURLBar.addEventListener("input", UpdatePageProxyState, false);
+
+    PageProxySetIcon(gBrowser.getIcon());
   } else if (aState == "invalid") {
     gURLBar.removeEventListener("input", UpdatePageProxyState, false);
+    PageProxyClearIcon();
   }
+}
+
+function PageProxySetIcon (aURL)
+{
+  if (!gProxyFavIcon)
+    return;
+
+  if (!aURL)
+    PageProxyClearIcon();
+  else if (gProxyFavIcon.getAttribute("src") != aURL)
+    gProxyFavIcon.setAttribute("src", aURL);
+}
+
+function PageProxyClearIcon ()
+{
+  gProxyFavIcon.removeAttribute("src");
 }
 
 function PageProxyClickHandler(aEvent)
@@ -3682,6 +3706,7 @@ function BrowserToolboxCustomizeDone(aToolboxChanged) {
   if (aToolboxChanged) {
     gURLBar = document.getElementById("urlbar");
 
+    gProxyFavIcon = document.getElementById("page-proxy-favicon");
     gHomeButton.updateTooltip();
     gIdentityHandler._cacheElements();
     window.XULBrowserWindow.init();
@@ -4478,6 +4503,11 @@ var XULBrowserWindow = {
       return originalTarget;
 
     return "_blank";
+  },
+
+  onLinkIconAvailable: function (aIconURL) {
+    if (gProxyFavIcon && gBrowser.userTypedValue === null)
+      PageProxySetIcon(aIconURL); // update the favicon in the URL bar
   },
 
   onProgressChange: function (aWebProgress, aRequest,
@@ -8122,72 +8152,16 @@ var gIdentityHandler = {
     if (gURLBar.getAttribute("pageproxystate") != "valid")
       return;
 
-    let value = content.location.href;
-    let urlString = value + "\n" + content.document.title;
-    let htmlString = "<a href=\"" + value + "\">" + value + "</a>";
+    var value = content.location.href;
+    var urlString = value + "\n" + content.document.title;
+    var htmlString = "<a href=\"" + value + "\">" + value + "</a>";
 
-    let dt = event.dataTransfer;
+    var dt = event.dataTransfer;
     dt.setData("text/x-moz-url", urlString);
     dt.setData("text/uri-list", value);
     dt.setData("text/plain", value);
     dt.setData("text/html", htmlString);
-
-    const HTML_NS = "http://www.w3.org/1999/xhtml";
-    // XXX I need to see how necessary these calls to .save() are.
-    let canvas = document.createElementNS(HTML_NS, "canvas");
-    let ctx = canvas.getContext("2d");
-
-    // XXX I'm not happy with the hardcoded styling here.
-    ctx.font = "12px Segoe UI, Helvetica, sans-serif";
-    let text = content.document.title ? content.document.title : content.document.location;
-    let textWidth = ctx.measureText(text).width;
-    let textOffset = 20;
-    const iconAndPaddingWidth = 24;
-    const dragImageWidth = textWidth + iconAndPaddingWidth;
-    canvas.setAttribute("width", dragImageWidth);
-    canvas.setAttribute("height", 20);
-
-    ctx.fillStyle = "-moz-Dialog";
-    ctx.fillRect(0, 0, dragImageWidth, 20);
-    ctx.save();
-
-    var ioService = Cc["@mozilla.org/network/io-service;1"]
-                      .getService(Ci.nsIIOService);
-    try {
-      let iconURL = ioService.newURI(gBrowser.getIcon(), null, null);
-      let faviconService = Cc["@mozilla.org/browser/favicon-service;1"]
-                             .getService(Ci.nsIFaviconService);
-      // XXX This is broken for chrome:// URLs.
-      let iconAsDataURL = faviconService.getFaviconDataAsDataURL(iconURL);
-      dump("\n\n" + iconAsDataURL + "\n\n");
-      let favicon = new Image();
-      favicon.src = iconAsDataURL;
-      // XXX For some reason, the favicon doesn't get drawn to the canvas the
-      // first (and sometimes second) time that this function is called on a page,
-      // although the data URL is exactly the same each time. The third and subsequent
-      // times this function is called will result in the favicon being drawn.
-      ctx.drawImage(favicon, 2, 2, 16, 16);
-      ctx.save();
-    } catch (e) {
-      //if (e == "NS_ERROR_NOT_AVAILABLE") {
-      //  iconURL = ioService.newURI(faviconService.defaultFavicon, null, null);
-      //  iconAsDataURL = faviconService.getFaviconDataAsDataURL(iconURL);
-      //}
-      const reducedDragImageWidth = dragImageWidth - 18;
-      textOffset -= 18;
-      canvas.setAttribute("width", reducedDragImageWidth);
-      ctx.fillStyle = "-moz-Dialog";
-      ctx.fillRect(0, 0, reducedDragImageWidth, 20);
-      ctx.save();
-    }
-
-    ctx.fillStyle = "GrayText";
-    // XXX I'm not happy with the hardcoded styling here.
-    ctx.font = "12px Segoe UI, Helvetica, sans-serif";
-    ctx.fillText(text, textOffset, 16);
-    ctx.save();
-
-    dt.setDragImage(canvas, 16, 16);
+    dt.setDragImage(gProxyFavIcon, 16, 16);
   }
 };
 

@@ -938,7 +938,6 @@ toolbar[iconsize="small"] #feed-button {
   min-width: 7em;
   -moz-appearance: textfield;
   padding: 0;
-  height: 26px;
 }
 
 .urlbar-textbox-container {
@@ -1022,20 +1021,34 @@ toolbar[iconsize="small"] #feed-button {
   color: GrayText;
 }
 
-/* Identity indicator */
-#identity-box {
-  visibility: collapse;
+/* Favicon */
+#page-proxy-favicon {
+  width: 16px;
+  height: 16px;
 }
 
-#identity-box:-moz-any(.verifiedIdentity, .verifiedDomain) {
+#page-proxy-stack {
+  width: 24px;
+  height: 20px;
+  padding: 2px 4px;
+}
+
+#page-proxy-favicon:not([src]) {
+  list-style-image: url("chrome://mozapps/skin/places/defaultFavicon.png");
+}
+
+#page-proxy-favicon[pageproxystate="invalid"] {
+  opacity: 0.3;
+}
+
+/* Identity indicator */
+#identity-box {
   background-image: -moz-linear-gradient(hsl(0,0%,98%), hsl(0,0%,92%));
   box-shadow: 0 1px 0 hsla(0,0%,0%,.05) inset;
   -moz-border-end: 1px solid rgba(0,0,0,.1);
   padding: 1px;
-  -moz-padding-start: 4px;
   margin: -1px;
   -moz-margin-end: 0;
-  visibility: visible;
 }
 
 #identity-box:-moz-locale-dir(ltr) {
