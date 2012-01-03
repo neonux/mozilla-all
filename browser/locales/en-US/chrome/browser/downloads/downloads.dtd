@@ -1,0 +1,30 @@
+<!-- LOCALIZATION NOTE (downloads.title):
+     This labels the panel for assistive technologies like screen readers.
+     -->
+<!ENTITY downloads.title                  "Downloads">
+
+<!ENTITY cmd.pause.label                  "Pause">
+<!ENTITY cmd.pause.accesskey              "P">
+<!ENTITY cmd.resume.label                 "Resume">
+<!ENTITY cmd.resume.accesskey             "R">
+<!ENTITY cmd.cancel.label                 "Cancel">
+<!ENTITY cmd.cancel.accesskey             "C">
+<!-- LOCALIZATION NOTE (cmd.show.label, cmd.show.accesskey, cmd.showMac.label,
+     cmd.showMac.accesskey):
+     The show and showMac commands are never shown together, thus they can share
+     the same access key (though the two access keys can also be different).
+     -->
+<!ENTITY cmd.show.label                   "Open Containing Folder">
+<!ENTITY cmd.show.accesskey               "F">
+<!ENTITY cmd.showMac.label                "Show In Finder">
+<!ENTITY cmd.showMac.accesskey            "F">
+<!ENTITY cmd.retry.label                  "Retry">
+<!ENTITY cmd.goToDownloadPage.label       "Go To Download Page">
+<!ENTITY cmd.goToDownloadPage.accesskey   "G">
+<!ENTITY cmd.copyDownloadLink.label       "Copy Download Link">
+<!ENTITY cmd.copyDownloadLink.accesskey   "L">
+<!ENTITY cmd.removeFromList.label         "Remove From List">
+<!ENTITY cmd.removeFromList.accesskey     "e">
+
+<!ENTITY downloadshistory.label           "Show Downloads History">
+<!ENTITY downloadshistory.accesskey       "S">
