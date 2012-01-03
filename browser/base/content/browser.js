@@ -173,9 +173,6 @@ XPCOMUtils.defineLazyGetter(this, "PopupNotifications", function () {
   }
 });
 
-XPCOMUtils.defineLazyModuleGetter(this, "NewTabUtils",
-  "resource:///modules/NewTabUtils.jsm");
-
 XPCOMUtils.defineLazyGetter(this, "InspectorUI", function() {
   let tmp = {};
   Cu.import("resource:///modules/inspector.jsm", tmp);
@@ -190,7 +187,6 @@ XPCOMUtils.defineLazyGetter(this, "Tilt", function() {
 
 let gInitialPages = [
   "about:blank",
-  "about:newtab",
   "about:privatebrowsing",
   "about:sessionrestore"
 ];
@@ -1718,7 +1714,6 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
 #endif
 
   Thumbnails.init();
-  NewTabUtils.init();
   TabView.init();
 
   // Enable Inspector?
@@ -2203,7 +2198,7 @@ function openLocation() {
     else {
       // If there are no open browser windows, open a new one
       win = window.openDialog("chrome://browser/content/", "_blank",
-                              "chrome,all,dialog=no", BROWSER_NEW_TAB_URL);
+                              "chrome,all,dialog=no", "about:blank");
       win.addEventListener("load", openLocationCallback, false);
     }
     return;
@@ -2221,7 +2216,7 @@ function openLocationCallback()
 
 function BrowserOpenTab()
 {
-  openUILinkIn(BROWSER_NEW_TAB_URL, "tab");
+  openUILinkIn("about:blank", "tab");
 }
 
 /* Called from the openLocation dialog. This allows that dialog to instruct
@@ -2556,7 +2551,7 @@ function URLBarSetURI(aURI) {
     else
       value = losslessDecodeURI(uri);
 
-    valid = !isNewTabURL(uri.spec);
+    valid = (uri.spec != "about:blank");
   }
 
   gURLBar.value = value;
@@ -2832,7 +2827,7 @@ function getMeOutOfHere() {
   // Get the start page from the *default* pref branch, not the user's
   var prefs = Cc["@mozilla.org/preferences-service;1"]
              .getService(Ci.nsIPrefService).getDefaultBranch(null);
-  var url = BROWSER_NEW_TAB_URL;
+  var url = "about:blank";
   try {
     url = prefs.getComplexValue("browser.startup.homepage",
                                 Ci.nsIPrefLocalizedString).data;
@@ -5119,7 +5114,7 @@ nsBrowserAccess.prototype = {
       case Ci.nsIBrowserDOMWindow.OPEN_NEWWINDOW :
         // FIXME: Bug 408379. So how come this doesn't send the
         // referrer like the other loads do?
-        var url = aURI ? aURI.spec : BROWSER_NEW_TAB_URL;
+        var url = aURI ? aURI.spec : "about:blank";
         // Pass all params to openDialog to ensure that "url" isn't passed through
         // loadOneOrMoreURIs, which splits based on "|"
         newWindow = openDialog(getBrowserURL(), "_blank", "all,dialog=no", url, null, null, null);
@@ -5152,7 +5147,7 @@ nsBrowserAccess.prototype = {
         let loadInBackground = gPrefService.getBoolPref("browser.tabs.loadDivertedInBackground");
         let referrer = aOpener ? makeURI(aOpener.location.href) : null;
 
-        let tab = win.gBrowser.loadOneTab(aURI ? aURI.spec : BROWSER_NEW_TAB_URL, {
+        let tab = win.gBrowser.loadOneTab(aURI ? aURI.spec : "about:blank", {
                                           referrerURI: referrer,
                                           fromExternal: isExternal,
                                           inBackground: loadInBackground});
@@ -7693,11 +7688,9 @@ function undoCloseWindow(aIndex) {
  */
 function isTabEmpty(aTab) {
   let browser = aTab.linkedBrowser;
-  let uri = browser.currentURI.spec;
-  let body = browser.contentDocument.body;
   return browser.sessionHistory.count < 2 &&
-         isNewTabURL(uri) &&
-         (!body || !body.hasChildNodes()) &&
+         browser.currentURI.spec == "about:blank" &&
+         !browser.contentDocument.body.hasChildNodes() &&
          !aTab.hasAttribute("busy");
 }
 
