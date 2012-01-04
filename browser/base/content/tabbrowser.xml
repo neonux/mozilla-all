@@ -637,7 +637,7 @@
                   autocomplete.unregisterOpenPage(this.mBrowser.registeredOpenURI);
                   delete this.mBrowser.registeredOpenURI;
                 }
-                if (aLocation.spec != "about:blank") {
+                if (!isNewTabURL(aLocation.spec)) {
                   autocomplete.registerOpenPage(aLocation);
                   this.mBrowser.registeredOpenURI = aLocation;
                 }
@@ -1070,7 +1070,7 @@
                 }
               }
 
-              if (title && title != "about:blank") {
+              if (title && !isNewTabURL(title)) {
                 // At this point, we now have a URI.
                 // Let's try to unescape it using a character set
                 // in case the URI is not ASCII.
@@ -1247,7 +1247,7 @@
               "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul",
                                              "tab");
 
-            var blank = !aURI || (aURI == "about:blank");
+            var blank = !aURI || isNewTabURL(aURI);
 
             if (blank)
               t.setAttribute("label", this.mStringBundle.getString("tabs.emptyTabTitle"));
@@ -1369,15 +1369,22 @@
             evt.initEvent("TabOpen", true, false);
             t.dispatchEvent(evt);
 
-            if (!blank) {
+            if (aURI && aURI != "about:blank") {
               // Stop the existing about:blank load.  Otherwise, if aURI
               // doesn't stop in-progress loads on its own, we'll get into
               // trouble with multiple parallel loads running at once.
               b.stop();
 
-              // pretend the user typed this so it'll be available till
-              // the document successfully loads
-              b.userTypedValue = aURI;
+              if (blank) {
+                // The progress listener received a stop status change. Reset
+                // the mBlank status to true to prevent the throbber from being
+                // shown when we're still loading a new tab URL.
+                tabListener.mBlank = true;
+              } else {
+                // pretend the user typed this so it'll be available till
+                // the document successfully loads
+                b.userTypedValue = aURI;
+              }
 
               let flags = Ci.nsIWebNavigation.LOAD_FLAGS_NONE;
               if (aAllowThirdPartyFixup)
@@ -1602,7 +1609,7 @@
             aTab.closing = true;
             this._removingTabs.push(aTab);
             if (newTab)
-              this.addTab("about:blank", {skipAnimation: true});
+              this.addTab(BROWSER_NEW_TAB_URL, {skipAnimation: true});
             else
               this.tabContainer.updateVisibility();
 
