@@ -1360,13 +1360,6 @@ function BrowserStartup() {
     goSetCommandEnabled("cmd_newNavigatorTab", false);
   }
 
-  let (id = "new-tab-button", tc = gBrowser.tabContainer)
-    document.getElementById("TabsToolbar").insertItem(id, tc.nextSibling) |
-    document.getElementById(id).removeAttribute("removable") |
-    tc.__defineGetter__("_usingClosingTabsSpacer", function() !!this.__ucts) |
-    tc.__defineSetter__("_usingClosingTabsSpacer",
-      function(val) this.setAttribute("hasspacer", this.__ucts = !!val));
-
 #ifdef MENUBAR_CAN_AUTOHIDE
   updateAppButtonDisplay();
 #endif
