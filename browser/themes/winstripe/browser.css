@@ -1212,6 +1212,8 @@ toolbar[mode="full"] .toolbarbutton-1 > .toolbarbutton-menubutton-button {
   width: 7em;
   min-width: 7em;
   -moz-padding-end: 2px;
+  height: 24px;
+  max-height: 24px;
 }
 
 @media all and (-moz-windows-default-theme) {
@@ -1342,6 +1344,12 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
   -moz-margin-end: 3px;
 }
 
+/* todo: fix this selector so the margin-start is only applied when the identity box is hidden.
+/*@conditionalForwardWithUrlbar@ + #urlbar-container > #urlbar > #identity-box:-moz-any(.unknownIdentity, .chromeUI) + #urlbar-display-box + .urlbar-input-box {*/
+/*@conditionalForwardWithUrlbar@ + #urlbar-container > #urlbar > #identity-box:-moz-any(.unknownIdentity, .chromeUI) + #urlbar-display-box +*/ .urlbar-input-box {
+  /*-moz-margin-start: 9px;*/
+}
+
 #urlbar-display {
   margin-top: 0;
   margin-bottom: 0;
@@ -1350,11 +1358,11 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
 
 /* identity box */
 
-#identity-box {
-  background-image: -moz-linear-gradient(hsl(0,0%,98%), hsl(0,0%,92%));
-  box-shadow: 0 1px 0 hsla(0,0%,0%,.05) inset;
-  -moz-border-end: 1px solid hsla(0,0%,0%,.1);
-  padding: 2px;
+@conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #identity-box {
+  padding: 3px 4px;
+  max-width: 0;
+  overflow: hidden;
+  -moz-margin-end: 4px;
 }
 
 #identity-box:-moz-locale-dir(ltr) {
@@ -1376,13 +1384,17 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
   border-radius: 0;
 }
 
+@conditionalForwardWithUrlbar@ + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box {
+  -moz-padding-start: 0;
+}
+
 @conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(ltr) {
-  padding-left: 5px;
+  padding-left: 9px;
   -moz-transition: padding-left;
 }
 
 @conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(rtl) {
-  padding-right: 5px;
+  padding-right: 9px;
   -moz-transition: padding-right;
 }
 
@@ -1393,23 +1405,19 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
 
 @conditionalForwardWithUrlbar@[forwarddisabled]:not(:hover) + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(ltr) {
   /* when not hovered anymore, trigger a new non-delayed transition to react to the forward button hiding */
-  padding-left: 5.01px;
+  padding-left: 9.01px;
 }
 
 @conditionalForwardWithUrlbar@[forwarddisabled]:not(:hover) + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(rtl) {
   /* when not hovered anymore, trigger a new non-delayed transition to react to the forward button hiding */
-  padding-right: 5.01px;
+  padding-right: 9.01px;
 }
 
-#identity-box:hover {
-  background-image: -moz-linear-gradient(hsl(0,0%,95%), hsl(0,0%,87%));
-}
-
-#identity-box[open="true"],
-#identity-box:hover:active {
-  background-image: -moz-linear-gradient(hsl(0,0%,92%), hsl(0,0%,82%));
-  box-shadow: 0 1px 1px hsla(0,0%,0%,.3) inset,
-              0 1px 3px hsla(0,0%,0%,.3) inset;
+@conditionalForwardWithUrlbar@ + #urlbar-container > #urlbar > #identity-box:-moz-any(.verifiedIdentity, .verifiedDomain) {
+  -moz-border-end: 1px solid hsla(0,0%,0%,.1);
+  max-width: none;
+  overflow: visible;
+  -moz-margin-end: 2px;
 }
 
 #identity-box.verifiedDomain {
@@ -1458,6 +1466,28 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
   -moz-margin-end: 3px;
 }
 
+/* Identity drag panel */
+
+#identity-drag-panel {
+  background-color: InfoBackground;
+  border: none;
+  pointer-events: none;
+  padding: 2px;
+  -moz-padding-start: 0;
+}
+
+#identity-drag-label {
+  background-image: -moz-element(#dragFavicon);
+  background-repeat: no-repeat;
+  background-position: left;
+  -moz-padding-start: 20px;
+  color: InfoText;
+}
+
+#identity-drag-label:-moz-locale-dir(rtl) {
+  background-position: right;
+}
+
 /* Location bar dropmarker */
 
 .urlbar-history-dropmarker {
@@ -1483,22 +1513,6 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
 .urlbar-history-dropmarker[open="true"] {
   background-image: -moz-radial-gradient(center, circle closest-side, hsla(205,100%,70%,.1), hsla(205,100%,70%,0));
   -moz-image-region: rect(0px, 33px, 14px, 22px);
-}
-
-/* page proxy icon */
-
-#page-proxy-favicon {
-  width: 16px;
-  height: 16px;
-  margin: 1px 4px;
-}
-
-#page-proxy-favicon:not([src]) {
-  list-style-image: url("chrome://mozapps/skin/places/defaultFavicon.png");
-}
-
-#page-proxy-favicon[pageproxystate="invalid"] {
-  opacity: 0.5;
 }
 
 /* autocomplete */
