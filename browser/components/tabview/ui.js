@@ -585,6 +585,24 @@ let UI = {
       TabItems.resumePainting();
     }
 
+    if (gBrowser.tabContainer._cropRedundancyInTitles) {
+      let tabSets = GroupItems.groupItems.map(function (groupitem) {
+        return groupitem._children.map(function (child) {
+          return child.tab;
+        });
+      });
+      tabSets.forEach(function (aTabSet) {
+        function buildSet (aEvent) {
+          gBrowser.tabContainer.adjustTheseTabTitles([aTabSet]);
+        }
+        aTabSet.forEach(function (aTab) {
+          if (aTab._tabViewTabItem)
+            aTab._tabViewTabItem.addSubscriber("showingCachedData", buildSet);
+        });
+      });
+      gBrowser.tabContainer.adjustTheseTabTitles(tabSets);
+    }
+
     if (gTabView.firstUseExperienced)
       gTabView.enableSessionRestore();
   },
