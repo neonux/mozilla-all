@@ -75,13 +75,16 @@ let initTable = [
   ["locale", "@mozilla.org/intl/nslocaleservice;1", "nsILocaleService"],
   ["logins", "@mozilla.org/login-manager;1", "nsILoginManager"],
   ["obs", "@mozilla.org/observer-service;1", "nsIObserverService"],
+  ["privateBrowsing", "@mozilla.org/privatebrowsing;1", "nsIPrivateBrowsingService"],
   ["perms", "@mozilla.org/permissionmanager;1", "nsIPermissionManager"],
   ["prompt", "@mozilla.org/embedcomp/prompt-service;1", "nsIPromptService"],
   ["scriptloader", "@mozilla.org/moz/jssubscript-loader;1", "mozIJSSubScriptLoader"],
+  ["scriptSecurityManager", "@mozilla.org/scriptsecuritymanager;1", "nsIScriptSecurityManager"],
 #ifdef MOZ_TOOLKIT_SEARCH
   ["search", "@mozilla.org/browser/search-service;1", "nsIBrowserSearchService"],
 #endif
   ["storage", "@mozilla.org/storage/service;1", "mozIStorageService"],
+  ["domStorageManager", "@mozilla.org/dom/storagemanager;1", "nsIDOMStorageManager"],
   ["strings", "@mozilla.org/intl/stringbundle;1", "nsIStringBundleService"],
   ["telemetry", "@mozilla.org/base/telemetry;1", "nsITelemetry"],
   ["tm", "@mozilla.org/thread-manager;1", "nsIThreadManager"],
