@@ -1520,9 +1520,9 @@ let PlacesControllerDragHelper = {
                data.ownerDocument.defaultView instanceof ChromeWindow) {
         let uri = data.linkedBrowser.currentURI;
         let spec = uri ? uri.spec : "about:blank";
-        let title = data.label;
+        let title = data._originalTitle ? data._originalTitle : data.label;
         unwrapped = { uri: spec,
-                      title: data.label,
+                      title: title,
                       type: PlacesUtils.TYPE_X_MOZ_URL};
       }
       else
