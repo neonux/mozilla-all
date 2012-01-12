@@ -27,6 +27,7 @@
 #   Ehsan Akhgari <ehsan.akhgari@gmail.com>
 #   Nils Maier <maierman@web.de>
 #   Robert Strong <robert.bugzilla@gmail.com>
+#   Paolo Amadini <http://www.amadzone.org/>
 #
 # Alternatively, the contents of this file may be used under the terms of
 # either the GNU General Public License Version 2 or later (the "GPL"), or
