@@ -52,6 +52,7 @@
 #include "nsServiceManagerUtils.h"
 
 #include "nsIDOMRange.h"
+#include "nsIDOMDOMStringList.h"
 #include "nsIDocumentEncoder.h"
 #include "nsISupportsPrimitives.h"
 
