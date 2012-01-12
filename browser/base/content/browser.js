@@ -195,7 +195,6 @@ let gInitialPages = [
 #include browser-places.js
 #include browser-tabPreviews.js
 #include browser-tabview.js
-#include browser-thumbnails.js
 
 #ifdef MOZ_SERVICES_SYNC
 #include browser-syncui.js
@@ -1706,7 +1705,6 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
   gSyncUI.init();
 #endif
 
-  gBrowserThumbnails.init();
   TabView.init();
 
   // Enable Inspector?
@@ -1819,7 +1817,6 @@ function BrowserShutdown() {
     gPrefService.removeObserver(allTabs.prefName, allTabs);
     ctrlTab.uninit();
     TabView.uninit();
-    gBrowserThumbnails.init();
 
     try {
       FullZoom.destroy();
