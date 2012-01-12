@@ -1108,11 +1108,5 @@ pref("prompts.tab_modal.enabled", true);
 // Whether the Panorama should animate going in/out of tabs
 pref("browser.panorama.animate_zoom", true);
 
-// Defines the url to be used for new tabs.
-pref("browser.newtab.url", "about:newtab");
-
-// Toggles the content of 'about:newtab'. Shows the grid when enabled.
-pref("browser.newtabpage.enabled", true);
-
 // Enable the DOM full-screen API.
 pref("full-screen-api.enabled", true);
