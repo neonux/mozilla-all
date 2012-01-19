@@ -116,7 +116,6 @@ nsIRangeUtils* nsHTMLEditor::sRangeHelper;
 
 nsHTMLEditor::nsHTMLEditor()
 : nsPlaintextEditor()
-, mIgnoreSpuriousDragEvent(false)
 , mCRInParagraphCreatesParagraph(false)
 , mSelectedCellIndex(0)
 , mIsObjectResizingEnabled(true)
@@ -5471,13 +5470,6 @@ nsHTMLEditor::EndUpdateViewBatch()
     res = CheckSelectionStateForAnonymousButtons(selection);
   }
   return res;
-}
-
-NS_IMETHODIMP
-nsHTMLEditor::IgnoreSpuriousDragEvent(bool aIgnoreSpuriousDragEvent)
-{
-  mIgnoreSpuriousDragEvent = aIgnoreSpuriousDragEvent;
-  return NS_OK;
 }
 
 NS_IMETHODIMP
