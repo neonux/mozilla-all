@@ -274,6 +274,9 @@
 @BINPATH@/components/BrowserFeeds.manifest
 @BINPATH@/components/FeedConverter.js
 @BINPATH@/components/FeedWriter.js
+@BINPATH@/components/BrowserDownloads.manifest
+@BINPATH@/components/DownloadsStartup.js
+@BINPATH@/components/DownloadsUI.js
 @BINPATH@/components/fuelApplication.manifest
 @BINPATH@/components/fuelApplication.js
 @BINPATH@/components/WebContentConverter.js

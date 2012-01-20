@@ -400,6 +400,7 @@ pref("browser.tabs.tabClipWidth", 140);
 pref("browser.tabs.animate", true);
 pref("browser.tabs.onTop", true);
 pref("browser.tabs.drawInTitlebar", true);
+pref("browser.tabs.cropRedundancyInTitles", true);
 
 // Where to show tab close buttons:
 // 0  on active tab only
@@ -1104,6 +1105,9 @@ pref("browser.menu.showCharacterEncoding", "chrome://browser/locale/browser.prop
 pref("prompts.tab_modal.enabled", true);
 // Whether the Panorama should animate going in/out of tabs
 pref("browser.panorama.animate_zoom", true);
+
+// browser.newtab.url is in branding section
+// browser.newtabpage.enabled is in branding section
 
 // Enable the DOM full-screen API.
 pref("full-screen-api.enabled", true);
