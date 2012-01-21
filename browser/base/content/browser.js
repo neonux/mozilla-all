@@ -1709,6 +1709,7 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
   gSyncUI.init();
 #endif
 
+  gBrowserThumbnails.init();
   NewTabUtils.init();
   TabView.init();
 
