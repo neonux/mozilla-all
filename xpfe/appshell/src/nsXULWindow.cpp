@@ -1412,6 +1412,12 @@ void nsXULWindow::SyncAttributesToWidget()
   if (NS_SUCCEEDED(rv)) {
     mWindow->SetShowsToolbarButton(attr.LowerCaseEqualsLiteral("true"));
   }
+
+  // "fullscreenbutton" attribute
+  rv = windowElement->GetAttribute(NS_LITERAL_STRING("fullscreenbutton"), attr);
+  if (NS_SUCCEEDED(rv)) {
+    mWindow->SetShowsFullScreenButton(attr.LowerCaseEqualsLiteral("true"));
+  }
 }
 
 NS_IMETHODIMP nsXULWindow::SavePersistentAttributes()
@@ -1507,11 +1513,9 @@ NS_IMETHODIMP nsXULWindow::SavePersistentAttributes()
   }
 
   if (mPersistentAttributesDirty & PAD_MISC) {
-    if (sizeMode != nsSizeMode_Minimized) {
+    if (sizeMode != nsSizeMode_Minimized && sizeMode != nsSizeMode_Fullscreen) {
       if (sizeMode == nsSizeMode_Maximized)
         sizeString.Assign(SIZEMODE_MAXIMIZED);
-      else if (sizeMode == nsSizeMode_Fullscreen)
-        sizeString.Assign(SIZEMODE_FULLSCREEN);
       else
         sizeString.Assign(SIZEMODE_NORMAL);
       docShellElement->SetAttribute(MODE_ATTRIBUTE, sizeString);

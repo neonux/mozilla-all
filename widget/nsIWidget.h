@@ -118,8 +118,8 @@ typedef nsEventStatus (* EVENT_CALLBACK)(nsGUIEvent *event);
 #endif
 
 #define NS_IWIDGET_IID \
-  { 0xba20ac65, 0xb2a6, 0x4052, \
-    { 0xa4, 0xcb, 0x65, 0x40, 0xf8, 0x87, 0x9c, 0x55 } }
+  { 0xf60ba9a0, 0x3013, 0x4381, \
+    { 0xb7, 0xd4, 0x34, 0xeb, 0x0c, 0xe7, 0x79, 0x0e } }
 /*
  * Window shadow styles
  * Also used for the -moz-window-shadow CSS property
@@ -1007,6 +1007,14 @@ class nsIWidget : public nsISupports {
      * Ignored on child widgets and on non-Mac platforms.
      */
     virtual void SetShowsToolbarButton(bool aShow) = 0;
+
+    /*
+     * On Mac OS X Lion, this method shows or hides the full screen button in
+     * the titlebar that handles native full screen mode.
+     *
+     * Ignored on child widgets, non-Mac platforms, & pre-Lion Mac.
+     */
+    virtual void SetShowsFullScreenButton(bool aShow) = 0;
 
     /** 
      * Hide window chrome (borders, buttons) for this widget.
