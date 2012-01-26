@@ -85,6 +85,11 @@ function continueTest() {
 }
 
 function doTest() {
+  // Ensure that the download manager callbacks always display the window UI
+  // instead of the panel in the browser's window
+  Cc["@mozilla.org/preferences-service;1"].
+    getService(Ci.nsIPrefBranch).
+    setBoolPref("browser.download.manager.useWindowUI", true);
 
   let tempScope = {};
   Components.utils.import("resource://gre/modules/DownloadTaskbarProgress.jsm", tempScope);
@@ -142,6 +147,10 @@ function doTest() {
   // The owner window should not have changed, since our
   // original window still exists
   checkActiveTaskbar(false, window);
+
+  Cc["@mozilla.org/preferences-service;1"].
+    getService(Ci.nsIPrefBranch).
+    clearUserPref("browser.download.manager.useWindowUI");
 
   browserWindow.close();
   SimpleTest.finish();
