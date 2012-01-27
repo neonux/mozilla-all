@@ -2838,6 +2838,21 @@ function BrowserOnClick(event) {
           ss.restoreLastSession();
         errorDoc.getElementById("sessionRestoreContainer").hidden = true;
       }
+      else if (ot == errorDoc.getElementById("history")) {
+        PlacesCommandHook.showPlacesOrganizer('History');
+      }
+      else if (ot == errorDoc.getElementById("settings")) {
+        openPreferences();
+      }
+      else if (ot == errorDoc.getElementById("addons")) {
+        BrowserOpenAddonsMgr();
+      }
+      else if (ot == errorDoc.getElementById("apps")) {
+        openLinkIn("https://apps.mozillalabs.com/appdir/", "tab", {inBackground: false});
+      }
+      else if (ot == errorDoc.getElementById("downloads")) {
+        BrowserDownloadsUI();
+      }
       else if (ot == errorDoc.getElementById("pairDeviceLink")) {
         if (Services.prefs.prefHasUserValue("services.sync.username")) {
           gSyncUI.openAddDevice();
