@@ -56,6 +56,7 @@
 #   Patrick Walton <pcwalton@mozilla.com>
 #   Mihai Sucan <mihai.sucan@gmail.com>
 #   Victor Porof <vporof@mozilla.com>
+#   Frank Yan <fyan@mozilla.com>
 #
 # Alternatively, the contents of this file may be used under the terms of
 # either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -2702,7 +2703,7 @@ function BrowserOnAboutPageLoad(document) {
     let ss = Components.classes["@mozilla.org/browser/sessionstore;1"].
              getService(Components.interfaces.nsISessionStore);
     if (!ss.canRestoreLastSession)
-      document.getElementById("sessionRestoreContainer").hidden = true;
+      document.getElementById("bottomSection").className = "";
     // Sync-related links
     if (Services.prefs.prefHasUserValue("services.sync.username")) {
       document.getElementById("setupSyncLink").hidden = true;
@@ -2717,7 +2718,7 @@ function BrowserOnClick(event) {
     // Don't trust synthetic events
     if (!event.isTrusted ||
         (event.target.localName != "button" &&
-         event.target.className != "sync-link"))
+         event.target.className != "aboutHomeLink"))
       return;
 
     var ot = event.originalTarget;
@@ -2845,7 +2846,25 @@ function BrowserOnClick(event) {
                  getService(Ci.nsISessionStore);
         if (ss.canRestoreLastSession)
           ss.restoreLastSession();
-        errorDoc.getElementById("sessionRestoreContainer").hidden = true;
+        errorDoc.getElementById("bottomSection").className = "";
+      }
+      else if (ot == errorDoc.getElementById("bookmarks")) {
+        PlacesCommandHook.showPlacesOrganizer("AllBookmarks");
+      }
+      else if (ot == errorDoc.getElementById("history")) {
+        PlacesCommandHook.showPlacesOrganizer("History");
+      }
+      else if (ot == errorDoc.getElementById("settings")) {
+        openPreferences();
+      }
+      else if (ot == errorDoc.getElementById("addons")) {
+        BrowserOpenAddonsMgr();
+      }
+      else if (ot == errorDoc.getElementById("apps")) {
+        openLinkIn("https://apps.mozillalabs.com/appdir/", "tab", {inBackground: false});
+      }
+      else if (ot == errorDoc.getElementById("downloads")) {
+        BrowserDownloadsUI();
       }
       else if (ot == errorDoc.getElementById("pairDeviceLink")) {
         if (Services.prefs.prefHasUserValue("services.sync.username")) {
@@ -2853,9 +2872,6 @@ function BrowserOnClick(event) {
         } else {
           gSyncUI.openSetup("pair");
         }
-      }
-      else if (ot == errorDoc.getElementById("setupSyncLink")) {
-        gSyncUI.openSetup(null);
       }
     }
 }
