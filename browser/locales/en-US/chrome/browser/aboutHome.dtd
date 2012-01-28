@@ -21,9 +21,3 @@
 
 <!ENTITY abouthome.syncSetup.label   "Set Up Sync">
 <!ENTITY abouthome.pairDevice.label  "Pair a Device">
-
-<!ENTITY abouthome.historyButton.label "History">
-<!ENTITY abouthome.settingsButton.label "Settings">
-<!ENTITY abouthome.addonsButton.label "Add-ons">
-<!ENTITY abouthome.appsButton.label "Apps">
-<!ENTITY abouthome.downloadsButton.label "Downloads">

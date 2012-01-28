@@ -56,7 +56,11 @@ body {
 }
 
 a {
-  color: #07f;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
 }
 
 #brandStart {
@@ -193,6 +197,13 @@ body[dir=rtl] #searchSubmit:active {
 
 #contentContainer {
   height: 30%;
+  background-image: -moz-radial-gradient(center top, ellipse farthest-side, rgba(16,83,130,.5), rgba(16,83,130,0) 75%),
+                    -moz-radial-gradient(center top, ellipse farthest-side, rgba(180,218,244,.5), rgba(180,218,244,0)),
+                    -moz-radial-gradient(center top, ellipse farthest-side, rgba(180,218,244,.3), rgba(180,218,244,0));
+  background-size: 100% 5px,
+                   100% 50px,
+                   100% 100%;
+  background-repeat: no-repeat;
 }
 
 @media all and (max-height: 400px) {
@@ -201,7 +212,7 @@ body[dir=rtl] #searchSubmit:active {
 
 #snippetContainer {
   position: relative;
-  top: -45px;
+  top: -24px;
   text-align: center;
 }
 
@@ -210,8 +221,17 @@ body[dir=rtl] #searchSubmit:active {
   padding: 14px;
   width: 30%;
   max-width: 600px;
+  background-image: -moz-linear-gradient(rgba(255,255,255,.8), rgba(255,255,255,.1));
+  background-color: rgb(250,250,250);
+  border-radius: 4px;
+  box-shadow: 0 1px 0 rgba(255,255,255,.8) inset,
+              0 -2px 0 rgba(0,0,0,.1) inset,
+              0 0 10px rgba(255,255,255,.5) inset,
+              0 0 0 1px rgba(0,0,0,.1),
+              0 2px 4px rgba(0,0,0,.2);
   color: rgb(60,60,60);
   font-size: .85em;
+  cursor: pointer;
 }
 
 #snippets:empty {
@@ -224,6 +244,22 @@ body[dir=rtl] #searchSubmit:active {
 
 @media all and (min-width: 470px) and (max-width: 850px) {
   #snippets { width: 45% }
+}
+
+#snippets:hover {
+  background-color: rgb(255,255,255);
+  box-shadow: 0 1px 0 rgba(255,255,255,.8) inset,
+              0 -2px 0 rgba(0,0,0,.1) inset,
+              0 0 10px rgba(255,255,255,.5) inset,
+              0 0 5px rgba(0,0,0,.1),
+              0 0 0 1px rgba(0,0,0,.1),
+              0 2px 4px rgba(0,0,0,.2);
+}
+
+#snippets:hover:active {
+  background-color: rgb(210,210,210);
+  box-shadow: 0 2px 3px rgba(0,0,0,.3) inset,
+              0 1px 0 rgba(255,255,255,.5);
 }
 
 #defaultSnippet1,
@@ -247,17 +283,8 @@ body[dir=rtl] #searchSubmit:active {
 }
 
 #sessionRestoreContainer {
-  position: relative;
-  top: 40px;
   padding-top: 1.5%;
   text-align: center;
-  background-image: -moz-radial-gradient(center top, ellipse farthest-side, rgba(16,83,130,.5), rgba(16,83,130,0) 75%),
-                    -moz-radial-gradient(center top, ellipse farthest-side, rgba(180,218,244,.5), rgba(180,218,244,0)),
-                    -moz-radial-gradient(center top, ellipse farthest-side, rgba(180,218,244,.3), rgba(180,218,244,0));
-  background-size: 100% 5px,
-                   100% 50px,
-                   100% 100%;
-  background-repeat: no-repeat;
 }
 
 @media all and (max-height: 500px) {
@@ -269,30 +296,21 @@ body[dir=rtl] #searchSubmit:active {
 }
 
 #restorePreviousSession {
-  position: relative;
-  top: -60px;
   padding: 10px;
   border: 0;
   border-radius: 4px;
-  background-image: -moz-linear-gradient(rgb(254,254,254), rgb(251,251,251));
-  background-color: #fbfbfb;
-  box-shadow: 0 0 0 1px rgba(9,37,59,.1),
-              0 1px 2px rgba(9,37,59,.1),
-              0 0 10px rgba(255,255,255,.3),
-              0 -3px 0 rgba(180,194,212,.2) inset;
+  box-shadow: 0 0 0 1px rgba(9,37,59,0),
+              0 1px 2px rgba(9,37,59,0),
+              0 0 10px rgba(255,255,255,0),
+              0 -3px 0 rgba(180,194,212,0) inset;
   -moz-transition-property: background-color, box-shadow;
   -moz-transition-duration: 0.25s;
   -moz-transition-timing-function: ease-out;
+  background: transparent;
   color: rgb(50,50,50);
   font-weight: bold;
   font-size: 1em;
   cursor: pointer;
-}
-
-@media all and (max-height: 500px) {
-  #restorePreviousSession {
-    top: -30px;
-  }
 }
 
 #restorePreviousSession::before {
@@ -326,8 +344,7 @@ body[dir=rtl] #restorePreviousSession::before {
 }
 
 #restorePreviousSession:hover {
-  background-image: none;
-  background-color: #fff;
+  background-image: -moz-linear-gradient(rgba(255,255,255,.7), rgba(255,255,255,.2));
   border-radius: 4px;
   box-shadow: 0 0 0 1px rgba(9,37,59,.2),
               0 1px 2px rgba(9,37,59,.2),
@@ -336,6 +353,8 @@ body[dir=rtl] #restorePreviousSession::before {
 }
 
 #restorePreviousSession:hover:active {
+  background-image: -moz-linear-gradient(rgba(255,255,255,.0), rgba(255,255,255,.2));
+  background-color: rgba(23,75,115,.1);
   box-shadow: 0 0 0 1px rgba(9,37,59,.2),
               0 1px 2px rgba(9,37,59,.4) inset,
               0 1px 5px rgba(9,37,59,.15) inset;
@@ -348,34 +367,6 @@ body[dir=rtl] #restorePreviousSession::before {
   width: 100%;
   text-align: center;
   bottom: 2%;
-  overflow: hidden;
-}
-
-@media all and (max-height: 400px) {
-  #launcher {
-    display: none;
-  }
-}
-
-.launchButton {
-  margin: 2em 1em;
-  border: 0;
-  padding: 0;
-  background-color: transparent;
-  font-size: 1.1em;
-  color: #37c;
-  cursor: pointer;
-}
-
-.launchButton:hover {
-  text-decoration: underline;
-}
-
-#aboutMozilla {
-  position: absolute;
-  right: 1em;
-  bottom: 0;
-  text-align: end;
 }
 
 #syncLinksContainer {
