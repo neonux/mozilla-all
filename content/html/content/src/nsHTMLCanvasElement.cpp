@@ -216,6 +216,36 @@ nsHTMLCanvasElement::ToDataURL(const nsAString& aType, nsIVariant* aParams,
   return ToDataURLImpl(aType, aParams, aDataURL);
 }
 
+// nsHTMLCanvasElement::mozFetchAsStream
+
+NS_IMETHODIMP
+nsHTMLCanvasElement::MozFetchAsStream(nsIInputStreamCallback *aCallback,
+                                      const nsAString& aType,
+                                      PRUint8 optional_argc)
+{
+  NS_ENSURE_ARG_POINTER(aCallback);
+
+  if (!nsContentUtils::IsCallerChrome())
+    return NS_ERROR_FAILURE;
+
+  // do a trust check if this is a write-only canvas
+  if (mWriteOnly && !nsContentUtils::IsCallerTrustedForRead())
+    return NS_ERROR_DOM_SECURITY_ERR;
+
+  bool fellBackToPNG = false;
+  nsCOMPtr<nsIInputStream> inputData;
+  nsresult rv = ExtractData(aType, EmptyString(), getter_AddRefs(inputData),
+                            fellBackToPNG);
+
+  if (NS_SUCCEEDED(rv)) {
+    nsCOMPtr<nsIAsyncInputStream> asyncData = do_QueryInterface(inputData, &rv);
+    if (NS_SUCCEEDED(rv))
+      aCallback->OnInputStreamReady(asyncData);
+  }
+
+  return rv;
+}
+
 nsresult
 nsHTMLCanvasElement::ExtractData(const nsAString& aType,
                                  const nsAString& aOptions,

@@ -352,6 +352,11 @@ nsWebShellWindow::HandleEvent(nsGUIEvent *aEvent)
       case NS_SIZEMODE: {
         nsSizeModeEvent* modeEvent = (nsSizeModeEvent*)aEvent;
 
+        // Track the previous size mode so that we can call SetFullScreen(false)
+        // when transitioning out of full screen mode.
+        PRInt32 previousSizeMode;
+        aEvent->widget->GetSizeMode(&previousSizeMode);
+
         // an alwaysRaised (or higher) window will hide any newly opened
         // normal browser windows. here we just drop a raised window
         // to the normal zlevel if it's maximized. we make no provision
@@ -378,6 +383,9 @@ nsWebShellWindow::HandleEvent(nsGUIEvent *aEvent)
           // can update its UI.
           if (modeEvent->mSizeMode == nsSizeMode_Fullscreen) {
             ourWindow->SetFullScreen(true);
+          }
+          else if (previousSizeMode == nsSizeMode_Fullscreen) {
+            ourWindow->SetFullScreen(false);
           }
 
           // And always fire a user-defined sizemodechange event on the window
