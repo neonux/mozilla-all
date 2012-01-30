@@ -25,6 +25,8 @@
 <!ENTITY cmd.copyDownloadLink.accesskey   "L">
 <!ENTITY cmd.removeFromList.label         "Remove From List">
 <!ENTITY cmd.removeFromList.accesskey     "e">
+<!ENTITY cmd.clearList.label              "Clear List">
+<!ENTITY cmd.clearList.accesskey          "a">
 
 <!ENTITY downloadshistory.label           "Show Downloads History">
 <!ENTITY downloadshistory.accesskey       "S">

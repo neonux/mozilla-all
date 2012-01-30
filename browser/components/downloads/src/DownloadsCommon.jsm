@@ -609,7 +609,12 @@ const DownloadsData = {
 
   onDownloadStateChange: function DD_onDownloadStateChange(aState, aDownload)
   {
-    let dataItem = this._getOrAddDataItem(aDownload, true);
+    // When a new download is added, it may have the same identifier of a
+    // download that we previously deleted during this session.
+    let mayReuseId = aState == nsIDM.DOWNLOAD_NOTSTARTED ||
+                     aState == nsIDM.DOWNLOAD_QUEUED;
+
+    let dataItem = this._getOrAddDataItem(aDownload, mayReuseId);
     if (!dataItem) {
       return;
     }

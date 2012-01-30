@@ -473,15 +473,8 @@ const DownloadsView = {
 
   onDownloadClick: function DV_onDownloadClick(aEvent)
   {
-    // Only do the action for primary clicks.
+    // Handle primary clicks only.
     if (aEvent.button != 0) {
-      return;
-    }
-
-    // Clicking buttons should not invoke the action because the click has
-    // already been handled by the button itself.
-    if (aEvent.originalTarget.hasAttribute("command") ||
-        aEvent.originalTarget.hasAttribute("oncommand")) {
       return;
     }
 
@@ -801,7 +794,8 @@ const DownloadsViewController = {
   supportsCommand: function DVC_supportsCommand(aCommand)
   {
     // Firstly, determine if this is a command that we can handle.
-    if (!(aCommand in DownloadsViewItemController.prototype.commands)) {
+    if (!(aCommand in this.commands) &&
+        !(aCommand in DownloadsViewItemController.prototype.commands)) {
       return false;
     }
     // Secondly, determine if focus is on a control in the downloads list.
@@ -816,6 +810,12 @@ const DownloadsViewController = {
 
   isCommandEnabled: function DVC_isCommandEnabled(aCommand)
   {
+    // Handle commands that are not selection-specific.
+    if (aCommand == "downloadsCmd_clearList") {
+      return Services.downloads.canCleanUp;
+    }
+
+    // Other commands are selection-specific.
     let element = DownloadsView.richListBox.selectedItem;
     return element &&
            new DownloadsViewItemController(element).isCommandEnabled(aCommand);
@@ -823,6 +823,13 @@ const DownloadsViewController = {
 
   doCommand: function DVC_doCommand(aCommand)
   {
+    // If this command is not selection-specific, execute it.
+    if (aCommand in this.commands) {
+      this.commands[aCommand]();
+      return;
+    }
+
+    // Other commands are selection-specific.
     let element = DownloadsView.richListBox.selectedItem;
     if (element) {
       // The doCommand function also checks if the command is enabled.
@@ -837,9 +844,23 @@ const DownloadsViewController = {
 
   updateCommands: function DVC_updateCommands()
   {
-    // Update all the commands that are specific for the selected item.
+    Object.keys(this.commands).forEach(goUpdateCommand);
     Object.keys(DownloadsViewItemController.prototype.commands)
           .forEach(goUpdateCommand);
+  },
+
+  //////////////////////////////////////////////////////////////////////////////
+  //// Selection-independent commands
+
+  /**
+   * This object contains one key for each command that operates regardless of
+   * the currently selected item in the list.
+   */
+  commands: {
+    downloadsCmd_clearList: function DVC_downloadsCmd_clearList()
+    {
+      Services.downloads.cleanUp();
+    }
   }
 };
 
@@ -902,7 +923,7 @@ DownloadsViewItemController.prototype = {
   },
 
   //////////////////////////////////////////////////////////////////////////////
-  //// Commands
+  //// Item commands
 
   /**
    * This object contains one key for each command that operates on this item.
@@ -913,6 +934,8 @@ DownloadsViewItemController.prototype = {
     cmd_delete: function DVIC_cmd_delete()
     {
       this.commands.downloadsCmd_cancel.apply(this);
+
+      Services.downloads.removeDownload(this.dataItem.downloadId);
     },
 
     downloadsCmd_cancel: function DVIC_downloadsCmd_cancel()
@@ -933,8 +956,6 @@ DownloadsViewItemController.prototype = {
           }
         } catch (ex) { }
       }
-
-      Services.downloads.removeDownload(this.dataItem.downloadId);
     },
 
     downloadsCmd_open: function DVIC_downloadsCmd_open()
