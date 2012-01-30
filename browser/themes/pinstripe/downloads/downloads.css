@@ -135,3 +135,85 @@ richlistitem[type="download"][state="1"]:hover {
 .downloadButton.downloadRetry:active {
   -moz-image-region: rect(28px, 42px, 42px, 28px);
 }
+
+/*** Main indicator icon ***/
+
+#downloads-indicator-icon {
+  width: 20px;
+  height: 20px;
+  list-style-image: url("chrome://browser/skin/Toolbar.png");
+  -moz-image-region: rect(0, 140px, 20px, 120px);
+}
+
+#downloads-indicator-icon:-moz-lwtheme-brighttext {
+  list-style-image: url("chrome://browser/skin/Toolbar-inverted.png");
+}
+
+#downloads-indicator[attention] #downloads-indicator-icon {
+  list-style-image: url("chrome://browser/skin/downloads/download-glow.png");
+  -moz-image-region: rect(14px, 34px, 34px, 14px);
+}
+
+/*** Event notification ***/
+
+#downloads-indicator-notification {
+  opacity: 0;
+  width: 20px;
+  height: 20px;
+  list-style-image: url("chrome://browser/skin/downloads/download-notification.png");
+}
+
+@-moz-keyframes downloadsIndicatorNotification {
+  from { opacity: 0; -moz-transform: scale(1); }
+  10%  { opacity: .65; -moz-animation-timing-function: ease-out; }
+  to   { opacity: 0; -moz-transform: scale(8); }
+}
+
+#downloads-indicator[notification="show"] #downloads-indicator-notification {
+  -moz-animation-name: downloadsIndicatorNotification;
+  -moz-animation-duration: 3s;
+}
+
+/*** Progress bar and text ***/
+
+#downloads-indicator-counter {
+  height: 12px;
+  margin: 0;
+  color: hsl(0,0%,30%);
+  text-shadow: 0 1px 0 hsla(0,0%,100%,.5);
+  font-family: Lucida Grande, sans-serif, Helvetica;
+  font-size: 10px;
+  line-height: 10px;
+}
+
+#downloads-indicator-progress {
+  width: 24px;
+  height: 4px;
+  min-width: 0;
+  min-height: 0;
+  margin-top: 1px;
+  margin-bottom: 2px;
+  border-radius: 2px;
+  box-shadow: 0 1px 0 hsla(0,0%,100%,.4);
+}
+
+#downloads-indicator-progress > .progress-bar {
+  -moz-appearance: none;
+  min-width: 0;
+  min-height: 0;
+  background-image: -moz-linear-gradient(#41a0ff, #2090ff);
+  border: 1px solid;
+  border-color: hsla(0,0%,0%,.6) hsla(0,0%,0%,.2) hsla(0,0%,0%,.2);
+  border-radius: 2px 0 0 2px;
+}
+
+#downloads-indicator-progress > .progress-remainder {
+  -moz-appearance: none;
+  min-width: 0;
+  min-height: 0;
+  background-image: -moz-linear-gradient(#9a9a9a, #a1a1a1);
+  border: 1px solid;
+  border-color: hsla(0,0%,0%,.4) hsla(0,0%,0%,.3) hsla(0,0%,0%,.2);
+  border-left: none;
+  border-radius: 0 2px 2px 0;
+}
