@@ -73,8 +73,6 @@
              oncommand="goDoCommand('downloadsCmd_openReferrer')"/>
     <command id="downloadsCmd_copyLocation"
              oncommand="goDoCommand('downloadsCmd_copyLocation')"/>
-    <command id="downloadsCmd_clearList"
-             oncommand="goDoCommand('downloadsCmd_clearList')"/>
   </commandset>
 
   <popupset>
@@ -107,7 +105,7 @@
                   class="downloadCancelMenuItem"
                   label="&cmd.cancel.label;"
                   accesskey="&cmd.cancel.accesskey;"/>
-        <menuitem command="cmd_delete"
+        <menuitem command="downloadsCmd_cancel"
                   class="downloadRemoveFromListMenuItem"
                   label="&cmd.removeFromList.label;"
                   accesskey="&cmd.removeFromList.accesskey;"/>
@@ -130,18 +128,13 @@
         <menuitem command="downloadsCmd_copyLocation"
                   label="&cmd.copyDownloadLink.label;"
                   accesskey="&cmd.copyDownloadLink.accesskey;"/>
-
-        <menuseparator/>
-
-        <menuitem command="downloadsCmd_clearList"
-                  label="&cmd.clearList.label;"
-                  accesskey="&cmd.clearList.accesskey;"/>
       </menupopup>
 
       <richlistbox id="downloadsListBox"
                    class="plain"
                    flex="1"
                    context="downloadsContextMenu"
+                   onclick="DownloadsView.onDownloadClick(event);"
                    onkeypress="DownloadsView.onDownloadKeyPress(event);"
                    oncontextmenu="DownloadsView.onDownloadContextMenu(event);"
                    ondragstart="DownloadsView.onDownloadDragStart(event);"/>

@@ -11,22 +11,25 @@
 }
 
 #downloadsHistory {
-  height: 3.5em;
+  height: 3em;
   border-top: 1px solid ThreeDShadow;
   color: -moz-nativehyperlinktext;
   cursor: pointer;
   background-image: -moz-linear-gradient(hsla(0,0%,0%,.15), hsla(0,0%,0%,.08) 6px);
 }
 
+#downloadsHistory:hover {
+  cursor: hand;
+}
+
 /*** List items ***/
 
 richlistitem[type="download"] {
-  height: 7em;
   margin: 0;
   border-top: 1px solid hsla(0,0%,100%,.2);
   border-bottom: 1px solid hsla(0,0%,0%,.15);
   background: transparent;
-  padding: 0;
+  padding: 8px;
   color: WindowText;
 }
 
@@ -42,11 +45,6 @@ richlistitem[type="download"]:last-child {
   outline: 1px #999 dotted;
   outline-offset: -1px;
   -moz-outline-radius: 3px;
-}
-
-.downloadInfo {
-  padding: 8px;
-  -moz-padding-end: 0;
 }
 
 .downloadTypeIcon {
@@ -76,7 +74,7 @@ richlistitem[type="download"]:last-child {
   -moz-appearance: none;
   min-width: 0;
   min-height: 0;
-  margin: 6px;
+  margin: 0;
   border: none;
   background: transparent;
   padding: 5px;
@@ -89,13 +87,7 @@ richlistitem[type="download"]:last-child {
 
 /*** Highlighted list items ***/
 
-richlistitem[type="download"][state="1"] .downloadInfo {
-  border-top: 1px solid transparent;
-  border-bottom: 1px solid transparent;
-  -moz-padding-end: 8px;
-}
-
-richlistitem[type="download"][state="1"] .downloadInfo:hover {
+richlistitem[type="download"][state="1"]:hover {
   border-radius: 3px;
   border-top: 1px solid hsla(0,0%,100%,.3);
   border-bottom: 1px solid hsla(0,0%,0%,.2);
@@ -105,11 +97,9 @@ richlistitem[type="download"][state="1"] .downloadInfo:hover {
   cursor: pointer;
 }
 
-/*
 richlistitem[type="download"][state="1"]:hover .downloadButton {
   list-style-image: url(buttons-inverted.png);
 }
-*/
 
 /*** Button icons ***/
 
