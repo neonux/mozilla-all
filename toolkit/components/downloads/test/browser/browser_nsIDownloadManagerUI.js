@@ -106,13 +106,6 @@ function test()
   if (win)
     win.close();
 
-  // Ensure that our component is invoked by the browser-specific component,
-  // using pass-through mode, without displaying the browser-specific panel
-  Services.prefs.setBoolPref("browser.download.manager.useWindowUI", true);
-  registerCleanupFunction(function() {
-    Services.prefs.clearUserPref("browser.download.manager.useWindowUI");
-  });
-
   // OK, now that all the data is in, let's pull up the UI
   Cc["@mozilla.org/download-manager-ui;1"].
   getService(Ci.nsIDownloadManagerUI).show();
