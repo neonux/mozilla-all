@@ -81,7 +81,6 @@ const nsIWebNavigation = Ci.nsIWebNavigation;
 var gCharsetMenu = null;
 var gLastBrowserCharset = null;
 var gPrevCharset = null;
-var gProxyFavIcon = null;
 var gLastValidURLStr = "";
 var gInPrintPreviewMode = false;
 var gDownloadMgr = null;
@@ -2656,39 +2655,16 @@ function SetPageProxyState(aState)
   if (!gURLBar)
     return;
 
-  if (!gProxyFavIcon)
-    gProxyFavIcon = document.getElementById("page-proxy-favicon");
-
   gURLBar.setAttribute("pageproxystate", aState);
-  gProxyFavIcon.setAttribute("pageproxystate", aState);
 
   // the page proxy state is set to valid via OnLocationChange, which
   // gets called when we switch tabs.
   if (aState == "valid") {
     gLastValidURLStr = gURLBar.value;
     gURLBar.addEventListener("input", UpdatePageProxyState, false);
-
-    PageProxySetIcon(gBrowser.getIcon());
   } else if (aState == "invalid") {
     gURLBar.removeEventListener("input", UpdatePageProxyState, false);
-    PageProxyClearIcon();
   }
-}
-
-function PageProxySetIcon (aURL)
-{
-  if (!gProxyFavIcon)
-    return;
-
-  if (!aURL)
-    PageProxyClearIcon();
-  else if (gProxyFavIcon.getAttribute("src") != aURL)
-    gProxyFavIcon.setAttribute("src", aURL);
-}
-
-function PageProxyClearIcon ()
-{
-  gProxyFavIcon.removeAttribute("src");
 }
 
 function PageProxyClickHandler(aEvent)
@@ -2850,6 +2826,21 @@ function BrowserOnClick(event) {
         if (ss.canRestoreLastSession)
           ss.restoreLastSession();
         errorDoc.getElementById("sessionRestoreContainer").hidden = true;
+      }
+      else if (ot == errorDoc.getElementById("history")) {
+        PlacesCommandHook.showPlacesOrganizer('History');
+      }
+      else if (ot == errorDoc.getElementById("settings")) {
+        openPreferences();
+      }
+      else if (ot == errorDoc.getElementById("addons")) {
+        BrowserOpenAddonsMgr();
+      }
+      else if (ot == errorDoc.getElementById("apps")) {
+        openLinkIn("https://apps.mozillalabs.com/appdir/", "tab", {inBackground: false});
+      }
+      else if (ot == errorDoc.getElementById("downloads")) {
+        BrowserDownloadsUI();
       }
       else if (ot == errorDoc.getElementById("pairDeviceLink")) {
         if (Services.prefs.prefHasUserValue("services.sync.username")) {
@@ -3740,7 +3731,6 @@ function BrowserToolboxCustomizeDone(aToolboxChanged) {
   if (aToolboxChanged) {
     gURLBar = document.getElementById("urlbar");
 
-    gProxyFavIcon = document.getElementById("page-proxy-favicon");
     gHomeButton.updateTooltip();
     gIdentityHandler._cacheElements();
     window.XULBrowserWindow.init();
@@ -3902,10 +3892,15 @@ var FullScreen = {
       enterFS = !enterFS;
 
     // show/hide all menubars, toolbars (except the full screen toolbar)
-    this.showXULChrome("toolbar", !enterFS);
     document.getElementById("View:FullScreen").setAttribute("checked", enterFS);
 
-    if (enterFS) {
+    // On OS X Lion, we don't actually want to do much when entering fullscreen.
+    // We won't hide the toolbar and in turn we don't need to create a special toolbar.
+
+    if (enterFS && !this.useLionFullScreen) {
+      // hide menubars, toolbars (except the full screen toolbar)
+      this.showXULChrome(false);
+
       // Add a tiny toolbar to receive mouseover and dragenter events, and provide affordance.
       // This will help simulate the "collapse" metaphor while also requiring less code and
       // events than raw listening of mouse coords. We don't add the toolbar in DOM full-screen
@@ -3937,7 +3932,15 @@ var FullScreen = {
       // Autohide prefs
       gPrefService.addObserver("browser.fullscreen", this, false);
     }
-    else {
+    else if (enterFS && this.useLionFullScreen && document.mozFullScreen) {
+      // Entering DOM FS on Lion should still hide xul chrome (which hides toolbars)
+      this.showXULChrome("toolbar", false);
+    }
+    else if (!enterFS) {
+      // We'll still run this when leaving fullscreen on OS X Lion to make sure
+      // we've cleaned up since we still hide chrome when entering DOM fullscreen.
+      this.showXULChrome("toolbar", true);
+
       // The user may quit fullscreen during an animation
       this._cancelAnimation();
       gNavToolbox.style.marginTop = "";
@@ -3999,7 +4002,9 @@ var FullScreen = {
     gBrowser.tabContainer.addEventListener("TabSelect", this.exitDomFullScreen);
 
     // Exit DOM full-screen mode when the browser window loses focus (ALT+TAB, etc).
-    window.addEventListener("deactivate", this.exitDomFullScreen, true);
+    if (!this.useLionFullScreen) {
+      window.addEventListener("deactivate", this.exitDomFullScreen, true);
+    }
 
     // Cancel any "hide the toolbar" animation which is in progress, and make
     // the toolbar hide immediately.
@@ -4033,7 +4038,9 @@ var FullScreen = {
       gBrowser.tabContainer.removeEventListener("TabOpen", this.exitDomFullScreen);
       gBrowser.tabContainer.removeEventListener("TabClose", this.exitDomFullScreen);
       gBrowser.tabContainer.removeEventListener("TabSelect", this.exitDomFullScreen);
-      window.removeEventListener("deactivate", this.exitDomFullScreen, true);
+      if (!this.useLionFullScreen) {
+        window.removeEventListener("deactivate", this.exitDomFullScreen, true);
+      }
     }
   },
 
@@ -4383,6 +4390,18 @@ var FullScreen = {
       controls[i].hidden = aShow;
   }
 };
+XPCOMUtils.defineLazyGetter(FullScreen, "useLionFullScreen", function() {
+  // We'll only use OS X Lion full screen if we're
+  // * on OS X
+  // * on Lion (Darwin 11.x) -- this will need to be updated for OS X 10.8
+  // * have fullscreenbutton="true"
+#ifdef XP_MACOSX
+  return /^11\./.test(Services.sysinfo.getProperty("version")) &&
+         document.documentElement.getAttribute("fullscreenbutton") == "true";
+#else
+  return false;
+#endif
+});
 
 /**
  * Returns true if |aMimeType| is text-based, false otherwise.
@@ -4544,11 +4563,6 @@ var XULBrowserWindow = {
       return originalTarget;
 
     return "_blank";
-  },
-
-  onLinkIconAvailable: function (aIconURL) {
-    if (gProxyFavIcon && gBrowser.userTypedValue === null)
-      PageProxySetIcon(aIconURL); // update the favicon in the URL bar
   },
 
   onProgressChange: function (aWebProgress, aRequest,
@@ -8204,17 +8218,31 @@ var gIdentityHandler = {
     if (gURLBar.getAttribute("pageproxystate") != "valid")
       return;
 
-    var value = content.location.href;
-    var urlString = value + "\n" + content.document.title;
-    var htmlString = "<a href=\"" + value + "\">" + value + "</a>";
+    let value = content.location.href;
+    let urlString = value + "\n" + content.document.title;
+    let htmlString = "<a href=\"" + value + "\">" + value + "</a>";
 
-    var dt = event.dataTransfer;
+    let dt = event.dataTransfer;
     dt.setData("text/x-moz-url", urlString);
     dt.setData("text/uri-list", value);
     dt.setData("text/plain", value);
     dt.setData("text/html", htmlString);
-    dt.setDragImage(gProxyFavIcon, 16, 16);
-  }
+
+    let panel = document.getElementById("identity-drag-panel");
+    let panelLabel = panel.firstChild;
+    let text = content.document.title || content.document.location;
+    panelLabel.setAttribute("value", text);
+
+    for each(var tab in gBrowser.tabs) {
+      if (tab.linkedBrowser == gBrowser.selectedBrowser) {
+        let faviconImage = document.getAnonymousElementByAttribute(tab, "class", "tab-icon-image");
+        document.mozSetImageElement("dragFavicon", faviconImage);
+        break;
+      }
+    }
+
+    dt.setDragImage(panel, -1, -1);
+  },
 };
 
 let DownloadMonitorPanel = {

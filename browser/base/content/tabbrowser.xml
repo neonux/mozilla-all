@@ -236,6 +236,7 @@
           this.tabContainer._unlockTabSizing();
           this.tabContainer._positionPinnedTabs();
           this.tabContainer.adjustTabstrip();
+          this.tabContainer.adjustTabTitles();
 
           this.getBrowserForTab(aTab).docShell.isAppTab = true;
 
@@ -261,6 +262,7 @@
           this.tabContainer._unlockTabSizing();
           this.tabContainer._positionPinnedTabs();
           this.tabContainer.adjustTabstrip();
+          this.tabContainer.adjustTabTitles();
 
           this.getBrowserForTab(aTab).docShell.isAppTab = false;
 
@@ -1082,13 +1084,21 @@
                 title = this.mStringBundle.getString("tabs.emptyTabTitle");
             }
 
-            if (aTab.label == title &&
+            if (aTab.label != this.mStringBundle.getString("tabs.connecting") &&
+                aTab._originalTitle == title &&
                 aTab.crop == crop)
               return false;
 
-            aTab.label = title;
+            aTab._originalTitle = title;
+            if (aTab.pinned || !this.tabContainer._cropRedundancyInTitles ||
+                this.visibleTabs.indexOf(aTab) == -1) {
+              aTab.label = title;
+              this._tabAttrModified(aTab);
+            }
+            else {
+              this.tabContainer.adjustTabTitles();
+            }
             aTab.crop = crop;
-            this._tabAttrModified(aTab);
 
             if (aTab.selected)
               this.updateTitlebar();
@@ -1234,7 +1244,7 @@
               "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul",
                                              "tab");
 
-            var blank = !aURI || (aURI == "about:blank");
+            var blank = !aURI || isBlankPageURL(aURI);
 
             if (blank)
               t.setAttribute("label", this.mStringBundle.getString("tabs.emptyTabTitle"));
@@ -1356,15 +1366,22 @@
             evt.initEvent("TabOpen", true, false);
             t.dispatchEvent(evt);
 
-            if (!blank) {
+            if (aURI && aURI != "about:blank") {
               // Stop the existing about:blank load.  Otherwise, if aURI
               // doesn't stop in-progress loads on its own, we'll get into
               // trouble with multiple parallel loads running at once.
               b.stop();
 
-              // pretend the user typed this so it'll be available till
-              // the document successfully loads
-              b.userTypedValue = aURI;
+              if (blank) {
+                // The progress listener received a stop status change. Reset
+                // the mBlank status to true to prevent the throbber from being
+                // shown when we're still loading a new tab URL.
+                tabListener.mBlank = true;
+              } else {
+                // pretend the user typed this so it'll be available till
+                // the document successfully loads
+                b.userTypedValue = aURI;
+              }
 
               let flags = Ci.nsIWebNavigation.LOAD_FLAGS_NONE;
               if (aAllowThirdPartyFixup)
@@ -1709,6 +1726,7 @@
 
               // update tab close buttons state
               this.tabContainer.adjustTabstrip();
+              this.tabContainer.adjustTabTitles();
 
               setTimeout(function(tabs) {
                 tabs._lastTabClosedByMouse = false;
@@ -1954,6 +1972,8 @@
         <parameter name="aTabs"/>
         <body>
         <![CDATA[
+          // Set a bogus future time to prevent title adjustment until finished.
+          this.tabContainer._lastTitleAdjustment = Date.now() + 100000;
           Array.forEach(this.tabs, function(tab) {
             if (aTabs.indexOf(tab) == -1)
               this.hideTab(tab);
@@ -1962,6 +1982,8 @@
           }, this);
 
           this.tabContainer.mTabstrip.ensureElementIsVisible(this.selectedTab, false);
+          this.tabContainer._lastTitleAdjustment = Date.now() - 100;
+          this.tabContainer.adjustTabTitles();
         ]]>
         </body>
       </method>
@@ -1973,6 +1995,7 @@
           if (aTab.hidden) {
             aTab.removeAttribute("hidden");
             this.tabContainer.adjustTabstrip();
+            this.tabContainer.adjustTabTitles();
             let event = document.createEvent("Events");
             event.initEvent("TabShow", true, false);
             aTab.dispatchEvent(event);
@@ -1989,6 +2012,7 @@
               !aTab.closing) {
             aTab.setAttribute("hidden", "true");
             this.tabContainer.adjustTabstrip();
+            this.tabContainer.adjustTabTitles();
             let event = document.createEvent("Events");
             event.initEvent("TabHide", true, false);
             aTab.dispatchEvent(event);
@@ -2465,7 +2489,7 @@
           }
           event.target.setAttribute("label", tab.mOverCloseButton ?
                                              tab.getAttribute("closetabtext") :
-                                             tab.getAttribute("label"));
+                                             tab._originalTitle);
         ]]></body>
       </method>
 
@@ -2746,6 +2770,7 @@
           this.mTabClipWidth = Services.prefs.getIntPref("browser.tabs.tabClipWidth");
           this.mCloseButtons = Services.prefs.getIntPref("browser.tabs.closeButtons");
           this._closeWindowWithLastTab = Services.prefs.getBoolPref("browser.tabs.closeWindowWithLastTab");
+          this._cropRedundancyInTitles = Services.prefs.getBoolPref("browser.tabs.cropRedundancyInTitles");
 
           var tab = this.firstChild;
           tab.setAttribute("label",
@@ -2754,6 +2779,8 @@
           tab.setAttribute("validate", "never");
           tab.setAttribute("onerror", "this.removeAttribute('image');");
           this.adjustTabstrip();
+          this._lastTitleAdjustment = -1;
+          this.addEventListener("TabAttrModified", this.adjustTabTitles, false);
 
           Services.prefs.addObserver("browser.tabs.", this._prefObserver, false);
           window.addEventListener("resize", this, false);
@@ -2802,6 +2829,10 @@
             case "browser.tabs.closeWindowWithLastTab":
               this.tabContainer._closeWindowWithLastTab = Services.prefs.getBoolPref(data);
               this.tabContainer.adjustTabstrip();
+              break;
+            case "browser.tabs.cropRedundancyInTitles":
+              this.tabContainer._cropRedundancyInTitles = Services.prefs.getBoolPref(data);
+              this.tabContainer.adjustTabTitles();
               break;
           }
         }
@@ -2895,6 +2926,309 @@
           var tabstripClosebutton = document.getElementById("tabs-closebutton");
           if (tabstripClosebutton && tabstripClosebutton.parentNode == this._container)
             tabstripClosebutton.collapsed = this.mCloseButtons != 3;
+        ]]></body>
+      </method>
+
+      <method name="adjustTabTitles">
+        <parameter name="aEvent"/>
+        <body><![CDATA[
+          let tabbrowser = this.tabbrowser;
+
+          if (aEvent && (aEvent.target.pinned ||
+              tabbrowser.visibleTabs.indexOf(aEvent.target) < 0)) {
+            return;
+          }
+          else if(!this._cropRedundancyInTitles) {
+            if (this._lastTitleAdjustment != -1) {
+              // Resets all tabs, not just visible ones.
+              let tabs = tabbrowser.tabs
+              for (let i = 0; i < tabs.length; i++) {
+                let tab = tabs[i];
+                tab.label = tab._originalTitle;
+                if (tab._tabViewTabItem)
+                  tab._tabViewTabItem.$tabTitle.text(tab.label);
+              }
+              this._lastTitleAdjustment = -1;
+            }
+          }
+          else {
+            if (Date.now() - this._lastTitleAdjustment < 50) {
+              // try again in 100ms unless the adjustment's happened since then.
+              let oldAdjustmentTime = this._lastTitleAdjustment;
+              let tabContainer = this;
+              setTimeout(function() {
+                // Protects from multiple timeouts cascading.
+                if (oldAdjustmentTime == tabContainer._lastTitleAdjustment)
+                  tabContainer.adjustTabTitles();
+              }, 100);
+            }
+            else {
+              this.adjustTheseTabTitles([tabbrowser.visibleTabs]);
+            }
+          }
+        ]]></body>
+      </method>
+
+      <method name="adjustTheseTabTitles">
+        <parameter name="aTabSets"/>
+        <body><![CDATA[
+          if (!aTabSets)
+            return;
+          let event = document.createEvent("Events");
+          event.initEvent("TabsWillRelabel", true, false);
+          this.dispatchEvent(event);
+          for (let index = 0; index < aTabSets.length; index++) {
+            let tabs = aTabSets[index];
+
+            // Put the tabs into bins by domain
+            let domainSets = this._getDomainSets(tabs);
+
+            // Process each domain
+            for (let domain in domainSets) {
+              if (domain == "unknown")
+                continue;
+              let tabSet = domainSets[domain];
+              tabSet.sort(function(aTab, bTab) {
+                let aLabel = aTab._originalTitle;
+                let bLabel = bTab._originalTitle;
+                return (aLabel < bLabel) ? -1 : (aLabel > bLabel) ? 1 : 0;
+              });
+              // Get a chop list for the domain and apply it
+              let chopList = this._getChopsForSet(tabSet);
+              this._applyChops(tabSet, chopList);
+            }
+          }
+          this._lastTitleAdjustment = Date.now();
+          event = document.createEvent("Events");
+          event.initEvent("TabsRelabeled", true, false);
+          this.dispatchEvent(event);
+        ]]></body>
+      </method>
+
+      <method name="_getDomainSets">
+        <parameter name="aTabs"/>
+        <body><![CDATA[
+          let domainSets = {};
+          let eTLDSVC =
+              Components.classes[
+                "@mozilla.org/network/effective-tld-service;1"].getService(
+                Components.interfaces.nsIEffectiveTLDService);
+          for (let i = 0; i < aTabs.length; i++) {
+            let tab = aTabs[i];
+            if (tab.pinned || (!tab._originalTitle ||
+                tab._originalTitle.length == 0))
+              continue;
+            let browser = tab.linkedBrowser;
+            let browserURI = browser.currentURI;
+            // Restoring tabs may have a currentURI of about:blank;
+            // using the stored URL prevents misfiling.
+            if (browser.__SS_restoreState) {
+              try {
+                browserURI = makeURI(tab._originalURL);
+              }
+              catch (ex) {}
+            }
+            let tabDomain = "unknown";
+            switch (browserURI.scheme) {
+              case "chrome":
+              case "file":
+              case "resource":
+              case "about":
+                tabDomain = browserURI.scheme;
+                break;
+              default:
+                try {
+                  tabDomain = eTLDSVC.getBaseDomain(browserURI);
+                }
+                catch (e) {
+                  try {
+                    tabDomain = browserURI.host;
+                  }
+                  catch (ex) {}
+                }
+            }
+            if (!(tabDomain in domainSets))
+              domainSets[tabDomain] = [];
+            domainSets[tabDomain].push(tab);
+          }
+          return domainSets;
+        ]]></body>
+      </method>
+
+      <method name="_getChopsForSet">
+        <parameter name="aTabSet"/>
+        <body><![CDATA[
+          const MIN_CHOP = 3;
+          let chopList = [];
+          let separators = /\s[-:>\|]+\s/;
+          let pathMode = false;
+          function titleIsURI(aTitle) {
+            try {
+              makeURI(aTitle);
+              return true;
+            }
+            catch (e) {}
+            return false;
+          }
+          // indexOfSep returns the end index of the match
+          function indexOfSep(aStr, aStart) {
+            if (pathMode)
+              return aStr.indexOf('/', aStart);
+            let first = aStr.indexOf(' ', aStart);
+            let second = aStr.indexOf(' ', first + 1);
+            while (first != -1) {
+              if (second > first &&
+                  separators.test(aStr.substring(first, second + 1)))
+                return second;
+              first = second;
+              second = aStr.indexOf(' ', second + 1);
+            }
+            return -1;
+          }
+          function findFrontChop(aStr, aNextStr, aChop) {
+            // Advance until the end of the title or the pair diverges
+            do {
+              aChop = indexOfSep(aStr, aChop + 1);
+            } while (aChop != -1 &&
+                     aStr.substr(0, aChop + 1) == aNextStr.substr(0, aChop + 1));
+
+            if (aChop < 0)
+              aChop = aStr.length;
+
+            // Return the last valid spot
+            return lastIndexOfSep(aStr, aChop - 1)[1];
+          }
+          // lastIndexOfSep returns a tuple (start, end) to designate the match
+          // This is because findSuffix() needs to know the start for iterating
+          function lastIndexOfSep(aStr, aEnd) {
+            if (pathMode) {
+              let path = aStr.lastIndexOf('/', aEnd);
+              return [path, path];
+            }
+            let second = aStr.lastIndexOf(' ', aEnd);
+            let first = aStr.lastIndexOf(' ', second - 1);
+            while (first != -1) {
+              if (separators.test(aStr.substring(first, second + 1)))
+                return [first, second];
+              second = first;
+              first = aStr.lastIndexOf(' ', first - 1);
+            }
+            return [-1, -1];
+          }
+          function findSuffix(aStr, aNextStr, aChop) {
+            let last = lastIndexOfSep(aStr)[0]
+            let oldLast = last;
+            let size = aStr.length - last;
+            let nextLast = aNextStr.length - size;
+
+            // Is there any suffix match?
+            if (aStr.substr(last) != aNextStr.substr(nextLast))
+              return 0;
+            // Move backwards on the main string until the suffix diverges
+            do {
+              oldLast = last;
+              last = lastIndexOfSep(aStr, last - 1)[0];
+              size = aStr.length - last;
+              nextLast = aNextStr.length - size;
+            } while (last != -1 && nextLast != -1 &&
+                     aStr.substr(last) == aNextStr.substr(nextLast));
+
+            return aStr.length - oldLast;
+          }
+
+          // build and apply the chopList for the domain
+          for (let i = 0, next = 1; next < aTabSet.length; i = next++) {
+            let tabStr = aTabSet[i]._originalTitle;
+            pathMode = false;
+            if (titleIsURI(tabStr))
+              pathMode = true;
+            let chop = indexOfSep(tabStr);
+
+            // Default to no chop
+            if (!chopList[i])
+              chopList[i] = 0;
+            let nextStr = aTabSet[next]._originalTitle;
+
+            // Is the title one word, empty, or completely different than next?
+            if (chop == -1 ||
+                tabStr.substr(0, chop + 1) != nextStr.substr(0, chop + 1)) {
+              chopList[next] = 0;
+              continue;
+            }
+
+            // Treat neighbors with same title as ourselves
+            while (next < aTabSet.length && tabStr == nextStr) {
+              next += 1;
+              if (next < aTabSet.length)
+                nextStr = aTabSet[next]._originalTitle;
+            }
+
+            // Bail on these strings early, using the first as the basis
+            if (next >= aTabSet.length ||
+                tabStr.substr(0, chop) != nextStr.substr(0, chop)) {
+              chop = chopList[i];
+            }
+            else {
+              chop = findFrontChop(tabStr, nextStr, chop);
+              // Does a URI remain?
+              if (!pathMode && titleIsURI(tabStr.substr(chop))) {
+                pathMode = true;
+                chop = findFrontChop(tabStr, nextStr, chop);
+              }
+
+              let suffix = findSuffix(tabStr, nextStr, chop);
+              let sufPos = tabStr.length - suffix;
+              let nextSufPos = nextStr.length - suffix;
+
+              chop += 1;
+              chopList[next] = chop;
+              // Adjust the chop based on the suffix.
+              if (sufPos < chop) {
+                // Only revert based on suffix for tab and any identicals
+                chop = lastIndexOfSep(tabStr, sufPos - 1)[1] + 1;
+                chopList[i] = chop;
+              }
+              else if (nextSufPos < chop) {
+                // Only revert based on suffix for 'next'
+                let nextChop = lastIndexOfSep(nextStr, nextSufPos - 1)[1] + 1;
+                chopList[next] = nextChop;
+              }
+
+              if (tabStr.substr(chop).length < MIN_CHOP) {
+                chop = lastIndexOfSep(tabStr, chop - 2)[1] + 1;
+                chopList[next] = chop;
+              }
+            }
+
+            // Mark chop on the relevant tabs
+            for (let j = i; j < next; j++) {
+              let oldChop = chopList[j];
+              if (!oldChop || oldChop <= chop)
+                chopList[j] = chop;
+            }
+          }
+          return chopList;
+        ]]></body>
+      </method>
+
+      <method name="_applyChops">
+        <parameter name="aTabSet"/>
+        <parameter name="aChopList"/>
+        <body><![CDATA[
+          this.removeEventListener(
+            "TabAttrModified", this.adjustTabTitles, false);
+          for (let i = 0; i < aTabSet.length; i++) {
+            let tab = aTabSet[i];
+            let title = tab._originalTitle;
+            if (title.length > 0) {
+              tab.label = title.substr(aChopList[i] || 0);
+              if (tab._tabViewTabItem)
+                tab._tabViewTabItem.$tabTitle.text(tab.label);
+              this.tabbrowser._tabAttrModified(tab);
+            }
+          }
+          this.addEventListener(
+            "TabAttrModified", this.adjustTabTitles, false);
         ]]></body>
       </method>
 
@@ -3220,6 +3554,7 @@
           tab._fullyOpen = true;
 
           this.adjustTabstrip();
+          this.adjustTabTitles();
 
           if (tab.getAttribute("selected") == "true") {
             this._fillTrailingGap();
