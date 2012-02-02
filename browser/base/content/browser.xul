@@ -348,6 +348,10 @@
       </hbox>
     </panel>
 
+    <panel id="identity-drag-panel" allowevents="false" type="drag">
+      <label id="identity-drag-label"/>
+    </panel>
+
     <tooltip id="urlTooltip">
       <label crop="center" flex="1" class="tooltip-label"/>
     </tooltip>
@@ -520,7 +524,7 @@
                  ontextentered="this.handleCommand(param);"
                  ontextreverted="return this.handleRevert();"
                  pageproxystate="invalid"
-                 onfocus="document.getElementById('identity-box').style.MozUserFocus= 'normal'"
+                 onfocus="var idBox = document.getElementById('identity-box'); if (idBox.classList.contains('verifiedIdentity') || idBox.classList.contains('verifiedDomain')) idBox.style.MozUserFocus= 'normal'"
                  onblur="setTimeout(function() document.getElementById('identity-box').style.MozUserFocus = '', 0);">
           <box id="notification-popup-box" hidden="true" align="center">
             <image id="default-notification-icon" class="notification-anchor-icon" role="button"/>
@@ -538,12 +542,6 @@
                onkeypress="gIdentityHandler.handleIdentityButtonEvent(event);"
                ondragstart="gIdentityHandler.onDragStart(event);">
             <hbox id="identity-box-inner" align="center">
-              <stack id="page-proxy-stack"
-                     onclick="PageProxyClickHandler(event);">
-                <image id="page-proxy-favicon" validate="never"
-                       pageproxystate="invalid"
-                       onerror="this.removeAttribute('src');"/>
-              </stack>
               <hbox id="identity-icon-labels">
                 <label id="identity-icon-label" class="plain" flex="1"/>
                 <label id="identity-icon-country-label" class="plain"/>
