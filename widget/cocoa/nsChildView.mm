@@ -4597,8 +4597,11 @@ NSEvent* gLastDragMouseDownEvent = nil;
     if (operation == NSDragOperationNone) {
       nsCOMPtr<nsIDOMDataTransfer> dataTransfer;
       dragService->GetDataTransfer(getter_AddRefs(dataTransfer));
-      if (dataTransfer)
-        dataTransfer->SetDropEffectInt(nsIDragService::DRAGDROP_ACTION_NONE);
+      nsCOMPtr<nsIDOMNSDataTransfer> dataTransferNS =
+        do_QueryInterface(dataTransfer);
+
+      if (dataTransferNS)
+        dataTransferNS->SetDropEffectInt(nsIDragService::DRAGDROP_ACTION_NONE);
     }
 
     mDragService->EndDragSession(true);

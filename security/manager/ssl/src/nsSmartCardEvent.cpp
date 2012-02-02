@@ -152,6 +152,12 @@ NS_IMETHODIMP nsSmartCardEvent::GetExplicitOriginalTarget(nsIDOMEventTarget * *a
   return mNSEvent->GetExplicitOriginalTarget(aTarget);
 }
 
+NS_IMETHODIMP nsSmartCardEvent::GetTmpRealOriginalTarget(nsIDOMEventTarget * *aTarget)
+{
+  NS_ASSERTION(mNSEvent, "SmartCardEvent called without Init");
+  return mNSEvent->GetTmpRealOriginalTarget(aTarget);
+}
+
 NS_IMETHODIMP nsSmartCardEvent::PreventBubble(void)
 {
   NS_ASSERTION(mNSEvent, "SmartCardEvent called without Init");

@@ -267,7 +267,8 @@ protected:
 
   nsEvent*                    mEvent;
   nsRefPtr<nsPresContext>     mPresContext;
-  nsCOMPtr<nsIDOMEventTarget> mExplicitOriginalTarget;
+  nsCOMPtr<nsIDOMEventTarget> mTmpRealOriginalTarget;
+  nsIDOMEventTarget*          mExplicitOriginalTarget;
   nsString                    mCachedType;
   bool                        mEventIsInternal;
   bool                        mPrivateDataDuplicated;

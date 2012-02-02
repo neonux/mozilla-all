@@ -1374,8 +1374,11 @@ nsDragService::SourceEndDragSession(GdkDragContext *aContext,
         }
     }
 
-    if (mDataTransfer) {
-        mDataTransfer->SetDropEffectInt(dropEffect);
+    nsCOMPtr<nsIDOMNSDataTransfer> dataTransfer =
+        do_QueryInterface(mDataTransfer);
+
+    if (dataTransfer) {
+        dataTransfer->SetDropEffectInt(dropEffect);
     }
 
     // Inform the drag session that we're ending the drag.
