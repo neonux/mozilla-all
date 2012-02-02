@@ -400,7 +400,6 @@ pref("browser.tabs.tabClipWidth", 140);
 pref("browser.tabs.animate", true);
 pref("browser.tabs.onTop", true);
 pref("browser.tabs.drawInTitlebar", true);
-pref("browser.tabs.cropRedundancyInTitles", true);
 
 // Where to show tab close buttons:
 // 0  on active tab only

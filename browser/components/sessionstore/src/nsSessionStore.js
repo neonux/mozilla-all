@@ -1129,7 +1129,7 @@ SessionStoreService.prototype = {
 
     // store closed-tab data for undo
     if (this._shouldSaveTabState(tabState)) {
-      let tabTitle = aTab._originalTitle;
+      let tabTitle = aTab.label;
       let tabbrowser = aWindow.gBrowser;
       tabTitle = this._replaceLoadingTitle(tabTitle, tabbrowser, aTab);
       
@@ -2973,14 +2973,11 @@ SessionStoreService.prototype = {
       if (activePageData) {
         if (activePageData.title) {
           tab.label = activePageData.title;
-          tab._originalTitle = activePageData.title;
           tab.crop = "end";
         } else if (activePageData.url != "about:blank") {
           tab.label = activePageData.url;
-          tab._originalTitle = activePageData.url;
           tab.crop = "center";
         }
-        tab._originalURL = activePageData.url;
       }
     }
 
