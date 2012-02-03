@@ -53,22 +53,6 @@ class nsCocoaWindow;
 class nsChildView;
 class nsMenuBarX;
 
-// If we are using an SDK older than 10.7, define bits we need that are missing
-// from it.
-#if !defined(MAC_OS_X_VERSION_10_7) || \
-    MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_7
-
-enum {
-    NSWindowCollectionBehaviorFullScreenPrimary = 1 << 7,
-    NSFullScreenWindowMask = 1 << 14,
-};
-
-@interface NSWindow (NewInMacOS107)
-- (void)toggleFullScreen:(id)sender;
-@end
-
-#endif
-
 typedef struct _nsCocoaWindowList {
   _nsCocoaWindowList() : prev(NULL), window(NULL) {}
   struct _nsCocoaWindowList *prev;
@@ -256,7 +240,6 @@ public:
                                         nsIWidget *aWidget, bool aActivate);
     NS_IMETHOD              SetSizeMode(PRInt32 aMode);
     NS_IMETHOD              HideWindowChrome(bool aShouldHide);
-    NS_IMETHOD              SetFullScreen(bool aFullScreen);
     NS_IMETHOD              MakeFullScreen(bool aFullScreen);
     NS_IMETHOD              Resize(PRInt32 aWidth,PRInt32 aHeight, bool aRepaint);
     NS_IMETHOD              Resize(PRInt32 aX, PRInt32 aY, PRInt32 aWidth, PRInt32 aHeight, bool aRepaint);
@@ -283,7 +266,6 @@ public:
     virtual void SetTransparencyMode(nsTransparencyMode aMode);
     NS_IMETHOD SetWindowShadowStyle(PRInt32 aStyle);
     virtual void SetShowsToolbarButton(bool aShow);
-    virtual void SetShowsFullScreenButton(bool aShow);
     NS_IMETHOD SetWindowTitlebarColor(nscolor aColor, bool aActive);
     virtual void SetDrawsInTitlebar(bool aState);
     virtual nsresult SynthesizeNativeMouseEvent(nsIntPoint aPoint,
@@ -358,8 +340,6 @@ protected:
                                         // this is used for sibling sheet contention only
   bool                 mFullScreen;
   bool                 mModal;
-
-  bool                 mUsesNativeFullScreen; // only true on Lion if SetShowsFullScreenButton(true);
 
   bool                 mInReportMoveEvent; // true if in a call to ReportMoveEvent().
 

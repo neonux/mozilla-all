@@ -139,7 +139,6 @@ nsCocoaWindow::nsCocoaWindow()
 , mSheetNeedsShow(false)
 , mFullScreen(false)
 , mModal(false)
-, mUsesNativeFullScreen(false)
 , mInReportMoveEvent(false)
 , mNumModalDescendents(0)
 {
@@ -510,10 +509,7 @@ NS_IMETHODIMP nsCocoaWindow::Destroy()
   nsBaseWidget::Destroy();
   nsBaseWidget::OnDestroy();
 
-  // On Lion we do not have to mess with the OS chrome when in Full Screen mode. So we
-  // can simply skip that. When the Window is destroyed, the OS will take care of removing
-  // the full screen 'Space' that was setup for us.
-  if (!mUsesNativeFullScreen && mFullScreen) {
+  if (mFullScreen) {
     nsCocoaUtils::HideOSChromeOnScreen(false, [mWindow screen]);
   }
 
@@ -1162,47 +1158,25 @@ NS_IMETHODIMP nsCocoaWindow::HideWindowChrome(bool aShouldHide)
   NS_OBJC_END_TRY_ABORT_BLOCK_NSRESULT;
 }
 
-// LION ONLY
-NS_METHOD nsCocoaWindow::SetFullScreen(bool aFullScreen)
-{
-  if (mFullScreen != aFullScreen) {
-    // Since this isn't going through nsGlobalWindow::SetFullScreen, we need to
-    // set mFullScreen ourselves.
-    mFullScreen = aFullScreen;
-
-    DispatchSizeModeEvent();
-  }
-  return NS_OK;
-}
 
 NS_METHOD nsCocoaWindow::MakeFullScreen(bool aFullScreen)
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK_NSRESULT;
 
-  // On Lion we're going to dispatch a size mode event from SetFullScreen, which
-  // nsAppShell handles & forwards to nsGlobalWindow to here. We're already in
-  // full mode by this point, so handle it gracefully.
-  if (mFullScreen == aFullScreen) {
-    return NS_OK;
-  }
+  NS_ASSERTION(mFullScreen != aFullScreen, "Unnecessary MakeFullScreen call");
 
   NSDisableScreenUpdates();
-  nsresult rv = NS_OK;
 
-  if (mUsesNativeFullScreen) {
-    [mWindow toggleFullScreen : nil];
-  } else {
-    // The order here matters. When we exit full screen mode, we need to show the
-    // Dock first, otherwise the newly-created window won't have its minimize
-    // button enabled. See bug 526282.
-    nsCocoaUtils::HideOSChromeOnScreen(aFullScreen, [mWindow screen]);
+  // The order here matters. When we exit full screen mode, we need to show the
+  // Dock first, otherwise the newly-created window won't have its minimize
+  // button enabled. See bug 526282.
+  nsCocoaUtils::HideOSChromeOnScreen(aFullScreen, [mWindow screen]);
 
-    // Set mFullScreen here otherwise calls into nsBaseWidget::SetFullScreen()
-    // get weird & unruly. We end up with too many size mode events that get confused
-    mFullScreen = aFullScreen;
-    rv = nsBaseWidget::MakeFullScreen(aFullScreen);
-  }
+  // Set mFullScreen here otherwise calls into nsBaseWidget::SetFullScreen()
+  // get confused about current state. We end up with too many size mode events.
+  mFullScreen = aFullScreen;
 
+  nsresult rv = nsBaseWidget::MakeFullScreen(aFullScreen);
   NSEnableScreenUpdates();
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -1649,39 +1623,6 @@ void nsCocoaWindow::SetShowsToolbarButton(bool aShow)
   NS_OBJC_END_TRY_ABORT_BLOCK;
 }
 
-void nsCocoaWindow::SetShowsFullScreenButton(bool aShow)
-{
-  NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
-
-  //XXXzpao What if this gets called while already in non-native fullscreen?
-  //        Technically it's possible, though we won't currently do it.
-  //        mUsesFullScreen will lead to the wrong path taken in MakeFullScreen(false);
-  if (!nsToolkit::OnLionOrLater() || mUsesNativeFullScreen == aShow) {
-    return;
-  }
-
-  bool transition = mFullScreen;
-
-  if (transition) {
-    MakeFullScreen(false);
-  }
-
-  NSWindowCollectionBehavior newBehavior = [mWindow collectionBehavior];
-  if (aShow) {
-    newBehavior |= NSWindowCollectionBehaviorFullScreenPrimary;
-  } else {
-    newBehavior &= ~NSWindowCollectionBehaviorFullScreenPrimary;
-  }
-  [mWindow setCollectionBehavior : newBehavior];
-  mUsesNativeFullScreen = aShow;
-
-  if (transition) {
-    MakeFullScreen(true);
-  }
-
-  NS_OBJC_END_TRY_ABORT_BLOCK;
-}
-
 NS_IMETHODIMP nsCocoaWindow::SetWindowTitlebarColor(nscolor aColor, bool aActive)
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK_NSRESULT;
@@ -1908,36 +1849,6 @@ bool nsCocoaWindow::ShouldFocusPlugin()
     return;
 
   mGeckoWindow->ReportMoveEvent();
-}
-
-// Lion's full screen mode will bypass our internal fullscreen tracking, so
-// we need to catch it before we transition and call our own stuff, which in
-// turn will fire "fullscreen" events. We catch the transition at "will" events
-// because our "fullscreen" events are supposed to fire before the transition.
-- (void)windowWillEnterFullScreen:(NSNotification *)notification
-{
-  NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
-
-  if (!mGeckoWindow) {
-    return;
-  }
-
-  mGeckoWindow->SetFullScreen(true);
-
-  NS_OBJC_END_TRY_ABORT_BLOCK;
-}
-
-- (void)windowWillExitFullScreen:(NSNotification *)notification
-{
-  NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
-
-  if (!mGeckoWindow) {
-    return;
-  }
-
-  mGeckoWindow->SetFullScreen(false);
-
-  NS_OBJC_END_TRY_ABORT_BLOCK;
 }
 
 - (void)windowDidBecomeMain:(NSNotification *)aNotification
