@@ -81,7 +81,6 @@ const nsIWebNavigation = Ci.nsIWebNavigation;
 var gCharsetMenu = null;
 var gLastBrowserCharset = null;
 var gPrevCharset = null;
-var gProxyFavIcon = null;
 var gLastValidURLStr = "";
 var gInPrintPreviewMode = false;
 var gDownloadMgr = null;
@@ -2673,39 +2672,16 @@ function SetPageProxyState(aState)
   if (!gURLBar)
     return;
 
-  if (!gProxyFavIcon)
-    gProxyFavIcon = document.getElementById("page-proxy-favicon");
-
   gURLBar.setAttribute("pageproxystate", aState);
-  gProxyFavIcon.setAttribute("pageproxystate", aState);
 
   // the page proxy state is set to valid via OnLocationChange, which
   // gets called when we switch tabs.
   if (aState == "valid") {
     gLastValidURLStr = gURLBar.value;
     gURLBar.addEventListener("input", UpdatePageProxyState, false);
-
-    PageProxySetIcon(gBrowser.getIcon());
   } else if (aState == "invalid") {
     gURLBar.removeEventListener("input", UpdatePageProxyState, false);
-    PageProxyClearIcon();
   }
-}
-
-function PageProxySetIcon (aURL)
-{
-  if (!gProxyFavIcon)
-    return;
-
-  if (!aURL)
-    PageProxyClearIcon();
-  else if (gProxyFavIcon.getAttribute("src") != aURL)
-    gProxyFavIcon.setAttribute("src", aURL);
-}
-
-function PageProxyClearIcon ()
-{
-  gProxyFavIcon.removeAttribute("src");
 }
 
 function PageProxyClickHandler(aEvent)
@@ -2867,6 +2843,21 @@ function BrowserOnClick(event) {
         if (ss.canRestoreLastSession)
           ss.restoreLastSession();
         errorDoc.getElementById("sessionRestoreContainer").hidden = true;
+      }
+      else if (ot == errorDoc.getElementById("history")) {
+        PlacesCommandHook.showPlacesOrganizer('History');
+      }
+      else if (ot == errorDoc.getElementById("settings")) {
+        openPreferences();
+      }
+      else if (ot == errorDoc.getElementById("addons")) {
+        BrowserOpenAddonsMgr();
+      }
+      else if (ot == errorDoc.getElementById("apps")) {
+        openLinkIn("https://apps.mozillalabs.com/appdir/", "tab", {inBackground: false});
+      }
+      else if (ot == errorDoc.getElementById("downloads")) {
+        BrowserDownloadsUI();
       }
       else if (ot == errorDoc.getElementById("pairDeviceLink")) {
         if (Services.prefs.prefHasUserValue("services.sync.username")) {
@@ -3757,7 +3748,6 @@ function BrowserToolboxCustomizeDone(aToolboxChanged) {
   if (aToolboxChanged) {
     gURLBar = document.getElementById("urlbar");
 
-    gProxyFavIcon = document.getElementById("page-proxy-favicon");
     gHomeButton.updateTooltip();
     gIdentityHandler._cacheElements();
     window.XULBrowserWindow.init();
@@ -4561,11 +4551,6 @@ var XULBrowserWindow = {
       return originalTarget;
 
     return "_blank";
-  },
-
-  onLinkIconAvailable: function (aIconURL) {
-    if (gProxyFavIcon && gBrowser.userTypedValue === null)
-      PageProxySetIcon(aIconURL); // update the favicon in the URL bar
   },
 
   onProgressChange: function (aWebProgress, aRequest,
@@ -8234,17 +8219,26 @@ var gIdentityHandler = {
     if (gURLBar.getAttribute("pageproxystate") != "valid")
       return;
 
-    var value = content.location.href;
-    var urlString = value + "\n" + content.document.title;
-    var htmlString = "<a href=\"" + value + "\">" + value + "</a>";
+    let value = content.location.href;
+    let urlString = value + "\n" + content.document.title;
+    let htmlString = "<a href=\"" + value + "\">" + value + "</a>";
 
-    var dt = event.dataTransfer;
+    let dt = event.dataTransfer;
     dt.setData("text/x-moz-url", urlString);
     dt.setData("text/uri-list", value);
     dt.setData("text/plain", value);
     dt.setData("text/html", htmlString);
-    dt.setDragImage(gProxyFavIcon, 16, 16);
-  }
+
+    let panel = document.getElementById("identity-drag-panel");
+    let panelLabel = panel.firstChild;
+    panelLabel.setAttribute("value", gBrowser.selectedTab.label);
+
+    let faviconImage = document.getAnonymousElementByAttribute(gBrowser.selectedTab, "class", "tab-icon-image");
+    document.mozSetImageElement("dragFavicon", faviconImage);
+
+    // TODO: Update these coordinates when bug 712184 is fixed.
+    dt.setDragImage(panel, -1, -1);
+  },
 };
 
 let DownloadMonitorPanel = {

@@ -161,7 +161,6 @@ function endTest() {
     .getService(Ci.nsIWindowMediator)
     .getMostRecentWindow("Download:Manager")
     .close();
-
   waitForClearHistory(SimpleTest.finish);
 }
 
