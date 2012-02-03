@@ -1412,12 +1412,6 @@ void nsXULWindow::SyncAttributesToWidget()
   if (NS_SUCCEEDED(rv)) {
     mWindow->SetShowsToolbarButton(attr.LowerCaseEqualsLiteral("true"));
   }
-
-  // "fullscreenbutton" attribute
-  rv = windowElement->GetAttribute(NS_LITERAL_STRING("fullscreenbutton"), attr);
-  if (NS_SUCCEEDED(rv)) {
-    mWindow->SetShowsFullScreenButton(attr.LowerCaseEqualsLiteral("true"));
-  }
 }
 
 NS_IMETHODIMP nsXULWindow::SavePersistentAttributes()
