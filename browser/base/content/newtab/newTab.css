@@ -132,30 +132,27 @@
   overflow: hidden;
 }
 
-/* SITE STRIP */
-.site-strip {
+/* SITE BUTTONS */
+.strip-button {
   position: absolute;
-  left: 0;
-  top: 0;
-  width: 195px;
-  height: 17px;
-  overflow: hidden;
+  top: 5px;
   opacity: 0;
   -moz-transition: opacity 200ms ease-out;
 }
 
-.site:hover:not([frozen]) > .site-strip {
+.strip-button:focus,
+.site:hover:not([frozen]) > .strip-button {
   opacity: 1;
 }
 
 .strip-button-pin,
 .strip-button-block:-moz-locale-dir(rtl) {
-  float: left;
+  left: 5px;
 }
 
 .strip-button-block,
 .strip-button-pin:-moz-locale-dir(rtl) {
-  float: right;
+  right: 5px;
 }
 
 /* DRAG & DROP */
