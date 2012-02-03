@@ -78,9 +78,8 @@ let gBrowserThumbnails = {
 
   _capture: function Thumbnails_capture(aBrowser) {
     if (this._shouldCapture(aBrowser)) {
-      this._pageThumbs.capture(aBrowser.contentWindow, function (aData) {
-        this._pageThumbs.store(aBrowser.currentURI.spec, aData);
-      }.bind(this));
+      let canvas = this._pageThumbs.capture(aBrowser.contentWindow);
+      this._pageThumbs.store(aBrowser.currentURI.spec, canvas);
     }
   },
 
