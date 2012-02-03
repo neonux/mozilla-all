@@ -92,7 +92,6 @@
         windowtype="navigator:browser"
         screenX="4" screenY="4"
         browsingmode="normal"
-        fullscreenbutton="true"
         persist="screenX screenY width height sizemode">
 
 # All JS files which are not content (only) dependent that browser.xul

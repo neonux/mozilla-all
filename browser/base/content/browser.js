@@ -3892,15 +3892,10 @@ var FullScreen = {
       enterFS = !enterFS;
 
     // show/hide all menubars, toolbars (except the full screen toolbar)
+    this.showXULChrome("toolbar", !enterFS);
     document.getElementById("View:FullScreen").setAttribute("checked", enterFS);
 
-    // On OS X Lion, we don't actually want to do much when entering fullscreen.
-    // We won't hide the toolbar and in turn we don't need to create a special toolbar.
-
-    if (enterFS && !this.useLionFullScreen) {
-      // hide menubars, toolbars (except the full screen toolbar)
-      this.showXULChrome(false);
-
+    if (enterFS) {
       // Add a tiny toolbar to receive mouseover and dragenter events, and provide affordance.
       // This will help simulate the "collapse" metaphor while also requiring less code and
       // events than raw listening of mouse coords. We don't add the toolbar in DOM full-screen
@@ -3932,15 +3927,7 @@ var FullScreen = {
       // Autohide prefs
       gPrefService.addObserver("browser.fullscreen", this, false);
     }
-    else if (enterFS && this.useLionFullScreen && document.mozFullScreen) {
-      // Entering DOM FS on Lion should still hide xul chrome (which hides toolbars)
-      this.showXULChrome("toolbar", false);
-    }
-    else if (!enterFS) {
-      // We'll still run this when leaving fullscreen on OS X Lion to make sure
-      // we've cleaned up since we still hide chrome when entering DOM fullscreen.
-      this.showXULChrome("toolbar", true);
-
+    else {
       // The user may quit fullscreen during an animation
       this._cancelAnimation();
       gNavToolbox.style.marginTop = "";
@@ -4002,9 +3989,7 @@ var FullScreen = {
     gBrowser.tabContainer.addEventListener("TabSelect", this.exitDomFullScreen);
 
     // Exit DOM full-screen mode when the browser window loses focus (ALT+TAB, etc).
-    if (!this.useLionFullScreen) {
-      window.addEventListener("deactivate", this.exitDomFullScreen, true);
-    }
+    window.addEventListener("deactivate", this.exitDomFullScreen, true);
 
     // Cancel any "hide the toolbar" animation which is in progress, and make
     // the toolbar hide immediately.
@@ -4038,9 +4023,7 @@ var FullScreen = {
       gBrowser.tabContainer.removeEventListener("TabOpen", this.exitDomFullScreen);
       gBrowser.tabContainer.removeEventListener("TabClose", this.exitDomFullScreen);
       gBrowser.tabContainer.removeEventListener("TabSelect", this.exitDomFullScreen);
-      if (!this.useLionFullScreen) {
-        window.removeEventListener("deactivate", this.exitDomFullScreen, true);
-      }
+      window.removeEventListener("deactivate", this.exitDomFullScreen, true);
     }
   },
 
@@ -4390,18 +4373,6 @@ var FullScreen = {
       controls[i].hidden = aShow;
   }
 };
-XPCOMUtils.defineLazyGetter(FullScreen, "useLionFullScreen", function() {
-  // We'll only use OS X Lion full screen if we're
-  // * on OS X
-  // * on Lion (Darwin 11.x) -- this will need to be updated for OS X 10.8
-  // * have fullscreenbutton="true"
-#ifdef XP_MACOSX
-  return /^11\./.test(Services.sysinfo.getProperty("version")) &&
-         document.documentElement.getAttribute("fullscreenbutton") == "true";
-#else
-  return false;
-#endif
-});
 
 /**
  * Returns true if |aMimeType| is text-based, false otherwise.
