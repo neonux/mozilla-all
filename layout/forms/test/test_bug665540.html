@@ -43,8 +43,10 @@ function openFullscreenWindow() {
 
 function childFocused() {
     ok(win.fullScreen, "window should be fullscreen");
-    is(win.windowState, win.STATE_FULLSCREEN,
-       "window state should be fullscreen");
+    // bug 670026
+    ((navigator.platform.indexOf("Mac") < 0) ? is : todo_is)
+        (win.windowState, win.STATE_FULLSCREEN,
+         "window state should be fullscreen");
 
     // The select doesn't open if the mouse click is fired too soon
     // (on X11 at least).
@@ -95,8 +97,10 @@ function finish() {
         synthesizeMouseAtCenter(select, {}, win);
     }
 
-    is(win.windowState, win.STATE_FULLSCREEN,
-       "window state should still be fullscreen");
+    // bug 670026
+    ((navigator.platform.indexOf("Mac") < 0) ? is : todo_is)
+        (win.windowState, win.STATE_FULLSCREEN,
+         "window state should still be fullscreen");
 
     win.close();
     SimpleTest.finish();
