@@ -103,10 +103,12 @@ let gGrid = {
       '<img class="site-img" width="' + THUMB_WIDTH +'" ' +
       ' height="' + THUMB_HEIGHT + '" alt=""/>' +
       '<span class="site-title"/>' +
-      '<input class="button strip-button strip-button-pin" type="button"' +
-      ' title="' + newTabString("pin") + '"/>' +
-      '<input class="button strip-button strip-button-block" type="button"' +
-      ' title="' + newTabString("block") + '"/>';
+      '<span class="site-strip">' +
+      '  <input class="button strip-button strip-button-pin" type="button"' +
+      '   tabindex="-1" title="' + newTabString("pin") + '"/>' +
+      '  <input class="button strip-button strip-button-block" type="button"' +
+      '   tabindex="-1" title="' + newTabString("block") + '"/>' +
+      '</span>';
 
     this._siteFragment = document.createDocumentFragment();
     this._siteFragment.appendChild(site);

@@ -114,35 +114,35 @@
   font-weight: 700;
 }
 
-/* SITE BUTTONS */
+/* SITE STRIP */
+.site-strip {
+  padding: 4px 3px;
+  background-color: rgba(0,0,0,0.5);
+}
+
 .strip-button {
+  width: 17px;
+  height: 17px;
   background: transparent url(chrome://browser/skin/newtab/strip.png);
 }
 
-.strip-button-pin {
-  width: 12px;
-  height: 13px;
-}
-
 .strip-button-pin:hover {
-  background-position: 0 -13px;
+  background-position: 0 -17px;
 }
 
 .strip-button-pin:active,
 .site[pinned] .strip-button-pin {
-  background-position: 0 -26px;
+  background-position: 0 -34px;
 }
 
 .strip-button-block {
-  width: 11px;
-  height: 11px;
-  background-position: -12px 0;
+  background-position: -17px 0;
 }
 
 .strip-button-block:hover {
-  background-position: -12px -13px;
+  background-position: -17px -17px;
 }
 
 .strip-button-block:active {
-  background-position: -12px -26px;
+  background-position: -17px -34px;
 }
