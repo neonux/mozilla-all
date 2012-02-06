@@ -48,8 +48,7 @@ function testThree() {
     ok(hasFocus, "The search box has focus");
 
     let tab = win.gBrowser.tabs[1];
-    searchBox.val(tab._tabViewTabItem.$tabTitle[0].innerHTML);
-
+    searchBox.val(tab._tabViewTabItem._originalTitle || tab._tabViewTabItem.$tabTitle[0].textContent);
     cw.Search.perform();
 
     whenTabViewIsHidden(function () {
