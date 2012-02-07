@@ -3267,12 +3267,9 @@ nsEventStateManager::PostHandleEvent(nsPresContext* aPresContext,
 
       // the initial dataTransfer is the one from the dragstart event that
       // was set on the dragSession when the drag began.
-      nsCOMPtr<nsIDOMNSDataTransfer> dataTransfer;
+      nsCOMPtr<nsIDOMDataTransfer> dataTransfer;
       nsCOMPtr<nsIDOMDataTransfer> initialDataTransfer;
       dragSession->GetDataTransfer(getter_AddRefs(initialDataTransfer));
-
-      nsCOMPtr<nsIDOMNSDataTransfer> initialDataTransferNS = 
-        do_QueryInterface(initialDataTransfer);
 
       nsDragEvent *dragEvent = (nsDragEvent*)aEvent;
 
@@ -3305,7 +3302,7 @@ nsEventStateManager::PostHandleEvent(nsPresContext* aPresContext,
           // initialized (which is done in nsDOMDragEvent::GetDataTransfer),
           // so set it from the drag action. We'll still want to filter it
           // based on the effectAllowed below.
-          dataTransfer = initialDataTransferNS;
+          dataTransfer = initialDataTransfer;
 
           PRUint32 action;
           dragSession->GetDragAction(&action);
@@ -3355,8 +3352,8 @@ nsEventStateManager::PostHandleEvent(nsPresContext* aPresContext,
 
       // now set the drop effect in the initial dataTransfer. This ensures
       // that we can get the desired drop effect in the drop event.
-      if (initialDataTransferNS)
-        initialDataTransferNS->SetDropEffectInt(dropEffect);
+      if (initialDataTransfer)
+        initialDataTransfer->SetDropEffectInt(dropEffect);
     }
     break;
 
@@ -4149,18 +4146,11 @@ nsEventStateManager::UpdateDragDataTransfer(nsDragEvent* dragEvent)
     // was set on the dragSession when the drag began.
     nsCOMPtr<nsIDOMDataTransfer> initialDataTransfer;
     dragSession->GetDataTransfer(getter_AddRefs(initialDataTransfer));
-
-    // grab the interface that has GetMozCursor.
-    nsCOMPtr<nsIDOMNSDataTransfer> initialDataTransferNS = 
-      do_QueryInterface(initialDataTransfer);
-    nsCOMPtr<nsIDOMNSDataTransfer> eventTransferNS = 
-      do_QueryInterface(dragEvent->dataTransfer);
-
-    if (initialDataTransferNS && eventTransferNS) {
+    if (initialDataTransfer) {
       // retrieve the current moz cursor setting and save it.
       nsAutoString mozCursor;
-      eventTransferNS->GetMozCursor(mozCursor);
-      initialDataTransferNS->SetMozCursor(mozCursor);
+      dragEvent->dataTransfer->GetMozCursor(mozCursor);
+      initialDataTransfer->SetMozCursor(mozCursor);
     }
   }
 }
