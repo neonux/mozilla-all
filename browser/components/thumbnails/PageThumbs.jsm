@@ -129,16 +129,17 @@ let PageThumbs = {
           return;
         }
 
-      let outputStream = aEntry.openOutputStream(0);
+        let outputStream = aEntry.openOutputStream(0);
 
-      // Write the image data to the cache entry.
+        // Write the image data to the cache entry.
         NetUtil.asyncCopy(aInputStream, outputStream, function (aResult) {
-        let success = Components.isSuccessCode(aResult);
-        if (success)
-          aEntry.markValid();
+          let success = Components.isSuccessCode(aResult);
+          if (success)
+            aEntry.markValid();
 
-        aEntry.close();
-        finish(success);
+          aEntry.close();
+          finish(success);
+        });
       });
     });
   },

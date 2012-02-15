@@ -1433,7 +1433,7 @@ nsCocoaWindow::DispatchSizeModeEvent()
 
   mSizeMode = newMode;
   nsSizeModeEvent event(true, NS_SIZEMODE, this);
-  event.mSizeMode = GetWindowSizeMode(mWindow);
+  event.mSizeMode = GetWindowSizeMode(mWindow, mFullScreen);
   event.time = PR_IntervalNow();
 
   nsEventStatus status = nsEventStatus_eIgnore;
