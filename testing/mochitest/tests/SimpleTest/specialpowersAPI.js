@@ -121,7 +121,7 @@ Observer.prototype = {
   cleanup: function() {
     if (this._isPref) {
       var os = Cc["@mozilla.org/preferences-service;1"].getService()
-               .QueryInterface(Ci.nsIPrefBranch2);
+               .QueryInterface(Ci.nsIPrefBranch);
       os.removeObserver(this._topic, this);
     } else {
       var os = Cc["@mozilla.org/observer-service;1"]
@@ -466,7 +466,7 @@ SpecialPowersAPI.prototype = {
    * what we have set.
    *
    * prefs: {set|clear: [[pref, value], [pref, value, Iid], ...], set|clear: [[pref, value], ...], ...}
-   * ex: {'set': [['foo.bar', 2], ['browser.magic', '0xfeedface']], 'remove': [['bad.pref']] }
+   * ex: {'set': [['foo.bar', 2], ['browser.magic', '0xfeedface']], 'clear': [['bad.pref']] }
    *
    * In the scenario where our prefs specify the same pref more than once, we do not guarantee
    * the behavior.  
@@ -625,7 +625,7 @@ SpecialPowersAPI.prototype = {
 
     if (aIsPref) {
       var os = Cc["@mozilla.org/preferences-service;1"].getService()
-               .QueryInterface(Ci.nsIPrefBranch2);	
+               .QueryInterface(Ci.nsIPrefBranch);	
       os.addObserver(aTopic, observer, false);
     } else {
       var os = Cc["@mozilla.org/observer-service;1"]
@@ -1081,4 +1081,3 @@ SpecialPowersAPI.prototype = {
     return el.dispatchEvent(event);
   },
 };
-

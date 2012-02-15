@@ -319,6 +319,13 @@ function nsPlacesAutoComplete()
              DBConnection.
              clone(true);
 
+    // Autocomplete often fallbacks to a table scan due to lack of text indices.
+    // In such cases a larger cache helps reducing IO.  The default Storage
+    // value is MAX_CACHE_SIZE_BYTES in storage/src/mozStorageConnection.cpp.
+    let stmt = db.createAsyncStatement("PRAGMA cache_size = -6144"); // 6MiB
+    stmt.executeAsync();
+    stmt.finalize();
+
     // Create our in-memory tables for tab tracking.
     initTempTable(db);
 
@@ -687,7 +694,7 @@ nsPlacesAutoComplete.prototype = {
       this._os.removeObserver(this, kTopicShutdown);
 
       // Remove our preference observer.
-      this._prefs.QueryInterface(Ci.nsIPrefBranch2).removeObserver("", this);
+      this._prefs.removeObserver("", this);
       delete this._prefs;
 
       // Finalize the statements that we have used.
@@ -1262,6 +1269,8 @@ nsPlacesAutoComplete.prototype = {
 
   classID: Components.ID("d0272978-beab-4adc-a3d4-04b76acfa4e7"),
 
+  _xpcom_factory: XPCOMUtils.generateSingletonFactory(nsPlacesAutoComplete),
+
   QueryInterface: XPCOMUtils.generateQI([
     Ci.nsIAutoCompleteSearch,
     Ci.nsIAutoCompleteSimpleResultListener,
@@ -1577,6 +1586,8 @@ urlInlineComplete.prototype = {
   //// nsISupports
 
   classID: Components.ID("c88fae2d-25cf-4338-a1f4-64a320ea7440"),
+
+  _xpcom_factory: XPCOMUtils.generateSingletonFactory(urlInlineComplete),
 
   QueryInterface: XPCOMUtils.generateQI([
     Ci.nsIAutoCompleteSearch,

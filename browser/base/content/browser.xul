@@ -851,11 +851,6 @@
                      label="&printButton.label;" command="cmd_print"
                      tooltiptext="&printButton.tooltip;"/>
 
-      <toolbaritem id="navigator-throbber" title="&throbberItem.title;" align="center" pack="center"
-                   mousethrough="always">
-        <image/>
-      </toolbaritem>
-
       <toolbarbutton id="downloads-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
                      observes="Tools:Downloads"
                      ondrop="DownloadsButtonDNDObserver.onDrop(event)"
@@ -886,21 +881,6 @@
                      ondragenter="newWindowButtonObserver.onDragOver(event)"
                      ondragexit="newWindowButtonObserver.onDragExit(event)"/>
 
-      <toolbarbutton id="cut-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
-                     label="&cutCmd.label;"
-                     command="cmd_cut"
-                     tooltiptext="&cutButton.tooltip;"/>
-
-      <toolbarbutton id="copy-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
-                     label="&copyCmd.label;"
-                     command="cmd_copy"
-                     tooltiptext="&copyButton.tooltip;"/>
-
-      <toolbarbutton id="paste-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
-                     label="&pasteCmd.label;"
-                     command="cmd_paste"
-                     tooltiptext="&pasteButton.tooltip;"/>
-
       <toolbarbutton id="fullscreen-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
                      observes="View:FullScreen"
                      type="checkbox"
@@ -918,12 +898,7 @@
                        command="cmd_fullZoomEnlarge"
                        tooltiptext="&zoomInButton.tooltip;"/>
       </toolbaritem>
-#ifdef MOZ_SERVICES_SYNC
-      <toolbarbutton id="sync-button"
-                     class="toolbarbutton-1 chromeclass-toolbar-additional"
-                     label="&syncToolbarButton.label;"
-                     oncommand="gSyncUI.handleToolbarButton()"/>
-#endif
+
       <toolbarbutton id="feed-button"
                      type="menu"
                      class="toolbarbutton-1 chromeclass-toolbar-additional"
@@ -937,6 +912,33 @@
                    oncommand="return FeedHandler.subscribeToFeed(null, event);"
                    onclick="checkForMiddleClick(this, event);"/>
       </toolbarbutton>
+
+      <toolbarbutton id="cut-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
+                     label="&cutCmd.label;"
+                     command="cmd_cut"
+                     tooltiptext="&cutButton.tooltip;"/>
+
+      <toolbarbutton id="copy-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
+                     label="&copyCmd.label;"
+                     command="cmd_copy"
+                     tooltiptext="&copyButton.tooltip;"/>
+
+      <toolbarbutton id="paste-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
+                     label="&pasteCmd.label;"
+                     command="cmd_paste"
+                     tooltiptext="&pasteButton.tooltip;"/>
+
+#ifdef MOZ_SERVICES_SYNC
+      <toolbarbutton id="sync-button"
+                     class="toolbarbutton-1 chromeclass-toolbar-additional"
+                     label="&syncToolbarButton.label;"
+                     oncommand="gSyncUI.handleToolbarButton()"/>
+#endif
+
+      <toolbaritem id="navigator-throbber" title="&throbberItem.title;" align="center" pack="center"
+                   mousethrough="always">
+        <image/>
+      </toolbaritem>
 
       <toolbarbutton id="tabview-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
                      label="&tabGroupsButton.label;"
@@ -965,7 +967,7 @@
                   tabcontainer="tabbrowser-tabs"
                   contentcontextmenu="contentAreaContextMenu"
                   autocompletepopup="PopupAutoComplete"
-                  onclick="return contentAreaClick(event, false);"/>
+                  onclick="contentAreaClick(event, false);"/>
       <statuspanel id="statusbar-display" inactive="true"/>
     </vbox>
     <splitter id="devtools-side-splitter" hidden="true"/>

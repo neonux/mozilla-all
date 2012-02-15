@@ -282,11 +282,11 @@ typedef void
                          void *v, JSGCTraceKind vkind);
 
 struct WeakMapTracer {
-    JSContext            *context;
+    JSRuntime            *runtime;
     WeakMapTraceCallback callback;
 
-    WeakMapTracer(JSContext *cx, WeakMapTraceCallback cb)
-        : context(cx), callback(cb) {}
+    WeakMapTracer(JSRuntime *rt, WeakMapTraceCallback cb)
+        : runtime(rt), callback(cb) {}
 };
 
 extern JS_FRIEND_API(void)
@@ -517,6 +517,7 @@ IsObjectInContextCompartment(const JSObject *obj, const JSContext *cx);
 #define JSITER_KEYVALUE   0x4   /* destructuring for-in wants [key, value] */
 #define JSITER_OWNONLY    0x8   /* iterate over obj's own properties only */
 #define JSITER_HIDDEN     0x10  /* also enumerate non-enumerable properties */
+#define JSITER_FOR_OF     0x20  /* harmony for-of loop */
 
 inline uintptr_t
 GetContextStackLimit(const JSContext *cx)
@@ -753,14 +754,6 @@ class ObjectPtr
 };
 
 } /* namespace js */
-
-/*
- * If protoKey is not JSProto_Null, then clasp is ignored. If protoKey is
- * JSProto_Null, clasp must non-null.
- */
-extern JS_FRIEND_API(JSBool)
-js_GetClassPrototype(JSContext *cx, JSObject *scope, JSProtoKey protoKey,
-                     JSObject **protop, js::Class *clasp = NULL);
 
 #endif
 

@@ -366,7 +366,21 @@ gfxPlatform::Shutdown()
         gPlatform->mFontPrefsObserver = nsnull;
     }
 
+    // Shut down the default GL context provider.
     mozilla::gl::GLContextProvider::Shutdown();
+
+    // We always have OSMesa at least potentially available; shut it down too.
+    mozilla::gl::GLContextProviderOSMesa::Shutdown();
+
+#if defined(XP_WIN)
+    // The above shutdown calls operate on the available context providers on
+    // most platforms.  Windows is a "special snowflake", though, and has three
+    // context providers available, so we have to shut all of them down.
+    // We should only support the default GL provider on Windows; then, this
+    // could go away. Unfortunately, we currently support WGL (the default) for
+    // WebGL on Optimus.
+    mozilla::gl::GLContextProviderEGL::Shutdown();
+#endif
 
     delete gPlatform;
     gPlatform = nsnull;

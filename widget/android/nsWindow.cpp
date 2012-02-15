@@ -730,6 +730,12 @@ nsWindow::DispatchEvent(nsGUIEvent *aEvent)
         case NS_TEXT_TEXT:
             mIMEComposingText = static_cast<nsTextEvent*>(aEvent)->theText;
             break;
+        case NS_KEY_PRESS:
+            // Sometimes the text changes after a key press do not generate notifications (see Bug 723810)
+            // Call the corresponding methods explicitly to send those changes back to Java
+            OnIMETextChange(0, 0, 0);
+            OnIMESelectionChange();
+            break;
         }
         return status;
     }
@@ -1208,15 +1214,15 @@ nsWindow::OnDraw(AndroidGeckoEvent *ae)
         metadataProvider->GetDrawMetadata(metadata);
     }
 
+    nsIntRect dirtyRect = ae->Rect().Intersect(nsIntRect(0, 0, gAndroidBounds.width, gAndroidBounds.height));
+
     AndroidGeckoSoftwareLayerClient &client =
         AndroidBridge::Bridge()->GetSoftwareLayerClient();
     if (!client.BeginDrawing(gAndroidBounds.width, gAndroidBounds.height,
                              gAndroidTileSize.width, gAndroidTileSize.height,
-                             metadata, HasDirectTexture())) {
+                             dirtyRect, metadata, HasDirectTexture())) {
         return;
     }
-
-    nsIntRect dirtyRect = ae->Rect().Intersect(nsIntRect(0, 0, gAndroidBounds.width, gAndroidBounds.height));
 
     unsigned char *bits = NULL;
     if (HasDirectTexture()) {

@@ -747,6 +747,7 @@ public:
     void TraceXPConnectRoots(JSTracer *trc);
     void AddXPConnectRoots(JSContext* cx,
                            nsCycleCollectionTraversalCallback& cb);
+    void UnmarkSkippableJSHolders();
 
     static JSBool GCCallback(JSContext *cx, JSGCStatus status);
 
@@ -762,7 +763,7 @@ public:
 
     void DebugDump(PRInt16 depth);
 
-    void SystemIsBeingShutDown(JSContext* cx);
+    void SystemIsBeingShutDown();
 
     PRThread* GetThreadRunningGC() const {return mThreadRunningGC;}
 
@@ -1545,7 +1546,7 @@ public:
     }
 
     static void
-    SystemIsBeingShutDown(JSContext* cx);
+    SystemIsBeingShutDown();
 
     static void
     TraceJS(JSTracer* trc, XPCJSRuntime* rt);
@@ -2281,7 +2282,7 @@ public:
 
     void JSProtoObjectFinalized(JSContext *cx, JSObject *obj);
 
-    void SystemIsBeingShutDown(JSContext* cx);
+    void SystemIsBeingShutDown();
 
     void DebugDump(PRInt16 depth);
 
@@ -2381,7 +2382,8 @@ public:
 
     XPCNativeInterface* GetInterface() const {return mInterface;}
     nsISupports*        GetNative()    const {return mNative;}
-    JSObject*           GetJSObject()  const;
+    JSObject*           GetJSObject();
+    JSObject*           GetJSObjectPreserveColor() const;
     void SetInterface(XPCNativeInterface*  Interface) {mInterface = Interface;}
     void SetNative(nsISupports*  Native)              {mNative = Native;}
     void SetJSObject(JSObject*  JSObj);
@@ -2632,9 +2634,9 @@ public:
                            nsISupports* aCOMObj,
                            XPCWrappedNative** aWrapper);
 
-    void FlatJSObjectFinalized(JSContext *cx);
+    void FlatJSObjectFinalized();
 
-    void SystemIsBeingShutDown(JSContext* cx);
+    void SystemIsBeingShutDown();
 
     enum CallMode {CALL_METHOD, CALL_GETTER, CALL_SETTER};
 
@@ -3343,8 +3345,6 @@ public:
                                        JSContext* cx,
                                        jsval *jsExceptionPtr);
 
-    static void RemoveXPCOMUCStringFinalizer();
-
 private:
     XPCConvert(); // not implemented
 
@@ -3362,8 +3362,6 @@ public:
     // assigned.
     static jsval ReadableToJSVal(JSContext *cx, const nsAString &readable,
                                  nsStringBuffer** sharedBuffer);
-
-    static void ShutdownDOMStringFinalizer();
 
 private:
     XPCStringConvert();         // not implemented

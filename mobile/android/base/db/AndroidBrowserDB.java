@@ -41,6 +41,7 @@ import java.io.ByteArrayOutputStream;
 
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.database.ContentObserver;
 import android.database.Cursor;
 import android.database.CursorWrapper;
 import android.database.sqlite.SQLiteConstraintException;
@@ -204,6 +205,16 @@ public class AndroidBrowserDB implements BrowserDB.BrowserDBIface {
         return new AndroidDBCursor(c);
     }
 
+    public Cursor getMobileBookmarks(ContentResolver cr) {
+        Cursor c = cr.query(null, null, null, null, null);
+        return new AndroidDBCursor(c);
+    }
+
+    public Cursor getDesktopBookmarks(ContentResolver cr) {
+        Cursor c = cr.query(null, null, null, null, null);
+        return new AndroidDBCursor(c);
+    }
+
     public Cursor isBookmarkQueryPre11(ContentResolver cr, String uri) {
         return cr.query(Browser.BOOKMARKS_URI,
                         new String[] { BookmarkColumns.URL },
@@ -232,6 +243,10 @@ public class AndroidBrowserDB implements BrowserDB.BrowserDBIface {
         cursor.close();
 
         return (count == 1);
+    }
+
+    public String getUrlForKeyword(ContentResolver cr, String keyword) {
+        return null;
     }
 
     public void addBookmarkPre11(ContentResolver cr, String title, String uri) {
@@ -271,6 +286,35 @@ public class AndroidBrowserDB implements BrowserDB.BrowserDBIface {
             addBookmarkPre11(cr, title, uri);
     }
 
+    public void updateBookmarkPre11(ContentResolver cr, String oldUri, String uri, String title) {
+        ContentValues values = new ContentValues();
+        values.put(Browser.BookmarkColumns.TITLE, title);
+        values.put(Browser.BookmarkColumns.URL, uri);
+
+        cr.update(Browser.BOOKMARKS_URI,
+                  values,
+                  Browser.BookmarkColumns.URL + " = ?",
+                  new String[] { oldUri });
+    }
+
+    public void updateBookmarkPost11(ContentResolver cr, String oldUri, String uri, String title) {
+        ContentValues values = new ContentValues();
+        values.put(Browser.BookmarkColumns.TITLE, title);
+        values.put(Browser.BookmarkColumns.URL, uri);
+
+        cr.update(BOOKMARKS_CONTENT_URI_POST_11,
+                  values,
+                  Browser.BookmarkColumns.URL + " = ?",
+                  new String[] { oldUri });
+    }
+
+    public void updateBookmark(ContentResolver cr, String oldUri, String uri, String title, String keyword) {
+        if (Build.VERSION.SDK_INT >= 11)
+            updateBookmarkPost11(cr, oldUri, uri, title);
+        else
+            updateBookmarkPre11(cr, oldUri, uri, title);
+    }
+
     public void removeBookmarkPre11(ContentResolver cr, String uri) {
         ContentValues values = new ContentValues();
         values.put(Browser.BookmarkColumns.BOOKMARK, "0");
@@ -287,11 +331,30 @@ public class AndroidBrowserDB implements BrowserDB.BrowserDBIface {
                   new String[] { uri });
     }
 
-    public void removeBookmark(ContentResolver cr, String uri) {
+    public void removeBookmark(ContentResolver cr, int id) {
+        // Not implemented
+    }
+
+    public void removeBookmarksWithURL(ContentResolver cr, String uri) {
         if (Build.VERSION.SDK_INT >= 11)
             removeBookmarkPost11(cr, uri);
         else
             removeBookmarkPre11(cr, uri);
+    }
+
+    public void registerBookmarkObserverPre11(ContentResolver cr, ContentObserver observer) {
+        cr.registerContentObserver(Browser.BOOKMARKS_URI, false, observer);
+    }
+
+    public void registerBookmarkObserverPost11(ContentResolver cr, ContentObserver observer) {
+        cr.registerContentObserver(BOOKMARKS_CONTENT_URI_POST_11, false, observer);
+    }
+
+    public void registerBookmarkObserver(ContentResolver cr, ContentObserver observer) {
+        if (Build.VERSION.SDK_INT >= 11)
+            registerBookmarkObserverPost11(cr, observer);
+        else
+            registerBookmarkObserverPre11(cr, observer);
     }
 
     public BitmapDrawable getFaviconForUrl(ContentResolver cr, String uri) {

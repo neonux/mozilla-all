@@ -195,6 +195,9 @@ xpc_MarkInCCGeneration(nsISupports* aVariant, PRUint32 aGeneration);
 extern void
 xpc_UnmarkGrayObject(nsIXPConnectWrappedJS* aWrappedJS);
 
+extern void
+xpc_UnmarkSkippableJSHolders();
+
 // No JS can be on the stack when this is called. Probably only useful from
 // xpcshell.
 NS_EXPORT_(void)
@@ -216,6 +219,9 @@ bool StringToJsval(JSContext *cx, nsString &str, JS::Value *rval);
 void *GetCompartmentName(JSContext *cx, JSCompartment *c);
 void DestroyCompartmentName(void *string);
 
+#ifdef DEBUG
+void DumpJSHeap(FILE* file);
+#endif
 } // namespace xpc
 
 class nsIMemoryMultiReporterCallback;

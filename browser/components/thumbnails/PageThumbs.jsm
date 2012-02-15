@@ -72,7 +72,7 @@ let PageThumbs = {
   },
 
   /**
-   * Creates a canvas containing a thumbnail depicting the given window.
+   * Captures a thumbnail for the given window.
    * @param aWindow The DOM window to capture a thumbnail from.
    * @param aCallback The function to be called when the thumbnail has been
    *                  captured. The first argument will be the data stream
@@ -104,39 +104,35 @@ let PageThumbs = {
   },
 
   /**
-   * Stores the image data contained in the given canvas to the underlying
-   * storage.
-   * @param aKey The key to use for the storage.
-   * @param aData The data stream containing the image data.
-   * @param aCallback The function to be called when the canvas data has been
-   *                  stored (optional).
+   * Captures a thumbnail for the given browser and stores it to the cache.
+   * @param aBrowser The browser to capture a thumbnail for.
+   * @param aCallback The function to be called when finished (optional).
    */
-  store: function PageThumbs_store(aKey, aData, aCallback) {
-    let telemetryStoreTime = new Date();
+  captureAndStore: function PageThumbs_captureAndStore(aBrowser, aCallback) {
+    this.capture(aBrowser.contentWindow, function (aInputStream) {
+      let telemetryStoreTime = new Date();
 
-    function finish(aSuccessful) {
-      if (aSuccessful) {
-        Services.telemetry.getHistogramById("FX_THUMBNAILS_STORE_TIME_MS")
-          .add(new Date() - telemetryStoreTime);
+      function finish(aSuccessful) {
+        if (aSuccessful) {
+          Services.telemetry.getHistogramById("FX_THUMBNAILS_STORE_TIME_MS")
+            .add(new Date() - telemetryStoreTime);
+        }
+
+        if (aCallback)
+          aCallback(aSuccessful);
       }
 
-      if (aCallback)
-        aCallback(aSuccessful);
-    }
-
-    let self = this;
-
-    // Get a writeable cache entry.
-    PageThumbsCache.getWriteEntry(aKey, function (aEntry) {
-      if (!aEntry) {
-        finish(false);
-        return;
-      }
+      // Get a writeable cache entry.
+      PageThumbsCache.getWriteEntry(aBrowser.currentURI.spec, function (aEntry) {
+        if (!aEntry) {
+          finish(false);
+          return;
+        }
 
       let outputStream = aEntry.openOutputStream(0);
 
       // Write the image data to the cache entry.
-      NetUtil.asyncCopy(aData, outputStream, function (aResult) {
+        NetUtil.asyncCopy(aInputStream, outputStream, function (aResult) {
         let success = Components.isSuccessCode(aResult);
         if (success)
           aEntry.markValid();

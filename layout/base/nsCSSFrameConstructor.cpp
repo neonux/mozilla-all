@@ -4944,9 +4944,8 @@ nsCSSFrameConstructor::ConstructSVGForeignObjectFrame(nsFrameConstructorState& a
   innerPseudoStyle = mPresShell->StyleSet()->
     ResolveAnonymousBoxStyle(nsCSSAnonBoxes::mozSVGForeignContent, styleContext);
 
-  nsIFrame* blockFrame = NS_NewBlockFrame(mPresShell, innerPseudoStyle,
-                                          NS_BLOCK_FLOAT_MGR |
-                                          NS_BLOCK_MARGIN_ROOT);
+  nsIFrame* blockFrame = NS_NewBlockFormattingContext(mPresShell,
+                                                      innerPseudoStyle);
   if (NS_UNLIKELY(!blockFrame)) {
     newFrame->Destroy();
     return NS_ERROR_OUT_OF_MEMORY;
@@ -7617,7 +7616,6 @@ DoApplyRenderingChangeToTree(nsIFrame* aFrame,
                              nsChangeHint aChange);
 
 /**
- * @param aBoundsRect returns the bounds enclosing the areas covered by aFrame and its childre
  * This rect is relative to aFrame's parent
  */
 static void
@@ -7680,7 +7678,14 @@ DoApplyRenderingChangeToTree(nsIFrame* aFrame,
     // frame doesn't have a view, find the nearest containing view
     // (adjusting r's coordinate system to reflect the nesting) and
     // update there.
-    UpdateViewsForTree(aFrame, aFrameManager, aChange);
+    // We don't need to update transforms in UpdateViewsForTree, because
+    // there can't be any out-of-flows or popups that need to be transformed;
+    // all out-of-flow descendants of the transformed element must also be
+    // descendants of the transformed frame.
+    UpdateViewsForTree(aFrame, aFrameManager,
+                       nsChangeHint(aChange & (nsChangeHint_RepaintFrame |
+                                               nsChangeHint_SyncFrameView |
+                                               nsChangeHint_UpdateOpacityLayer)));
 
     // if frame has view, will already be invalidated
     if (aChange & nsChangeHint_RepaintFrame) {
@@ -7710,6 +7715,9 @@ ApplyRenderingChangeToTree(nsPresContext* aPresContext,
                            nsIFrame* aFrame,
                            nsChangeHint aChange)
 {
+  NS_ASSERTION(!(aChange & nsChangeHint_UpdateTransformLayer) || aFrame->IsTransformed(),
+               "Only transformed frames should have UpdateTransformLayer hint");
+
   nsIPresShell *shell = aPresContext->PresShell();
   if (shell->IsPaintingSuppressed()) {
     // Don't allow synchronous rendering changes when painting is turned off.
@@ -7981,7 +7989,7 @@ nsCSSFrameConstructor::ProcessRestyledFrames(nsStyleChangeList& aChangeList)
         ApplyRenderingChangeToTree(presContext, frame, hint);
         didInvalidate = true;
       }
-      if (hint & nsChangeHint_UpdateOverflow) {
+      if ((hint & nsChangeHint_UpdateOverflow) && !didReflow) {
         while (frame) {
           nsOverflowAreas* pre = static_cast<nsOverflowAreas*>
             (frame->Properties().Get(frame->PreTransformOverflowAreasProperty()));

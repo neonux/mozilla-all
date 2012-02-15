@@ -85,6 +85,7 @@ JSCompartment::JSCompartment(JSRuntime *rt)
 #ifdef JS_METHODJIT
     jaegerCompartment_(NULL),
 #endif
+    regExps(rt),
     propertyTree(thisForCtor()),
     emptyTypeObject(NULL),
     debugModeBits(rt->debugMode ? DebugFromC : 0),
@@ -121,6 +122,9 @@ JSCompartment::init(JSContext *cx)
     if (!crossCompartmentWrappers.init())
         return false;
 
+    if (!regExps.init(cx))
+        return false;
+
     if (!scriptFilenameTable.init())
         return false;
 
@@ -137,7 +141,7 @@ JSCompartment::ensureJaegerCompartmentExists(JSContext *cx)
     mjit::JaegerCompartment *jc = cx->new_<mjit::JaegerCompartment>();
     if (!jc)
         return false;
-    if (!jc->Initialize()) {
+    if (!jc->Initialize(cx)) {
         cx->delete_(jc);
         return false;
     }
@@ -413,7 +417,7 @@ JSCompartment::markCrossCompartmentWrappers(JSTracer *trc)
     JS_ASSERT(trc->runtime->gcCurrentCompartment);
 
     for (WrapperMap::Enum e(crossCompartmentWrappers); !e.empty(); e.popFront())
-        MarkRoot(trc, e.front().key, "cross-compartment wrapper");
+        MarkValueRoot(trc, e.front().key, "cross-compartment wrapper");
 }
 
 void
@@ -428,7 +432,7 @@ JSCompartment::markTypes(JSTracer *trc)
 
     for (CellIterUnderGC i(this, FINALIZE_SCRIPT); !i.done(); i.next()) {
         JSScript *script = i.get<JSScript>();
-        MarkRoot(trc, script, "mark_types_script");
+        MarkScriptRoot(trc, script, "mark_types_script");
     }
 
     for (size_t thingKind = FINALIZE_OBJECT0;
@@ -437,12 +441,12 @@ JSCompartment::markTypes(JSTracer *trc)
         for (CellIterUnderGC i(this, AllocKind(thingKind)); !i.done(); i.next()) {
             JSObject *object = i.get<JSObject>();
             if (object->hasSingletonType())
-                MarkRoot(trc, object, "mark_types_singleton");
+                MarkObjectRoot(trc, object, "mark_types_singleton");
         }
     }
 
     for (CellIterUnderGC i(this, FINALIZE_TYPE_OBJECT); !i.done(); i.next())
-        MarkRoot(trc, i.get<types::TypeObject>(), "mark_types_scan");
+        MarkTypeObjectRoot(trc, i.get<types::TypeObject>(), "mark_types_scan");
 }
 
 void
@@ -450,11 +454,11 @@ JSCompartment::sweep(JSContext *cx, bool releaseTypes)
 {
     /* Remove dead wrappers from the table. */
     for (WrapperMap::Enum e(crossCompartmentWrappers); !e.empty(); e.popFront()) {
-        JS_ASSERT_IF(IsAboutToBeFinalized(cx, e.front().key) &&
-                     !IsAboutToBeFinalized(cx, e.front().value),
+        JS_ASSERT_IF(IsAboutToBeFinalized(e.front().key) &&
+                     !IsAboutToBeFinalized(e.front().value),
                      e.front().key.isString());
-        if (IsAboutToBeFinalized(cx, e.front().key) ||
-            IsAboutToBeFinalized(cx, e.front().value)) {
+        if (IsAboutToBeFinalized(e.front().key) ||
+            IsAboutToBeFinalized(e.front().value)) {
             e.removeFront();
         }
     }
@@ -466,7 +470,7 @@ JSCompartment::sweep(JSContext *cx, bool releaseTypes)
     sweepNewTypeObjectTable(cx, newTypeObjects);
     sweepNewTypeObjectTable(cx, lazyTypeObjects);
 
-    if (emptyTypeObject && IsAboutToBeFinalized(cx, emptyTypeObject))
+    if (emptyTypeObject && IsAboutToBeFinalized(emptyTypeObject))
         emptyTypeObject = NULL;
 
     newObjectCache.reset();
@@ -549,6 +553,7 @@ void
 JSCompartment::purge(JSContext *cx)
 {
     arenas.purge();
+    regExps.purge();
     dtoaCache.purge();
 
     /*
@@ -745,7 +750,7 @@ JSCompartment::sweepBreakpoints(JSContext *cx)
         JSScript *script = i.get<JSScript>();
         if (!script->hasAnyBreakpointsOrStepMode())
             continue;
-        bool scriptGone = IsAboutToBeFinalized(cx, script);
+        bool scriptGone = IsAboutToBeFinalized(script);
         for (unsigned i = 0; i < script->length; i++) {
             BreakpointSite *site = script->getBreakpointSite(script->code + i);
             if (!site)
@@ -755,7 +760,7 @@ JSCompartment::sweepBreakpoints(JSContext *cx)
             Breakpoint *nextbp;
             for (Breakpoint *bp = site->firstBreakpoint(); bp; bp = nextbp) {
                 nextbp = bp->nextInSite();
-                if (scriptGone || IsAboutToBeFinalized(cx, bp->debugger->toJSObject()))
+                if (scriptGone || IsAboutToBeFinalized(bp->debugger->toJSObject()))
                     bp->destroy(cx);
             }
         }

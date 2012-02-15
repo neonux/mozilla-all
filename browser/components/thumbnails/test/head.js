@@ -94,16 +94,12 @@ function whenLoaded(aElement, aCallback) {
  * @param aMessage The info message to print when comparing the pixel color.
  */
 function captureAndCheckColor(aRed, aGreen, aBlue, aMessage) {
-  let window = gBrowser.selectedTab.linkedBrowser.contentWindow;
+  let browser = gBrowser.selectedBrowser;
 
   // Capture the screenshot.
-  PageThumbs.capture(window, function (aData) {
-    let key = Date.now();
-
-    // Store the thumbnail in the cache.
-    PageThumbs.store(key, aData, function () {
+  PageThumbs.captureAndStore(browser, function () {
       let width = 100, height = 100;
-      let thumb = PageThumbs.getThumbnailURL(key, width, height);
+    let thumb = PageThumbs.getThumbnailURL(browser.currentURI.spec, width, height);
 
       getXULDocument(function (aDocument) {
         let htmlns = "http://www.w3.org/1999/xhtml";

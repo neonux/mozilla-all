@@ -20,6 +20,7 @@
  *
  * Contributor(s):
  *   Lucas Rocha <lucasr@mozilla.com>
+ *   Richard Newman <rnewman@mozilla.com>
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -48,20 +49,33 @@ import org.mozilla.gecko.db.BrowserContract.URLColumns;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
+import android.database.ContentObserver;
 import android.database.Cursor;
 import android.database.CursorWrapper;
+import android.database.MatrixCursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
 import android.provider.Browser;
+import android.util.Log;
 
 public class LocalBrowserDB implements BrowserDB.BrowserDBIface {
-    // Same as android.provider.Browser for consistency
+    // Same as android.provider.Browser for consistency.
     private static final int MAX_HISTORY_COUNT = 250;
 
-    // Same as android.provider.Browser for consistency
+    // Same as android.provider.Browser for consistency.
     public static final int TRUNCATE_N_OLDEST = 5;
+
+    // Calculate these once, at initialization. isLoggable is too expensive to
+    // have in-line in each log call.
+    private static final String LOGTAG = "GeckoLocalBrowserDB";
+    private static boolean logDebug = Log.isLoggable(LOGTAG, Log.DEBUG);
+    protected static void debug(String message) {
+        if (logDebug) {
+            Log.d(LOGTAG, message);
+        }
+    }
 
     private final String mProfile;
     private long mMobileFolderId;
@@ -270,10 +284,35 @@ public class LocalBrowserDB implements BrowserDB.BrowserDBIface {
                             new String[] { Bookmarks._ID,
                                            Bookmarks.URL,
                                            Bookmarks.TITLE,
-                                           Bookmarks.FAVICON },
+                                           Bookmarks.FAVICON,
+                                           Bookmarks.KEYWORD },
                             Bookmarks.IS_FOLDER + " = 0",
                             null,
                             Bookmarks.TITLE + " ASC");
+
+        return new LocalDBCursor(c);
+    }
+
+    public Cursor getMobileBookmarks(ContentResolver cr) {
+        return getBookmarks(cr, true);
+    }
+
+    public Cursor getDesktopBookmarks(ContentResolver cr) {
+        return getBookmarks(cr, false);
+    }
+
+    private Cursor getBookmarks(ContentResolver cr, boolean mobileBookmarks) {
+        String parentSelection = mobileBookmarks ? " = ?" : " != ?";
+        long mobileFolderId = getMobileBookmarksFolderId(cr);
+        Cursor c = cr.query(appendProfile(Bookmarks.CONTENT_URI),
+                            new String[] { Bookmarks._ID,
+                                           Bookmarks.URL,
+                                           Bookmarks.TITLE,
+                                           Bookmarks.FAVICON },
+                            Bookmarks.IS_FOLDER + " = 0 AND " +
+                            Bookmarks.PARENT + parentSelection,
+                            new String[] { String.valueOf(mobileFolderId) },
+                            Bookmarks.DATE_MODIFIED + " DESC");
 
         return new LocalDBCursor(c);
     }
@@ -289,6 +328,24 @@ public class LocalBrowserDB implements BrowserDB.BrowserDBIface {
         cursor.close();
 
         return (count == 1);
+    }
+
+    public String getUrlForKeyword(ContentResolver cr, String keyword) {
+        Cursor cursor = cr.query(appendProfile(Bookmarks.CONTENT_URI),
+                                 new String[] { Bookmarks.URL },
+                                 Bookmarks.KEYWORD + " = ?",
+                                 new String[] { keyword },
+                                 null);
+
+        if (!cursor.moveToFirst()) {
+            cursor.close();
+            return null;
+        }
+
+        String url = cursor.getString(cursor.getColumnIndexOrThrow(Bookmarks.URL));
+        cursor.close();
+
+        return url;
     }
 
     private long getMobileBookmarksFolderId(ContentResolver cr) {
@@ -314,32 +371,106 @@ public class LocalBrowserDB implements BrowserDB.BrowserDBIface {
         return mMobileFolderId;
     }
 
+    /**
+     * Find parents of records that match the provided criteria, and bump their
+     * modified timestamp.
+     */
+    protected void bumpParents(ContentResolver cr, String param, String value) {
+        ContentValues values = new ContentValues();
+        values.put(Bookmarks.DATE_MODIFIED, System.currentTimeMillis());
+
+        // Inline appendProfile here to avoid building multiple Uri objects.
+        final Uri updateURI =
+            Bookmarks.CONTENT_URI.buildUpon()
+                                 .appendPath("parents")
+                                 .appendQueryParameter(BrowserContract.PARAM_PROFILE, mProfile)
+                                 .build();
+        String where  = param + " = ?";
+        String[] args = new String[] { value };
+        int updated  = cr.update(updateURI, values, where, args);
+        debug("Updated " + updated + " rows to new modified time.");
+    }
+
     public void addBookmark(ContentResolver cr, String title, String uri) {
         long folderId = getMobileBookmarksFolderId(cr);
         if (folderId < 0)
             return;
 
+        final long now = System.currentTimeMillis();
         ContentValues values = new ContentValues();
         values.put(Browser.BookmarkColumns.TITLE, title);
         values.put(Bookmarks.URL, uri);
         values.put(Bookmarks.PARENT, folderId);
+        values.put(Bookmarks.DATE_MODIFIED, now);
 
         // Restore deleted record if possible
         values.put(Bookmarks.IS_DELETED, 0);
 
-        int updated = cr.update(appendProfile(Bookmarks.CONTENT_URI),
+        Uri contentUri = appendProfile(Bookmarks.CONTENT_URI);
+        int updated = cr.update(contentUri,
                                 values,
                                 Bookmarks.URL + " = ?",
                                 new String[] { uri });
 
         if (updated == 0)
-            cr.insert(appendProfile(Bookmarks.CONTENT_URI), values);
+            cr.insert(contentUri, values);
+
+        // Bump parent modified time using its ID.
+        debug("Bumping parent modified time for addition to: " + folderId);
+        final String where  = Bookmarks._ID + " = ?";
+        final String[] args = new String[] { String.valueOf(folderId) };
+
+        ContentValues bumped = new ContentValues();
+        bumped.put(Bookmarks.DATE_MODIFIED, now);
+
+        updated = cr.update(contentUri, bumped, where, args);
+        debug("Updated " + updated + " rows to new modified time.");
+
+        cr.notifyChange(contentUri, null);
     }
 
-    public void removeBookmark(ContentResolver cr, String uri) {
-        cr.delete(appendProfile(Bookmarks.CONTENT_URI),
+    public void removeBookmark(ContentResolver cr, int id) {
+        Uri contentUri = appendProfile(Bookmarks.CONTENT_URI);
+
+        // Do this now so that the item still exists!
+        final String idString = String.valueOf(id);
+        bumpParents(cr, Bookmarks._ID, idString);
+
+        final String[] idArgs = new String[] { idString };
+        final String idEquals = Bookmarks._ID + " = ?";
+        cr.delete(contentUri, idEquals, idArgs);
+
+        cr.notifyChange(contentUri, null);
+    }
+
+    public void removeBookmarksWithURL(ContentResolver cr, String uri) {
+        Uri contentUri = appendProfile(Bookmarks.CONTENT_URI);
+
+        // Do this now so that the items still exist!
+        bumpParents(cr, Bookmarks.URL, uri);
+
+        final String[] urlArgs = new String[] { uri };
+        final String urlEquals = Bookmarks.URL + " = ?";
+        cr.delete(contentUri, urlEquals, urlArgs);
+
+        cr.notifyChange(contentUri, null);
+    }
+
+    public void registerBookmarkObserver(ContentResolver cr, ContentObserver observer) {
+        Uri uri = appendProfile(Bookmarks.CONTENT_URI);
+        cr.registerContentObserver(uri, false, observer);
+    }
+
+    public void updateBookmark(ContentResolver cr, String oldUri, String uri, String title, String keyword) {
+        ContentValues values = new ContentValues();
+        values.put(Browser.BookmarkColumns.TITLE, title);
+        values.put(Bookmarks.URL, uri);
+        values.put(Bookmarks.KEYWORD, keyword);
+
+        cr.update(appendProfile(Bookmarks.CONTENT_URI),
+                  values,
                   Bookmarks.URL + " = ?",
-                  new String[] { uri });
+                  new String[] { oldUri });
     }
 
     public BitmapDrawable getFaviconForUrl(ContentResolver cr, String uri) {

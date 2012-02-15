@@ -145,6 +145,7 @@ using namespace mozilla;
 #define XML_HTTP_REQUEST_NEED_AC_PREFLIGHT (1 << 16) // Internal
 #define XML_HTTP_REQUEST_AC_WITH_CREDENTIALS (1 << 17) // Internal
 #define XML_HTTP_REQUEST_TIMED_OUT (1 << 18) // Internal
+#define XML_HTTP_REQUEST_DELETED (1 << 19) // Internal
 
 #define XML_HTTP_REQUEST_LOADSTATES         \
   (XML_HTTP_REQUEST_UNSENT |                \
@@ -300,7 +301,7 @@ nsMultipartProxyListener::OnDataAvailable(nsIRequest *aRequest,
 NS_IMPL_CYCLE_COLLECTION_CLASS(nsXHREventTarget)
 
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(nsXHREventTarget,
-                                                  nsDOMEventTargetWrapperCache)
+                                                  nsDOMEventTargetHelper)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mOnLoadListener)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mOnErrorListener)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mOnAbortListener)
@@ -311,7 +312,7 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(nsXHREventTarget,
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(nsXHREventTarget,
-                                                nsDOMEventTargetWrapperCache)
+                                                nsDOMEventTargetHelper)
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mOnLoadListener)
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mOnErrorListener)
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mOnAbortListener)
@@ -323,10 +324,10 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION_INHERITED(nsXHREventTarget)
   NS_INTERFACE_MAP_ENTRY(nsIXMLHttpRequestEventTarget)
-NS_INTERFACE_MAP_END_INHERITING(nsDOMEventTargetWrapperCache)
+NS_INTERFACE_MAP_END_INHERITING(nsDOMEventTargetHelper)
 
-NS_IMPL_ADDREF_INHERITED(nsXHREventTarget, nsDOMEventTargetWrapperCache)
-NS_IMPL_RELEASE_INHERITED(nsXHREventTarget, nsDOMEventTargetWrapperCache)
+NS_IMPL_ADDREF_INHERITED(nsXHREventTarget, nsDOMEventTargetHelper)
+NS_IMPL_RELEASE_INHERITED(nsXHREventTarget, nsDOMEventTargetHelper)
 
 NS_IMETHODIMP
 nsXHREventTarget::GetOnload(nsIDOMEventListener** aOnLoad)
@@ -460,6 +461,8 @@ nsXMLHttpRequest::nsXMLHttpRequest()
 
 nsXMLHttpRequest::~nsXMLHttpRequest()
 {
+  mState |= XML_HTTP_REQUEST_DELETED;
+
   if (mState & (XML_HTTP_REQUEST_STOPPED |
                 XML_HTTP_REQUEST_SENT |
                 XML_HTTP_REQUEST_LOADING)) {
@@ -1269,7 +1272,11 @@ nsXMLHttpRequest::CloseRequestWithError(const nsAString& aType,
   PRUint32 responseLength = mResponseBody.Length();
   ResetResponse();
   mState |= aFlag;
-  
+
+  // If we're in the destructor, don't risk dispatching an event.
+  if (mState & XML_HTTP_REQUEST_DELETED)
+    return;
+
   if (!(mState & (XML_HTTP_REQUEST_UNSENT |
                   XML_HTTP_REQUEST_OPENED |
                   XML_HTTP_REQUEST_DONE))) {
