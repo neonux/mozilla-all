@@ -24,7 +24,6 @@
  *   Marco Bonardo <mak77@bonardo.net> (original author)
  *   Mihai Sucan <mihai.sucan@gmail.com>
  *   Stephen Horlander <shorlander@mozilla.com>
- *   Frank Yan <fyan@mozilla.com>
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -42,97 +41,137 @@
 %endif
 
 html {
-  font-family: Segoe, "Lucida Grande", sans-serif;
+  font-family: sans-serif;
   background: -moz-Field;
   color: -moz-FieldText;
   height: 100%;
 }
 
 body {
+  display: inline-block;
+  position: relative;
   margin: 0;
-  height: 100%;
-}
-
-#container {
-  display: -moz-box;
-  -moz-box-orient: vertical;
   width: 100%;
   height: 100%;
 }
 
-input,
-button {
-  font-size: inherit;
-  font-family: inherit;
-}
-
 a {
-  color: #08c;
+  text-decoration: none;
 }
 
-.spacer {
-  -moz-box-flex: 1;
+a:hover {
+  text-decoration: underline;
 }
 
-#topSection {
+#brandStart {
   text-align: center;
+  height: 19%;
+  max-height: 256px;
+  min-height: 92px;
 }
 
-#brandLogo {
-  height: 153px;
-  margin: 20px 0 25px;
+#brandStartSpacer {
+  height: 6.5%;
 }
 
-#searchForm,
-#snippets {
-  width: 440px;
+#brandStartLogo {
+  height: 100%;
 }
 
-@media all and (max-width: 448px) {
-  #searchForm,
-  #snippets {
-    width: 98%;
-  }
+#searchContainer {
+  height: 15%;
+  min-height: 90px;
+}
+
+#searchContainer::before {
+  content: " ";
+  display: block;
+  height: 23%;
 }
 
 #searchForm {
-  display: -moz-box;
-  width: 439px;
+  display: table;
+  width: 100%;
+  max-width: 1830px;
   margin: 0 auto;
 }
 
-@media all and (max-width: 448px) {
-  #searchForm {
-    width: 98%;
-  }
+@media all and (max-height: 700px) {
+  #searchContainer { height: 20% }
+}
+
+@media all and (max-height: 500px) {
+  #searchContainer { height: 25% }
+}
+
+@media all and (max-height: 370px) {
+  #searchContainer { height: 30% }
+}
+
+#searchLogoContainer {
+  display: table-cell;
+  width: 30%;
+  text-align: end;
+  line-height: 32px;
+}
+
+#searchEngineLogo {
+  -moz-margin-end: 2.5%;
+  vertical-align: middle;
+}
+
+#searchInputContainer {
+  display: table-cell;
+  width: 38%;
+  max-width: 700px;
+  min-width: 150px;
 }
 
 #searchText {
-  -moz-box-flex: 1;
-  padding: 6px 8px;
-  border-radius: 3px 0 0 3px;
-  border: 1px solid #c1c6cd;
-  background-image: -moz-linear-gradient(rgba(98,136,185,.15), rgba(98,136,185,0));
-  background-size: 100% 4px;
-  background-repeat: no-repeat;
-  font-size: 1em;
+  width: 100%;
+  height: 24px;
+  padding: 3px 6px;
+  border-radius: 2px;
+  border: 1px solid rgb(150,150,150);
+  border-top-color: rgb(100,100,100);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.5);
+  font-size: 1.2em;
 }
 
-body[dir=rtl] #searchText {
-  border-radius: 0 3px 3px 0;
+#searchButtons {
+  display: table-cell;
+  width: 31%;
+  -moz-padding-start: 13px;
+  vertical-align: top;
 }
 
-#searchText:-moz-placeholder {
-  font-style: italic;
-  color: #bbb;
+@media all and (max-width: 470px) {
+  #searchLogoContainer { width: 10% }
+  #searchButtons { width: 11% }
+  #searchInputContainer { width: 40% }
+}
+
+@media all and (min-width: 470px) and (max-width: 600px) {
+  #searchLogoContainer { width: 15% }
+  #searchButtons { width: 16%; white-space: nowrap }
+  #searchInputContainer { width: 45% }
+}
+
+@media all and (min-width: 600px) and (max-width: 850px) {
+  #searchLogoContainer { width: 20% }
+  #searchButtons { width: 21%; white-space: nowrap }
+  #searchInputContainer { width: 49% }
 }
 
 #searchSubmit {
-  -moz-margin-start: -4px;
-  background: -moz-linear-gradient(#efefef, #d8d8d8);
-  padding: 5px 9px;
-  border-radius: 3px;
-  border: 1px solid #a2a7a8;
+  background: -moz-linear-gradient(#f1f1f1, #dfdfdf);
+  padding: 4px 8px;
+  height: 32px;
+  border: 1px solid #ccc;
+  border-top-color: #ccc;
+  border-bottom-color: #999;
+  -moz-border-start-color: #afafaf;
+  -moz-border-end-color: #999;
   box-shadow: 1px 1px 0 #e7e7e7,
               0 1px 0 #fcfcfc inset,
               0 -1px 0 #d7d7d7 inset;
@@ -148,7 +187,7 @@ body[dir=rtl] #searchSubmit {
 }
 
 #searchSubmit:active {
-  background: -moz-linear-gradient(#d8d8d8, #efefef);
+  background: -moz-linear-gradient(#c5c5c5, #c5c5c5);
   box-shadow: 1px 1px 0 #e7e7e7;
 }
 
@@ -156,15 +195,71 @@ body[dir=rtl] #searchSubmit:active {
   box-shadow: -1px 1px 0 #e7e7e7;
 }
 
+#contentContainer {
+  height: 30%;
+  background-image: -moz-radial-gradient(center top, ellipse farthest-side, rgba(16,83,130,.5), rgba(16,83,130,0) 75%),
+                    -moz-radial-gradient(center top, ellipse farthest-side, rgba(180,218,244,.5), rgba(180,218,244,0)),
+                    -moz-radial-gradient(center top, ellipse farthest-side, rgba(180,218,244,.3), rgba(180,218,244,0));
+  background-size: 100% 5px,
+                   100% 50px,
+                   100% 100%;
+  background-repeat: no-repeat;
+}
+
+@media all and (max-height: 400px) {
+  #contentContainer { height: 20% }
+}
+
+#snippetContainer {
+  position: relative;
+  top: -24px;
+  text-align: center;
+}
+
 #snippets {
   display: inline-block;
-  margin-top: 14px;
+  padding: 14px;
+  width: 30%;
+  max-width: 600px;
+  background-image: -moz-linear-gradient(rgba(255,255,255,.8), rgba(255,255,255,.1));
+  background-color: rgb(250,250,250);
+  border-radius: 4px;
+  box-shadow: 0 1px 0 rgba(255,255,255,.8) inset,
+              0 -2px 0 rgba(0,0,0,.1) inset,
+              0 0 10px rgba(255,255,255,.5) inset,
+              0 0 0 1px rgba(0,0,0,.1),
+              0 2px 4px rgba(0,0,0,.2);
   color: rgb(60,60,60);
-  font-size: .75em;
+  font-size: .85em;
+  cursor: pointer;
 }
 
 #snippets:empty {
   visibility: hidden;
+}
+
+@media all and (max-width: 470px) {
+  #snippets { width: 65% }
+}
+
+@media all and (min-width: 470px) and (max-width: 850px) {
+  #snippets { width: 45% }
+}
+
+#snippets:hover {
+  background-color: rgb(255,255,255);
+  box-shadow: 0 1px 0 rgba(255,255,255,.8) inset,
+              0 -2px 0 rgba(0,0,0,.1) inset,
+              0 0 10px rgba(255,255,255,.5) inset,
+              0 0 5px rgba(0,0,0,.1),
+              0 0 0 1px rgba(0,0,0,.1),
+              0 2px 4px rgba(0,0,0,.2);
+}
+
+#snippets:hover:active {
+  background-color: rgb(210,210,210);
+  box-shadow: 0 2px 3px rgba(0,0,0,.3) inset,
+              0 1px 0 rgba(255,255,255,.5);
 }
 
 #defaultSnippet1,
@@ -187,70 +282,69 @@ body[dir=rtl] #searchSubmit:active {
   content: url("chrome://browser/content/aboutHome-snippet2.png");
 }
 
-#bottomSection {
-  border-top: 1px solid #c9d7ef;
-  color: rgb(150,150,150);
-  font-size: .75em;
+#sessionRestoreContainer {
+  padding-top: 1.5%;
   text-align: center;
-  background-image: -moz-linear-gradient(rgba(0,0,0,.06), transparent),
-                    -moz-radial-gradient(center top, circle farthest-side, rgb(230,237,248), rgba(230,237,248,0));
-  background-size: 100% 5px,
-                   100% 100%;
-  background-repeat: no-repeat;
 }
 
-#bottomSection.hasSession {
-  margin-top: 32px;
+@media all and (max-height: 500px) {
+  #sessionRestoreContainer {
+    position: relative;
+    top: -15px;
+    padding-top: 0;
+  }
 }
 
 #restorePreviousSession {
-  position: relative;
-  top: -12px;
-  margin: -20px 0 -12px;
-  padding: 12px;
+  padding: 10px;
   border: 0;
-  border-radius: 5px;
-  background-image: -moz-linear-gradient(rgb(254,254,254), rgb(251,251,251));
-  background-color: #fbfbfb;
-  box-shadow: 0 0 0 1px rgba(9,37,59,.1),
-              0 1px 2px rgba(9,37,59,.1),
-              0 0 10px rgba(255,255,255,.3),
-              0 -3px 0 rgba(180,194,212,.2) inset;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px rgba(9,37,59,0),
+              0 1px 2px rgba(9,37,59,0),
+              0 0 10px rgba(255,255,255,0),
+              0 -3px 0 rgba(180,194,212,0) inset;
   -moz-transition-property: background-color, box-shadow;
   -moz-transition-duration: 0.25s;
   -moz-transition-timing-function: ease-out;
-  color: rgb(70,70,70);
-  font-size: 1.4em;
-  white-space: nowrap;
+  background: transparent;
+  color: rgb(50,50,50);
+  font-weight: bold;
+  font-size: 1em;
   cursor: pointer;
-}
-
-@media all and (max-width: 448px) {
-  #restorePreviousSession {
-    font-size: 1.2em;
-  }
 }
 
 #restorePreviousSession::before {
   display: inline-block;
   content: url("chrome://browser/content/aboutHome-restore-icon.png");
-  height: 41px;
   -moz-margin-end: 10px;
   vertical-align: middle;
+  height: 66px; /* Needed to avoid a blank space under the image */
 }
 
 body[dir=rtl] #restorePreviousSession::before {
   -moz-transform: scaleX(-1);
 }
 
-#bottomSection:not(.hasSession) > #restorePreviousSession,
+@media all and (max-height: 500px) {
+  #restorePreviousSession::before {
+    content: url("chrome://browser/content/aboutHome-restore-icon-small.png");
+    height: 41px;
+  }
+}
+
+@media all and (max-width: 500px) {
+  #restorePreviousSession::before { 
+    content: url("chrome://browser/content/aboutHome-restore-icon-small.png");
+    height: 41px;
+  }
+}
+
 #restorePreviousSession:disabled {
   display: none;
 }
 
 #restorePreviousSession:hover {
-  background-image: none;
-  background-color: #fff;
+  background-image: -moz-linear-gradient(rgba(255,255,255,.7), rgba(255,255,255,.2));
   border-radius: 4px;
   box-shadow: 0 0 0 1px rgba(9,37,59,.2),
               0 1px 2px rgba(9,37,59,.2),
@@ -259,105 +353,32 @@ body[dir=rtl] #restorePreviousSession::before {
 }
 
 #restorePreviousSession:hover:active {
+  background-image: -moz-linear-gradient(rgba(255,255,255,.0), rgba(255,255,255,.2));
+  background-color: rgba(23,75,115,.1);
   box-shadow: 0 0 0 1px rgba(9,37,59,.2),
-              0 1px 2px rgba(9,37,59,.3) inset,
-              0 1px 5px rgba(9,37,59,.1) inset;
+              0 1px 2px rgba(9,37,59,.4) inset,
+              0 1px 5px rgba(9,37,59,.15) inset;
 }
 
-#launcher {
-  white-space: nowrap;
-}
-
-.launchButton {
-  margin: 25px 4px;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  padding: 46px 3px 6px;
-  min-width: 65px;
-  background: transparent none center 8px no-repeat;
-  color: #333;
-  cursor: pointer;
-}
-
-.launchButton:hover {
-  border-color: rgba(99,160,204,.4);
-  background-color: rgba(231,243,254,.4);
-  box-shadow: 0 1px 2px rgba(99,160,204,.1),
-              0 1px 1px rgba(255,255,255,.2) inset,
-              0 -3px 1px rgba(180,194,212,.4) inset;
-}
-
-.launchButton:hover:active {
-  box-shadow: 0 1px 2px rgba(99,160,204,.1) inset,
-              0 -1px 2px rgba(255,255,255,.1) inset,
-              0 3px 2px rgba(180,194,212,.2) inset;
-}
-
-#bookmarks {
-  background-image: url("chrome://browser/content/aboutHome-bookmarks.png");
-}
-
-#history {
-  background-image: url("chrome://browser/content/aboutHome-history.png");
-}
-
-#settings {
-  background-image: url("chrome://browser/content/aboutHome-settings.png");
-}
-
-#addons {
-  background-image: url("chrome://browser/content/aboutHome-addons.png");
-}
-
-#apps {
-  background-image: url("chrome://browser/content/aboutHome-apps.png");
-}
-
-#downloads {
-  background-image: url("chrome://browser/content/aboutHome-downloads.png");
-}
-
-#links {
+#bottomSection {
   position: absolute;
-  right: 6px;
-  bottom: 6px;
-  text-align: right;
+  color: rgb(150,150,150);
+  font-size: .8em;
+  width: 100%;
+  text-align: center;
+  bottom: 2%;
 }
 
-.aboutHomeLink {
-  display: block;
-  margin: 6px;
+#syncLinksContainer {
+  padding-top: 1em;
 }
 
-@media all and (max-width: 520px) {
-  #restorePreviousSession {
-    margin-bottom: 0;
-  }
-
-  #launcher {
-    display: none;
-  }
+.sync-link {
+  padding: 1em;
 }
 
-@media all and (max-width: 680px) {
-  #links {
-    display: none;
-  }
-}
-
-@media all and (max-height: 440px) {
-  #bottomSection:not(.hasSession) {
-    display: none;
-  }
-}
-
-@media all and (max-height: 530px) {
-  #bottomSection.hasSession > #restorePreviousSession {
-    margin-bottom: 0;
-  }
-
-  #bottomSection.hasSession > #launcher,
-  #bottomSection.hasSession > #links {
-    display: none;
+@media all and (max-height: 370px) {
+  #bottomSection {
+    visibility: hidden;
   }
 }
