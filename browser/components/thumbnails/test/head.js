@@ -98,26 +98,25 @@ function captureAndCheckColor(aRed, aGreen, aBlue, aMessage) {
 
   // Capture the screenshot.
   PageThumbs.captureAndStore(browser, function () {
-      let width = 100, height = 100;
+    let width = 100, height = 100;
     let thumb = PageThumbs.getThumbnailURL(browser.currentURI.spec, width, height);
 
-      getXULDocument(function (aDocument) {
-        let htmlns = "http://www.w3.org/1999/xhtml";
-        let img = aDocument.createElementNS(htmlns, "img");
-        img.setAttribute("src", thumb);
+    getXULDocument(function (aDocument) {
+      let htmlns = "http://www.w3.org/1999/xhtml";
+      let img = aDocument.createElementNS(htmlns, "img");
+      img.setAttribute("src", thumb);
 
-        whenLoaded(img, function () {
-          let canvas = aDocument.createElementNS(htmlns, "canvas");
-          canvas.setAttribute("width", width);
-          canvas.setAttribute("height", height);
+      whenLoaded(img, function () {
+        let canvas = aDocument.createElementNS(htmlns, "canvas");
+        canvas.setAttribute("width", width);
+        canvas.setAttribute("height", height);
 
-          // Draw the image to a canvas and compare the pixel color values.
-          let ctx = canvas.getContext("2d");
-          ctx.drawImage(img, 0, 0, width, height);
-          checkCanvasColor(ctx, aRed, aGreen, aBlue, aMessage);
+        // Draw the image to a canvas and compare the pixel color values.
+        let ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        checkCanvasColor(ctx, aRed, aGreen, aBlue, aMessage);
 
-          next();
-        });
+        next();
       });
     });
   });
