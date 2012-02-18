@@ -1303,7 +1303,8 @@ NS_QUERYFRAME_TAIL_INHERITING(nsBoxFrame)
 
 const double kCurrentVelocityWeighting = 0.25;
 const double kStopDecelerationWeighting = 0.4;
-const double kSmoothScrollAnimationDuration = 150; // milliseconds
+const double kSmoothScrollAnimationDuration = 250; // milliseconds //avih: was fixed 150, now 250 is minimum (when events arrive rapidly)
+const double kSmoothScrollAnimationDurationMax = 800;  //avih: maximum duration (when events arrive slowly)
 
 class nsGfxScrollFrameInner::AsyncScroll {
 public:
@@ -1327,6 +1328,7 @@ public:
 
   nsCOMPtr<nsITimer> mScrollTimer;
   TimeStamp mStartTime;
+  TimeStamp mPrevStartTime;  //avih: TODO: needs initialization, but otherwise, at most affects first event, and not significantly.
   TimeDuration mDuration;
   nsPoint mStartPos;
   nsPoint mDestination;
@@ -1349,6 +1351,11 @@ protected:
                           nscoord aCurrentPos, nscoord aCurrentVelocity,
                           nscoord aDestination);
 };
+
+// Linear transform a value from one range into another (ranges are allowed to have opposite polarity).
+double linearTransform(double inVal, double inMin, double inMax, double outMin, double outMax){
+  return (inVal - inMin) / (inMax - inMin) * (outMax - outMin) + outMin;
+}
 
 nsPoint
 nsGfxScrollFrameInner::AsyncScroll::PositionAt(TimeStamp aTime) {
@@ -1375,7 +1382,18 @@ nsGfxScrollFrameInner::AsyncScroll::InitSmoothScroll(TimeStamp aTime,
   mStartTime = aTime;
   mStartPos = aCurrentPos;
   mDestination = aDestination;
-  mDuration = TimeDuration::FromMilliseconds(kSmoothScrollAnimationDuration);
+  TimeDuration delta = mStartTime - mPrevStartTime;
+  mPrevStartTime = mStartTime;
+
+  mDuration = TimeDuration::FromMilliseconds(
+                clamped(linearTransform(delta.ToMilliseconds(),
+                                        kSmoothScrollAnimationDuration / 2,
+                                        kSmoothScrollAnimationDurationMax / 1.5,
+                                        kSmoothScrollAnimationDuration,
+                                        kSmoothScrollAnimationDurationMax),
+                        kSmoothScrollAnimationDuration,
+                        kSmoothScrollAnimationDurationMax)
+              );
   InitTimingFunction(mTimingFunctionX, mStartPos.x, aCurrentVelocity.width, aDestination.x);
   InitTimingFunction(mTimingFunctionY, mStartPos.y, aCurrentVelocity.height, aDestination.y);
 }
