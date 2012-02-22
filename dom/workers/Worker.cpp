@@ -48,7 +48,7 @@
 #include "WorkerInlines.h"
 
 #define PROPERTY_FLAGS \
-  JSPROP_ENUMERATE | JSPROP_SHARED
+  (JSPROP_ENUMERATE | JSPROP_SHARED)
 
 #define FUNCTION_FLAGS \
   JSPROP_ENUMERATE
@@ -300,10 +300,10 @@ private:
 
 JSClass Worker::sClass = {
   "Worker",
-  JSCLASS_HAS_PRIVATE,
+  JSCLASS_HAS_PRIVATE | JSCLASS_IMPLEMENTS_BARRIERS,
   JS_PropertyStub, JS_PropertyStub, JS_PropertyStub, JS_StrictPropertyStub,
-  JS_EnumerateStub, JS_ResolveStub, JS_ConvertStub, Finalize, NULL, NULL, NULL,
-  NULL, NULL, NULL, Trace, NULL
+  JS_EnumerateStub, JS_ResolveStub, JS_ConvertStub, Finalize,
+  NULL, NULL, NULL, NULL, Trace,
 };
 
 JSPropertySpec Worker::sProperties[] = {
@@ -415,10 +415,10 @@ private:
 
 JSClass ChromeWorker::sClass = {
   "ChromeWorker",
-  JSCLASS_HAS_PRIVATE,
+  JSCLASS_HAS_PRIVATE | JSCLASS_IMPLEMENTS_BARRIERS,
   JS_PropertyStub, JS_PropertyStub, JS_PropertyStub, JS_StrictPropertyStub,
-  JS_EnumerateStub, JS_ResolveStub, JS_ConvertStub, Finalize, NULL, NULL, NULL,
-  NULL, NULL, NULL, Trace, NULL
+  JS_EnumerateStub, JS_ResolveStub, JS_ConvertStub, Finalize,
+  NULL, NULL, NULL, NULL, Trace
 };
 
 WorkerPrivate*

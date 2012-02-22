@@ -72,6 +72,7 @@
 #include "jslibmath.h"
 
 #include "vm/GlobalObject.h"
+#include "vm/MethodGuard.h"
 
 #include "jsatominlines.h"
 #include "jsinferinlines.h"
@@ -79,6 +80,7 @@
 #include "jsobjinlines.h"
 #include "jsstrinlines.h"
 
+#include "vm/MethodGuard-inl.h"
 #include "vm/NumberObject-inl.h"
 #include "vm/String-inl.h"
 
@@ -490,10 +492,9 @@ Number(JSContext *cx, uintN argc, Value *vp)
     if (!isConstructing)
         return true;
 
-    JSObject *obj = NewBuiltinClassInstance(cx, &NumberClass);
+    JSObject *obj = NumberObject::create(cx, vp[0].toNumber());
     if (!obj)
         return false;
-    obj->setPrimitiveThis(vp[0]);
     vp->setObject(*obj);
     return true;
 }

@@ -1147,7 +1147,7 @@ js::AssertValidPropertyCacheHit(JSContext *cx,
     jsbytecode *pc;
     cx->stack.currentScript(&pc);
 
-    uint32_t sample = cx->runtime->gcNumber;
+    uint64_t sample = cx->runtime->gcNumber;
     PropertyCacheEntry savedEntry = *entry;
 
     PropertyName *name = GetNameFromBytecode(cx, pc, JSOp(*pc), js_CodeSpec[*pc]);
@@ -1254,7 +1254,7 @@ js::Interpret(JSContext *cx, StackFrame *entryFrame, InterpMode interpMode)
 {
     JSAutoResolveFlags rf(cx, RESOLVE_INFER);
 
-    gc::VerifyBarriers(cx, true);
+    gc::MaybeVerifyBarriers(cx, true);
 
     JS_ASSERT(!cx->compartment->activeAnalysis);
 
@@ -1289,7 +1289,7 @@ js::Interpret(JSContext *cx, StackFrame *entryFrame, InterpMode interpMode)
 
 # define DO_OP()            JS_BEGIN_MACRO                                    \
                                 CHECK_PCCOUNT_INTERRUPTS();                   \
-                                js::gc::VerifyBarriers(cx);                   \
+                                js::gc::MaybeVerifyBarriers(cx);              \
                                 JS_EXTENSION_(goto *jumpTable[op]);           \
                             JS_END_MACRO
 # define DO_NEXT_OP(n)      JS_BEGIN_MACRO                                    \
@@ -1566,7 +1566,7 @@ js::Interpret(JSContext *cx, StackFrame *entryFrame, InterpMode interpMode)
 
       do_op:
         CHECK_PCCOUNT_INTERRUPTS();
-        js::gc::VerifyBarriers(cx);
+        js::gc::MaybeVerifyBarriers(cx);
         switchOp = intN(op) | switchMask;
       do_switch:
         switch (switchOp) {
@@ -3070,7 +3070,18 @@ BEGIN_CASE(JSOP_DEFCONST)
 BEGIN_CASE(JSOP_DEFVAR)
 {
     PropertyName *dn = atoms[GET_INDEX(regs.pc)]->asPropertyName();
-    if (!DefVarOrConstOperation(cx, op, dn, regs.fp()))
+
+    /* ES5 10.5 step 8 (with subsequent errata). */
+    uintN attrs = JSPROP_ENUMERATE;
+    if (!regs.fp()->isEvalFrame())
+        attrs |= JSPROP_PERMANENT;
+    if (op == JSOP_DEFCONST)
+        attrs |= JSPROP_READONLY;
+
+    /* Step 8b. */
+    JSObject &obj = regs.fp()->varObj();
+
+    if (!DefVarOrConstOperation(cx, obj, dn, attrs))
         goto error;
 }
 END_CASE(JSOP_DEFVAR)
@@ -4413,6 +4424,6 @@ END_CASE(JSOP_ARRAYPUSH)
   leave_on_safe_point:
 #endif
 
-    gc::VerifyBarriers(cx, true);
+    gc::MaybeVerifyBarriers(cx, true);
     return interpReturnOK;
 }

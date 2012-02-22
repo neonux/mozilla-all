@@ -688,8 +688,6 @@ PresShell::MemoryReporter::SizeEnumerator(PresShellPtrKey *aEntry,
   return PL_DHASH_NEXT;
 }
 
-NS_MEMORY_REPORTER_MALLOC_SIZEOF_FUN(GfxTextrunWordCacheMallocSizeOf, "gfx/textrun-word-cache")
-
 NS_IMETHODIMP
 PresShell::MemoryReporter::GetName(nsACString &aName)
 {
@@ -977,8 +975,8 @@ PresShell::~PresShell()
                "post-reflow queues not empty.  This means we're leaking");
 
 #ifdef DEBUG
-  NS_ASSERTION(mPresArenaAllocCount == 0,
-               "Some pres arena objects were not freed");
+  MOZ_ASSERT(mPresArenaAllocCount == 0,
+             "Some pres arena objects were not freed");
 #endif
 
   delete mStyleSet;
@@ -5214,7 +5212,7 @@ void PresShell::SetDisplayPort(const nsRect& aDisplayPort)
 
 nsresult PresShell::SetResolution(float aXResolution, float aYResolution)
 {
-  if (!(aXResolution > 0.0 && aXResolution > 0.0)) {
+  if (!(aXResolution > 0.0 && aYResolution > 0.0)) {
     return NS_ERROR_ILLEGAL_VALUE;
   }
   if (aXResolution == mXResolution && aYResolution == mYResolution) {
@@ -5349,6 +5347,12 @@ static nsIView* FindViewContaining(nsIView* aView, nsPoint aPt)
 void
 PresShell::ProcessSynthMouseMoveEvent(bool aFromScroll)
 {
+  // If drag session has started, we shouldn't synthesize mousemove event.
+  nsCOMPtr<nsIDragSession> dragSession = nsContentUtils::GetDragSession();
+  if (dragSession) {
+    return;
+  }
+
   // allow new event to be posted while handling this one only if the
   // source of the event is a scroll (to prevent infinite reflow loops)
   if (aFromScroll) {
@@ -5428,6 +5432,24 @@ PresShell::ProcessSynthMouseMoveEvent(bool aFromScroll)
   }
 }
 
+class nsAutoNotifyDidPaint
+{
+public:
+  nsAutoNotifyDidPaint(bool aWillSendDidPaint)
+    : mWillSendDidPaint(aWillSendDidPaint)
+  {
+  }
+  ~nsAutoNotifyDidPaint()
+  {
+    if (!mWillSendDidPaint && nsContentUtils::XPConnect()) {
+      nsContentUtils::XPConnect()->NotifyDidPaint();
+    }
+  }
+
+private:
+  bool mWillSendDidPaint;
+};
+
 void
 PresShell::Paint(nsIView*           aViewToPaint,
                  nsIWidget*         aWidgetToPaint,
@@ -5450,6 +5472,8 @@ PresShell::Paint(nsIView*           aViewToPaint,
   NS_ASSERTION(!mIsDestroying, "painting a destroyed PresShell");
   NS_ASSERTION(aViewToPaint, "null view");
   NS_ASSERTION(aWidgetToPaint, "Can't paint without a widget");
+
+  nsAutoNotifyDidPaint notifyDidPaint(aWillSendDidPaint);
 
   nsPresContext* presContext = GetPresContext();
   AUTO_LAYOUT_PHASE_ENTRY_POINT(presContext, Paint);
@@ -5744,6 +5768,7 @@ PresShell::RecordMouseLocation(nsGUIEvent* aEvent)
   }
 }
 
+#ifdef MOZ_TOUCH
 static void
 EvictTouchPoint(nsCOMPtr<nsIDOMTouch>& aTouch)
 {
@@ -5791,6 +5816,7 @@ AppendToTouchList(const PRUint32& aKey, nsCOMPtr<nsIDOMTouch>& aData, void *aTou
   touches->AppendElement(aData);
   return PL_DHASH_NEXT;
 }
+#endif // MOZ_TOUCH
 
 nsresult
 PresShell::HandleEvent(nsIFrame        *aFrame,
@@ -7220,6 +7246,10 @@ PresShell::DidPaint()
   // tree is torn down we might not be a root presshell...
   if (rootPresContext == mPresContext) {
     rootPresContext->UpdatePluginGeometry();
+  }
+
+  if (nsContentUtils::XPConnect()) {
+    nsContentUtils::XPConnect()->NotifyDidPaint();
   }
 }
 

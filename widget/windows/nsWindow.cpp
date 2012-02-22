@@ -1273,7 +1273,8 @@ NS_METHOD nsWindow::IsVisible(bool & bState)
 // transparency. These routines are called on size and move operations.
 void nsWindow::ClearThemeRegion()
 {
-  if (nsUXThemeData::sIsVistaOrLater && !HasGlass() &&
+  if (WinUtils::GetWindowsVersion() >= WinUtils::VISTA_VERSION &&
+      !HasGlass() &&
       (mWindowType == eWindowType_popup && !IsPopupWithTitleBar() &&
        (mPopupType == ePopupTypeTooltip || mPopupType == ePopupTypePanel))) {
     SetWindowRgn(mWnd, NULL, false);
@@ -1287,7 +1288,8 @@ void nsWindow::SetThemeRegion()
   // so default constants are used for part and state. At some point we might need part and
   // state values from nsNativeThemeWin's GetThemePartAndState, but currently windows that
   // change shape based on state haven't come up.
-  if (nsUXThemeData::sIsVistaOrLater && !HasGlass() &&
+  if (WinUtils::GetWindowsVersion() >= WinUtils::VISTA_VERSION &&
+      !HasGlass() &&
       (mWindowType == eWindowType_popup && !IsPopupWithTitleBar() &&
        (mPopupType == ePopupTypeTooltip || mPopupType == ePopupTypePanel))) {
     HRGN hRgn = nsnull;
@@ -3535,20 +3537,16 @@ NS_IMETHODIMP nsWindow::DispatchEvent(nsGUIEvent* event, nsEventStatus & aStatus
   if (mViewCallback) {
     // A subset of events are sent to the base xul window first
     switch(event->message) {
-      // send to the base window (view mgr ignores these for the view)
-      case NS_UISTATECHANGED:
-      case NS_DESTROY:
-      case NS_SETZLEVEL:
-      case NS_XUL_CLOSE:
-      case NS_MOVE:
-        (*mEventCallback)(event); // web shell / xul window
-        return NS_OK;
-
       // sent to the base window, then to the view
       case NS_SIZE:
       case NS_DEACTIVATE:
       case NS_ACTIVATE:
       case NS_SIZEMODE:
+      case NS_UISTATECHANGED:
+      case NS_DESTROY:
+      case NS_SETZLEVEL:
+      case NS_XUL_CLOSE:
+      case NS_MOVE:
         (*mEventCallback)(event); // web shell / xul window
         break;
     };
@@ -6357,7 +6355,7 @@ nsWindow::InitMouseWheelScrollData()
 
   if (!::SystemParametersInfo(SPI_GETWHEELSCROLLCHARS, 0,
                               &sMouseWheelScrollChars, 0)) {
-    NS_ASSERTION(!nsUXThemeData::sIsVistaOrLater,
+    NS_ASSERTION(WinUtils::GetWindowsVersion() < WinUtils::VISTA_VERSION,
                  "Failed to get SPI_GETWHEELSCROLLCHARS");
     sMouseWheelScrollChars = 1;
   } else if (sMouseWheelScrollChars > WHEEL_DELTA) {

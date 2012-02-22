@@ -48,13 +48,13 @@
 #include "WorkerInlines.h"
 
 #define PROPERTY_FLAGS \
-  JSPROP_ENUMERATE | JSPROP_SHARED
+  (JSPROP_ENUMERATE | JSPROP_SHARED)
 
 #define FUNCTION_FLAGS \
   JSPROP_ENUMERATE
 
 #define CONSTANT_FLAGS \
-  JSPROP_ENUMERATE | JSPROP_SHARED | JSPROP_PERMANENT | JSPROP_READONLY
+  (JSPROP_ENUMERATE | JSPROP_SHARED | JSPROP_PERMANENT | JSPROP_READONLY)
 
 USING_WORKERS_NAMESPACE
 
@@ -220,10 +220,10 @@ private:
 
 JSClass XMLHttpRequestUpload::sClass = {
   "XMLHttpRequestUpload",
-  JSCLASS_HAS_PRIVATE | JSCLASS_HAS_RESERVED_SLOTS(SLOT_COUNT),
+  JSCLASS_HAS_PRIVATE | JSCLASS_IMPLEMENTS_BARRIERS | JSCLASS_HAS_RESERVED_SLOTS(SLOT_COUNT),
   JS_PropertyStub, JS_PropertyStub, JS_PropertyStub, JS_StrictPropertyStub,
   JS_EnumerateStub, JS_ResolveStub, JS_ConvertStub, Finalize,
-  NULL, NULL, NULL, NULL, NULL, NULL, Trace, NULL
+  NULL, NULL, NULL, NULL, Trace
 };
 
 JSPropertySpec XMLHttpRequestUpload::sProperties[] = {
@@ -769,10 +769,10 @@ private:
 
 JSClass XMLHttpRequest::sClass = {
   "XMLHttpRequest",
-  JSCLASS_HAS_PRIVATE | JSCLASS_HAS_RESERVED_SLOTS(SLOT_COUNT),
+  JSCLASS_HAS_PRIVATE | JSCLASS_IMPLEMENTS_BARRIERS | JSCLASS_HAS_RESERVED_SLOTS(SLOT_COUNT),
   JS_PropertyStub, JS_PropertyStub, JS_PropertyStub, JS_StrictPropertyStub,
   JS_EnumerateStub, JS_ResolveStub, JS_ConvertStub, Finalize,
-  NULL, NULL, NULL, NULL, NULL, NULL, Trace, NULL
+  NULL, NULL, NULL, NULL, Trace
 };
 
 JSPropertySpec XMLHttpRequest::sProperties[] = {

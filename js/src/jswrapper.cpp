@@ -61,18 +61,14 @@
 using namespace js;
 using namespace js::gc;
 
-static int sWrapperFamily;
+namespace js {
+int sWrapperFamily;
+}
 
 void *
 Wrapper::getWrapperFamily()
 {
     return &sWrapperFamily;
-}
-
-JS_FRIEND_API(bool)
-js::IsWrapper(const JSObject *wrapper)
-{
-    return wrapper->isProxy() && GetProxyHandler(wrapper)->family() == &sWrapperFamily;
 }
 
 JS_FRIEND_API(JSObject *)
@@ -367,7 +363,7 @@ Wrapper::iteratorNext(JSContext *cx, JSObject *wrapper, Value *vp)
 void
 Wrapper::trace(JSTracer *trc, JSObject *wrapper)
 {
-    MarkValue(trc, wrapper->getReservedSlotRef(JSSLOT_PROXY_PRIVATE), "wrappedObject");
+    MarkValue(trc, &wrapper->getReservedSlotRef(JSSLOT_PROXY_PRIVATE), "wrappedObject");
 }
 
 JSObject *
@@ -875,7 +871,7 @@ CrossCompartmentWrapper::iteratorNext(JSContext *cx, JSObject *wrapper, Value *v
 void
 CrossCompartmentWrapper::trace(JSTracer *trc, JSObject *wrapper)
 {
-    MarkCrossCompartmentValue(trc, wrapper->getReservedSlotRef(JSSLOT_PROXY_PRIVATE),
+    MarkCrossCompartmentValue(trc, &wrapper->getReservedSlotRef(JSSLOT_PROXY_PRIVATE),
                               "wrappedObject");
 }
 

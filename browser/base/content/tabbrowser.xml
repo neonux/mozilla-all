@@ -539,7 +539,8 @@
                 if (!this.mBlank) {
                   if (!(aStateFlags & nsIWebProgressListener.STATE_RESTORING)) {
                     this.mTab.setAttribute("busy", "true");
-                    this.mTabBrowser.setTabTitleLoading(this.mTab);
+                    if (!(this.mBrowser.docShell.loadType & Ci.nsIDocShell.LOAD_CMD_RELOAD))
+                      this.mTabBrowser.setTabTitleLoading(this.mTab);
                   }
 
                   if (this.mTab.selected)
@@ -1276,6 +1277,12 @@
                 else {
                   t._animStartTime = Date.now();
                   t.setAttribute("fadein", "true");
+
+                  // This call to adjustTabstrip is redundant but needed so that
+                  // when opening a second tab, the first tab's close buttons
+                  // appears immediately rather than when the transition ends.
+                  if (tabContainer.childNodes.length == 2)
+                    tabContainer.adjustTabstrip();
                 }
               }, 0, this.tabContainer);
             }
@@ -1381,6 +1388,7 @@
               } else {
                 // pretend the user typed this so it'll be available till
                 // the document successfully loads
+              if (!isBlankPageURL(aURI))
                 b.userTypedValue = aURI;
               }
 
@@ -1574,15 +1582,26 @@
         <parameter name="aCloseWindowFastpath"/>
         <body>
           <![CDATA[
-            if (aTab.closing || this._windowIsClosing)
+            if (aTab.closing ||
+                aTab._pendingPermitUnload ||
+                this._windowIsClosing)
               return false;
 
             var browser = this.getBrowserForTab(aTab);
 
             if (!aTabWillBeMoved) {
               let ds = browser.docShell;
-              if (ds && ds.contentViewer && !ds.contentViewer.permitUnload())
-                return false;
+              if (ds && ds.contentViewer) {
+                // We need to block while calling permitUnload() because it
+                // processes the event queue and may lead to another removeTab()
+                // call before permitUnload() even returned.
+                aTab._pendingPermitUnload = true;
+                let permitUnload = ds.contentViewer.permitUnload();
+                delete aTab._pendingPermitUnload;
+
+                if (!permitUnload)
+                  return false;
+              }
             }
 
             var closeWindow = false;
@@ -3881,12 +3900,14 @@
           // it triggers will correctly update our URL bar.
           this.tabbrowser.selectedTab = newTab;
         } else {
-          let url = browserDragAndDrop.drop(event, { });
+          // Pass true to disallow dropping javascript: or data: urls
+          let url;
+          try {
+            url = browserDragAndDrop.drop(event, { }, true);
+          } catch (ex) {}
 
           // valid urls don't contain spaces ' '; if we have a space it isn't a valid url.
-          // Also disallow dropping javascript: or data: urls--bail out
-          if (!url || !url.length || url.indexOf(" ", 0) != -1 ||
-              /^\s*(javascript|data):/.test(url))
+          if (!url || url.indexOf(" ") != -1)
             return;
 
           let bgLoad = Services.prefs.getBoolPref("browser.tabs.loadInBackground");
@@ -3914,8 +3935,10 @@
 
         // these offsets are only used in dragend, but we need to free them here
         // as well
-        delete draggedTab._dragOffsetX;
-        delete draggedTab._dragOffsetY;
+        if (draggedTab) {
+          delete draggedTab._dragOffsetX;
+          delete draggedTab._dragOffsetY;
+        }
       ]]></handler>
 
       <handler event="dragend"><![CDATA[
@@ -4330,24 +4353,18 @@
 
     <implementation implements="nsIDOMEventListener">
       <constructor><![CDATA[
-        window.addEventListener("findbaropen", this, false);
         window.addEventListener("resize", this, false);
       ]]></constructor>
 
       <destructor><![CDATA[
-        window.removeEventListener("findbaropen", this, false);
         window.removeEventListener("resize", this, false);
         MousePosTracker.removeListener(this);
       ]]></destructor>
 
       <property name="label">
         <setter><![CDATA[
-          if (!this.label) {
-            if (window.gFindBarInitialized && !window.gFindBar.hidden)
-              this.setAttribute("mirror", "true");
-            else
-              this.removeAttribute("mirror");
-          }
+          if (!this.label)
+            this.removeAttribute("mirror");
 
           this.style.minWidth = this.getAttribute("type") == "status" &&
                                 this.getAttribute("previoustype") == "status"
@@ -4395,10 +4412,6 @@
             return;
 
           switch (event.type) {
-            case "findbaropen":
-              this.setAttribute("mirror", "true");
-              this._calcMouseTargetRect();
-              break;
             case "resize":
               this._calcMouseTargetRect();
               break;
@@ -4408,10 +4421,10 @@
 
       <method name="_calcMouseTargetRect">
         <body><![CDATA[
-          let alignRight = (window.gFindBarInitialized && !window.gFindBar.hidden);
+          let alignRight = false;
 
           if (getComputedStyle(document.documentElement).direction == "rtl")
-            alighRight = !alignRight;
+            alignRight = !alignRight;
 
           let rect = this.getBoundingClientRect();
           this._mouseTargetRect = {

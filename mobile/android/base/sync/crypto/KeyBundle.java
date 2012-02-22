@@ -41,14 +41,18 @@ package org.mozilla.gecko.sync.crypto;
 import java.io.UnsupportedEncodingException;
 import java.security.NoSuchAlgorithmException;
 
+import javax.crypto.KeyGenerator;
 import javax.crypto.Mac;
 
 import org.mozilla.apache.commons.codec.binary.Base64;
 import org.mozilla.gecko.sync.Utils;
 import org.mozilla.gecko.sync.crypto.CryptoException;
 import java.security.InvalidKeyException;
+import java.util.Locale;
 
 public class KeyBundle {
+    private static final String KEY_ALGORITHM_SPEC = "AES";
+    private static final int    KEY_SIZE           = 256;
 
     private byte[] encryptionKey;
     private byte[] hmacKey;
@@ -73,9 +77,9 @@ public class KeyBundle {
         throw new IllegalArgumentException("No account name provided.");
       }
       if (account.matches("^[A-Za-z0-9._-]+$")) {
-        return account;
+        return account.toLowerCase(Locale.US);
       }
-      return Cryptographer.sha1Base32(account);
+      return Utils.sha1Base32(account.toLowerCase(Locale.US));
     }
 
     // If we encounter characters not allowed by the API (as found for
@@ -130,6 +134,36 @@ public class KeyBundle {
        this.setHMACKey(hmacKey);
     }
 
+    /**
+     * Make a KeyBundle with the specified base64-encoded keys.
+     *
+     * @return A KeyBundle with the specified keys.
+     */
+    public static KeyBundle fromBase64EncodedKeys(String base64EncryptionKey, String base64HmacKey) throws UnsupportedEncodingException {
+      return new KeyBundle(Base64.decodeBase64(base64EncryptionKey.getBytes("UTF-8")),
+                           Base64.decodeBase64(base64HmacKey.getBytes("UTF-8")));
+    }
+
+    /**
+     * Make a KeyBundle with two random 256 bit keys (encryption and HMAC).
+     *
+     * @return A KeyBundle with random keys.
+     */
+    public static KeyBundle withRandomKeys() throws CryptoException {
+      KeyGenerator keygen;
+      try {
+        keygen = KeyGenerator.getInstance(KEY_ALGORITHM_SPEC);
+      } catch (NoSuchAlgorithmException e) {
+        throw new CryptoException(e);
+      }
+
+      keygen.init(KEY_SIZE);
+      byte[] encryptionKey = keygen.generateKey().getEncoded();
+      byte[] hmacKey = keygen.generateKey().getEncoded();
+
+      return new KeyBundle(encryptionKey, hmacKey);
+    }
+
     public byte[] getEncryptionKey() {
         return encryptionKey;
     }
@@ -144,10 +178,5 @@ public class KeyBundle {
 
     public void setHMACKey(byte[] hmacKey) {
         this.hmacKey = hmacKey;
-    }
-
-    public static KeyBundle decodeKeyStrings(String base64EncryptionKey, String base64HmacKey) throws UnsupportedEncodingException {
-      return new KeyBundle(Base64.decodeBase64(base64EncryptionKey.getBytes("UTF-8")),
-                           Base64.decodeBase64(base64HmacKey.getBytes("UTF-8")));
     }
 }

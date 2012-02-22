@@ -50,6 +50,8 @@
 #include "jsproxy.h"
 #include "jsscope.h"
 
+#include "vm/MethodGuard.h"
+
 #include "jsatominlines.h"
 #include "jsinferinlines.h"
 #include "jsobjinlines.h"
@@ -57,7 +59,7 @@
 using namespace js;
 using namespace js::gc;
 
-static inline const HeapValue &
+static inline HeapValue &
 GetCall(JSObject *proxy)
 {
     JS_ASSERT(IsFunctionProxy(proxy));
@@ -72,7 +74,7 @@ GetConstruct(JSObject *proxy)
     return proxy->getSlot(JSSLOT_PROXY_CONSTRUCT);
 }
 
-static inline const HeapValue &
+static inline HeapValue &
 GetFunctionProxyConstruct(JSObject *proxy)
 {
     JS_ASSERT(IsFunctionProxy(proxy));
@@ -91,6 +93,9 @@ OperationInProgress(JSContext *cx, JSObject *proxy)
     }
     return false;
 }
+
+static bool
+FixProxy(JSContext *cx, JSObject *proxy, JSBool *bp);
 
 ProxyHandler::ProxyHandler(void *family) : mFamily(family)
 {
@@ -1243,12 +1248,12 @@ static void
 proxy_TraceObject(JSTracer *trc, JSObject *obj)
 {
     GetProxyHandler(obj)->trace(trc, obj);
-    MarkCrossCompartmentValue(trc, obj->getReservedSlotRef(JSSLOT_PROXY_PRIVATE), "private");
-    MarkCrossCompartmentValue(trc, obj->getReservedSlotRef(JSSLOT_PROXY_EXTRA + 0), "extra0");
-    MarkCrossCompartmentValue(trc, obj->getReservedSlotRef(JSSLOT_PROXY_EXTRA + 1), "extra1");
+    MarkCrossCompartmentValue(trc, &obj->getReservedSlotRef(JSSLOT_PROXY_PRIVATE), "private");
+    MarkCrossCompartmentValue(trc, &obj->getReservedSlotRef(JSSLOT_PROXY_EXTRA + 0), "extra0");
+    MarkCrossCompartmentValue(trc, &obj->getReservedSlotRef(JSSLOT_PROXY_EXTRA + 1), "extra1");
     if (IsFunctionProxy(obj)) {
-        MarkCrossCompartmentValue(trc, GetCall(obj), "call");
-        MarkCrossCompartmentValue(trc, GetFunctionProxyConstruct(obj), "construct");
+        MarkCrossCompartmentValue(trc, &GetCall(obj), "call");
+        MarkCrossCompartmentValue(trc, &GetFunctionProxyConstruct(obj), "construct");
     }
 }
 
@@ -1256,8 +1261,8 @@ static void
 proxy_TraceFunction(JSTracer *trc, JSObject *obj)
 {
     proxy_TraceObject(trc, obj);
-    MarkCrossCompartmentValue(trc, GetCall(obj), "call");
-    MarkCrossCompartmentValue(trc, GetFunctionProxyConstruct(obj), "construct");
+    MarkCrossCompartmentValue(trc, &GetCall(obj), "call");
+    MarkCrossCompartmentValue(trc, &GetFunctionProxyConstruct(obj), "construct");
 }
 
 static JSBool
@@ -1308,7 +1313,7 @@ proxy_TypeOf(JSContext *cx, JSObject *proxy)
 
 JS_FRIEND_DATA(Class) js::ObjectProxyClass = {
     "Proxy",
-    Class::NON_NATIVE | JSCLASS_HAS_RESERVED_SLOTS(4),
+    Class::NON_NATIVE | JSCLASS_IMPLEMENTS_BARRIERS | JSCLASS_HAS_RESERVED_SLOTS(4),
     JS_PropertyStub,         /* addProperty */
     JS_PropertyStub,         /* delProperty */
     JS_PropertyStub,         /* getProperty */
@@ -1317,11 +1322,9 @@ JS_FRIEND_DATA(Class) js::ObjectProxyClass = {
     JS_ResolveStub,
     proxy_Convert,
     proxy_Finalize,          /* finalize    */
-    NULL,                    /* reserved0   */
     NULL,                    /* checkAccess */
     NULL,                    /* call        */
     NULL,                    /* construct   */
-    NULL,                    /* xdrObject   */
     proxy_HasInstance,       /* hasInstance */
     proxy_TraceObject,       /* trace       */
     JS_NULL_CLASS_EXT,
@@ -1364,7 +1367,7 @@ JS_FRIEND_DATA(Class) js::ObjectProxyClass = {
 
 JS_FRIEND_DATA(Class) js::OuterWindowProxyClass = {
     "Proxy",
-    Class::NON_NATIVE | JSCLASS_HAS_RESERVED_SLOTS(4),
+    Class::NON_NATIVE | JSCLASS_IMPLEMENTS_BARRIERS | JSCLASS_HAS_RESERVED_SLOTS(4),
     JS_PropertyStub,         /* addProperty */
     JS_PropertyStub,         /* delProperty */
     JS_PropertyStub,         /* getProperty */
@@ -1373,11 +1376,9 @@ JS_FRIEND_DATA(Class) js::OuterWindowProxyClass = {
     JS_ResolveStub,
     JS_ConvertStub,
     proxy_Finalize,          /* finalize    */
-    NULL,                    /* reserved0   */
     NULL,                    /* checkAccess */
     NULL,                    /* call        */
     NULL,                    /* construct   */
-    NULL,                    /* xdrObject   */
     NULL,                    /* hasInstance */
     proxy_TraceObject,       /* trace       */
     {
@@ -1442,7 +1443,7 @@ proxy_Construct(JSContext *cx, uintN argc, Value *vp)
 
 JS_FRIEND_DATA(Class) js::FunctionProxyClass = {
     "Proxy",
-    Class::NON_NATIVE | JSCLASS_HAS_RESERVED_SLOTS(6),
+    Class::NON_NATIVE | JSCLASS_IMPLEMENTS_BARRIERS | JSCLASS_HAS_RESERVED_SLOTS(6),
     JS_PropertyStub,         /* addProperty */
     JS_PropertyStub,         /* delProperty */
     JS_PropertyStub,         /* getProperty */
@@ -1451,11 +1452,9 @@ JS_FRIEND_DATA(Class) js::FunctionProxyClass = {
     JS_ResolveStub,
     JS_ConvertStub,
     NULL,                    /* finalize */
-    NULL,                    /* reserved0   */
     NULL,                    /* checkAccess */
     proxy_Call,
     proxy_Construct,
-    NULL,                    /* xdrObject   */
     FunctionClass.hasInstance,
     proxy_TraceFunction,     /* trace       */
     JS_NULL_CLASS_EXT,
@@ -1729,14 +1728,13 @@ Class js::CallableObjectClass = {
     JS_ResolveStub,
     JS_ConvertStub,
     NULL,                    /* finalize    */
-    NULL,                    /* reserved0   */
     NULL,                    /* checkAccess */
     callable_Call,
     callable_Construct,
 };
 
-JS_FRIEND_API(JSBool)
-js::FixProxy(JSContext *cx, JSObject *proxy, JSBool *bp)
+static bool
+FixProxy(JSContext *cx, JSObject *proxy, JSBool *bp)
 {
     if (OperationInProgress(cx, proxy)) {
         JS_ReportErrorNumber(cx, js_GetErrorMessage, NULL, JSMSG_BAD_PROXY_FIX);

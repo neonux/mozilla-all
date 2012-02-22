@@ -40,13 +40,16 @@ package org.mozilla.gecko.sync.middleware;
 import java.io.UnsupportedEncodingException;
 import java.util.concurrent.ExecutorService;
 
+import org.mozilla.gecko.sync.CryptoRecord;
 import org.mozilla.gecko.sync.crypto.CryptoException;
 import org.mozilla.gecko.sync.crypto.KeyBundle;
-import org.mozilla.gecko.sync.CryptoRecord;
 import org.mozilla.gecko.sync.repositories.NoStoreDelegateException;
 import org.mozilla.gecko.sync.repositories.RecordFactory;
 import org.mozilla.gecko.sync.repositories.RepositorySession;
+import org.mozilla.gecko.sync.repositories.RepositorySessionBundle;
+import org.mozilla.gecko.sync.repositories.delegates.RepositorySessionBeginDelegate;
 import org.mozilla.gecko.sync.repositories.delegates.RepositorySessionFetchRecordsDelegate;
+import org.mozilla.gecko.sync.repositories.delegates.RepositorySessionFinishDelegate;
 import org.mozilla.gecko.sync.repositories.delegates.RepositorySessionGuidsSinceDelegate;
 import org.mozilla.gecko.sync.repositories.delegates.RepositorySessionStoreDelegate;
 import org.mozilla.gecko.sync.repositories.delegates.RepositorySessionWipeDelegate;
@@ -146,7 +149,7 @@ public class Crypto5MiddlewareRepositorySession extends RepositorySession {
     }
 
     @Override
-    public void onFetchSucceeded(Record[] records, long end) {
+    public void onFetchSucceeded(Record[] records, long fetchEnd) {
       for (Record record : records) {
         try {
           this.onFetchedRecord(record);
@@ -154,12 +157,12 @@ public class Crypto5MiddlewareRepositorySession extends RepositorySession {
           this.onFetchFailed(e, record);
         }
       }
-      this.onFetchCompleted(end);
+      this.onFetchCompleted(fetchEnd);
     }
 
     @Override
-    public void onFetchCompleted(long end) {
-      next.onFetchCompleted(end);
+    public void onFetchCompleted(final long fetchEnd) {
+      next.onFetchCompleted(fetchEnd);
     }
 
     @Override
@@ -236,5 +239,83 @@ public class Crypto5MiddlewareRepositorySession extends RepositorySession {
   @Override
   public void storeDone() {
     inner.storeDone();
+  }
+
+  @Override
+  public void storeDone(long storeEnd) {
+    inner.storeDone(storeEnd);
+  }
+
+  public class Crypto5MiddlewareRepositorySessionBeginDelegate implements RepositorySessionBeginDelegate {
+    private Crypto5MiddlewareRepositorySession outerSession;
+    private RepositorySessionBeginDelegate next;
+
+    public Crypto5MiddlewareRepositorySessionBeginDelegate(Crypto5MiddlewareRepositorySession outerSession, RepositorySessionBeginDelegate next) {
+      this.outerSession = outerSession;
+      this.next = next;
+    }
+
+    @Override
+    public void onBeginFailed(Exception ex) {
+      next.onBeginFailed(ex);
+    }
+
+    @Override
+    public void onBeginSucceeded(RepositorySession session) {
+      outerSession.setStatus(SessionStatus.ACTIVE);
+      next.onBeginSucceeded(outerSession);
+    }
+
+    @Override
+    public RepositorySessionBeginDelegate deferredBeginDelegate(ExecutorService executor) {
+      return this;
+    }
+  }
+
+  public void begin(RepositorySessionBeginDelegate delegate) {
+    inner.begin(new Crypto5MiddlewareRepositorySessionBeginDelegate(this, delegate));
+  }
+
+  public class Crypto5MiddlewareRepositorySessionFinishDelegate implements RepositorySessionFinishDelegate {
+    private Crypto5MiddlewareRepositorySession outerSession;
+    private RepositorySessionFinishDelegate next;
+
+    public Crypto5MiddlewareRepositorySessionFinishDelegate(Crypto5MiddlewareRepositorySession outerSession, RepositorySessionFinishDelegate next) {
+      this.outerSession = outerSession;
+      this.next = next;
+    }
+
+    @Override
+    public void onFinishFailed(Exception ex) {
+      next.onFinishFailed(ex);
+    }
+
+    @Override
+    public void onFinishSucceeded(RepositorySession session, RepositorySessionBundle bundle) {
+      outerSession.setStatus(SessionStatus.DONE);
+      next.onFinishSucceeded(outerSession, bundle);
+    }
+
+    @Override
+    public RepositorySessionFinishDelegate deferredFinishDelegate(ExecutorService executor) {
+      return this;
+    }
+  }
+
+  @Override
+  public void finish(RepositorySessionFinishDelegate delegate) {
+    inner.finish(new Crypto5MiddlewareRepositorySessionFinishDelegate(this, delegate));
+  }
+
+  @Override
+  public void abort() {
+    setStatus(SessionStatus.ABORTED);
+    inner.abort();
+  }
+
+  @Override
+  public void abort(RepositorySessionFinishDelegate delegate) {
+    this.status = SessionStatus.DONE; // TODO: ABORTED?
+    inner.abort(new Crypto5MiddlewareRepositorySessionFinishDelegate(this, delegate));
   }
 }

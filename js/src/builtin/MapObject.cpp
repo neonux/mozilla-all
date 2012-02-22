@@ -45,6 +45,7 @@
 #include "jsobj.h"
 
 #include "vm/GlobalObject.h"
+#include "vm/MethodGuard.h"
 #include "vm/Stack.h"
 
 #include "jsobjinlines.h"
@@ -146,7 +147,7 @@ HashableValue::equals(const HashableValue &other) const
 
 Class MapObject::class_ = {
     "Map",
-    JSCLASS_HAS_PRIVATE |
+    JSCLASS_HAS_PRIVATE | JSCLASS_IMPLEMENTS_BARRIERS |
     JSCLASS_HAS_CACHED_PROTO(JSProto_Map),
     JS_PropertyStub,         /* addProperty */
     JS_PropertyStub,         /* delProperty */
@@ -156,11 +157,9 @@ Class MapObject::class_ = {
     JS_ResolveStub,
     JS_ConvertStub,
     finalize,
-    NULL,                    /* reserved0   */
     NULL,                    /* checkAccess */
     NULL,                    /* call        */
     NULL,                    /* construct   */
-    NULL,                    /* xdrObject   */
     NULL,                    /* hasInstance */
     mark
 };
@@ -185,8 +184,11 @@ MapObject::mark(JSTracer *trc, JSObject *obj)
     MapObject *mapobj = static_cast<MapObject *>(obj);
     if (ValueMap *map = mapobj->getData()) {
         for (ValueMap::Range r = map->all(); !r.empty(); r.popFront()) {
-            gc::MarkValue(trc, r.front().key, "key");
-            gc::MarkValue(trc, r.front().value, "value");
+            const HeapValue &key = r.front().key;
+            HeapValue tmp(key);
+            gc::MarkValue(trc, &tmp, "key");
+            JS_ASSERT(tmp.get() == key.get());
+            gc::MarkValue(trc, &r.front().value, "value");
         }
     }
 }
@@ -294,7 +296,7 @@ js_InitMapClass(JSContext *cx, JSObject *obj)
 
 Class SetObject::class_ = {
     "Set",
-    JSCLASS_HAS_PRIVATE |
+    JSCLASS_HAS_PRIVATE | JSCLASS_IMPLEMENTS_BARRIERS |
     JSCLASS_HAS_CACHED_PROTO(JSProto_Set),
     JS_PropertyStub,         /* addProperty */
     JS_PropertyStub,         /* delProperty */
@@ -304,11 +306,9 @@ Class SetObject::class_ = {
     JS_ResolveStub,
     JS_ConvertStub,
     finalize,
-    NULL,                    /* reserved0   */
     NULL,                    /* checkAccess */
     NULL,                    /* call        */
     NULL,                    /* construct   */
-    NULL,                    /* xdrObject   */
     NULL,                    /* hasInstance */
     mark
 };
@@ -331,8 +331,12 @@ SetObject::mark(JSTracer *trc, JSObject *obj)
 {
     SetObject *setobj = static_cast<SetObject *>(obj);
     if (ValueSet *set = setobj->getData()) {
-        for (ValueSet::Range r = set->all(); !r.empty(); r.popFront())
-            gc::MarkValue(trc, r.front(), "key");
+        for (ValueSet::Range r = set->all(); !r.empty(); r.popFront()) {
+            const HeapValue &key = r.front();
+            HeapValue tmp(key);
+            gc::MarkValue(trc, &tmp, "key");
+            JS_ASSERT(tmp.get() == key.get());
+        }
     }
 }
 

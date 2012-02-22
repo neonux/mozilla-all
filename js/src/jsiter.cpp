@@ -76,6 +76,7 @@
 #include "jsinferinlines.h"
 #include "jsobjinlines.h"
 
+#include "vm/MethodGuard-inl.h"
 #include "vm/Stack-inl.h"
 #include "vm/String-inl.h"
 
@@ -89,7 +90,7 @@ static JSObject *iterator_iterator(JSContext *cx, JSObject *obj, JSBool keysonly
 
 Class js::IteratorClass = {
     "Iterator",
-    JSCLASS_HAS_PRIVATE |
+    JSCLASS_HAS_PRIVATE | JSCLASS_IMPLEMENTS_BARRIERS |
     JSCLASS_HAS_CACHED_PROTO(JSProto_Iterator),
     JS_PropertyStub,         /* addProperty */
     JS_PropertyStub,         /* delProperty */
@@ -99,11 +100,9 @@ Class js::IteratorClass = {
     JS_ResolveStub,
     JS_ConvertStub,
     iterator_finalize,
-    NULL,                    /* reserved    */
     NULL,                    /* checkAccess */
     NULL,                    /* call        */
     NULL,                    /* construct   */
-    NULL,                    /* xdrObject   */
     NULL,                    /* hasInstance */
     iterator_trace,
     {
@@ -126,11 +125,9 @@ Class js::ElementIteratorClass = {
     JS_ResolveStub,
     JS_ConvertStub,
     NULL,                    /* finalize    */
-    NULL,                    /* reserved    */
     NULL,                    /* checkAccess */
     NULL,                    /* call        */
     NULL,                    /* construct   */
-    NULL,                    /* xdrObject   */
     NULL,                    /* hasInstance */
     NULL,                    /* trace       */
     {
@@ -148,9 +145,9 @@ void
 NativeIterator::mark(JSTracer *trc)
 {
     for (HeapPtr<JSFlatString> *str = begin(); str < end(); str++)
-        MarkString(trc, *str, "prop");
+        MarkString(trc, str, "prop");
     if (obj)
-        MarkObject(trc, obj, "obj");
+        MarkObject(trc, &obj, "obj");
 }
 
 static void
@@ -1339,11 +1336,9 @@ Class js::StopIterationClass = {
     JS_ResolveStub,
     JS_ConvertStub,
     NULL,                    /* finalize    */
-    NULL,                    /* reserved0   */
     NULL,                    /* checkAccess */
     NULL,                    /* call        */
     NULL,                    /* construct   */
-    NULL,                    /* xdrObject   */
     stopiter_hasInstance
 };
 
@@ -1419,7 +1414,7 @@ generator_trace(JSTracer *trc, JSObject *obj)
 
 Class js::GeneratorClass = {
     "Generator",
-    JSCLASS_HAS_PRIVATE,
+    JSCLASS_HAS_PRIVATE | JSCLASS_IMPLEMENTS_BARRIERS,
     JS_PropertyStub,         /* addProperty */
     JS_PropertyStub,         /* delProperty */
     JS_PropertyStub,         /* getProperty */
@@ -1428,11 +1423,9 @@ Class js::GeneratorClass = {
     JS_ResolveStub,
     JS_ConvertStub,
     generator_finalize,
-    NULL,                    /* reserved    */
     NULL,                    /* checkAccess */
     NULL,                    /* call        */
     NULL,                    /* construct   */
-    NULL,                    /* xdrObject   */
     NULL,                    /* hasInstance */
     generator_trace,
     {

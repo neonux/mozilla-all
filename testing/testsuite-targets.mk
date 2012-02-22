@@ -65,6 +65,14 @@ RUN_MOCHITEST = \
 	rm -f ./$@.log && \
 	$(PYTHON) _tests/testing/mochitest/runtests.py --autorun --close-when-done \
 	  --console-level=INFO --log-file=./$@.log --file-level=INFO \
+	  --failure-file=$(call core_abspath,_tests/testing/mochitest/makefailures.json)  \
+	  $(SYMBOLS_PATH) $(TEST_PATH_ARG) $(EXTRA_TEST_ARGS)
+
+RERUN_MOCHITEST = \
+	rm -f ./$@.log && \
+	$(PYTHON) _tests/testing/mochitest/runtests.py --autorun --close-when-done \
+	  --console-level=INFO --log-file=./$@.log --file-level=INFO \
+	  --run-only-tests=makefailures.json  \
 	  $(SYMBOLS_PATH) $(TEST_PATH_ARG) $(EXTRA_TEST_ARGS)
 
 RUN_MOCHITEST_REMOTE = \
@@ -88,6 +96,7 @@ define CHECK_TEST_ERROR
   if test "$$errors" ; then \
 	  echo "$@ failed:"; \
 	  echo "$$errors"; \
+          echo "To rerun your failures please run 'make mochitest-plain-rerun-failures'"; \
 	  exit 1; \
   else \
 	  echo "$@ passed"; \
@@ -97,23 +106,31 @@ endif
 
 mochitest-remote: DM_TRANS?=adb
 mochitest-remote:
-	@if test -f ${MOZ_HOST_BIN}/xpcshell && [ "${TEST_DEVICE}" != "usb" -o "$(DM_TRANS)" = "adb" ]; \
-          then $(RUN_MOCHITEST_REMOTE); \
-        else \
-          echo "please prepare your host with environment variables for TEST_DEVICE and MOZ_HOST_BIN"; \
-        fi
+	@if [ ! -f ${MOZ_HOST_BIN}/xpcshell ]; then \
+        echo "please prepare your host with the environment variable MOZ_HOST_BIN"; \
+    elif [ "${TEST_DEVICE}" = "" -a "$(DM_TRANS)" != "adb" ]; then \
+        echo "please prepare your host with the environment variable TEST_DEVICE"; \
+    else \
+        $(RUN_MOCHITEST_REMOTE); \
+    fi
 
 mochitest-robotium: robotium-id-map
 mochitest-robotium: DM_TRANS?=adb
 mochitest-robotium:
-	@if test -f ${MOZ_HOST_BIN}/xpcshell && [ "${TEST_DEVICE}" != "usb" -o "$(DM_TRANS)" = "adb" ]; \
-          then $(RUN_MOCHITEST_ROBOTIUM); \
-        else \
-          echo "please prepare your host with environment variables for TEST_DEVICE and MOZ_HOST_BIN"; \
-        fi
+	@if [ ! -f ${MOZ_HOST_BIN}/xpcshell ]; then \
+        echo "please prepare your host with the environment variable MOZ_HOST_BIN"; \
+    elif [ "${TEST_DEVICE}" = "" -a "$(DM_TRANS)" != "adb" ]; then \
+        echo "please prepare your host with the environment variable TEST_DEVICE"; \
+    else \
+        $(RUN_MOCHITEST_ROBOTIUM); \
+    fi
 
 mochitest-plain:
 	$(RUN_MOCHITEST)
+	$(CHECK_TEST_ERROR)
+
+mochitest-plain-rerun-failures:
+	$(RERUN_MOCHITEST)
 	$(CHECK_TEST_ERROR)
 
 # Allow mochitest-1 ... mochitest-5 for developer ease
@@ -172,11 +189,15 @@ reftest:
 reftest-remote: TEST_PATH?=layout/reftests/reftest.list
 reftest-remote: DM_TRANS?=adb
 reftest-remote:
-	@if test -f ${MOZ_HOST_BIN}/xpcshell && [ "${TEST_DEVICE}" != "" -o "$(DM_TRANS)" = "adb" ]; \
-	  then ln -s $(abspath $(topsrcdir)) _tests/reftest/tests;$(call REMOTE_REFTEST,tests/$(TEST_PATH)); $(CHECK_TEST_ERROR); \
-        else \
-          echo "please prepare your host with environment variables for TEST_DEVICE and MOZ_HOST_BIN"; \
-        fi
+	@if [ ! -f ${MOZ_HOST_BIN}/xpcshell ]; then \
+        echo "please prepare your host with the environment variable MOZ_HOST_BIN"; \
+    elif [ "${TEST_DEVICE}" = "" -a "$(DM_TRANS)" != "adb" ]; then \
+        echo "please prepare your host with the environment variable TEST_DEVICE"; \
+    else \
+        ln -s $(abspath $(topsrcdir)) _tests/reftest/tests; \
+        $(call REMOTE_REFTEST,tests/$(TEST_PATH)); \
+        $(CHECK_TEST_ERROR); \
+    fi
 
 reftest-ipc: TEST_PATH?=layout/reftests/reftest.list
 reftest-ipc:
@@ -250,8 +271,12 @@ xpcshell-tests-remote:
 # Runs peptest, for usage see: https://developer.mozilla.org/en/Peptest#Running_Tests
 RUN_PEPTEST = \
 	rm -f ./$@.log && \
-	$(PYTHON) _tests/peptest/runtests.py --binary=$(browser_path) $(PEPTEST_PATH_ARG) \
-	  --log-file=./$@.log $(SYMBOLS_PATH) $(EXTRA_TEST_ARGS)
+	$(PYTHON) _tests/peptest/runtests.py --binary=$(browser_path) \
+          $(PEPTEST_PATH_ARG) \
+	  --proxy=_tests/peptest/tests/firefox/server-locations.txt \
+          --proxy-host-dirs \
+          --server-path=_tests/peptest/tests/firefox/server \
+          --log-file=./$@.log $(SYMBOLS_PATH) $(EXTRA_TEST_ARGS)
 
 peptest:
 	$(RUN_PEPTEST)

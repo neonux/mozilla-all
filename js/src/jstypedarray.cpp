@@ -67,6 +67,8 @@
 #include "jsobjinlines.h"
 #include "jstypedarrayinlines.h"
 
+#include "vm/MethodGuard-inl.h"
+
 using namespace mozilla;
 using namespace js;
 using namespace js::gc;
@@ -1097,7 +1099,7 @@ class TypedArrayTemplate
     static void
     obj_trace(JSTracer *trc, JSObject *obj)
     {
-        MarkValue(trc, obj->getFixedSlotRef(FIELD_BUFFER), "typedarray.buffer");
+        MarkValue(trc, &obj->getFixedSlotRef(FIELD_BUFFER), "typedarray.buffer");
     }
 
     static JSBool
@@ -2180,6 +2182,7 @@ Class ArrayBuffer::slowClass = {
 Class js::ArrayBufferClass = {
     "ArrayBuffer",
     JSCLASS_HAS_PRIVATE |
+    JSCLASS_IMPLEMENTS_BARRIERS |
     Class::NON_NATIVE |
     JSCLASS_HAS_RESERVED_SLOTS(ARRAYBUFFER_RESERVED_SLOTS) |
     JSCLASS_HAS_CACHED_PROTO(JSProto_ArrayBuffer),
@@ -2191,11 +2194,9 @@ Class js::ArrayBufferClass = {
     JS_ResolveStub,
     JS_ConvertStub,
     NULL,           /* finalize    */
-    NULL,           /* reserved0   */
     NULL,           /* checkAccess */
     NULL,           /* call        */
     NULL,           /* construct   */
-    NULL,           /* xdrObject   */
     NULL,           /* hasInstance */
     ArrayBuffer::obj_trace,
     JS_NULL_CLASS_EXT,
@@ -2298,7 +2299,7 @@ JSFunctionSpec _typedArray::jsfuncs[] = {                                      \
 {                                                                              \
     #_typedArray,                                                              \
     JSCLASS_HAS_RESERVED_SLOTS(TypedArray::FIELD_MAX) |                        \
-    JSCLASS_HAS_PRIVATE |                                                      \
+    JSCLASS_HAS_PRIVATE | JSCLASS_IMPLEMENTS_BARRIERS |                        \
     JSCLASS_FOR_OF_ITERATION |                                                 \
     Class::NON_NATIVE,                                                         \
     JS_PropertyStub,         /* addProperty */                                 \
@@ -2309,11 +2310,9 @@ JSFunctionSpec _typedArray::jsfuncs[] = {                                      \
     JS_ResolveStub,                                                            \
     JS_ConvertStub,                                                            \
     NULL,                    /* finalize    */                                 \
-    NULL,                    /* reserved0   */                                 \
     NULL,                    /* checkAccess */                                 \
     NULL,                    /* call        */                                 \
     NULL,                    /* construct   */                                 \
-    NULL,                    /* xdrObject   */                                 \
     NULL,                    /* hasInstance */                                 \
     _typedArray::obj_trace,  /* trace       */                                 \
     {                                                                          \

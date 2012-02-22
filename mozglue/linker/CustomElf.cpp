@@ -84,12 +84,17 @@ public:
   : GenericMappedPtr<Mappable1stPagePtr>(
       mappable->mmap(NULL, PAGE_SIZE, PROT_READ, MAP_PRIVATE, 0), PAGE_SIZE)
   , mappable(mappable)
-  { }
+  {
+    /* Ensure the content of this page */
+    mappable->ensure(*this);
+  }
 
+private:
+  friend class GenericMappedPtr<Mappable1stPagePtr>;
   void munmap(void *buf, size_t length) {
     mappable->munmap(buf, length);
   }
-private:
+
   Mappable *mappable;
 };
 
@@ -175,10 +180,20 @@ CustomElf::Load(Mappable *mappable, const char *path, int flags)
   }
 
   /* Reserve enough memory to map the complete virtual address space for this
-   * library. */
-  elf->base.Assign(mmap(NULL, max_vaddr, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS,
+   * library.
+   * As we are using the base address from here to mmap something else with
+   * MAP_FIXED | MAP_SHARED, we need to make sure these mmaps will work. For
+   * instance, on armv6, MAP_SHARED mappings require a 16k alignment, but mmap
+   * MAP_PRIVATE only returns a 4k aligned address. So we first get a base
+   * address with MAP_SHARED, which guarantees the kernel returns an address
+   * that we'll be able to use with MAP_FIXED, and then remap MAP_PRIVATE at
+   * the same address, because of some bad side effects of keeping it as
+   * MAP_SHARED. */
+  elf->base.Assign(mmap(NULL, max_vaddr, PROT_NONE, MAP_SHARED | MAP_ANONYMOUS,
                       -1, 0), max_vaddr);
-  if (elf->base == MAP_FAILED) {
+  if ((elf->base == MAP_FAILED) ||
+      (mmap(elf->base, max_vaddr, PROT_NONE,
+            MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) != elf->base)) {
     log("%s: Failed to mmap", elf->GetPath());
     return NULL;
   }
@@ -203,6 +218,7 @@ CustomElf::Load(Mappable *mappable, const char *path, int flags)
   if (!elf->InitDyn(dyn))
     return NULL;
 
+  elf->stats("oneLibLoaded");
   debug("CustomElf::Load(\"%s\", %x) = %p", path, flags,
         static_cast<void *>(elf));
   return elf;
@@ -288,6 +304,13 @@ CustomElf::GetSymbolPtrInDeps(const char *symbol) const
       return FunctionPtr(&ElfLoader::__wrap_cxa_finalize);
     if (strcmp(symbol + 2, "dso_handle") == 0)
       return const_cast<CustomElf *>(this);
+    if (strcmp(symbol + 2, "moz_linker_stats") == 0)
+      return FunctionPtr(&ElfLoader::stats);
+  } else if (symbol[0] == 's' && symbol[1] == 'i') {
+    if (strcmp(symbol + 2, "gnal") == 0)
+      return FunctionPtr(__wrap_signal);
+    if (strcmp(symbol + 2, "gaction") == 0)
+      return FunctionPtr(__wrap_sigaction);
   }
 
   void *sym;
@@ -348,6 +371,12 @@ bool
 CustomElf::Contains(void *addr) const
 {
   return base.Contains(addr);
+}
+
+void
+CustomElf::stats(const char *when) const
+{
+  mappable->stats(when, GetPath());
 }
 
 bool
@@ -618,7 +647,8 @@ CustomElf::RelocateJumps()
       symptr = GetSymbolPtrInDeps(strtab.GetStringAt(sym.st_name));
 
     if (symptr == NULL) {
-      log("%s: Error: relocation to NULL @0x%08" PRIxAddr, GetPath(), rel->r_offset);
+      log("%s: Error: relocation to NULL @0x%08" PRIxAddr " for symbol \"%s\"",
+          GetPath(), rel->r_offset, strtab.GetStringAt(sym.st_name));
       return false;
     }
     /* Apply relocation */

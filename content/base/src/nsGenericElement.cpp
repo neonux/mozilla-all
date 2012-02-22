@@ -213,16 +213,9 @@ nsINode::nsSlots::Unlink()
 
 //----------------------------------------------------------------------
 
-nsINode *nsINode::sOrphanNodeHead = nsnull;
-
 nsINode::~nsINode()
 {
   NS_ASSERTION(!HasSlots(), "nsNodeUtils::LastRelease was not called?");
-
-  MOZ_ASSERT(IsOrphan(), "Node should be orphan by the time it's deleted!");
-
-  mPreviousOrphanNode->mNextOrphanNode = mNextOrphanNode;
-  mNextOrphanNode->mPreviousOrphanNode = mPreviousOrphanNode;
 }
 
 void*
@@ -1700,9 +1693,29 @@ nsINode::SetExplicitBaseURI(nsIURI* aURI)
 
 //----------------------------------------------------------------------
 
+static JSObject*
+GetJSObjectChild(nsWrapperCache* aCache)
+{
+  if (aCache->PreservingWrapper()) {
+    return aCache->GetWrapperPreserveColor();
+  }
+  return aCache->GetExpandoObjectPreserveColor();
+}
+
+static bool
+NeedsScriptTraverse(nsWrapperCache* aCache)
+{
+  JSObject* o = GetJSObjectChild(aCache);
+  return o && xpc_IsGrayGCThing(o);
+}
+
+//----------------------------------------------------------------------
+
 NS_IMPL_CYCLE_COLLECTING_ADDREF(nsChildContentList)
 NS_IMPL_CYCLE_COLLECTING_RELEASE(nsChildContentList)
 
+// If nsChildContentList is changed so that any additional fields are
+// traversed by the cycle collector, then CAN_SKIP must be updated.
 NS_IMPL_CYCLE_COLLECTION_CLASS(nsChildContentList)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN(nsChildContentList)
   NS_IMPL_CYCLE_COLLECTION_UNLINK_PRESERVED_WRAPPER
@@ -1713,6 +1726,20 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 NS_IMPL_CYCLE_COLLECTION_TRACE_BEGIN(nsChildContentList)
   NS_IMPL_CYCLE_COLLECTION_TRACE_PRESERVED_WRAPPER
 NS_IMPL_CYCLE_COLLECTION_TRACE_END
+
+// nsChildContentList only ever has a single child, its wrapper, so if
+// the wrapper is black, the list can't be part of a garbage cycle.
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_BEGIN(nsChildContentList)
+  return !NeedsScriptTraverse(tmp);
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_END
+
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_IN_CC_BEGIN(nsChildContentList)
+  return !NeedsScriptTraverse(tmp);
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_IN_CC_END
+
+// CanSkipThis returns false to avoid problems with incomplete unlinking.
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_THIS_BEGIN(nsChildContentList)
+NS_IMPL_CYCLE_COLLECTION_CAN_SKIP_THIS_END
 
 NS_INTERFACE_TABLE_HEAD(nsChildContentList)
   NS_WRAPPERCACHE_INTERFACE_MAP_ENTRY
@@ -3235,7 +3262,7 @@ nsGenericElement::UnbindFromTree(bool aDeep, bool aNullParent)
 
   // Unset this since that's what the old code effectively did.
   UnsetFlags(NODE_FORCE_XBL_BINDINGS);
-
+  
 #ifdef MOZ_XUL
   nsXULElement* xulElem = nsXULElement::FromContent(this);
   if (xulElem) {
@@ -3829,22 +3856,7 @@ nsGenericElement::SetTextContent(const nsAString& aTextContent)
   return nsContentUtils::SetNodeTextContent(this, aTextContent, false);
 }
 
-// static
-void
-nsINode::Init()
-{
-  // Allocate static storage for the head of the list of orphan nodes
-  static MOZ_ALIGNED_DECL(char orphanNodeListHead[sizeof(nsINode)], 8);
-  sOrphanNodeHead = reinterpret_cast<nsINode *>(&orphanNodeListHead[0]);
-
-  sOrphanNodeHead->mNextOrphanNode = sOrphanNodeHead;
-  sOrphanNodeHead->mPreviousOrphanNode = sOrphanNodeHead;
-
-  sOrphanNodeHead->mFirstChild = reinterpret_cast<nsIContent *>(0xdeadbeef);
-  sOrphanNodeHead->mParent = reinterpret_cast<nsIContent *>(0xdeadbeef);
-}
-
-// static
+/* static */
 nsresult
 nsGenericElement::DispatchEvent(nsPresContext* aPresContext,
                                 nsEvent* aEvent,
@@ -4404,22 +4416,6 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 NS_IMPL_CYCLE_COLLECTION_TRACE_BEGIN(nsGenericElement)
   nsINode::Trace(tmp, aCallback, aClosure);
 NS_IMPL_CYCLE_COLLECTION_TRACE_END
-
-static JSObject*
-GetJSObjectChild(nsINode* aNode)
-{
-  if (aNode->PreservingWrapper()) {
-    return aNode->GetWrapperPreserveColor();
-  }
-  return aNode->GetExpandoObjectPreserveColor();
-}
-                                  
-static bool
-NeedsScriptTraverse(nsINode* aNode)
-{
-  JSObject* o = GetJSObjectChild(aNode);
-  return o && xpc_IsGrayGCThing(o);
-}
 
 void
 nsGenericElement::MarkUserData(void* aObject, nsIAtom* aKey, void* aChild,

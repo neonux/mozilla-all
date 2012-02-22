@@ -287,6 +287,7 @@ pref("browser.urlbar.doubleClickSelectsAll", true);
 pref("browser.urlbar.doubleClickSelectsAll", false);
 #endif
 pref("browser.urlbar.autoFill", false);
+pref("browser.urlbar.autoFill.typed", true);
 // 0: Match anywhere (e.g., middle of words)
 // 1: Match on word boundaries and then try matching anywhere
 // 2: Match only on word boundaries (e.g., after / or .)
@@ -361,6 +362,9 @@ pref("browser.search.order.3",                "chrome://browser-region/locale/re
 
 // search bar results always open in a new tab
 pref("browser.search.openintab", false);
+
+// context menu searches open in the foreground
+pref("browser.search.context.loadInBackground", false);
 
 // send ping to the server to update
 pref("browser.search.update", true);

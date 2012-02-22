@@ -127,6 +127,7 @@
 #include "methodjit/StubCalls-inl.h"
 
 #include "vm/ArgumentsObject.h"
+#include "vm/MethodGuard.h"
 
 #include "ds/Sort.h"
 
@@ -1224,11 +1225,9 @@ Class js::ArrayClass = {
     JS_ResolveStub,
     JS_ConvertStub,
     NULL,
-    NULL,           /* reserved0   */
     NULL,           /* checkAccess */
     NULL,           /* call        */
     NULL,           /* construct   */
-    NULL,           /* xdrObject   */
     NULL,           /* hasInstance */
     array_trace,    /* trace       */
     {
@@ -1288,11 +1287,9 @@ Class js::SlowArrayClass = {
     JS_ResolveStub,
     JS_ConvertStub,
     NULL,
-    NULL,           /* reserved0   */
     NULL,           /* checkAccess */
     NULL,           /* call        */
     NULL,           /* construct   */
-    NULL,           /* xdrObject   */
     NULL,           /* hasInstance */
     NULL,           /* trace       */
     {
@@ -1434,23 +1431,22 @@ JSObject::makeDenseArraySlow(JSContext *cx)
 class ArraySharpDetector
 {
     JSContext *cx;
-    JSHashEntry *he;
+    bool success;
     bool alreadySeen;
     bool sharp;
 
   public:
     ArraySharpDetector(JSContext *cx)
       : cx(cx),
-        he(NULL),
+        success(false),
         alreadySeen(false),
         sharp(false)
     {}
 
     bool init(JSObject *obj) {
-        he = js_EnterSharpObject(cx, obj, NULL, &alreadySeen);
-        if (!he)
+        success = js_EnterSharpObject(cx, obj, NULL, &alreadySeen, &sharp);
+        if (!success)
             return false;
-        sharp = IS_SHARP(he);
         return true;
     }
 
@@ -1460,7 +1456,7 @@ class ArraySharpDetector
     }
 
     ~ArraySharpDetector() {
-        if (he && !sharp)
+        if (success && !sharp)
             js_LeaveSharpObject(cx, NULL);
     }
 };

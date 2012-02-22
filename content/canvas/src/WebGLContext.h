@@ -55,8 +55,8 @@
 #include "nsHTMLCanvasElement.h"
 #include "nsWeakReference.h"
 #include "nsIDOMHTMLElement.h"
-#include "nsIJSNativeInitializer.h"
 #include "nsIMemoryReporter.h"
+#include "nsIJSNativeInitializer.h"
 #include "nsContentUtils.h"
 
 #include "GLContextProvider.h"
@@ -514,7 +514,7 @@ class WebGLContext :
     public nsITimerCallback,
     public WebGLRectangleObject
 {
-    friend class WebGLMemoryReporter;
+    friend class WebGLMemoryMultiReporterWrapper;
     friend class WebGLExtensionLoseContext;
     friend class WebGLContextUserData;
 
@@ -1024,7 +1024,7 @@ struct WebGLVertexAttribData {
     }
 };
 
-class WebGLBuffer
+class WebGLBuffer MOZ_FINAL
     : public nsIWebGLBuffer
     , public WebGLRefCountedObject<WebGLBuffer>
     , public WebGLContextBoundObject
@@ -1055,6 +1055,10 @@ public:
         mContext->mBuffers.RemoveElement(mMonotonicHandle);
     }
 
+    size_t SizeOfIncludingThis(nsMallocSizeOfFun aMallocSizeOf) const {
+        return aMallocSizeOf(this) + aMallocSizeOf(mData);
+    }
+   
     bool HasEverBeenBound() { return mHasEverBeenBound; }
     void SetHasEverBeenBound(bool x) { mHasEverBeenBound = x; }
     GLuint GLName() const { return mGLName; }
@@ -1158,7 +1162,7 @@ protected:
     void* mData; // in the case of an Element Array Buffer, we keep a copy.
 };
 
-class WebGLTexture
+class WebGLTexture MOZ_FINAL
     : public nsIWebGLTexture
     , public WebGLRefCountedObject<WebGLTexture>
     , public WebGLContextBoundObject
@@ -1608,7 +1612,7 @@ public:
     }
 };
 
-class WebGLShader
+class WebGLShader MOZ_FINAL
     : public nsIWebGLShader
     , public WebGLRefCountedObject<WebGLShader>
     , public WebGLContextBoundObject
@@ -1626,6 +1630,12 @@ public:
 
     ~WebGLShader() {
         DeleteOnce();
+    }
+    
+    size_t SizeOfIncludingThis(nsMallocSizeOfFun aMallocSizeOf) {
+        return aMallocSizeOf(this) +
+               mSource.SizeOfExcludingThisIfUnshared(aMallocSizeOf) +
+               mTranslationLog.SizeOfExcludingThisIfUnshared(aMallocSizeOf);
     }
 
     void Delete() {
@@ -1673,7 +1683,7 @@ protected:
     WebGLMonotonicHandle mMonotonicHandle;
 };
 
-class WebGLProgram
+class WebGLProgram MOZ_FINAL
     : public nsIWebGLProgram
     , public WebGLRefCountedObject<WebGLProgram>
     , public WebGLContextBoundObject
@@ -1795,7 +1805,7 @@ protected:
     WebGLMonotonicHandle mMonotonicHandle;
 };
 
-class WebGLRenderbuffer
+class WebGLRenderbuffer MOZ_FINAL
     : public nsIWebGLRenderbuffer
     , public WebGLRefCountedObject<WebGLRenderbuffer>
     , public WebGLRectangleObject
@@ -2001,7 +2011,7 @@ public:
     }
 };
 
-class WebGLFramebuffer
+class WebGLFramebuffer MOZ_FINAL
     : public nsIWebGLFramebuffer
     , public WebGLRefCountedObject<WebGLFramebuffer>
     , public WebGLContextBoundObject
@@ -2296,7 +2306,7 @@ public:
     WebGLMonotonicHandle mMonotonicHandle;
 };
 
-class WebGLUniformLocation
+class WebGLUniformLocation MOZ_FINAL
     : public nsIWebGLUniformLocation
     , public WebGLContextBoundObject
     , public WebGLRefCountedObject<WebGLUniformLocation>
@@ -2337,7 +2347,7 @@ protected:
     friend class WebGLProgram;
 };
 
-class WebGLActiveInfo
+class WebGLActiveInfo MOZ_FINAL
     : public nsIWebGLActiveInfo
 {
 public:
@@ -2356,7 +2366,7 @@ protected:
     nsString mName;
 };
 
-class WebGLShaderPrecisionFormat
+class WebGLShaderPrecisionFormat MOZ_FINAL
     : public nsIWebGLShaderPrecisionFormat
 {
 public:
@@ -2388,6 +2398,7 @@ public:
 
     NS_DECL_ISUPPORTS
     NS_DECL_NSIWEBGLEXTENSION
+    virtual ~WebGLExtension() {}
 };
 
 inline const WebGLRectangleObject *WebGLContext::FramebufferRectangleObject() const {
@@ -2514,30 +2525,21 @@ WebGLContext::CanGetConcreteObject(const char *info,
     return GetConcreteObject(info, aInterface, &aConcreteObject, isNull, isDeleted, false);
 }
 
-class WebGLMemoryReporter
+class WebGLMemoryMultiReporterWrapper
 {
-    WebGLMemoryReporter();
-    ~WebGLMemoryReporter();
-    static WebGLMemoryReporter* sUniqueInstance;
+    WebGLMemoryMultiReporterWrapper();
+    ~WebGLMemoryMultiReporterWrapper();
+    static WebGLMemoryMultiReporterWrapper* sUniqueInstance;
 
-    // here we store plain pointers, not RefPtrs: we don't want the WebGLMemoryReporter unique instance to keep alive all
+    // here we store plain pointers, not RefPtrs: we don't want the 
+    // WebGLMemoryMultiReporterWrapper unique instance to keep alive all		
     // WebGLContexts ever created.
     typedef nsTArray<const WebGLContext*> ContextsArrayType;
     ContextsArrayType mContexts;
     
-    nsCOMPtr<nsIMemoryReporter> mTextureMemoryUsageReporter;
-    nsCOMPtr<nsIMemoryReporter> mTextureCountReporter;
-    nsCOMPtr<nsIMemoryReporter> mBufferMemoryUsageReporter;
-    nsCOMPtr<nsIMemoryReporter> mBufferCacheMemoryUsageReporter;
-    nsCOMPtr<nsIMemoryReporter> mBufferCountReporter;
-    nsCOMPtr<nsIMemoryReporter> mRenderbufferMemoryUsageReporter;
-    nsCOMPtr<nsIMemoryReporter> mRenderbufferCountReporter;
-    nsCOMPtr<nsIMemoryReporter> mShaderSourcesSizeReporter;
-    nsCOMPtr<nsIMemoryReporter> mShaderTranslationLogsSizeReporter;
-    nsCOMPtr<nsIMemoryReporter> mShaderCountReporter;
-    nsCOMPtr<nsIMemoryReporter> mContextCountReporter;
+    nsCOMPtr<nsIMemoryMultiReporter> mReporter;
 
-    static WebGLMemoryReporter* UniqueInstance();
+    static WebGLMemoryMultiReporterWrapper* UniqueInstance();
 
     static ContextsArrayType & Contexts() { return UniqueInstance()->mContexts; }
 
@@ -2551,7 +2553,7 @@ class WebGLMemoryReporter
         ContextsArrayType & contexts = Contexts();
         contexts.RemoveElement(c);
         if (contexts.IsEmpty()) {
-            delete sUniqueInstance;
+            delete sUniqueInstance; 
             sUniqueInstance = nsnull;
         }
     }
@@ -2560,8 +2562,8 @@ class WebGLMemoryReporter
         const ContextsArrayType & contexts = Contexts();
         PRInt64 result = 0;
         for(size_t i = 0; i < contexts.Length(); ++i)
-            for (size_t t = 0; t < contexts[i]->mTextures.Length(); ++t)
-              result += contexts[i]->mTextures[t]->MemoryUsage();
+            for (size_t j = 0; j < contexts[i]->mTextures.Length(); ++j)
+              result += contexts[i]->mTextures[j]->MemoryUsage();
         return result;
     }
 
@@ -2577,20 +2579,12 @@ class WebGLMemoryReporter
         const ContextsArrayType & contexts = Contexts();
         PRInt64 result = 0;
         for(size_t i = 0; i < contexts.Length(); ++i)
-            for (size_t b = 0; b < contexts[i]->mBuffers.Length(); ++b)
-                result += contexts[i]->mBuffers[b]->ByteLength();
+            for (size_t j = 0; j < contexts[i]->mBuffers.Length(); ++j)
+                result += contexts[i]->mBuffers[j]->ByteLength();
         return result;
     }
 
-    static PRInt64 GetBufferCacheMemoryUsed() {
-        const ContextsArrayType & contexts = Contexts();
-        PRInt64 result = 0;
-        for(size_t i = 0; i < contexts.Length(); ++i)
-            for (size_t b = 0; b < contexts[i]->mBuffers.Length(); ++b)
-                if (contexts[i]->mBuffers[b]->Target() == LOCAL_GL_ELEMENT_ARRAY_BUFFER)
-                    result += contexts[i]->mBuffers[b]->ByteLength();
-        return result;
-    }
+    static PRInt64 GetBufferCacheMemoryUsed();
 
     static PRInt64 GetBufferCount() {
         const ContextsArrayType & contexts = Contexts();
@@ -2604,8 +2598,8 @@ class WebGLMemoryReporter
         const ContextsArrayType & contexts = Contexts();
         PRInt64 result = 0;
         for(size_t i = 0; i < contexts.Length(); ++i)
-            for (size_t r = 0; r < contexts[i]->mRenderbuffers.Length(); ++r)
-              result += contexts[i]->mRenderbuffers[r]->MemoryUsage();
+            for (size_t j = 0; j < contexts[i]->mRenderbuffers.Length(); ++j)
+              result += contexts[i]->mRenderbuffers[j]->MemoryUsage();
         return result;
     }
 
@@ -2617,23 +2611,7 @@ class WebGLMemoryReporter
         return result;
     }
 
-    static PRInt64 GetShaderSourcesSize() {
-        const ContextsArrayType & contexts = Contexts();
-        PRInt64 result = 0;
-        for(size_t i = 0; i < contexts.Length(); ++i)
-            for (size_t s = 0; s < contexts[i]->mShaders.Length(); ++s)
-                result += contexts[i]->mShaders[s]->Source().Length();
-        return result;
-    }
-
-    static PRInt64 GetShaderTranslationLogsSize() {
-        const ContextsArrayType & contexts = Contexts();
-        PRInt64 result = 0;
-        for(size_t i = 0; i < contexts.Length(); ++i)
-            for (size_t s = 0; s < contexts[i]->mShaders.Length(); ++s)
-                result += contexts[i]->mShaders[s]->TranslationLog().Length();
-        return result;
-    }
+    static PRInt64 GetShaderSize();
 
     static PRInt64 GetShaderCount() {
         const ContextsArrayType & contexts = Contexts();

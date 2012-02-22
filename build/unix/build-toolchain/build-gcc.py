@@ -1,5 +1,18 @@
 #!/usr/bin/python
 
+# The directories end up in the debug info, so the easy way of getting
+# a reproducible build is to run it in a know absolute directory.
+# We use a directory in /builds/slave because the mozilla infrastructure
+# cleans it up automatically.
+base_dir = "/builds/slave/moz-toolschain"
+
+source_dir = base_dir + "/src"
+build_dir  = base_dir + "/build"
+aux_inst_dir = build_dir + '/aux_inst'
+old_make = aux_inst_dir + '/bin/make'
+
+##############################################
+
 import urllib
 import os
 import os.path
@@ -33,17 +46,21 @@ def patch(patch, plevel, srcdir):
     check_run(['patch', '-d', srcdir, '-p%s' % plevel, '-i', patch, '--fuzz=0',
                '-s'])
 
-def build_package(package_source_dir, package_build_dir, configure_args):
+def build_package(package_source_dir, package_build_dir, configure_args,
+                   make = old_make):
     os.mkdir(package_build_dir)
     run_in(package_build_dir,
            ["%s/configure" % package_source_dir] + configure_args)
-    run_in(package_build_dir, ["make", "-j8"])
-    run_in(package_build_dir, ["make", "install"])
+    run_in(package_build_dir, [make, "-j8"])
+    run_in(package_build_dir, [make, "install"])
 
-def build_tar(base_dir, tar_inst_dir):
+def build_aux_tools(base_dir):
+    make_build_dir = base_dir + '/make_build'
+    build_package(make_source_dir, make_build_dir,
+                  ["--prefix=%s" % aux_inst_dir], "make")
     tar_build_dir = base_dir + '/tar_build'
     build_package(tar_source_dir, tar_build_dir,
-                  ["--prefix=%s" % tar_inst_dir])
+                  ["--prefix=%s" % aux_inst_dir])
 
 def with_env(env, f):
     old_env = os.environ.copy()
@@ -63,9 +80,15 @@ def build_glibc_aux(stage_dir, inst_dir):
                   ["--disable-profile",
                    "--enable-add-ons=nptl",
                    "--without-selinux",
-                   "--enable-kernel=2.6.18",
+                   "--enable-kernel=%s" % linux_version,
                    "--libdir=%s/lib64" % inst_dir,
                    "--prefix=%s" % inst_dir])
+
+def build_linux_headers(inst_dir):
+    run_in(linux_source_dir, [old_make, "headers_check"])
+    run_in(linux_source_dir, [old_make, "INSTALL_HDR_PATH=dest",
+                               "headers_install"])
+    shutil.move(linux_source_dir + "/dest", inst_dir)
 
 def build_one_stage(env, stage_dir, is_stage_one):
     def f():
@@ -91,6 +114,7 @@ def build_one_stage_aux(stage_dir, is_stage_one):
                    "--with-mpfr=%s" % lib_inst_dir])
 
     tool_inst_dir = stage_dir + '/inst'
+    build_linux_headers(tool_inst_dir)
 
     binutils_build_dir = stage_dir + '/binutils'
     build_package(binutils_source_dir, binutils_build_dir,
@@ -102,17 +126,15 @@ def build_one_stage_aux(stage_dir, is_stage_one):
                           "--with-gmp=%s" % lib_inst_dir,
                           "--with-mpfr=%s" % lib_inst_dir,
                           "--with-mpc=%s" % lib_inst_dir,
+                          "--enable-languages=c,c++",
+                          "--disable-multilib",
                           "--disable-bootstrap"]
     if is_stage_one:
-        gcc_configure_args.append("--enable-languages=c")
-        gcc_configure_args.append("--disable-multilib")
         # We build the stage1 gcc without shared libraries. Otherwise its
         # libgcc.so would depend on the system libc.so, which causes problems
         # when it tries to use that libgcc.so and the libc we are about to
         # build.
         gcc_configure_args.append("--disable-shared")
-    else:
-        gcc_configure_args.append("--enable-languages=c,c++")
 
     build_package(gcc_source_dir, gcc_build_dir, gcc_configure_args)
 
@@ -133,21 +155,14 @@ def build_tar_package(tar, name, base, directory):
 
 ##############################################
 
-# The directories end up in the debug info, so the easy way of getting
-# a reproducible build is to run it in a know absolute directory.
-# We use a directory in /builds/slave because the mozilla infrastructure
-# cleans it up automatically.
-base_dir = "/builds/slave/moz-toolschain"
-
-source_dir = base_dir + "/src"
-build_dir  = base_dir + "/build"
-
 def build_source_dir(prefix, version):
     return source_dir + '/' + prefix + version
 
 binutils_version = "2.21.1"
-glibc_version = "2.12.2" #FIXME: should probably use 2.5.1
+glibc_version = "2.5.1"
+linux_version = "2.6.18"
 tar_version = "1.26"
+make_version = "3.81"
 gcc_version = "4.5.2"
 mpfr_version = "2.4.2"
 gmp_version = "5.0.1"
@@ -157,8 +172,12 @@ binutils_source_uri = "http://ftp.gnu.org/gnu/binutils/binutils-%sa.tar.bz2" % \
     binutils_version
 glibc_source_uri = "http://ftp.gnu.org/gnu/glibc/glibc-%s.tar.bz2" % \
     glibc_version
+linux_source_uri = "http://www.kernel.org/pub/linux/kernel/v2.6/linux-%s.tar.bz2" % \
+    linux_version
 tar_source_uri = "http://ftp.gnu.org/gnu/tar/tar-%s.tar.bz2" % \
     tar_version
+make_source_uri = "http://ftp.gnu.org/gnu/make/make-%s.tar.bz2" % \
+    make_version
 gcc_source_uri = "http://ftp.gnu.org/gnu/gcc/gcc-%s/gcc-%s.tar.bz2" % \
     (gcc_version, gcc_version)
 mpfr_source_uri = "http://www.mpfr.org/mpfr-%s/mpfr-%s.tar.bz2" % \
@@ -169,7 +188,9 @@ mpc_source_uri = "http://www.multiprecision.org/mpc/download/mpc-%s.tar.gz" % \
 
 binutils_source_tar = download_uri(binutils_source_uri)
 glibc_source_tar = download_uri(glibc_source_uri)
+linux_source_tar = download_uri(linux_source_uri)
 tar_source_tar = download_uri(tar_source_uri)
+make_source_tar = download_uri(make_source_uri)
 mpc_source_tar = download_uri(mpc_source_uri)
 mpfr_source_tar = download_uri(mpfr_source_uri)
 gmp_source_tar = download_uri(gmp_source_uri)
@@ -177,7 +198,9 @@ gcc_source_tar = download_uri(gcc_source_uri)
 
 binutils_source_dir  = build_source_dir('binutils-', binutils_version)
 glibc_source_dir  = build_source_dir('glibc-', glibc_version)
+linux_source_dir  = build_source_dir('linux-', linux_version)
 tar_source_dir  = build_source_dir('tar-', tar_version)
+make_source_dir  = build_source_dir('make-', make_version)
 mpc_source_dir  = build_source_dir('mpc-', mpc_version)
 mpfr_source_dir = build_source_dir('mpfr-', mpfr_version)
 gmp_source_dir  = build_source_dir('gmp-', gmp_version)
@@ -188,9 +211,11 @@ if not os.path.exists(source_dir):
     extract(binutils_source_tar, source_dir)
     patch('binutils-deterministic.patch', 1, binutils_source_dir)
     extract(glibc_source_tar, source_dir)
+    extract(linux_source_tar, source_dir)
     patch('glibc-deterministic.patch', 1, glibc_source_dir)
     run_in(glibc_source_dir, ["autoconf"])
     extract(tar_source_tar, source_dir)
+    extract(make_source_tar, source_dir)
     extract(mpc_source_tar, source_dir)
     extract(mpfr_source_tar, source_dir)
     extract(gmp_source_tar, source_dir)
@@ -203,19 +228,18 @@ if os.path.exists(build_dir):
     shutil.rmtree(build_dir)
 os.makedirs(build_dir)
 
-tar_inst_dir = build_dir + '/tar_inst'
-build_tar(build_dir, tar_inst_dir)
+build_aux_tools(build_dir)
 
 stage1_dir = build_dir + '/stage1'
 build_one_stage({"CC": "gcc", "CXX" : "g++"}, stage1_dir, True)
 
 stage1_tool_inst_dir = stage1_dir + '/inst'
 stage2_dir = build_dir + '/stage2'
-build_one_stage({"CC"     : stage1_tool_inst_dir + "/bin/gcc",
+build_one_stage({"CC"     : stage1_tool_inst_dir + "/bin/gcc -fgnu89-inline",
                  "CXX"    : stage1_tool_inst_dir + "/bin/g++",
                  "AR"     : stage1_tool_inst_dir + "/bin/ar",
                  "RANLIB" : "true" },
                 stage2_dir, False)
 
-build_tar_package(tar_inst_dir + "/bin/tar",
+build_tar_package(aux_inst_dir + "/bin/tar",
                   "toolchain.tar", stage2_dir, "inst")
