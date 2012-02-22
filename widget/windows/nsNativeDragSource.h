@@ -84,7 +84,7 @@ protected:
   ULONG m_cRef;
 
   // Data object, hold information about cursor state
-  nsCOMPtr<nsIDOMDataTransfer> mDataTransfer;
+  nsCOMPtr<nsIDOMNSDataTransfer> mDataTransfer;
 
   // Custom drag cursor
   HCURSOR m_hCursor;
