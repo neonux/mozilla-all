@@ -417,13 +417,15 @@ protected:
    *
    * aSelectionTarget - target to check for selection
    * aDataTransfer - data transfer object that will contain the data to drag
-   * aSelection - [out] set to the selection to be dragged
+   * aIsSelection - [out] set to true if a selection is being dragged
+   * aIsInEditor - [out] set to true if the content is in an editor field
    * aTargetNode - [out] the draggable node, or null if there isn't one
    */
   void DetermineDragTarget(nsPresContext* aPresContext,
                            nsIContent* aSelectionTarget,
                            nsDOMDataTransfer* aDataTransfer,
-                           nsISelection** aSelection,
+                           bool* aIsSelection,
+                           bool* aIsInEditor,
                            nsIContent** aTargetNode);
 
   /*
@@ -434,13 +436,13 @@ protected:
    * aDragEvent - the dragstart/draggesture event
    * aDataTransfer - the data transfer that holds the data to be dragged
    * aDragTarget - the target of the drag
-   * aSelection - the selection to be dragged
+   * aIsSelection - true if a selection is being dragged
    */
   bool DoDefaultDragStart(nsPresContext* aPresContext,
                             nsDragEvent* aDragEvent,
                             nsDOMDataTransfer* aDataTransfer,
                             nsIContent* aDragTarget,
-                            nsISelection* aSelection);
+                            bool aIsSelection);
 
   bool IsTrackingDragGesture ( ) const { return mGestureDownContent != nsnull; }
   /**

@@ -257,6 +257,7 @@ class nsEditorUtils
 };
 
 
+class nsIDragSession;
 class nsITransferable;
 class nsIDOMEvent;
 class nsISimpleEnumerator;
