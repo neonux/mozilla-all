@@ -938,7 +938,6 @@ toolbar[iconsize="small"] #feed-button {
   min-width: 7em;
   -moz-appearance: textfield;
   padding: 0;
-  height: 26px;
 }
 
 .urlbar-textbox-container {
@@ -1022,15 +1021,34 @@ toolbar[iconsize="small"] #feed-button {
   color: GrayText;
 }
 
+/* Favicon */
+#page-proxy-favicon {
+  width: 16px;
+  height: 16px;
+}
+
+#page-proxy-stack {
+  width: 24px;
+  height: 20px;
+  padding: 2px 4px;
+}
+
+#page-proxy-favicon:not([src]) {
+  list-style-image: url("chrome://mozapps/skin/places/defaultFavicon.png");
+}
+
+#page-proxy-favicon[pageproxystate="invalid"] {
+  opacity: 0.3;
+}
+
 /* Identity indicator */
-#identity-box:-moz-any(.verifiedIdentity, .verifiedDomain) {
+#identity-box {
   background-image: -moz-linear-gradient(hsl(0,0%,98%), hsl(0,0%,92%));
   box-shadow: 0 1px 0 hsla(0,0%,0%,.05) inset;
   -moz-border-end: 1px solid rgba(0,0,0,.1);
-  padding: 1px 4px;
-  margin: -1px 0;
-  max-width: none;
-  overflow: visible;
+  padding: 1px;
+  margin: -1px;
+  -moz-margin-end: 0;
 }
 
 #identity-box:-moz-locale-dir(ltr) {
@@ -1053,6 +1071,11 @@ toolbar[iconsize="small"] #feed-button {
   background-image: -moz-linear-gradient(hsl(0,0%,92%), hsl(0,0%,82%));
   box-shadow: 0 1px 1px hsla(0,0%,0%,.3) inset,
               0 1px 3px hsla(0,0%,0%,.3) inset;
+}
+
+#identity-icon-labels {
+  -moz-padding-start: 2px;
+  -moz-padding-end: 5px;
 }
 
 #identity-box.verifiedDomain {
@@ -1081,35 +1104,6 @@ toolbar[iconsize="small"] #feed-button {
   background-image: -moz-linear-gradient(hsl(92,65%,70%), hsl(92,40%,48%));
   box-shadow: 0 1px 1px hsla(92,81%,16%,.6) inset,
               0 1px 3px 1px hsla(92,81%,16%,.5) inset;
-}
-
-#identity-box[identityMessageHidden].verifiedDomain {
-  -moz-padding-start: 0;
-  -moz-padding-end: 0;
-  background-image: none;
-  -moz-border-end: 0;
-}
-
-/* Identity drag panel */
-
-#identity-drag-panel {
-  background-color: InfoBackground;
-  border: none;
-  pointer-events: none;
-  padding: 2px;
-  -moz-padding-start: 0;
-}
-
-#identity-drag-label {
-  background-image: -moz-element(#dragFavicon);
-  background-repeat: no-repeat;
-  background-position: left;
-  -moz-padding-start: 20px;
-  color: InfoText;
-}
-
-#identity-drag-label:-moz-locale-dir(rtl) {
-  background-position: right;
 }
 
 /* Identity popup icons */
@@ -1254,11 +1248,6 @@ toolbar[iconsize="small"] #feed-button {
 #notification-popup-box:not([hidden]) + #identity-box {
   -moz-padding-start: 10px;
   border-radius: 0;
-  -moz-margin-start: 8px;
-}
-
-#notification-popup-box:not([hidden]) + #identity-box:-moz-any(.verifiedIdentity, .verifiedDomain) {
-  -moz-margin-start: 0;
 }
 
 #notification-popup-box:-moz-locale-dir(rtl),

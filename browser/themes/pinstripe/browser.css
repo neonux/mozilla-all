@@ -29,7 +29,6 @@
  *   Drew Willcoxon (adw@mozilla.com)
  *   Paul Rouget (paul@mozilla.com)
  *   Rob Campbell (rcampbell@mozilla.com)
- *   Jared Wein (jwein@mozilla.com)
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -1033,17 +1032,11 @@ toolbar[mode="icons"] #zoom-in-button {
 }
 
 #identity-box {
-  padding: 1px 4px;
-  border-radius: 0;
-}
-
-#identity-box:-moz-any(.verifiedIdentity, .verifiedDomain) {
   background-image: -moz-linear-gradient(hsl(0,0%,98%), hsl(0,0%,92%));
   box-shadow: 0 1px 0 hsla(0,0%,0%,.05) inset;
   -moz-border-end: 1px solid hsla(0,0%,0%,.1);
   -moz-margin-end: 3px;
-  max-width: none;
-  overflow: visible;
+  padding: 1px 4px;
 }
 
 #identity-box:-moz-locale-dir(ltr) {
@@ -1057,25 +1050,12 @@ toolbar[mode="icons"] #zoom-in-button {
 }
 
 #notification-popup-box:not([hidden]) + #identity-box {
-  -moz-margin-start: 10px;
-}
-
-#notification-popup-box:not([hidden]) + #identity-box:-moz-any(.verifiedIdentity, .verifiedDomain) {
-  -moz-margin-start: 0;
   -moz-padding-start: 10px;
   border-radius: 0;
 }
 
-@conditionalForwardWithUrlbar@ + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box {
-  -moz-margin-start: 4px;
-}
-
-@conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box {
-  -moz-margin-start: 10px;
-}
-
-@conditionalForwardWithUrlbar@ + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-any(.verifiedIdentity, .verifiedDomain) {
-  -moz-margin-start: 0;
+@conditionalForwardWithUrlbar@ + #urlbar-container > #urlbar > #identity-box {
+  border-radius: 0;
 }
 
 @conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(ltr) {
@@ -1086,14 +1066,6 @@ toolbar[mode="icons"] #zoom-in-button {
 @conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(rtl) {
   -moz-transition: 0s padding-right;
   padding-right: 10px;
-}
-
-@conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box[identityMessageHidden]:-moz-locale-dir(ltr) {
-  padding-left: 7px;
-}
-
-@conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box[identityMessageHidden]:-moz-locale-dir(rtl) {
-  padding-right: 7px;
 }
 
 @conditionalForwardWithUrlbar@[forwarddisabled]:hover:not([switchingtabs]) + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box {
@@ -1107,21 +1079,6 @@ toolbar[mode="icons"] #zoom-in-button {
 
 @conditionalForwardWithUrlbar@[forwarddisabled]:not(:hover) + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(rtl) {
   padding-right: 10.01px;
-}
-
-@conditionalForwardWithUrlbar@[forwarddisabled]:not(:hover) + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box[identityMessageHidden]:-moz-locale-dir(ltr) {
-  padding-left: 7.01px;
-}
-
-@conditionalForwardWithUrlbar@[forwarddisabled]:not(:hover) + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box[identityMessageHidden]:-moz-locale-dir(rtl) {
-  padding-right: 7.01px;
-}
-
-@conditionalForwardWithUrlbar@ + #urlbar-container > #urlbar > #notification-popup-box + #identity-box[identityMessageHidden] {
-  -moz-padding-start: 0;
-  -moz-padding-end: 0;
-  -moz-border-end: 0;
-  background-image: none;
 }
 
 #identity-box:active:hover,
@@ -1164,26 +1121,8 @@ toolbar[mode="icons"] #zoom-in-button {
   -moz-padding-end: 5px;
 }
 
-/* Identity drag panel */
-
-#identity-drag-panel {
-  background-color: InfoBackground;
-  border: none;
-  pointer-events: none;
-  padding: 2px;
-  -moz-padding-start: 0;
-}
-
-#identity-drag-label {
-  background-image: -moz-element(#dragFavicon);
-  background-repeat: no-repeat;
-  background-position: left;
-  -moz-padding-start: 20px;
-  color: InfoText;
-}
-
-#identity-drag-label:-moz-locale-dir(rtl) {
-  background-position: right;
+#identity-icon-labels {
+  -moz-margin-start: 6px;
 }
 
 .urlbar-input-box {
@@ -1223,6 +1162,26 @@ toolbar[mode="icons"] #zoom-in-button {
   margin: 0 -4px;
   position: relative;
   height: 22px;
+}
+
+#page-proxy-favicon {
+  width: 16px;
+  height: 16px;
+  margin: 0px;
+  padding: 0px;
+}
+
+#page-proxy-stack {
+  width: 16px;
+  height: 16px;
+}
+
+#page-proxy-favicon:not([src]) {
+  list-style-image: url("chrome://mozapps/skin/places/defaultFavicon.png");
+}
+
+#page-proxy-favicon[pageproxystate="invalid"] {
+  opacity: 0.5;
 }
 
 #wrapper-urlbar-container[place="palette"] {
