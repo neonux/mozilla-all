@@ -429,7 +429,7 @@ nsHTMLScrollFrame::TryLayout(ScrollReflowState* aState,
     ComputeInsideBorderSize(aState, desiredInsideBorderSize);
   nsSize scrollPortSize = nsSize(NS_MAX(0, aState->mInsideBorderSize.width - vScrollbarDesiredWidth),
                                  NS_MAX(0, aState->mInsideBorderSize.height - hScrollbarDesiredHeight));
-                                                                                
+
   if (!aForce) {
     nsRect scrolledRect =
       mInner.GetScrolledRectInternal(aState->mContentsOverflowAreas.ScrollableOverflow(),
@@ -442,8 +442,7 @@ nsHTMLScrollFrame::TryLayout(ScrollReflowState* aState,
         aState->mStyles.mHorizontal == NS_STYLE_OVERFLOW_SCROLL ||
         scrolledRect.XMost() >= scrollPortSize.width + oneDevPixel ||
         scrolledRect.x <= -oneDevPixel;
-      if (aState->mInsideBorderSize.height < hScrollbarMinSize.height ||
-          scrollPortSize.width < hScrollbarMinSize.width)
+      if (scrollPortSize.width < hScrollbarMinSize.width)
         wantHScrollbar = false;
       if (wantHScrollbar != aAssumeHScroll)
         return false;
@@ -455,8 +454,7 @@ nsHTMLScrollFrame::TryLayout(ScrollReflowState* aState,
         aState->mStyles.mVertical == NS_STYLE_OVERFLOW_SCROLL ||
         scrolledRect.YMost() >= scrollPortSize.height + oneDevPixel ||
         scrolledRect.y <= -oneDevPixel;
-      if (aState->mInsideBorderSize.width < vScrollbarMinSize.width ||
-          scrollPortSize.height < vScrollbarMinSize.height)
+      if (scrollPortSize.height < vScrollbarMinSize.height)
         wantVScrollbar = false;
       if (wantVScrollbar != aAssumeVScroll)
         return false;
@@ -3280,7 +3278,8 @@ nsGfxScrollFrameInner::ReflowFinished()
     nsPoint scrollPos = GetScrollPosition();
     // XXX shouldn't we use GetPageScrollAmount/GetLineScrollAmount here?
     if (vScroll) {
-      const double kScrollMultiplier = 3;
+      const double kScrollMultiplier = Preferences::GetInt("toolkit.scrollbox.verticalScrollDistance",
+                                                           NS_DEFAULT_VERTICAL_SCROLL_DISTANCE);
       nscoord fontHeight = GetLineScrollAmount().height * kScrollMultiplier;
       // We normally use (scrollArea.height - fontHeight) for height
       // of page scrolling.  However, it is too small when

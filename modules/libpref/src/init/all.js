@@ -215,8 +215,8 @@ pref("gfx.font_rendering.harfbuzz.scripts", 71);
 #ifdef ANDROID
 pref("gfx.font_rendering.harfbuzz.scripts", 71);
 #else
-// use harfbuzz for default (0x01) + arabic (0x02)
-pref("gfx.font_rendering.harfbuzz.scripts", 3);
+// use harfbuzz for default (0x01) + arabic (0x02) + hebrew (0x04)
+pref("gfx.font_rendering.harfbuzz.scripts", 7);
 #endif
 #endif
 
@@ -297,6 +297,8 @@ pref("toolkit.autocomplete.richBoundaryCutoff", 200);
 
 pref("toolkit.scrollbox.smoothScroll", true);
 pref("toolkit.scrollbox.scrollIncrement", 20);
+// Make sure to update NS_DEFAULT_VERTICAL_SCROLL_DISTANCE if changing this default.
+pref("toolkit.scrollbox.verticalScrollDistance", 3);
 pref("toolkit.scrollbox.clickToScroll.scrollDelay", 150);
 
 // Telemetry
@@ -3409,6 +3411,7 @@ pref("full-screen-api.enabled", false);
 pref("full-screen-api.allow-trusted-requests-only", true);
 pref("full-screen-api.key-input-restricted", true);
 pref("full-screen-api.warning.enabled", true);
+pref("full-screen-api.exit-on-deactivate", true);
 
 // Time limit, in milliseconds, for nsEventStateManager::IsHandlingUserInput().
 // Used to detect long running handlers of user-generated events.
