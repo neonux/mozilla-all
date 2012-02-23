@@ -670,12 +670,38 @@ void nsTextControlFrame::SetFocus(bool aOn, bool aRepaint)
   // Revoke the previous scroll event if one exists
   mScrollEvent.Revoke();
 
-  if (!aOn)
+  if (!aOn) {
+    if (mUsePlaceholder) {
+      PRInt32 textLength;
+      GetTextLength(&textLength);
+
+      if (!textLength) {
+        nsWeakFrame weakFrame(this);
+
+        txtCtrl->SetPlaceholderClass(true, true);
+
+        if (!weakFrame.IsAlive()) {
+          return;
+        }
+      }
+    }
+
     return;
+  }
 
   nsISelectionController* selCon = txtCtrl->GetSelectionController();
   if (!selCon)
     return;
+
+  if (mUsePlaceholder) {
+    nsWeakFrame weakFrame(this);
+
+    txtCtrl->SetPlaceholderClass(false, true);
+
+    if (!weakFrame.IsAlive()) {
+      return;
+    }
+  }
 
   InitFocusedValue();
 
@@ -1447,7 +1473,9 @@ nsTextControlFrame::SetValueChanged(bool aValueChanged)
   nsCOMPtr<nsITextControlElement> txtCtrl = do_QueryInterface(GetContent());
   NS_ASSERTION(txtCtrl, "Content not a text control element");
 
-  if (mUsePlaceholder) {
+  if (mUsePlaceholder && !nsContentUtils::IsFocusedContent(mContent)) {
+    // If the content is focused, we don't care about the changes because
+    // the placeholder is going to be hidden/shown on blur.
     PRInt32 textLength;
     GetTextLength(&textLength);
 
