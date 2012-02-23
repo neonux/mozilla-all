@@ -250,7 +250,6 @@ function runTest(testNum) {
                     "context-inspect", true];
   }
 
-  var MAC = navigator.platform.indexOf("Mac") != -1;
   switch (testNum) {
     case 1:
         // Invoke context menu for next test.
@@ -281,7 +280,6 @@ function runTest(testNum) {
 
     case 3:
         // Context menu for text link
-        MAC ? todo(false, "TODO: FIX KNOWN FAILURES IN TEST #" + testNum) :
         checkContextMenu(["context-openlinkintab", true,
                           "context-openlink",      true,
                           "---",                   null,
@@ -296,7 +294,6 @@ function runTest(testNum) {
 
     case 4:
         // Context menu for text mailto-link
-        MAC ? todo(false, "TODO: FIX KNOWN FAILURES IN TEST #" + testNum) :
         checkContextMenu(["context-copyemail", true].concat(inspectItems));
         closeContextMenu();
         openContextMenuFor(input); // Invoke context menu for next test.
@@ -336,7 +333,6 @@ function runTest(testNum) {
 
     case 7:
         // Context menu for a canvas
-        MAC ? todo(false, "TODO: FIX KNOWN FAILURES IN TEST #" + testNum) :
         checkContextMenu(["context-viewimage",    true,
                           "context-saveimage",    true,
                           "context-bookmarkpage", true,
@@ -555,7 +551,6 @@ function runTest(testNum) {
 
     case 17:
         // Context menu for contenteditable
-        MAC ? todo(false, "TODO: FIX KNOWN FAILURES IN TEST #" + testNum) :
         checkContextMenu(["spell-no-suggestions", false,
                           "spell-add-to-dictionary", true,
                           "---",                 null,
@@ -612,7 +607,6 @@ function runTest(testNum) {
 
     case 20:
         // Context menu for element with assigned content context menu
-        MAC ? todo(false, "TODO: FIX KNOWN FAILURES IN TEST #" + testNum) :
         checkContextMenu(["+Plain item",          {type: "", icon: "", checked: false, disabled: false},
                           "+Disabled item",       {type: "", icon: "", checked: false, disabled: true},
                           "+Item w/ textContent", {type: "", icon: "", checked: false, disabled: false},
@@ -657,7 +651,6 @@ function runTest(testNum) {
     case 21:
         // Context menu for element with assigned content context menu
         // The shift key should bypass content context menu processing
-        MAC ? todo(false, "TODO: FIX KNOWN FAILURES IN TEST #" + testNum) :
         checkContextMenu(["context-back",         false,
                           "context-forward",      false,
                           "context-reload",       true,
