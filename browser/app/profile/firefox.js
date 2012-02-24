@@ -346,6 +346,12 @@ pref("browser.download.manager.quitBehavior", 0);
 pref("browser.download.manager.scanWhenDone", true);
 pref("browser.download.manager.resumeOnWakeDelay", 10000);
 
+// This allows disabling the Downloads Panel in favor of the old interface.
+pref("browser.download.manager.useWindowUI", false);
+
+// This controls retention behavior in the Downloads Panel only.
+pref("browser.download.panel.removeWhenDone", false);
+
 // search engines URL
 pref("browser.search.searchEnginesURL",      "https://addons.mozilla.org/%LOCALE%/firefox/search-engines/");
 
