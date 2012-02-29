@@ -239,6 +239,11 @@ pref("general.useragent.locale", "@AB_CD@");
 pref("general.skins.selectedSkin", "classic/1.0");
 
 pref("general.smoothScroll", true);
+// These values are duplicated in layout/generic/nsGfxScrollFrame.cpp
+pref("general.smoothScroll.currentVelocityWeighting", 25);
+pref("general.smoothScroll.stopDecelerationWeighting", 4);
+pref("general.smoothScroll.animationDurationMS", 200);
+pref("general.smoothScroll.animationDurationMaxMS", 800);
 #ifdef UNIX_BUT_NOT_MAC
 pref("general.autoScroll", false);
 #else
