@@ -30,6 +30,7 @@
  *   Drew Willcoxon (adw@mozilla.com)
  *   Paul Rouget (paul@mozilla.com)
  *   Rob Campbell (rcampbell@mozilla.com)
+ *   Jared Wein (jwein@mozilla.com)
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -1298,6 +1299,14 @@ toolbar[mode="full"] .toolbarbutton-1 > .toolbarbutton-menubutton-button {
   -moz-transform: scaleX(-1);
 }
 
+html|*.urlbar-input {
+  /* !important due to the rules in global/skin/textbox.css */
+  padding-top: 3px !important;
+  padding-bottom: 2px !important;
+  margin-top: 1px !important;
+  margin-bottom: 1px !important;
+}
+
 html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
 .searchbar-textbox:-moz-lwtheme > .autocomplete-textbox-container > .textbox-input-box > html|*.textbox-input:-moz-placeholder {
   color: #777;
@@ -1368,12 +1377,8 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
 }
 
 /* identity box */
-
 #identity-box {
-  background-image: -moz-linear-gradient(hsl(0,0%,98%), hsl(0,0%,92%));
-  box-shadow: 0 1px 0 hsla(0,0%,0%,.05) inset;
-  -moz-border-end: 1px solid hsla(0,0%,0%,.1);
-  padding: 2px;
+  padding: 0 4px;
 }
 
 #identity-box:-moz-locale-dir(ltr) {
@@ -1389,20 +1394,41 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
 #notification-popup-box:not([hidden]) + #identity-box {
   -moz-padding-start: 10px;
   border-radius: 0;
+  -moz-margin-start: 8px;
 }
 
 @conditionalForwardWithUrlbar@ + #urlbar-container > #urlbar > #identity-box {
   border-radius: 0;
 }
 
+@conditionalForwardWithUrlbar@ + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box {
+  -moz-padding-start: 4px;
+}
+
+@conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-any(.verifiedIdentity, .verifiedDomain) {
+  -moz-margin-start: 0;
+}
+
+@conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box {
+  -moz-margin-start: 4px;
+}
+
 @conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(ltr) {
-  padding-left: 5px;
+  padding-left: 9px;
   -moz-transition: padding-left;
 }
 
 @conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(rtl) {
-  padding-right: 5px;
+  padding-right: 9px;
   -moz-transition: padding-right;
+}
+
+@conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box[identityMessageHidden]:-moz-locale-dir(ltr) {
+  padding-left: 4px;
+}
+
+@conditionalForwardWithUrlbar@[forwarddisabled] + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box[identityMessageHidden]:-moz-locale-dir(rtl) {
+  padding-right: 4px;
 }
 
 @conditionalForwardWithUrlbar@[forwarddisabled]:hover:not([switchingtabs]) + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box {
@@ -1412,23 +1438,35 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
 
 @conditionalForwardWithUrlbar@[forwarddisabled]:not(:hover) + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(ltr) {
   /* when not hovered anymore, trigger a new non-delayed transition to react to the forward button hiding */
-  padding-left: 5.01px;
+  padding-left: 9.01px;
 }
 
 @conditionalForwardWithUrlbar@[forwarddisabled]:not(:hover) + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box:-moz-locale-dir(rtl) {
   /* when not hovered anymore, trigger a new non-delayed transition to react to the forward button hiding */
-  padding-right: 5.01px;
+  padding-right: 9.01px;
 }
 
-#identity-box:hover {
-  background-image: -moz-linear-gradient(hsl(0,0%,95%), hsl(0,0%,87%));
+@conditionalForwardWithUrlbar@[forwarddisabled]:not(:hover) + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box[identityMessageHidden]:-moz-locale-dir(ltr) {
+  padding-left: 4.01px;
 }
 
-#identity-box[open="true"],
-#identity-box:hover:active {
-  background-image: -moz-linear-gradient(hsl(0,0%,92%), hsl(0,0%,82%));
-  box-shadow: 0 1px 1px hsla(0,0%,0%,.3) inset,
-              0 1px 3px hsla(0,0%,0%,.3) inset;
+@conditionalForwardWithUrlbar@[forwarddisabled]:not(:hover) + #urlbar-container > #urlbar > #notification-popup-box[hidden] + #identity-box[identityMessageHidden]:-moz-locale-dir(rtl) {
+  padding-right: 4.01px;
+}
+
+#identity-box.verifiedIdentity,
+#identity-box.verifiedDomain {
+  -moz-border-end: 1px solid hsla(0,0%,0%,.1);
+  max-width: none;
+  overflow: visible;
+  -moz-margin-start: 0;
+}
+
+#identity-box[identityMessageHidden] {
+  -moz-padding-start: 0;
+  -moz-padding-end: 0;
+  -moz-border-end: 0;
+  background-image: none;
 }
 
 #identity-box.verifiedDomain {
@@ -1472,9 +1510,35 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
   outline-offset: -3px;
 }
 
-#identity-icon-labels {
-  -moz-margin-start: 1px;
-  -moz-margin-end: 3px;
+/* Identity drag panel */
+
+#identity-drag-panel {
+  background-color: InfoBackground;
+  border: none;
+  pointer-events: none;
+  padding: 4px;
+}
+
+%ifdef WINSTRIPE_AERO
+#identity-drag-panel {
+  background-color: transparent;
+  background-image: -moz-linear-gradient(to bottom, #FFFFFF 0%, #E4E5F0 99%); 
+  border: 1px solid #767676;
+  border-radius: 3px;
+}
+%endif
+
+#identity-drag-label {
+  background-image: -moz-element(#dragFavicon);
+  background-repeat: no-repeat;
+  background-position: left;
+  -moz-padding-start: 20px;
+  margin: 0;
+  color: InfoText;
+}
+
+#identity-drag-label:-moz-locale-dir(rtl) {
+  background-position: right;
 }
 
 /* Location bar dropmarker */
@@ -1502,22 +1566,6 @@ html|*.urlbar-input:-moz-lwtheme:-moz-placeholder,
 .urlbar-history-dropmarker[open="true"] {
   background-image: -moz-radial-gradient(center, circle closest-side, hsla(205,100%,70%,.1), hsla(205,100%,70%,0));
   -moz-image-region: rect(0px, 33px, 14px, 22px);
-}
-
-/* page proxy icon */
-
-#page-proxy-favicon {
-  width: 16px;
-  height: 16px;
-  margin: 1px 4px;
-}
-
-#page-proxy-favicon:not([src]) {
-  list-style-image: url("chrome://mozapps/skin/places/defaultFavicon.png");
-}
-
-#page-proxy-favicon[pageproxystate="invalid"] {
-  opacity: 0.5;
 }
 
 /* autocomplete */

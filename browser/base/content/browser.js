@@ -56,6 +56,7 @@
 #   Patrick Walton <pcwalton@mozilla.com>
 #   Mihai Sucan <mihai.sucan@gmail.com>
 #   Victor Porof <vporof@mozilla.com>
+#   Frank Yan <fyan@mozilla.com>
 #
 # Alternatively, the contents of this file may be used under the terms of
 # either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -81,7 +82,6 @@ const nsIWebNavigation = Ci.nsIWebNavigation;
 var gCharsetMenu = null;
 var gLastBrowserCharset = null;
 var gPrevCharset = null;
-var gProxyFavIcon = null;
 var gLastValidURLStr = "";
 var gInPrintPreviewMode = false;
 var gDownloadMgr = null;
@@ -1381,6 +1381,8 @@ function BrowserStartup() {
 
   gPrivateBrowsingUI.init();
 
+  DownloadsButton.initializePlaceholder();
+
   retrieveToolbarIconsizesFromTheme();
 
   gDelayedStartupTimeoutId = setTimeout(delayedStartup, 0, isLoadingBlank, mustLoadSidebar);
@@ -1671,6 +1673,11 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
     }
 #endif
   }, 10000);
+
+  // We can intialize the downloads indicator here in delayedStartup() because
+  // it is initially invisible, at least until the download manager is started,
+  // thus no flickering occurs when we set its position.
+  DownloadsButton.initializeIndicator();
 
 #ifndef XP_MACOSX
   updateEditUIVisibility();
@@ -2699,39 +2706,16 @@ function SetPageProxyState(aState)
   if (!gURLBar)
     return;
 
-  if (!gProxyFavIcon)
-    gProxyFavIcon = document.getElementById("page-proxy-favicon");
-
   gURLBar.setAttribute("pageproxystate", aState);
-  gProxyFavIcon.setAttribute("pageproxystate", aState);
 
   // the page proxy state is set to valid via OnLocationChange, which
   // gets called when we switch tabs.
   if (aState == "valid") {
     gLastValidURLStr = gURLBar.value;
     gURLBar.addEventListener("input", UpdatePageProxyState, false);
-
-    PageProxySetIcon(gBrowser.getIcon());
   } else if (aState == "invalid") {
     gURLBar.removeEventListener("input", UpdatePageProxyState, false);
-    PageProxyClearIcon();
   }
-}
-
-function PageProxySetIcon (aURL)
-{
-  if (!gProxyFavIcon)
-    return;
-
-  if (!aURL)
-    PageProxyClearIcon();
-  else if (gProxyFavIcon.getAttribute("src") != aURL)
-    gProxyFavIcon.setAttribute("src", aURL);
-}
-
-function PageProxyClearIcon ()
-{
-  gProxyFavIcon.removeAttribute("src");
 }
 
 function PageProxyClickHandler(aEvent)
@@ -2749,11 +2733,7 @@ function BrowserOnAboutPageLoad(document) {
     let ss = Components.classes["@mozilla.org/browser/sessionstore;1"].
              getService(Components.interfaces.nsISessionStore);
     if (!ss.canRestoreLastSession)
-      document.getElementById("sessionRestoreContainer").hidden = true;
-    // Sync-related links
-    if (Services.prefs.prefHasUserValue("services.sync.username")) {
-      document.getElementById("setupSyncLink").hidden = true;
-    }
+      document.getElementById("launcher").removeAttribute("session");
   }
 }
 
@@ -2761,19 +2741,17 @@ function BrowserOnAboutPageLoad(document) {
  * Handle command events bubbling up from error page content
  */
 function BrowserOnClick(event) {
-    // Don't trust synthetic events
-    if (!event.isTrusted ||
-        (event.target.localName != "button" &&
-         event.target.className != "sync-link"))
+    if (!event.isTrusted /* don't trust synthetic events */ ||
+        event.button == 2 || event.target.localName != "button")
       return;
 
     var ot = event.originalTarget;
-    var errorDoc = ot.ownerDocument;
+    var ownerDoc = ot.ownerDocument;
 
     // If the event came from an ssl error page, it is probably either the "Add
     // Exception…" or "Get me out of here!" button
-    if (/^about:certerror/.test(errorDoc.documentURI)) {
-      if (ot == errorDoc.getElementById('exceptionDialogButton')) {
+    if (/^about:certerror/.test(ownerDoc.documentURI)) {
+      if (ot == ownerDoc.getElementById('exceptionDialogButton')) {
         var params = { exceptionAdded : false, handlePrivateBrowsing : true };
 
         try {
@@ -2781,7 +2759,7 @@ function BrowserOnClick(event) {
             case 2 : // Pre-fetch & pre-populate
               params.prefetchCert = true;
             case 1 : // Pre-populate
-              params.location = errorDoc.location.href;
+              params.location = ownerDoc.location.href;
           }
         } catch (e) {
           Components.utils.reportError("Couldn't get ssl_override pref: " + e);
@@ -2792,22 +2770,22 @@ function BrowserOnClick(event) {
 
         // If the user added the exception cert, attempt to reload the page
         if (params.exceptionAdded)
-          errorDoc.location.reload();
+          ownerDoc.location.reload();
       }
-      else if (ot == errorDoc.getElementById('getMeOutOfHereButton')) {
+      else if (ot == ownerDoc.getElementById('getMeOutOfHereButton')) {
         getMeOutOfHere();
       }
     }
-    else if (/^about:blocked/.test(errorDoc.documentURI)) {
+    else if (/^about:blocked/.test(ownerDoc.documentURI)) {
       // The event came from a button on a malware/phishing block page
       // First check whether it's malware or phishing, so that we can
       // use the right strings/links
-      var isMalware = /e=malwareBlocked/.test(errorDoc.documentURI);
+      var isMalware = /e=malwareBlocked/.test(ownerDoc.documentURI);
 
-      if (ot == errorDoc.getElementById('getMeOutButton')) {
+      if (ot == ownerDoc.getElementById('getMeOutButton')) {
         getMeOutOfHere();
       }
-      else if (ot == errorDoc.getElementById('reportButton')) {
+      else if (ot == ownerDoc.getElementById('reportButton')) {
         // This is the "Why is this site blocked" button.  For malware,
         // we can fetch a site-specific report, for phishing, we redirect
         // to the generic page describing phishing protection.
@@ -2817,7 +2795,7 @@ function BrowserOnClick(event) {
           // append the current url, and go there.
           try {
             let reportURL = formatURL("browser.safebrowsing.malware.reportURL", true);
-            reportURL += errorDoc.location.href;
+            reportURL += ownerDoc.location.href;
             content.location = reportURL;
           } catch (e) {
             Components.utils.reportError("Couldn't get malware report URL: " + e);
@@ -2831,7 +2809,7 @@ function BrowserOnClick(event) {
           }
         }
       }
-      else if (ot == errorDoc.getElementById('ignoreWarningButton')) {
+      else if (ot == ownerDoc.getElementById('ignoreWarningButton')) {
         // Allow users to override and continue through to the site,
         // but add a notify bar as a reminder, so that they don't lose
         // track after, e.g., tab switching.
@@ -2886,23 +2864,31 @@ function BrowserOnClick(event) {
         );
       }
     }
-    else if (/^about:home$/i.test(errorDoc.documentURI)) {
-      if (ot == errorDoc.getElementById("restorePreviousSession")) {
+    else if (/^about:home$/i.test(ownerDoc.documentURI)) {
+      if (ot == ownerDoc.getElementById("restorePreviousSession")) {
         let ss = Cc["@mozilla.org/browser/sessionstore;1"].
                  getService(Ci.nsISessionStore);
         if (ss.canRestoreLastSession)
           ss.restoreLastSession();
-        errorDoc.getElementById("sessionRestoreContainer").hidden = true;
+        ownerDoc.getElementById("launcher").removeAttribute("session");
       }
-      else if (ot == errorDoc.getElementById("pairDeviceLink")) {
-        if (Services.prefs.prefHasUserValue("services.sync.username")) {
-          gSyncUI.openAddDevice();
-        } else {
-          gSyncUI.openSetup("pair");
-        }
+      else if (ot == ownerDoc.getElementById("bookmarks")) {
+        PlacesCommandHook.showPlacesOrganizer("AllBookmarks");
       }
-      else if (ot == errorDoc.getElementById("setupSyncLink")) {
-        gSyncUI.openSetup(null);
+      else if (ot == ownerDoc.getElementById("history")) {
+        PlacesCommandHook.showPlacesOrganizer("History");
+      }
+      else if (ot == ownerDoc.getElementById("settings")) {
+        openPreferences();
+      }
+      else if (ot == ownerDoc.getElementById("addons")) {
+        BrowserOpenAddonsMgr();
+      }
+      else if (ot == ownerDoc.getElementById("downloads")) {
+        BrowserDownloadsUI();
+      }
+      else if (ot == ownerDoc.getElementById("sync")) {
+        openPreferences("paneSync");
       }
     }
 }
@@ -3291,29 +3277,6 @@ var newWindowButtonObserver = {
       // allow third-party services to fixup this URL
       openNewWindowWith(url, null, postData.value, true);
     }
-  }
-}
-
-var DownloadsButtonDNDObserver = {
-  onDragOver: function (aEvent)
-  {
-    var types = aEvent.dataTransfer.types;
-    if (types.contains("text/x-moz-url") ||
-        types.contains("text/uri-list") ||
-        types.contains("text/plain"))
-      aEvent.preventDefault();
-  },
-
-  onDragExit: function (aEvent)
-  {
-  },
-
-  onDrop: function (aEvent)
-  {
-    let name = { };
-    let url = browserDragAndDrop.drop(aEvent, name);
-    if (url)
-      saveURL(url, name, null, true, true);
   }
 }
 
@@ -3731,6 +3694,7 @@ function BrowserCustomizeToolbar()
 
   PlacesToolbarHelper.customizeStart();
   BookmarksMenuButton.customizeStart();
+  DownloadsButton.customizeStart();
 
   TabsInTitlebar.allowedBy("customizing-toolbars", false);
 
@@ -3779,7 +3743,6 @@ function BrowserToolboxCustomizeDone(aToolboxChanged) {
   if (aToolboxChanged) {
     gURLBar = document.getElementById("urlbar");
 
-    gProxyFavIcon = document.getElementById("page-proxy-favicon");
     gHomeButton.updateTooltip();
     gIdentityHandler._cacheElements();
     window.XULBrowserWindow.init();
@@ -3797,6 +3760,7 @@ function BrowserToolboxCustomizeDone(aToolboxChanged) {
 
   PlacesToolbarHelper.customizeDone();
   BookmarksMenuButton.customizeDone();
+  DownloadsButton.customizeDone();
 
   // The url bar splitter state is dependent on whether stop/reload
   // and the location bar are combined, so we need this ordering
@@ -4585,11 +4549,6 @@ var XULBrowserWindow = {
       return originalTarget;
 
     return "_blank";
-  },
-
-  onLinkIconAvailable: function (aIconURL) {
-    if (gProxyFavIcon && gBrowser.userTypedValue === null)
-      PageProxySetIcon(aIconURL); // update the favicon in the URL bar
   },
 
   onProgressChange: function (aWebProgress, aRequest,
@@ -8034,10 +7993,16 @@ var gIdentityHandler = {
       var icon_labels_dir = "ltr";
       switch (gPrefService.getIntPref("browser.identity.ssl_domain_display")) {
         case 2 : // Show full domain
+          this._identityBox.removeAttribute("identityMessageHidden");
           icon_label = this._lastLocation.hostname;
           break;
         case 1 : // Show eTLD.
+          this._identityBox.removeAttribute("identityMessageHidden");
           icon_label = this.getEffectiveHost();
+          break;
+        case 0 : // Hide the identity-box
+          this._identityBox.setAttribute("identityMessageHidden", "true");
+          break;
       }
 
       // Verifier is either the CA Org, for a normal cert, or a special string
@@ -8060,6 +8025,9 @@ var gIdentityHandler = {
         tooltip = gNavigatorBundle.getString("identity.identified.verified_by_you");
     }
     else if (newMode == this.IDENTITY_MODE_IDENTIFIED) {
+      if (this._identityBox.hasAttribute("identityMessageHidden"))
+        this._identityBox.removeAttribute("identityMessageHidden");
+
       // If it's identified, then we can populate the dialog with credentials
       iData = this.getIdentityData();
       tooltip = gNavigatorBundle.getFormattedString("identity.identified.verifier",
@@ -8219,17 +8187,26 @@ var gIdentityHandler = {
     if (gURLBar.getAttribute("pageproxystate") != "valid")
       return;
 
-    var value = content.location.href;
-    var urlString = value + "\n" + content.document.title;
-    var htmlString = "<a href=\"" + value + "\">" + value + "</a>";
+    let value = content.location.href;
+    let urlString = value + "\n" + content.document.title;
+    let htmlString = "<a href=\"" + value + "\">" + value + "</a>";
 
-    var dt = event.dataTransfer;
+    let dt = event.dataTransfer;
     dt.setData("text/x-moz-url", urlString);
     dt.setData("text/uri-list", value);
     dt.setData("text/plain", value);
     dt.setData("text/html", htmlString);
-    dt.setDragImage(gProxyFavIcon, 16, 16);
-  }
+
+    let panel = document.getElementById("identity-drag-panel");
+    let panelLabel = panel.firstChild;
+    panelLabel.setAttribute("value", gBrowser.selectedTab.label);
+
+    let faviconImage = document.getAnonymousElementByAttribute(gBrowser.selectedTab, "class", "tab-icon-image");
+    document.mozSetImageElement("dragFavicon", faviconImage);
+
+    // TODO: Update these coordinates when bug 712184 is fixed.
+    dt.setDragImage(panel, -1, -1);
+  },
 };
 
 let DownloadMonitorPanel = {

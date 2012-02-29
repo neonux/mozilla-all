@@ -239,6 +239,11 @@ pref("general.useragent.locale", "@AB_CD@");
 pref("general.skins.selectedSkin", "classic/1.0");
 
 pref("general.smoothScroll", true);
+// These values are duplicated in layout/generic/nsGfxScrollFrame.cpp
+pref("general.smoothScroll.currentVelocityWeighting", 25);
+pref("general.smoothScroll.stopDecelerationWeighting", 4);
+pref("general.smoothScroll.animationDurationMS", 250);
+pref("general.smoothScroll.animationDurationMaxMS", 800);
 #ifdef UNIX_BUT_NOT_MAC
 pref("general.autoScroll", false);
 #else
@@ -341,6 +346,12 @@ pref("browser.download.manager.quitBehavior", 0);
 pref("browser.download.manager.scanWhenDone", true);
 pref("browser.download.manager.resumeOnWakeDelay", 10000);
 
+// This allows disabling the Downloads Panel in favor of the old interface.
+pref("browser.download.manager.useWindowUI", false);
+
+// This controls retention behavior in the Downloads Panel only.
+pref("browser.download.panel.removeWhenDone", false);
+
 // search engines URL
 pref("browser.search.searchEnginesURL",      "https://addons.mozilla.org/%LOCALE%/firefox/search-engines/");
 
@@ -404,6 +415,8 @@ pref("browser.tabs.tabClipWidth", 140);
 pref("browser.tabs.animate", true);
 pref("browser.tabs.onTop", true);
 pref("browser.tabs.drawInTitlebar", true);
+pref("browser.tabs.cropRedundancyInTitles", true);
+pref("browser.tabs.addEllipsisToCropped", false);
 
 // Where to show tab close buttons:
 // 0  on active tab only

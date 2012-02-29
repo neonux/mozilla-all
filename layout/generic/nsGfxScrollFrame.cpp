@@ -1303,10 +1303,6 @@ NS_QUERYFRAME_TAIL_INHERITING(nsBoxFrame)
 
 #define SMOOTH_SCROLL_PREF_NAME "general.smoothScroll"
 
-const double kCurrentVelocityWeighting = 0.25;
-const double kStopDecelerationWeighting = 0.4;
-const double kSmoothScrollAnimationDuration = 150; // milliseconds
-
 class nsGfxScrollFrameInner::AsyncScroll {
 public:
   typedef mozilla::TimeStamp TimeStamp;
@@ -1328,6 +1324,7 @@ public:
   }
 
   nsCOMPtr<nsITimer> mScrollTimer;
+  TimeStamp mPrevStartTime; // XXX Needs initialization, but only affects first event and not significantly.
   TimeStamp mStartTime;
   TimeDuration mDuration;
   nsPoint mStartPos;
@@ -1369,15 +1366,34 @@ nsGfxScrollFrameInner::AsyncScroll::VelocityAt(TimeStamp aTime) {
                                   mStartPos.y, mDestination.y));
 }
 
+// Linear transform a value from one range into another (ranges are allowed to have opposite polarity).
+double linearTransform(double inVal, double inMin, double inMax, double outMin, double outMax){
+  return (inVal - inMin) / (inMax - inMin) * (outMax - outMin) + outMin;
+}
+
 void
 nsGfxScrollFrameInner::AsyncScroll::InitSmoothScroll(TimeStamp aTime,
                                                      nsPoint aCurrentPos,
                                                      nsSize aCurrentVelocity,
                                                      nsPoint aDestination) {
+  const double kDefaultSmoothScrollAnimationDurationMS = 250;
+  const double kSmoothScrollAnimationDurationMS = Preferences::GetInt("general.smoothScroll.animationDurationMS",
+                                                                    kDefaultSmoothScrollAnimationDurationMS);
+  const double kDefaultSmoothScrollAnimationDurationMaxMS = 800;
+  const double kSmoothScrollAnimationDurationMaxMS = Preferences::GetInt("general.smoothScroll.animationDurationMaxMS",
+                                                                       kDefaultSmoothScrollAnimationDurationMaxMS);
   mStartTime = aTime;
   mStartPos = aCurrentPos;
   mDestination = aDestination;
-  mDuration = TimeDuration::FromMilliseconds(kSmoothScrollAnimationDuration);
+  TimeDuration delta = mStartTime - mPrevStartTime;
+  mPrevStartTime = mStartTime;
+  mDuration = TimeDuration::FromMilliseconds(
+                  clamped( 
+                    linearTransform(delta.ToMilliseconds(),
+                      kSmoothScrollAnimationDurationMS / 2, kSmoothScrollAnimationDurationMaxMS / 1.5,
+                      kSmoothScrollAnimationDurationMS, kSmoothScrollAnimationDurationMaxMS),
+                    kSmoothScrollAnimationDurationMS, kSmoothScrollAnimationDurationMaxMS)
+              );
   InitTimingFunction(mTimingFunctionX, mStartPos.x, aCurrentVelocity.width, aDestination.x);
   InitTimingFunction(mTimingFunctionY, mStartPos.y, aCurrentVelocity.height, aDestination.y);
 }
@@ -1405,6 +1421,13 @@ nsGfxScrollFrameInner::AsyncScroll::InitTimingFunction(nsSMILKeySpline& aTimingF
                                                        nscoord aCurrentVelocity,
                                                        nscoord aDestination)
 {
+  const double kDefaultCurrentVelocityWeighting = 25;
+  const double kCurrentVelocityWeighting = Preferences::GetInt("general.smoothScroll.currentVelocityWeighting",
+                                                               kDefaultCurrentVelocityWeighting) / 100.0;
+  const double kDefaultStopDecelerationWeighting = 4;
+  const double kStopDecelerationWeighting = Preferences::GetInt("general.smoothScroll.stopDecelerationWeighting",
+                                                                kDefaultStopDecelerationWeighting) / 10.0;
+
   if (aDestination == aCurrentPos || kCurrentVelocityWeighting == 0) {
     aTimingFunction.Init(0, 0, 1 - kStopDecelerationWeighting, 1);
     return;
