@@ -1302,26 +1302,16 @@ NS_QUERYFRAME_TAIL_INHERITING(nsBoxFrame)
 
 #define SMOOTH_SCROLL_PREF_NAME "general.smoothScroll"
 
+const double kCurrentVelocityWeighting = 0.25;
+const double kStopDecelerationWeighting = 0.4;
+const double kSmoothScrollAnimationDuration = 150; // milliseconds
+
 class nsGfxScrollFrameInner::AsyncScroll {
 public:
   typedef mozilla::TimeStamp TimeStamp;
   typedef mozilla::TimeDuration TimeDuration;
 
-  AsyncScroll():
-    kDefaultSmoothScrollAnimationDurationMS(200),
-    kSmoothScrollAnimationDurationMS(Preferences::GetInt("general.smoothScroll.animationDurationMS",
-                                                          kDefaultSmoothScrollAnimationDurationMS)),
-    kDefaultSmoothScrollAnimationDurationMaxMS(800),
-    kSmoothScrollAnimationDurationMaxMS(Preferences::GetInt("general.smoothScroll.animationDurationMaxMS",
-                                                             kDefaultSmoothScrollAnimationDurationMaxMS))
-  {
-    TimeDuration maxDelta = TimeDuration::FromMilliseconds(kSmoothScrollAnimationDurationMaxMS);
-    
-    mPrevStartTime1 = TimeStamp::Now() - maxDelta;
-    mPrevStartTime2 = mPrevStartTime1  - maxDelta;
-    mPrevStartTime3 = mPrevStartTime2  - maxDelta;
-  }
-
+  AsyncScroll() {}
   ~AsyncScroll() {
     if (mScrollTimer) mScrollTimer->Cancel();
   }
@@ -1338,19 +1328,12 @@ public:
 
   nsCOMPtr<nsITimer> mScrollTimer;
   TimeStamp mStartTime;
-  TimeStamp mPrevStartTime1;
-  TimeStamp mPrevStartTime2;
-  TimeStamp mPrevStartTime3;
   TimeDuration mDuration;
   nsPoint mStartPos;
   nsPoint mDestination;
   nsSMILKeySpline mTimingFunctionX;
   nsSMILKeySpline mTimingFunctionY;
   bool mIsSmoothScroll;
-  double kDefaultSmoothScrollAnimationDurationMS;
-  double kDefaultSmoothScrollAnimationDurationMaxMS;
-  double kSmoothScrollAnimationDurationMS;
-  double kSmoothScrollAnimationDurationMaxMS;
 
 protected:
   double ProgressAt(TimeStamp aTime) {
@@ -1366,12 +1349,6 @@ protected:
   void InitTimingFunction(nsSMILKeySpline& aTimingFunction,
                           nscoord aCurrentPos, nscoord aCurrentVelocity,
                           nscoord aDestination);
-  
-  // Linear transform a value from one range into another (ranges are allowed to have opposite polarity).
-  double linearTransform(double inVal, double inMin, double inMax, double outMin, double outMax){
-    return (inVal - inMin) / (inMax - inMin) * (outMax - outMin) + outMin;
-  }
-
 };
 
 nsPoint
@@ -1399,20 +1376,7 @@ nsGfxScrollFrameInner::AsyncScroll::InitSmoothScroll(TimeStamp aTime,
   mStartTime = aTime;
   mStartPos = aCurrentPos;
   mDestination = aDestination;
-
-  double deltaMs = (mStartTime - mPrevStartTime3).ToMilliseconds() / 3; // Average last 3 delta durations
-  mPrevStartTime3 = mPrevStartTime2;
-  mPrevStartTime2 = mPrevStartTime1;
-  mPrevStartTime1 = mStartTime;
-
-  mDuration = TimeDuration::FromMilliseconds(
-                  clamped( 
-                    linearTransform(deltaMs,
-                                    kSmoothScrollAnimationDurationMS / 1.5, kSmoothScrollAnimationDurationMaxMS / 1.5,  // Manually tuned correlation
-                                    kSmoothScrollAnimationDurationMS, kSmoothScrollAnimationDurationMaxMS),
-                    kSmoothScrollAnimationDurationMS, kSmoothScrollAnimationDurationMaxMS)
-              );
-
+  mDuration = TimeDuration::FromMilliseconds(kSmoothScrollAnimationDuration);
   InitTimingFunction(mTimingFunctionX, mStartPos.x, aCurrentVelocity.width, aDestination.x);
   InitTimingFunction(mTimingFunctionY, mStartPos.y, aCurrentVelocity.height, aDestination.y);
 }
@@ -1440,13 +1404,6 @@ nsGfxScrollFrameInner::AsyncScroll::InitTimingFunction(nsSMILKeySpline& aTimingF
                                                        nscoord aCurrentVelocity,
                                                        nscoord aDestination)
 {
-  const double kDefaultCurrentVelocityWeighting = 25;
-  const double kCurrentVelocityWeighting = Preferences::GetInt("general.smoothScroll.currentVelocityWeighting",
-                                                               kDefaultCurrentVelocityWeighting) / 100.0;
-  const double kDefaultStopDecelerationWeighting = 4;
-  const double kStopDecelerationWeighting = Preferences::GetInt("general.smoothScroll.stopDecelerationWeighting",
-                                                                kDefaultStopDecelerationWeighting) / 10.0;
-
   if (aDestination == aCurrentPos || kCurrentVelocityWeighting == 0) {
     aTimingFunction.Init(0, 0, 1 - kStopDecelerationWeighting, 1);
     return;
