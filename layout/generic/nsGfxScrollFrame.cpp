@@ -1309,20 +1309,14 @@ public:
 
   AsyncScroll():
     kDefaultSmoothScrollAnimationDurationMS(200),
-    smoothScrollAnimationDurationMS(Preferences::GetInt("general.smoothScroll.animationDurationMS",
+    kSmoothScrollAnimationDurationMS(Preferences::GetInt("general.smoothScroll.animationDurationMS",
                                                           kDefaultSmoothScrollAnimationDurationMS)),
     kDefaultSmoothScrollAnimationDurationMaxMS(800),
-    smoothScrollAnimationDurationMaxMS(Preferences::GetInt("general.smoothScroll.animationDurationMaxMS",
+    kSmoothScrollAnimationDurationMaxMS(Preferences::GetInt("general.smoothScroll.animationDurationMaxMS",
                                                              kDefaultSmoothScrollAnimationDurationMaxMS))
   {
-    // Clamp user prefs to valid and sane (up to 10 seconds).
-    smoothScrollAnimationDurationMS = clamped(smoothScrollAnimationDurationMS,
-                                               0.0, 10000.0);
-    smoothScrollAnimationDurationMaxMS = clamped(smoothScrollAnimationDurationMaxMS,
-                                                  smoothScrollAnimationDurationMS + 1,
-                                                  10001.0);
-
-    TimeDuration maxDelta = TimeDuration::FromMilliseconds(smoothScrollAnimationDurationMaxMS);
+    TimeDuration maxDelta = TimeDuration::FromMilliseconds(kSmoothScrollAnimationDurationMaxMS);
+    
     mPrevStartTime1 = TimeStamp::Now() - maxDelta;
     mPrevStartTime2 = mPrevStartTime1  - maxDelta;
     mPrevStartTime3 = mPrevStartTime2  - maxDelta;
@@ -1353,10 +1347,10 @@ public:
   nsSMILKeySpline mTimingFunctionX;
   nsSMILKeySpline mTimingFunctionY;
   bool mIsSmoothScroll;
-  const double kDefaultSmoothScrollAnimationDurationMS;
-  const double kDefaultSmoothScrollAnimationDurationMaxMS;
-  double smoothScrollAnimationDurationMS;
-  double smoothScrollAnimationDurationMaxMS;
+  double kDefaultSmoothScrollAnimationDurationMS;
+  double kDefaultSmoothScrollAnimationDurationMaxMS;
+  double kSmoothScrollAnimationDurationMS;
+  double kSmoothScrollAnimationDurationMaxMS;
 
 protected:
   double ProgressAt(TimeStamp aTime) {
@@ -1414,9 +1408,9 @@ nsGfxScrollFrameInner::AsyncScroll::InitSmoothScroll(TimeStamp aTime,
   mDuration = TimeDuration::FromMilliseconds(
                   clamped( 
                     linearTransform(deltaMs,
-                                    smoothScrollAnimationDurationMS / 1.5, smoothScrollAnimationDurationMaxMS / 1.5,  // Manually tuned correlation
-                                    smoothScrollAnimationDurationMS, smoothScrollAnimationDurationMaxMS),
-                    smoothScrollAnimationDurationMS, smoothScrollAnimationDurationMaxMS)
+                                    kSmoothScrollAnimationDurationMS / 1.5, kSmoothScrollAnimationDurationMaxMS / 1.5,  // Manually tuned correlation
+                                    kSmoothScrollAnimationDurationMS, kSmoothScrollAnimationDurationMaxMS),
+                    kSmoothScrollAnimationDurationMS, kSmoothScrollAnimationDurationMaxMS)
               );
 
   InitTimingFunction(mTimingFunctionX, mStartPos.x, aCurrentVelocity.width, aDestination.x);
