@@ -17,6 +17,25 @@ input[type=button] {
   overflow: auto;
 }
 
+/* UNDO */
+#newtab-undo-container {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  right: 0;
+  text-align: center;
+}
+
+#newtab-undo {
+  display: inline-block;
+  -moz-transition: opacity 100ms ease-out;
+}
+
+#newtab-undo[tabindex] {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* TOGGLE */
 #newtab-toggle {
   position: absolute;

@@ -85,6 +85,7 @@ Site.prototype = {
    * @param aCallback The callback to be called when finished.
    */
   block: function Site_block(aCallback) {
+    gUndoDialog.show(this);
     gBlockedLinks.block(this._link);
     gUpdater.updateGrid(aCallback);
   },
