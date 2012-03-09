@@ -150,12 +150,8 @@ let PageThumbs = {
    * @return An array containing width, height and scale.
    */
   _determineCropSize: function PageThumbs_determineCropSize(aWindow) {
-    let doc = aWindow.document.documentElement;
-    let sw = Math.max(doc.clientWidth, aWindow.innerWidth);
-    let sh = Math.max(doc.clientHeight, aWindow.innerHeight);
-
-    if (sh > THUMBNAIL_HEIGHT)
-      sh = Math.max(THUMBNAIL_HEIGHT, sh * 0.5);
+    let sw = aWindow.innerWidth;
+    let sh = aWindow.innerHeight;
 
     let scale = Math.max(THUMBNAIL_WIDTH / sw, THUMBNAIL_HEIGHT / sh);
     let scaledWidth = sw * scale;
