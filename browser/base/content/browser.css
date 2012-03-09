@@ -263,13 +263,6 @@ panel[noactions] > richlistbox > richlistitem[type~="action"] > .ac-url-box > .a
   direction: ltr;
 }
 
-#identity-box {
-  /* XXX Setting max-width:0 and overflow:hidden so the margins of the identity-box
-     are still applied. visibility:collapse did not still apply margins as hoped. */
-  max-width: 0;
-  overflow: hidden;
-}
-
 #identity-box.verifiedIdentity > #identity-box-inner > #identity-icon-labels > #identity-icon-label {
   -moz-margin-end: 0.25em !important;
 }

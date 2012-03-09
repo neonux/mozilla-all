@@ -82,8 +82,6 @@
 #include "FrameLayerBuilder.h"
 #include "nsSMILKeySpline.h"
 #include "nsSubDocumentFrame.h"
-#include <math.h>
-#include <float.h>
 
 using namespace mozilla;
 using namespace mozilla::dom;
@@ -1306,16 +1304,14 @@ NS_QUERYFRAME_TAIL_INHERITING(nsBoxFrame)
 
 const double kCurrentVelocityWeighting = 0.25;
 const double kStopDecelerationWeighting = 0.4;
+const double kSmoothScrollAnimationDuration = 150; // milliseconds
 
 class nsGfxScrollFrameInner::AsyncScroll {
 public:
   typedef mozilla::TimeStamp TimeStamp;
   typedef mozilla::TimeDuration TimeDuration;
 
-  AsyncScroll():
-    mIsInitializedDuration(false)
-  {}
-
+  AsyncScroll() {}
   ~AsyncScroll() {
     if (mScrollTimer) mScrollTimer->Cancel();
   }
@@ -1324,7 +1320,7 @@ public:
   nsSize VelocityAt(TimeStamp aTime); // In nscoords per second
 
   void InitSmoothScroll(TimeStamp aTime, nsPoint aCurrentPos,
-                        nsSize aCurrentVelocity, nsPoint aDestination, nsGfxScrollFrameInner::SmoothProfile aProfile);
+                        nsSize aCurrentVelocity, nsPoint aDestination);
 
   bool IsFinished(TimeStamp aTime) {
     return aTime > mStartTime + mDuration; // XXX or if we've hit the wall
@@ -1332,16 +1328,12 @@ public:
 
   nsCOMPtr<nsITimer> mScrollTimer;
   TimeStamp mStartTime;
-  TimeStamp mPrevStartTime1;
-  TimeStamp mPrevStartTime2;
-  TimeStamp mPrevStartTime3;
   TimeDuration mDuration;
   nsPoint mStartPos;
   nsPoint mDestination;
   nsSMILKeySpline mTimingFunctionX;
   nsSMILKeySpline mTimingFunctionY;
   bool mIsSmoothScroll;
-  bool mIsInitializedDuration;
 
 protected:
   double ProgressAt(TimeStamp aTime) {
@@ -1357,17 +1349,6 @@ protected:
   void InitTimingFunction(nsSMILKeySpline& aTimingFunction,
                           nscoord aCurrentPos, nscoord aCurrentVelocity,
                           nscoord aDestination);
-  
-  void InitDuration(nsGfxScrollFrameInner::SmoothProfile aProfile);
-  
-  // Linear transform a value from one scale into another (opposite polarities are allowed).
-  double linearTransform(double inVal, double inRef1, double inRef2, double outRef1, double outRef2){
-    if(fabs(inRef2 - inRef1) < DBL_EPSILON )
-      return outRef1;
-    
-    return (inVal - inRef1) / (inRef2 - inRef1) * (outRef2 - outRef1) + outRef1;
-  }
-
 };
 
 nsPoint
@@ -1387,97 +1368,15 @@ nsGfxScrollFrameInner::AsyncScroll::VelocityAt(TimeStamp aTime) {
                                   mStartPos.y, mDestination.y));
 }
 
-/*
- * Calculate/update mDuration, possibly dynamically according to events rate and smooth profile.
- * (also maintain previous timestamps - which are only used here).
- */
-void
-nsGfxScrollFrameInner::AsyncScroll::InitDuration(nsGfxScrollFrameInner::SmoothProfile aProfile){
-  double minMS = 0, maxMS = 0;
-  bool isSmooth = false;
-
-  switch(aProfile){
-
-    case SMOOTH_NONE:
-      minMS = maxMS = 0;
-      isSmooth = false;
-      break;
-
-    case SMOOTH_PIXELS:
-      isSmooth = Preferences::GetBool("general.smoothScroll.pixels", true);
-      minMS =    Preferences::GetInt( "general.smoothScroll.pixels.durationMinMS", 200);
-      maxMS =    Preferences::GetInt( "general.smoothScroll.pixels.durationMaxMS", 800);
-      break;
-
-    case SMOOTH_LINES:
-      isSmooth = Preferences::GetBool("general.smoothScroll.lines", true);
-      minMS =    Preferences::GetInt( "general.smoothScroll.lines.durationMinMS", 150);
-      maxMS =    Preferences::GetInt( "general.smoothScroll.lines.durationMaxMS", 150);
-      break;
-
-    case SMOOTH_PAGES:
-      isSmooth = Preferences::GetBool("general.smoothScroll.pages", true);
-      minMS =    Preferences::GetInt( "general.smoothScroll.pages.durationMinMS", 150);
-      maxMS =    Preferences::GetInt( "general.smoothScroll.pages.durationMaxMS", 150);
-      break;
-
-    case SMOOTH_SCROLLBARS:
-      isSmooth = Preferences::GetBool("general.smoothScroll.scrollbars", true);
-      minMS =    Preferences::GetInt( "general.smoothScroll.scrollbars.durationMinMS", 150);
-      maxMS =    Preferences::GetInt( "general.smoothScroll.scrollbars.durationMaxMS", 150);
-      break;
-
-    case SMOOTH_OTHER:
-      isSmooth = Preferences::GetBool("general.smoothScroll.other", true);
-      minMS =    Preferences::GetInt( "general.smoothScroll.other.durationMinMS", 150);
-      maxMS =    Preferences::GetInt( "general.smoothScroll.other.durationMaxMS", 150);
-      break;
-
-    default:
-      NS_ERROR("Invalid smooth profile");
-  }
-
-  if(!isSmooth)
-    minMS = maxMS = 0;
-  
-  minMS = clamped(minMS, 0.0,   10000.0);
-  maxMS = clamped(maxMS, minMS, 10000.0);
-
-  if(!mIsInitializedDuration){
-    // Starting a new scroll (i.e. not when extending an existing scroll animation)
-    mIsInitializedDuration = true;
-    
-    TimeDuration maxDelta = TimeDuration::FromMilliseconds(maxMS);
-    
-    mPrevStartTime1 = mStartTime       - maxDelta;
-    mPrevStartTime2 = mPrevStartTime1  - maxDelta;
-    mPrevStartTime3 = mPrevStartTime2  - maxDelta;
-  }
-
-  double deltaMs = (mStartTime - mPrevStartTime3).ToMilliseconds() / 3; // Average last 3 delta durations
-  mPrevStartTime3 = mPrevStartTime2;
-  mPrevStartTime2 = mPrevStartTime1;
-  mPrevStartTime1 = mStartTime;
-
-  mDuration = TimeDuration::FromMilliseconds(
-                clamped( 
-                  linearTransform(deltaMs,
-                                  minMS / 1.25, maxMS / 1.25,  // Manually tuned correlation
-                                  minMS, maxMS),
-                  minMS, maxMS)
-              );
-}
-
 void
 nsGfxScrollFrameInner::AsyncScroll::InitSmoothScroll(TimeStamp aTime,
                                                      nsPoint aCurrentPos,
                                                      nsSize aCurrentVelocity,
-                                                     nsPoint aDestination,
-                                                     nsGfxScrollFrameInner::SmoothProfile aProfile) {
+                                                     nsPoint aDestination) {
   mStartTime = aTime;
   mStartPos = aCurrentPos;
   mDestination = aDestination;
-  InitDuration(aProfile);
+  mDuration = TimeDuration::FromMilliseconds(kSmoothScrollAnimationDuration);
   InitTimingFunction(mTimingFunctionX, mStartPos.x, aCurrentVelocity.width, aDestination.x);
   InitTimingFunction(mTimingFunctionY, mStartPos.y, aCurrentVelocity.height, aDestination.y);
 }
@@ -1645,9 +1544,8 @@ nsGfxScrollFrameInner::AsyncScrollCallback(nsITimer *aTimer, void* anInstance)
  *  based on the setting of the smooth scroll pref
  */
 void
-nsGfxScrollFrameInner::_ScrollTo(nsPoint aScrollPosition,
-                                 nsIScrollableFrame::ScrollMode aMode,
-                                 SmoothProfile aProfile)
+nsGfxScrollFrameInner::ScrollTo(nsPoint aScrollPosition,
+                                nsIScrollableFrame::ScrollMode aMode)
 {
   if (ShouldClampScrollPosition()) {
     mDestination = ClampScrollPosition(aScrollPosition);
@@ -1687,7 +1585,6 @@ nsGfxScrollFrameInner::_ScrollTo(nsPoint aScrollPosition,
     }
     if (isSmoothScroll) {
       mAsyncScroll->mScrollTimer->InitWithFuncCallback(
-        // Should be replaced by bug 702463
         AsyncScrollCallback, this, 1000 / 60,
         nsITimer::TYPE_REPEATING_SLACK);
     } else {
@@ -1700,7 +1597,7 @@ nsGfxScrollFrameInner::_ScrollTo(nsPoint aScrollPosition,
 
   if (isSmoothScroll) {
     mAsyncScroll->InitSmoothScroll(now, currentPosition, currentVelocity,
-                                   mDestination, aProfile);
+                                   aScrollPosition);
   }
 }
 
@@ -2317,23 +2214,19 @@ nsGfxScrollFrameInner::ScrollBy(nsIntPoint aDelta,
                                 nsIntPoint* aOverflow)
 {
   nsSize deltaMultiplier;
-  SmoothProfile aProfile = SMOOTH_OTHER;
   switch (aUnit) {
   case nsIScrollableFrame::DEVICE_PIXELS: {
     nscoord appUnitsPerDevPixel =
       mOuter->PresContext()->AppUnitsPerDevPixel();
     deltaMultiplier = nsSize(appUnitsPerDevPixel, appUnitsPerDevPixel);
-    aProfile = SMOOTH_PIXELS;
     break;
   }
   case nsIScrollableFrame::LINES: {
     deltaMultiplier = GetLineScrollAmount();
-    aProfile = SMOOTH_LINES;
     break;
   }
   case nsIScrollableFrame::PAGES: {
     deltaMultiplier = GetPageScrollAmount();
-    aProfile = SMOOTH_PAGES;
     break;
   }
   case nsIScrollableFrame::WHOLE: {
@@ -2353,7 +2246,7 @@ nsGfxScrollFrameInner::ScrollBy(nsIntPoint aDelta,
 
   nsPoint newPos = mDestination +
     nsPoint(aDelta.x*deltaMultiplier.width, aDelta.y*deltaMultiplier.height);
-  _ScrollTo(newPos, aMode, aProfile);
+  ScrollTo(newPos, aMode);
 
   if (aOverflow) {
     nsPoint clampAmount = mDestination - newPos;
@@ -2769,8 +2662,8 @@ void nsGfxScrollFrameInner::CurPosAttributeChanged(nsIContent* aContent)
     // was.
     UpdateScrollbarPosition();
   }
-  _ScrollTo(dest,
-            isSmooth ? nsIScrollableFrame::SMOOTH : nsIScrollableFrame::INSTANT, SMOOTH_SCROLLBARS);
+  ScrollTo(dest,
+           isSmooth ? nsIScrollableFrame::SMOOTH : nsIScrollableFrame::INSTANT);
 }
 
 /* ============= Scroll events ========== */

@@ -18,7 +18,7 @@ const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
  * Hint: This is the default value because the 'New Tab Page' is the only
  *       client for now.
  */
-const THUMBNAIL_WIDTH = 400;
+const THUMBNAIL_WIDTH = 201;
 
 /**
  * The default height for page thumbnails.
@@ -26,7 +26,7 @@ const THUMBNAIL_WIDTH = 400;
  * Hint: This is the default value because the 'New Tab Page' is the only
  *       client for now.
  */
-const THUMBNAIL_HEIGHT = 225;
+const THUMBNAIL_HEIGHT = 127;
 
 /**
  * The default background color for page thumbnails.

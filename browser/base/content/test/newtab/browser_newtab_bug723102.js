@@ -12,7 +12,6 @@ function runTests() {
   yield addNewTabPageTab();
   gBrowser.removeTab(firstTab);
 
-  ok(NewTabUtils.allPages.enabled, true, "page is enabled");
-  NewTabUtils.allPages.enabled = false;
+  cw.gToolbar.hide();
   ok(cw.gGrid.node.hasAttribute("page-disabled"), "page is disabled");
 }

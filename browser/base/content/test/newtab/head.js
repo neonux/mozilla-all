@@ -129,13 +129,10 @@ function addNewTabPageTab() {
     cw = browser.contentWindow;
 
     if (NewTabUtils.allPages.enabled) {
-      waitForFocus(function () {
-        // Continue when the link cache has been populated.
-        NewTabUtils.links.populateCache(function () {
-          cells = cw.gGrid.cells;
-          executeSoon(TestRunner.next);
-        });
-      });
+      cells = cw.gGrid.cells;
+
+      // Continue when the link cache has been populated.
+      NewTabUtils.links.populateCache(TestRunner.next);
     } else {
       TestRunner.next();
     }
@@ -190,7 +187,7 @@ function checkGrid(aSitesPattern, aSites) {
 
     let shouldBePinned = /p$/.test(id);
     let cellContainsPinned = site.isPinned();
-    let cssClassPinned = site.node && site.node.querySelector(".newtab-control-pin").hasAttribute("pinned");
+    let cssClassPinned = site.node && site.node.hasAttribute("pinned");
 
     // Check if the site should be and is pinned.
     if (shouldBePinned) {
@@ -249,8 +246,6 @@ function unpinCell(aCell) {
  */
 function simulateDrop(aDropTarget, aDragSource) {
   let event = {
-    clientX: 0,
-    clientY: 0,
     dataTransfer: {
       mozUserCancelled: false,
       setData: function () null,
@@ -266,25 +261,4 @@ function simulateDrop(aDropTarget, aDragSource) {
 
   if (aDragSource)
     cw.gDrag.end(aDragSource.site);
-}
-
-/**
- * Restores all sites that have been removed from the Wew Tab Page.
- * @param aCallback The function to call when finished restoring.
- */
-function restore(aCallback) {
-  whenPagesUpdated();
-  NewTabUtils.restore();
-}
-
-/**
- * Resumes testing when all pages have been updated.
- */
-function whenPagesUpdated() {
-  NewTabUtils.allPages.register({
-    update: function () {
-      NewTabUtils.allPages.unregister(this);
-      executeSoon(TestRunner.next);
-    }
-  });
 }

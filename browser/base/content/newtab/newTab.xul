@@ -13,50 +13,28 @@
   %newTabDTD;
 ]>
 
-<xul:window id="newtab-window" xmlns="http://www.w3.org/1999/xhtml"
+<xul:window xmlns="http://www.w3.org/1999/xhtml"
             xmlns:xul="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
             disablefastfind="true" title="&newtab.pageTitle;">
-
-  <div id="newtab-scrollbox" title=" ">
-
-    <div id="newtab-vertical-margin">
-      <div id="newtab-margin-top"/>
-
-      <div id="newtab-horizontal-margin">
-        <div id="newtab-margin-left"/>
-
-        <div id="newtab-grid">
-          <div class="newtab-row">
-            <div class="newtab-cell"/>
-            <div class="newtab-cell"/>
-            <div class="newtab-cell"/>
-          </div>
-          <div class="newtab-row">
-            <div class="newtab-cell"/>
-            <div class="newtab-cell"/>
-            <div class="newtab-cell"/>
-          </div>
-          <div class="newtab-row">
-            <div class="newtab-cell"/>
-            <div class="newtab-cell"/>
-            <div class="newtab-cell"/>
-          </div>
-        </div>
-
-        <div id="newtab-margin-right"/>
+  <xul:vbox id="scrollbox" flex="1" title=" ">
+    <body id="body">
+      <div id="toolbar">
+        <input class="button toolbar-button" id="toolbar-button-show"
+               type="button" title="&newtab.show;"/>
+        <input class="button toolbar-button" id="toolbar-button-hide"
+               type="button" title="&newtab.hide;"/>
+        <input class="button toolbar-button" id="toolbar-button-reset"
+               type="button" title="&newtab.reset;"/>
       </div>
 
-      <div id="newtab-margin-bottom"/>
-    </div>
+      <ul id="grid">
+        <li class="cell"/><li class="cell"/><li class="cell"/>
+        <li class="cell"/><li class="cell"/><li class="cell"/>
+        <li class="cell"/><li class="cell"/><li class="cell"/>
+      </ul>
 
-    <div id="newtab-undo-container">
-      <input id="newtab-undo" type="button" tabindex="-1"
-             value="&newtab.undoLabel;"/>
-    </div>
-
-    <input id="newtab-toggle" type="button"/>
-  </div>
-
-  <xul:script type="text/javascript;version=1.8"
-              src="chrome://browser/content/newtab/newTab.js"/>
+      <xul:script type="text/javascript;version=1.8"
+                  src="chrome://browser/content/newtab/newTab.js"/>
+    </body>
+  </xul:vbox>
 </xul:window>

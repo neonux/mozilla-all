@@ -15,14 +15,16 @@ function Cell(aGrid, aNode) {
   this._node._newtabCell = this;
 
   // Register drag-and-drop event handlers.
-  ["dragenter", "dragover", "dragexit", "drop"].forEach(function (aType) {
-    this._node.addEventListener(aType, this, false);
+  ["DragEnter", "DragOver", "DragExit", "Drop"].forEach(function (aType) {
+    let method = "on" + aType;
+    this[method] = this[method].bind(this);
+    this._node.addEventListener(aType.toLowerCase(), this[method], false);
   }, this);
 }
 
 Cell.prototype = {
   /**
-   * The grid.
+   *
    */
   _grid: null,
 
@@ -95,27 +97,41 @@ Cell.prototype = {
   },
 
   /**
-   * Handles all cell events.
+   * Event handler for the 'dragenter' event.
+   * @param aEvent The dragenter event.
    */
-  handleEvent: function Cell_handleEvent(aEvent) {
-    if (aEvent.type != "dragexit" && !gDrag.isValid(aEvent))
-      return;
+  onDragEnter: function Cell_onDragEnter(aEvent) {
+    if (gDrag.isValid(aEvent)) {
+      aEvent.preventDefault();
+      gDrop.enter(this, aEvent);
+    }
+  },
 
-    switch (aEvent.type) {
-      case "dragenter":
-        aEvent.preventDefault();
-        gDrop.enter(this, aEvent);
-        break;
-      case "dragover":
-        aEvent.preventDefault();
-        break;
-      case "dragexit":
-        gDrop.exit(this, aEvent);
-        break;
-      case "drop":
-        aEvent.preventDefault();
-        gDrop.drop(this, aEvent);
-        break;
+  /**
+   * Event handler for the 'dragover' event.
+   * @param aEvent The dragover event.
+   */
+  onDragOver: function Cell_onDragOver(aEvent) {
+    if (gDrag.isValid(aEvent))
+      aEvent.preventDefault();
+  },
+
+  /**
+   * Event handler for the 'dragexit' event.
+   * @param aEvent The dragexit event.
+   */
+  onDragExit: function Cell_onDragExit(aEvent) {
+    gDrop.exit(this, aEvent);
+  },
+
+  /**
+   * Event handler for the 'drop' event.
+   * @param aEvent The drop event.
+   */
+  onDrop: function Cell_onDrop(aEvent) {
+    if (gDrag.isValid(aEvent)) {
+      aEvent.preventDefault();
+      gDrop.drop(this, aEvent);
     }
   }
 };

@@ -14,11 +14,18 @@ function runTests() {
   yield addNewTabPageTab();
   checkGrid("0,1p,2,3,4,5,6,7,8");
 
+  let resetButton = cw.document.getElementById("toolbar-button-reset");
+  ok(!resetButton.hasAttribute("modified"), "page is not modified");
+
   let oldCw = cw;
+  let oldResetButton = resetButton;
 
   // create the new tab page
   yield addNewTabPageTab();
   checkGrid("0,1p,2,3,4,5,6,7,8");
+
+  resetButton = cw.document.getElementById("toolbar-button-reset");
+  ok(!resetButton.hasAttribute("modified"), "page is not modified");
 
   // unpin a cell
   yield unpinCell(cells[1]);
@@ -29,6 +36,8 @@ function runTests() {
   yield blockCell(cells[1]);
   checkGrid("0,2,3,4,5,6,7,8,9");
   checkGrid("0,2,3,4,5,6,7,8,9", oldCw.gGrid.sites);
+  ok(resetButton.hasAttribute("modified"), "page is modified");
+  ok(oldResetButton.hasAttribute("modified"), "page is modified");
 
   // insert a new cell by dragging
   yield simulateDrop(cells[1]);
@@ -41,7 +50,9 @@ function runTests() {
   checkGrid("0,2p,99p,3,4,5,6,7,8", oldCw.gGrid.sites);
 
   // reset the new tab page
-  yield restore(TestRunner.next);
+  yield cw.gToolbar.reset(TestRunner.next);
   checkGrid("0,1,2,3,4,5,6,7,8");
   checkGrid("0,1,2,3,4,5,6,7,8", oldCw.gGrid.sites);
+  ok(!resetButton.hasAttribute("modified"), "page is not modified");
+  ok(!oldResetButton.hasAttribute("modified"), "page is not modified");
 }
