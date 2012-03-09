@@ -2,157 +2,190 @@
   -moz-appearance: none;
 }
 
-#scrollbox:not([page-disabled]) {
+input[type=button] {
+  cursor: pointer;
+}
+
+/* SCROLLBOX */
+#newtab-scrollbox {
+  display: -moz-box;
+  position: relative;
+  -moz-box-flex: 1;
+}
+
+#newtab-scrollbox:not([page-disabled]) {
   overflow: auto;
 }
 
-#body {
-  position: relative;
-  margin: 0;
-  min-width: 675px;
-  -moz-user-select: none;
-}
-
-.button {
-  cursor: pointer;
-}
-
-/* TOOLBAR */
-#toolbar {
+/* UNDO */
+#newtab-undo-container {
   position: absolute;
+  top: 12px;
+  left: 0;
+  right: 0;
+  text-align: center;
 }
 
-#toolbar[page-disabled] {
-  position: fixed;
+#newtab-undo {
+  display: inline-block;
+  -moz-transition: opacity 100ms ease-out;
 }
 
-#toolbar:-moz-locale-dir(rtl) {
-  left: 8px;
+#newtab-undo[tabindex] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* TOGGLE */
+#newtab-toggle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+#newtab-toggle:-moz-locale-dir(rtl) {
+  left: 12px;
   right: auto;
 }
 
-.toolbar-button {
-  position: absolute;
-  cursor: pointer;
-  -moz-transition: opacity 200ms ease-out;
+/* MARGINS */
+#newtab-vertical-margin {
+  display: -moz-box;
+  position: relative;
+  -moz-box-flex: 1;
+  -moz-box-orient: vertical;
 }
 
-#toolbar-button-show,
-#toolbar-button-reset {
-  opacity: 0;
-  pointer-events: none;
+#newtab-margin-top {
+  min-height: 50px;
+  max-height: 80px;
+  -moz-box-flex: 1;
 }
 
-#toolbar-button-reset[modified],
-#toolbar-button-show[page-disabled] {
-  opacity: 1;
-  pointer-events: auto;
+#newtab-margin-bottom {
+  min-height: 40px;
+  max-height: 100px;
+  -moz-box-flex: 1;
 }
 
-#toolbar-button-hide[page-disabled],
-#toolbar-button-reset[page-disabled] {
-  opacity: 0;
-  pointer-events: none;
+#newtab-horizontal-margin {
+  display: -moz-box;
+  -moz-box-flex: 5;
+}
+
+#newtab-margin-left,
+#newtab-margin-right {
+  min-width: 40px;
+  max-width: 300px;
+  -moz-box-flex: 1;
 }
 
 /* GRID */
-#grid {
-  width: 637px;
-  height: 411px;
-  overflow: hidden;
-  list-style-type: none;
-  -moz-transition: opacity 200ms ease-out;
+#newtab-grid {
+  display: -moz-box;
+  -moz-box-flex: 5;
+  -moz-box-orient: vertical;
+  min-width: 600px;
+  min-height: 400px;
+  -moz-transition: 100ms ease-out;
+  -moz-transition-property: opacity;
 }
 
-#grid[page-disabled] {
+#newtab-grid[page-disabled] {
   opacity: 0;
 }
 
-#grid[page-disabled],
-#grid[locked] {
+#newtab-grid[locked],
+#newtab-grid[page-disabled] {
   pointer-events: none;
+}
+
+/* ROWS */
+.newtab-row {
+  display: -moz-box;
+  -moz-box-orient: horizontal;
+  -moz-box-direction: normal;
+  -moz-box-flex: 1;
 }
 
 /* CELLS */
-.cell {
-  float: left;
-  width: 201px;
-  height: 127px;
-  margin-bottom: 15px;
-  -moz-margin-end: 16px;
-}
-
-.cell:-moz-locale-dir(rtl) {
-  float: right;
-}
-
-.cell:nth-child(3n+3) {
-  -moz-margin-end: 0;
+.newtab-cell {
+  display: -moz-box;
+  -moz-box-flex: 1;
 }
 
 /* SITES */
-.site {
+.newtab-site {
   display: block;
   position: relative;
-  width: 201px;
-  height: 127px;
+  -moz-box-flex: 1;
+  -moz-transition: 100ms ease-out;
+  -moz-transition-property: top, left, opacity;
 }
 
-.site[frozen] {
+.newtab-site[frozen] {
   position: absolute;
   pointer-events: none;
 }
 
-.site[ontop] {
+.newtab-site[dragged] {
+  -moz-transition-property: none;
   z-index: 10;
 }
 
-/* SITE IMAGE */
-.site-img {
-  display: block;
-  opacity: 0.75;
-  -moz-transition: opacity 200ms ease-out;
-}
-
-.site:hover > .site-img,
-.site[ontop] > .site-img,
-.site:-moz-focusring > .site-img {
-  opacity: 1;
-}
-
-.site-img[loading] {
-  display: none;
-}
-
-/* SITE TITLE */
-.site-title {
+/* THUMBNAILS */
+.newtab-thumbnail {
   position: absolute;
   left: 0;
+  top: 0;
+  right: 0;
   bottom: 0;
-  overflow: hidden;
+  opacity: .8;
+  -moz-transition: opacity 100ms ease-out;
 }
 
-/* SITE BUTTONS */
-.strip-button {
-  position: absolute;
-  top: 5px;
-  opacity: 0;
-  -moz-transition: opacity 200ms ease-out;
-}
-
-.strip-button:focus,
-.site:hover:not([frozen]) > .strip-button {
+.newtab-site:hover > .newtab-thumbnail,
+.newtab-site[dragged] > .newtab-thumbnail,
+.newtab-site:-moz-focusring > .newtab-thumbnail {
   opacity: 1;
 }
 
-.strip-button-pin,
-.strip-button-block:-moz-locale-dir(rtl) {
-  left: 5px;
+/* TITLES */
+.newtab-title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.strip-button-block,
-.strip-button-pin:-moz-locale-dir(rtl) {
-  right: 5px;
+/* CONTROLS */
+.newtab-control {
+  position: absolute;
+  top: 4px;
+  opacity: 0;
+  -moz-transition: opacity 100ms ease-out;
+}
+
+.newtab-control:-moz-focusring,
+.newtab-site:hover > .newtab-control {
+  opacity: 1;
+}
+
+.newtab-site[dragged] > .newtab-control {
+  opacity: 0;
+}
+
+.newtab-control-pin:-moz-locale-dir(ltr),
+.newtab-control-block:-moz-locale-dir(rtl) {
+  left: 4px;
+}
+
+.newtab-control-block:-moz-locale-dir(ltr),
+.newtab-control-pin:-moz-locale-dir(rtl) {
+  right: 4px;
 }
 
 /* DRAG & DROP */
@@ -162,7 +195,7 @@
  * so that we can use custom drag images and elements. It needs an opacity of
  * 0.01 so that the core code detects that it's in fact a visible element.
  */
-.drag-element {
+.newtab-drag {
   width: 1px;
   height: 1px;
   background-color: #fff;
