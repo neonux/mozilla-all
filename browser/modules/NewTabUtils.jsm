@@ -561,6 +561,14 @@ let NewTabUtils = {
     BlockedLinks.resetCache();
   },
 
+  /**
+   * Restores all sites that haven been removed from the grid.
+   */
+  restore: function NewTabUtils_restore() {
+    this.reset();
+    Links.populateCache(function () { AllPages.update() }, true);
+  },
+
   allPages: AllPages,
   links: Links,
   pinnedLinks: PinnedLinks,

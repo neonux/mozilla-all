@@ -55,8 +55,8 @@ Site.prototype = {
     if (typeof aIndex == "undefined")
       aIndex = this.cell.index;
 
-    this._updateAttributes(true);
     gPinnedLinks.pin(this._link, aIndex);
+    this.updatePinnedAttributes();
   },
 
   /**
@@ -65,8 +65,8 @@ Site.prototype = {
    */
   unpin: function Site_unpin(aCallback) {
     if (this.isPinned()) {
-      this._updateAttributes(false);
       gPinnedLinks.unpin(this._link);
+      this.updatePinnedAttributes();
       gUpdater.updateGrid(aCallback);
     }
   },
@@ -101,12 +101,11 @@ Site.prototype = {
   /**
    * Updates attributes for all nodes which status depends on this site being
    * pinned or unpinned.
-   * @param aPinned Whether this site is now pinned or unpinned.
    */
-  _updateAttributes: function (aPinned) {
+  updatePinnedAttributes: function Site_updatePinnedAttributes() {
     let control = this._querySelector(".newtab-control-pin");
 
-    if (aPinned) {
+    if (this.isPinned()) {
       control.setAttribute("pinned", true);
       control.setAttribute("title", newTabString("unpin"));
     } else {
@@ -125,7 +124,7 @@ Site.prototype = {
     this._querySelector(".newtab-title").textContent = title;
 
     if (this.isPinned())
-      this._updateAttributes(true);
+      this.updatePinnedAttributes();
 
     let thumbnailURL = PageThumbs.getThumbnailURL(this.url);
     let thumbnail = this._querySelector(".newtab-thumbnail");
