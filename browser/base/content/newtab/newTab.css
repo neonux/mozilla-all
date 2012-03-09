@@ -132,27 +132,30 @@
   overflow: hidden;
 }
 
-/* SITE BUTTONS */
-.strip-button {
+/* SITE STRIP */
+.site-strip {
   position: absolute;
-  top: 5px;
+  left: 0;
+  top: 0;
+  width: 195px;
+  height: 17px;
+  overflow: hidden;
   opacity: 0;
   -moz-transition: opacity 200ms ease-out;
 }
 
-.strip-button:focus,
-.site:hover:not([frozen]) > .strip-button {
+.site:hover:not([frozen]) > .site-strip {
   opacity: 1;
 }
 
 .strip-button-pin,
 .strip-button-block:-moz-locale-dir(rtl) {
-  left: 5px;
+  float: left;
 }
 
 .strip-button-block,
 .strip-button-pin:-moz-locale-dir(rtl) {
-  right: 5px;
+  float: right;
 }
 
 /* DRAG & DROP */
