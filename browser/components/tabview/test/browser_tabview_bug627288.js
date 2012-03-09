@@ -41,7 +41,7 @@ function test() {
   let testChangeUrlAfterReconnect = function () {
     tab.linkedBrowser.loadURI('http://mochi.test:8888/browser/');
 
-    whenTabAttrModified(tab, function () {
+    whenTabsWillRelabel(tab, function () {
       cw.TabItems._update(tab);
 
       let tabItem = tab._tabViewTabItem;
@@ -77,6 +77,19 @@ function test() {
     cw = TabView.getContentWindow();
     testReconnectWithSameUrl();
   });
+}
+
+// ----------
+function whenTabsWillRelabel(tab, callback) {
+  let onModified = function (event) {
+    tab.parentNode.removeEventListener(event.type, onModified, false);
+    // we need executeSoon here because the tabItem also listens for the
+    // TabAttrModified event. so this is to make sure the tabItem logic
+    // is executed before the test logic.
+    executeSoon(callback);
+  }
+
+  tab.parentNode.addEventListener("TabsWillRelabel", onModified, false);
 }
 
 // ----------

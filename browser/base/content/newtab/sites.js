@@ -55,8 +55,8 @@ Site.prototype = {
     if (typeof aIndex == "undefined")
       aIndex = this.cell.index;
 
-    this._updateAttributes(true);
     gPinnedLinks.pin(this._link, aIndex);
+    this.updatePinnedAttributes();
   },
 
   /**
@@ -65,8 +65,8 @@ Site.prototype = {
    */
   unpin: function Site_unpin(aCallback) {
     if (this.isPinned()) {
-      this._updateAttributes(false);
       gPinnedLinks.unpin(this._link);
+      this.updatePinnedAttributes();
       gUpdater.updateGrid(aCallback);
     }
   },
@@ -87,7 +87,6 @@ Site.prototype = {
   block: function Site_block(aCallback) {
     gBlockedLinks.block(this._link);
     gUpdater.updateGrid(aCallback);
-    gPage.updateModifiedFlag();
   },
 
   /**
@@ -102,17 +101,16 @@ Site.prototype = {
   /**
    * Updates attributes for all nodes which status depends on this site being
    * pinned or unpinned.
-   * @param aPinned Whether this site is now pinned or unpinned.
    */
-  _updateAttributes: function (aPinned) {
-    let buttonPin = this._querySelector(".strip-button-pin");
+  updatePinnedAttributes: function Site_updatePinnedAttributes() {
+    let control = this._querySelector(".newtab-control-pin");
 
-    if (aPinned) {
-      this.node.setAttribute("pinned", true);
-      buttonPin.setAttribute("title", newTabString("unpin"));
+    if (this.isPinned()) {
+      control.setAttribute("pinned", true);
+      control.setAttribute("title", newTabString("unpin"));
     } else {
-      this.node.removeAttribute("pinned");
-      buttonPin.setAttribute("title", newTabString("pin"));
+      control.removeAttribute("pinned");
+      control.setAttribute("title", newTabString("pin"));
     }
   },
 
@@ -123,30 +121,14 @@ Site.prototype = {
     let title = this.title || this.url;
     this.node.setAttribute("title", title);
     this.node.setAttribute("href", this.url);
-    this._querySelector(".site-title").textContent = title;
+    this._querySelector(".newtab-title").textContent = title;
 
     if (this.isPinned())
-      this._updateAttributes(true);
+      this.updatePinnedAttributes();
 
-    this._renderThumbnail();
-  },
-
-  /**
-   * Renders the site's thumbnail.
-   */
-  _renderThumbnail: function Site_renderThumbnail() {
-    let img = this._querySelector(".site-img")
-    img.setAttribute("alt", this.title || this.url);
-    img.setAttribute("loading", "true");
-
-    // Wait until the image has loaded.
-    img.addEventListener("load", function onLoad() {
-      img.removeEventListener("load", onLoad, false);
-      img.removeAttribute("loading");
-    }, false);
-
-    // Set the thumbnail url.
-    img.setAttribute("src", PageThumbs.getThumbnailURL(this.url));
+    let thumbnailURL = PageThumbs.getThumbnailURL(this.url);
+    let thumbnail = this._querySelector(".newtab-thumbnail");
+    thumbnail.style.backgroundImage = "url(" + thumbnailURL + ")";
   },
 
   /**
@@ -154,56 +136,38 @@ Site.prototype = {
    */
   _addEventHandlers: function Site_addEventHandlers() {
     // Register drag-and-drop event handlers.
-    ["DragStart", /*"Drag",*/ "DragEnd"].forEach(function (aType) {
-      let method = "_on" + aType;
-      this[method] = this[method].bind(this);
-      this._node.addEventListener(aType.toLowerCase(), this[method], false);
+    ["dragstart", /*"drag",*/ "dragend"].forEach(function (aType) {
+      this._node.addEventListener(aType, this, false);
     }, this);
 
-    let self = this;
-
-    function pin(aEvent) {
-      if (aEvent)
-        aEvent.preventDefault();
-
-      if (self.isPinned())
-        self.unpin();
-      else
-        self.pin();
-    }
-
-    function block(aEvent) {
-      if (aEvent)
-        aEvent.preventDefault();
-
-      self.block();
-    }
-
-    this._querySelector(".strip-button-pin").addEventListener("click", pin, false);
-    this._querySelector(".strip-button-block").addEventListener("click", block, false);
+    let controls = this.node.querySelectorAll(".newtab-control");
+    for (let i = 0; i < controls.length; i++)
+      controls[i].addEventListener("click", this, false);
   },
 
   /**
-   * Event handler for the 'dragstart' event.
-   * @param aEvent The drag event.
+   * Handles all site events.
    */
-  _onDragStart: function Site_onDragStart(aEvent) {
-    gDrag.start(this, aEvent);
-  },
-
-  /**
-   * Event handler for the 'drag' event.
-   * @param aEvent The drag event.
-  */
-  _onDrag: function Site_onDrag(aEvent) {
-    gDrag.drag(this, aEvent);
-  },
-
-  /**
-   * Event handler for the 'dragend' event.
-   * @param aEvent The drag event.
-   */
-  _onDragEnd: function Site_onDragEnd(aEvent) {
-    gDrag.end(this, aEvent);
+  handleEvent: function Site_handleEvent(aEvent) {
+    switch (aEvent.type) {
+      case "click":
+        aEvent.preventDefault();
+        if (aEvent.target.classList.contains("newtab-control-block"))
+          this.block();
+        else if (this.isPinned())
+          this.unpin();
+        else
+          this.pin();
+        break;
+      case "dragstart":
+        gDrag.start(this, aEvent);
+        break;
+      case "drag":
+        gDrag.drag(this, aEvent);
+        break;
+      case "dragend":
+        gDrag.end(this, aEvent);
+        break;
+    }
   }
 };

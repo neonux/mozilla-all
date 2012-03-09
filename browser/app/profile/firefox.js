@@ -240,6 +240,23 @@ pref("general.useragent.locale", "@AB_CD@");
 pref("general.skins.selectedSkin", "classic/1.0");
 
 pref("general.smoothScroll", true);
+// These values are duplicated in layout/generic/nsGfxScrollFrame.cpp
+pref("general.smoothScroll.pixels.durationMinMS", 200);
+pref("general.smoothScroll.pixels.durationMaxMS", 800);
+pref("general.smoothScroll.lines.durationMinMS", 150);
+pref("general.smoothScroll.lines.durationMaxMS", 150);
+pref("general.smoothScroll.pages.durationMinMS", 150);
+pref("general.smoothScroll.pages.durationMaxMS", 150);
+pref("general.smoothScroll.scrollbars.durationMinMS", 150);
+pref("general.smoothScroll.scrollbars.durationMaxMS", 150);
+pref("general.smoothScroll.other.durationMinMS", 150);
+pref("general.smoothScroll.other.durationMaxMS", 150);
+pref("general.smoothScroll.pixels", true);
+pref("general.smoothScroll.lines", true);
+pref("general.smoothScroll.pages", true);
+pref("general.smoothScroll.scrollbars", true);
+pref("general.smoothScroll.other", true);
+
 #ifdef UNIX_BUT_NOT_MAC
 pref("general.autoScroll", false);
 #else
@@ -407,6 +424,8 @@ pref("browser.tabs.tabClipWidth", 140);
 pref("browser.tabs.animate", true);
 pref("browser.tabs.onTop", true);
 pref("browser.tabs.drawInTitlebar", true);
+pref("browser.tabs.cropRedundancyInTitles", true);
+pref("browser.tabs.addEllipsisToCropped", false);
 
 // Where to show tab close buttons:
 // 0  on active tab only

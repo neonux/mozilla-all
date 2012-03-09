@@ -72,6 +72,11 @@ struct ScrollReflowState;
 
 class nsGfxScrollFrameInner : public nsIReflowCallback {
 public:
+  /**
+   * Implies different animation durations, according to type of requested scroll:
+   */
+  enum SmoothProfile { SMOOTH_NONE, SMOOTH_PIXELS, SMOOTH_LINES, SMOOTH_PAGES, SMOOTH_SCROLLBARS, SMOOTH_OTHER};
+
   class AsyncScroll;
 
   nsGfxScrollFrameInner(nsContainerFrame* aOuter, bool aIsRoot);
@@ -180,7 +185,9 @@ public:
   nsPoint RestrictToDevPixels(const nsPoint& aPt, nsIntPoint* aPtDevPx, bool aShouldClamp) const;
   nsPoint ClampScrollPosition(const nsPoint& aPt) const;
   static void AsyncScrollCallback(nsITimer *aTimer, void* anInstance);
-  void ScrollTo(nsPoint aScrollPosition, nsIScrollableFrame::ScrollMode aMode);
+  void ScrollTo(nsPoint aScrollPosition, nsIScrollableFrame::ScrollMode aMode){
+    _ScrollTo(aScrollPosition, aMode, SMOOTH_OTHER);
+  };
   void ScrollToImpl(nsPoint aScrollPosition);
   void ScrollVisual(nsPoint aOldScrolledFramePosition);
   void ScrollBy(nsIntPoint aDelta, nsIScrollableFrame::ScrollUnit aUnit,
@@ -340,6 +347,10 @@ public:
   // If true, the layer should always be active because we always build a layer.
   // Used for asynchronous scrolling.
   bool mShouldBuildLayer:1;
+  
+protected:
+  void _ScrollTo(nsPoint aScrollPosition, nsIScrollableFrame::ScrollMode aMode, SmoothProfile aProfile);
+
 };
 
 /**
