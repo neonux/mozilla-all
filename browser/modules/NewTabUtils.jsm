@@ -384,6 +384,15 @@ let BlockedLinks = {
   },
 
   /**
+   * Unblocks a given link.
+   * @param aLink The link to unblock.
+   */
+  unblock: function BlockedLinks_unblock(aLink) {
+    if (this.isBlocked(aLink))
+      delete this.links[aLink.url];
+  },
+
+  /**
    * Returns whether a given link is blocked.
    * @param aLink The link to check.
    */
@@ -591,6 +600,14 @@ let NewTabUtils = {
     Links.resetCache();
     PinnedLinks.resetCache();
     BlockedLinks.resetCache();
+  },
+
+  /**
+   * Restores all sites that haven been removed from the grid.
+   */
+  restore: function NewTabUtils_restore() {
+    this.reset();
+    Links.populateCache(function () { AllPages.update() }, true);
   },
 
   allPages: AllPages,
