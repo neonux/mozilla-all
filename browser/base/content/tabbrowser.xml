@@ -1246,7 +1246,7 @@
               "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul",
                                              "tab");
 
-            var blank = !aURI || isBlankPageURL(aURI);
+            var blank = !aURI || (aURI == "about:blank");
 
             if (blank)
               t.setAttribute("label", this.mStringBundle.getString("tabs.emptyTabTitle"));
@@ -1374,7 +1374,7 @@
             evt.initEvent("TabOpen", true, false);
             t.dispatchEvent(evt);
 
-            if (aURI && aURI != "about:blank") {
+            if (!blank) {
               // Stop the existing about:blank load.  Otherwise, if aURI
               // doesn't stop in-progress loads on its own, we'll get into
               // trouble with multiple parallel loads running at once.
@@ -1382,16 +1382,8 @@
 
               // pretend the user typed this so it'll be available till
               // the document successfully loads
-              if (blank) {
-                // The progress listener received a stop status change. Reset
-                // the mBlank status to true to prevent the throbber from being
-                // shown when we're still loading a new tab URL.
-                tabListener.mBlank = true;
-              } else {
-                // pretend the user typed this so it'll be available till
-                // the document successfully loads
+              if (!isBlankPageURL(aURI))
                 b.userTypedValue = aURI;
-              }
 
               let flags = Ci.nsIWebNavigation.LOAD_FLAGS_NONE;
               if (aAllowThirdPartyFixup)
