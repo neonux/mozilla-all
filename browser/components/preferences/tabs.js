@@ -37,9 +37,6 @@
 #
 # ***** END LICENSE BLOCK *****
 
-XPCOMUtils.defineLazyModuleGetter(this, "NewTabUtils",
-                                  "resource:///modules/NewTabUtils.jsm");
-
 var gTabsPane = {
 
   /*
@@ -66,14 +63,11 @@ var gTabsPane = {
    * - true if tabs are to be shown in the Windows 7 taskbar
    */
 
+#ifdef XP_WIN
   /**
    * Initialize any platform-specific UI.
    */
   init: function () {
-    if (!NewTabUtils.blockedLinks.isEmpty())
-      document.getElementById("restoreNewTabPage").removeAttribute("disabled");
-
-#ifdef XP_WIN
     const Cc = Components.classes;
     const Ci = Components.interfaces;
     try {
@@ -83,8 +77,8 @@ var gTabsPane = {
       let showTabsInTaskbar = document.getElementById("showTabsInTaskbar");
       showTabsInTaskbar.hidden = ver < 6.1;
     } catch (ex) {}
-#endif
   },
+#endif
 
   /**
    * Determines where a link which opens a new window will open.
@@ -105,13 +99,5 @@ var gTabsPane = {
   writeLinkTarget: function() {
     var linkTargeting = document.getElementById("linkTargeting");
     return linkTargeting.checked ? 3 : 2;
-  },
-
-  /**
-   * Restores all sites from the New Tab Page.
-   */
-  restoreNewTabPage: function () {
-    NewTabUtils.restore();
-    document.getElementById("restoreNewTabPage").setAttribute("disabled", "true");
   }
 };

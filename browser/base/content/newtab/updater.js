@@ -20,12 +20,6 @@ let gUpdater = {
     // Find all sites that remain in the grid.
     let sites = this._findRemainingSites(links);
 
-    // Update each site's pinned status.
-    sites.forEach(function (aSite) {
-      if (aSite)
-        aSite.updatePinnedAttributes();
-    });
-
     let self = this;
 
     // Remove sites that are no longer in the grid.
