@@ -11,6 +11,24 @@
   background-attachment: fixed;
 }
 
+/* UNDO */
+#newtab-undo {
+  padding: 5px 10px;
+  border: 1px solid;
+  border-radius: 4px;
+  border-color: rgba(8,22,37,.12) rgba(8,22,37,.14) rgba(8,22,37,.16);
+  background-color: #ececec;
+  font-size: 12px;
+  box-shadow: 0 0 2px rgba(8,22,37,.3);
+  -moz-transition-property: opacity, box-shadow, border-color;
+}
+
+#newtab-undo:hover {
+  text-decoration: underline;
+  box-shadow: 0 0 10px rgba(8,22,37,.3);
+  border-color: rgba(8,22,37,.25) rgba(8,22,37,.27) rgba(8,22,37,.3);
+}
+
 /* TOGGLE */
 #newtab-toggle {
   width: 16px;
