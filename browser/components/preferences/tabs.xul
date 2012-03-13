@@ -50,7 +50,9 @@
          xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
 
   <prefpane id="paneTabs"
+#ifdef XP_WIN
             onpaneload="gTabsPane.init();"
+#endif
             helpTopic="prefs-tabs">
 
     <preferences id="tabsPreferences">
@@ -92,19 +94,6 @@
                 preference="browser.taskbar.previews.enable"/>
 #endif
     </vbox>
-
-    <groupbox id="newTabPageGroup" flex="1">
-      <caption label="&newTabPage.label;"/>
-
-      <hbox align="center">
-        <description flex="1" control="restoreNewTabPage">&restoreNewTabPage.label;</description>
-        <button label="&restoreNewTabPageButton.label;"
-                accesskey="&restoreNewTabPageButton.accesskey;"
-                oncommand="gTabsPane.restoreNewTabPage();"
-                id="restoreNewTabPage"
-                disabled="true"/>
-      </hbox>
-    </groupbox>
 
   </prefpane>
 
