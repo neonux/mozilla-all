@@ -48,12 +48,6 @@
 
       <div id="newtab-margin-bottom"/>
     </div>
-
-    <div id="newtab-undo-container">
-      <input id="newtab-undo" type="button" tabindex="-1"
-             value="&newtab.undoLabel;"/>
-    </div>
-
     <input id="newtab-toggle" type="button"/>
   </div>
 

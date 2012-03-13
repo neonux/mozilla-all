@@ -89,7 +89,6 @@ Site.prototype = {
       if (aCallback)
         aCallback();
     } else {
-      gUndoDialog.show(this);
       gBlockedLinks.block(this._link);
       gUpdater.updateGrid(aCallback);
     }
