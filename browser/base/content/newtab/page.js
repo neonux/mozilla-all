@@ -11,24 +11,25 @@
 let gPage = {
   /**
    * Initializes the page.
+   * @param aToolbarSelector The query selector for the page toolbar.
+   * @param aGridSelector The query selector for the grid.
    */
-  init: function Page_init() {
+  init: function Page_init(aToolbarSelector, aGridSelector) {
+    gToolbar.init(aToolbarSelector);
+    this._gridSelector = aGridSelector;
+
     // Add ourselves to the list of pages to receive notifications.
     gAllPages.register(this);
 
     // Listen for 'unload' to unregister this page.
-    addEventListener("unload", this, false);
-
-    // Listen for toggle button clicks.
-    let button = document.getElementById("newtab-toggle");
-    button.addEventListener("click", this, false);
+    function unload() { gAllPages.unregister(this); }
+    addEventListener("unload", unload.bind(this), false);
 
     // Check if the new tab feature is enabled.
-    let enabled = gAllPages.enabled;
-    if (enabled)
+    if (gAllPages.enabled)
       this._init();
-
-    this._updateAttributes(enabled);
+    else
+      this._updateAttributes(false);
   },
 
   /**
@@ -47,7 +48,23 @@ let gPage = {
    * Updates the whole page and the grid when the storage has changed.
    */
   update: function Page_update() {
+    this.updateModifiedFlag();
     gGrid.refresh();
+  },
+
+  /**
+   * Checks if the page is modified and sets the CSS class accordingly
+   */
+  updateModifiedFlag: function Page_updateModifiedFlag() {
+    let node = document.getElementById("toolbar-button-reset");
+    let modified = this._isModified();
+
+    if (modified)
+      node.setAttribute("modified", "true");
+    else
+      node.removeAttribute("modified");
+
+    this._updateTabIndices(gAllPages.enabled, modified);
   },
 
   /**
@@ -61,26 +78,29 @@ let gPage = {
     this._initialized = true;
 
     gLinks.populateCache(function () {
+      // Check if the grid is modified.
+      this.updateModifiedFlag();
+
       // Initialize and render the grid.
-      gGrid.init();
+      gGrid.init(this._gridSelector);
 
       // Initialize the drop target shim.
       gDropTargetShim.init();
 
 #ifdef XP_MACOSX
       // Workaround to prevent a delay on MacOSX due to a slow drop animation.
-      document.addEventListener("dragover", this, false);
-      document.addEventListener("drop", this, false);
+      document.addEventListener("dragover", this.onDragOver, false);
+      document.addEventListener("drop", this.onDrop, false);
 #endif
     }.bind(this));
   },
 
   /**
    * Updates the 'page-disabled' attributes of the respective DOM nodes.
-   * @param aValue Whether the New Tab Page is enabled or not.
+   * @param aValue Whether to set or remove attributes.
    */
   _updateAttributes: function Page_updateAttributes(aValue) {
-    let nodes = document.querySelectorAll("#newtab-toggle, #newtab-grid");
+    let nodes = document.querySelectorAll("#grid, #scrollbox, #toolbar, .toolbar-button");
 
     // Set the nodes' states.
     for (let i = 0; i < nodes.length; i++) {
@@ -91,31 +111,64 @@ let gPage = {
         node.setAttribute("page-disabled", "true");
     }
 
-    // Update the toggle button's title.
-    nodes[0].setAttribute("title", newTabString(aValue ? "hide" : "show"));
+    this._updateTabIndices(aValue, this._isModified());
   },
 
   /**
-   * Handles all page events.
+   * Checks whether the page is modified.
+   * @return Whether the page is modified or not.
    */
-  handleEvent: function Page_handleEvent(aEvent) {
-    switch (aEvent.type) {
-      case "unload":
-        gAllPages.unregister(this);
-        break;
-      case "click":
-        gAllPages.enabled = !gAllPages.enabled;
-        break;
-      case "dragover":
-        if (gDrag.isValid(aEvent) && gDrag.draggedSite)
-          aEvent.preventDefault();
-        break;
-      case "drop":
-        if (gDrag.isValid(aEvent) && gDrag.draggedSite) {
-          aEvent.preventDefault();
-          aEvent.stopPropagation();
-        }
-        break;
+  _isModified: function Page_isModified() {
+    // The page is considered modified only if sites have been removed.
+    return !gBlockedLinks.isEmpty();
+  },
+
+  /**
+   * Updates the tab indices of focusable elements.
+   * @param aEnabled Whether the page is currently enabled.
+   * @param aModified Whether the page is currently modified.
+   */
+  _updateTabIndices: function Page_updateTabIndices(aEnabled, aModified) {
+    function setFocusable(aNode, aFocusable) {
+      if (aFocusable)
+        aNode.removeAttribute("tabindex");
+      else
+        aNode.setAttribute("tabindex", "-1");
+    }
+
+    // Sites and the 'hide' button are always focusable when the grid is shown.
+    let nodes = document.querySelectorAll(".site, #toolbar-button-hide");
+    for (let i = 0; i < nodes.length; i++)
+      setFocusable(nodes[i], aEnabled);
+
+    // The 'show' button is focusable when the grid is hidden.
+    let btnShow = document.getElementById("toolbar-button-show");
+    setFocusable(btnShow, !aEnabled);
+
+    // The 'reset' button is focusable when the grid is shown and modified.
+    let btnReset = document.getElementById("toolbar-button-reset");
+    setFocusable(btnReset, aEnabled && aModified);
+  },
+
+  /**
+   * Handles the 'dragover' event. Workaround to prevent a delay on MacOSX
+   * due to a slow drop animation.
+   * @param aEvent The 'dragover' event.
+   */
+  onDragOver: function Page_onDragOver(aEvent) {
+    if (gDrag.isValid(aEvent) && gDrag.draggedSite)
+      aEvent.preventDefault();
+  },
+
+  /**
+   * Handles the 'drop' event. Workaround to prevent a delay on MacOSX due to
+   * a slow drop animation.
+   * @param aEvent The 'drop' event.
+   */
+  onDrop: function Page_onDrop(aEvent) {
+    if (gDrag.isValid(aEvent) && gDrag.draggedSite) {
+      aEvent.preventDefault();
+      aEvent.stopPropagation();
     }
   }
 };
