@@ -1339,29 +1339,36 @@ pref("mousewheel.horizscroll.withmetakey.action",0);
 pref("mousewheel.horizscroll.withmetakey.numlines",1);
 pref("mousewheel.horizscroll.withmetakey.sysnumlines",true);
 
-// These define the smooth scroll behavior (min ms, max ms) for different triggers
+// Define the smooth scrolling behavior (enabled, min ms, max ms) for different triggers
 // Some triggers:
-// Pixels: Discrete mouse wheel events, Synaptics touchpads on windows (generate wheel events)
+// Pixels: Discrete mouse wheel events, Synaptics touchpads (generate wheel events)
 // Lines:  Up/Down/Left/Right KB arrows
 // Pages:  Page up/down, Space
 // Scrollbars: Clicking scrollbars arrows, clicking scrollbars tracks
 // Note: Currently OS X trackpad and magic mouse don't use our smooth scrolling
 // Note: These are relevant only when "general.smoothScroll" is enabled
+//
+// Enable/Disable per smooth scroll trigger:
+pref("general.smoothScroll.pixels", true);
+pref("general.smoothScroll.lines", true);
+pref("general.smoothScroll.pages", true);
+pref("general.smoothScroll.scrollbars", true);
+pref("general.smoothScroll.other", true);
+// "quickAndFixed" forces fixed duration of 150ms for all triggers (otherwise, the prefs
+// which come next define dynamic durations for different scroll triggers). This is the
+// behavior which was used up to (and including) Firefox 12.
+pref("general.smoothScroll.quickAndFixed", false);
+// Different min/max durations for different trigers:
 pref("general.smoothScroll.pixels.durationMinMS", 200);
 pref("general.smoothScroll.pixels.durationMaxMS", 800);
 pref("general.smoothScroll.lines.durationMinMS", 150);
-pref("general.smoothScroll.lines.durationMaxMS", 150);
+pref("general.smoothScroll.lines.durationMaxMS", 300);
 pref("general.smoothScroll.pages.durationMinMS", 150);
 pref("general.smoothScroll.pages.durationMaxMS", 150);
 pref("general.smoothScroll.scrollbars.durationMinMS", 150);
 pref("general.smoothScroll.scrollbars.durationMaxMS", 150);
 pref("general.smoothScroll.other.durationMinMS", 150);
 pref("general.smoothScroll.other.durationMaxMS", 150);
-pref("general.smoothScroll.pixels", true);
-pref("general.smoothScroll.lines", true);
-pref("general.smoothScroll.pages", true);
-pref("general.smoothScroll.scrollbars", true);
-pref("general.smoothScroll.other", true);
 // To connect consecutive scroll events into a continuous flow, the animation's duration
 // should be longer than scroll events intervals (or else the scroll will stop
 // before the next event arrives - we're guessing next interval by averaging recent
