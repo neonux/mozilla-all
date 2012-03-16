@@ -146,12 +146,10 @@ function addNewTabPageTab() {
     cw = browser.contentWindow;
 
     if (NewTabUtils.allPages.enabled) {
-      waitForFocus(function () {
-        // Continue when the link cache has been populated.
-        NewTabUtils.links.populateCache(function () {
-          cells = cw.gGrid.cells;
-          executeSoon(TestRunner.next);
-        });
+      // Continue when the link cache has been populated.
+      NewTabUtils.links.populateCache(function () {
+        cells = cw.gGrid.cells;
+        executeSoon(TestRunner.next);
       });
     } else {
       TestRunner.next();
@@ -290,7 +288,13 @@ function simulateDrop(aDropTarget, aDragSource) {
  * @param aCallback The function to call when finished restoring.
  */
 function restore(aCallback) {
-  whenPagesUpdated();
+  NewTabUtils.allPages.register({
+    update: function () {
+      NewTabUtils.allPages.unregister(this);
+      executeSoon(aCallback);
+    }
+  });
+
   NewTabUtils.restore();
 }
 
@@ -308,17 +312,5 @@ function whenPagesUpdated(aCallback) {
   NewTabUtils.allPages.register(page);
   registerCleanupFunction(function () {
     NewTabUtils.allPages.unregister(page);
-  });
-}
-
-/**
- * Resumes testing when all pages have been updated.
- */
-function whenPagesUpdated() {
-  NewTabUtils.allPages.register({
-    update: function () {
-      NewTabUtils.allPages.unregister(this);
-      executeSoon(TestRunner.next);
-    }
   });
 }
