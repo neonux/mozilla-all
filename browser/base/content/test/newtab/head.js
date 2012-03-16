@@ -284,21 +284,6 @@ function simulateDrop(aDropTarget, aDragSource) {
 }
 
 /**
- * Restores all sites that have been removed from the Wew Tab Page.
- * @param aCallback The function to call when finished restoring.
- */
-function restore(aCallback) {
-  NewTabUtils.allPages.register({
-    update: function () {
-      NewTabUtils.allPages.unregister(this);
-      executeSoon(aCallback);
-    }
-  });
-
-  NewTabUtils.restore();
-}
-
-/**
  * Resumes testing when all pages have been updated.
  */
 function whenPagesUpdated(aCallback) {
