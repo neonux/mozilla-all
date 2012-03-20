@@ -69,6 +69,7 @@
 @BINPATH@/@MOZ_CHILD_PROCESS_NAME@
 #endif
 #ifdef XP_WIN32
+#ifdef MOZ_WIN32_REDIST
 #ifndef MOZ_DEBUG
 #if _MSC_VER == 1400
 @BINPATH@/Microsoft.VC80.CRT.manifest
@@ -86,6 +87,7 @@
 #elif _MSC_VER == 1700
 @BINPATH@/msvcp110.dll
 @BINPATH@/msvcr110.dll
+#endif
 #endif
 #endif
 #endif
@@ -201,7 +203,9 @@
 @BINPATH@/components/inspector.xpt
 @BINPATH@/components/intl.xpt
 @BINPATH@/components/jar.xpt
+#ifdef MOZ_JSDEBUGGER
 @BINPATH@/components/jsdservice.xpt
+#endif
 @BINPATH@/components/jsdebugger.xpt
 @BINPATH@/components/jsinspector.xpt
 @BINPATH@/components/layout_base.xpt
