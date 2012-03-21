@@ -208,9 +208,11 @@ TabItem.prototype = Utils.extend(new Item(), new Subscribable(), {
     this.$canvas.css({opacity: 0});
     let label = "";
     let title;
+    if ("_originalTitle" in tabData)
+      this._originalTitle = tabData._originalTitle;
     if (tabData.title) {
       label = tabData.title;
-      title = label + "\n" + tabData.url;
+      title = (this._originalTitle || label) + "\n" + tabData.url;
     } else {
       title = tabData.url;
     }
@@ -238,6 +240,8 @@ TabItem.prototype = Utils.extend(new Item(), new Subscribable(), {
       groupID: (this.parent ? this.parent.id : 0),
       title: this.tab.label
     };
+    if (this.tab._originalTitle != undefined)
+      data["_originalTitle"] = this.tab._originalTitle;
     if (this.parent && this.parent.getActiveTab() == this)
       data.active = true;
 
@@ -1017,7 +1021,8 @@ let TabItems = {
         tabItem.url = tabUrl;
         tabItem.save();
       }
-      tabItem.$container.attr("title", label + "\n" + tabUrl);
+      tabItem.$container.attr("title",
+        (tab._originalTitle || label) + "\n" + tabUrl);
 
       // ___ Make sure the tab is complete and ready for updating.
       if (!this.isComplete(tab) && (!options || !options.force)) {
