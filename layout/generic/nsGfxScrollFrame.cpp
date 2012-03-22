@@ -1350,13 +1350,15 @@ public:
   // Cached Preferences values to avoid re-reading them when extending an existing
   // animation for the same profile (can be as frequent as every 10(!)ms for a quick
   // roll of the mouse wheel).
-  // These values are: minimum and maximum animation duration per profile, and a global
-  // ratio which defines how longer is the animation's duration compared to the average
-  // recent events intervals (such that for a relatively consistent events rate, the
-  // next event arrives before current animation ends).
+  // These values are minimum and maximum animation duration per profile, is smoothness
+  // enabled for that profile, and a global ratio which defines how longer is the
+  // animation's duration compared to the average recent events intervals (such
+  // that for a relatively consistent events rate, the next event arrives before
+  // current animation ends)
   nsIAtom* mProfile;
   PRInt32 mProfileMinMS;
   PRInt32 mProfileMaxMS;
+  bool    mIsProfileSmoothnessEnabled;
   double  mIntervalRatio;
 
   TimeDuration mDuration;
@@ -1411,34 +1413,28 @@ nsGfxScrollFrameInner::AsyncScroll::InitDuration(nsIAtom *aProfile) {
   if (mIsFirstIteration || aProfile != mProfile) {
     mProfile = aProfile;
     mProfileMinMS = mProfileMaxMS = 0;
+    mIsProfileSmoothnessEnabled = false;
     mIntervalRatio = 1;
 
     // Default values for all preferences are defined in all.js
     if (aProfile) {
       static const PRInt32 kDefaultMinMS = 150, kDefaultMaxMS = 150;
-      static const bool kDefaultIsSmoothEnabled = true, kDefaultQuickAndFixed = false;
+      static const bool kDefaultIsSmoothEnabled = true;
 
       nsCAutoString profileName;
       aProfile->ToUTF8String(profileName);
       nsCAutoString prefBase = NS_LITERAL_CSTRING("general.smoothScroll.") + profileName;
 
-      bool isProfileSmoothnessEnabled = Preferences::GetBool(prefBase.get(), kDefaultIsSmoothEnabled);
-      if (isProfileSmoothnessEnabled){
-        if(Preferences::GetBool("general.smoothScroll.quickAndFixed", kDefaultQuickAndFixed)){
-          // Override discrete profiles - set to fixed minimum duration for all scrolls.
-          mProfileMinMS = kDefaultMinMS;
-          mProfileMaxMS = kDefaultMinMS;
-        } else {
-          // Use different values for different profiles
-          nsCAutoString prefMin = prefBase + NS_LITERAL_CSTRING(".durationMinMS");
-          nsCAutoString prefMax = prefBase + NS_LITERAL_CSTRING(".durationMaxMS");
-          mProfileMinMS = Preferences::GetInt(prefMin.get(), kDefaultMinMS);
-          mProfileMaxMS = Preferences::GetInt(prefMax.get(), kDefaultMaxMS);
+      mIsProfileSmoothnessEnabled = Preferences::GetBool(prefBase.get(), kDefaultIsSmoothEnabled);
+      if (mIsProfileSmoothnessEnabled) {
+        nsCAutoString prefMin = prefBase + NS_LITERAL_CSTRING(".durationMinMS");
+        nsCAutoString prefMax = prefBase + NS_LITERAL_CSTRING(".durationMaxMS");
+        mProfileMinMS = Preferences::GetInt(prefMin.get(), kDefaultMinMS);
+        mProfileMaxMS = Preferences::GetInt(prefMax.get(), kDefaultMaxMS);
 
-          static const PRInt32 kSmoothScrollMaxAllowedAnimationDurationMS = 10000;
-          mProfileMinMS = clamped(mProfileMinMS, 0,             kSmoothScrollMaxAllowedAnimationDurationMS);
-          mProfileMaxMS = clamped(mProfileMaxMS, mProfileMinMS, kSmoothScrollMaxAllowedAnimationDurationMS);
-        }
+        static const PRInt32 kSmoothScrollMaxAllowedAnimationDurationMS = 10000;
+        mProfileMinMS = clamped(mProfileMinMS, 0,             kSmoothScrollMaxAllowedAnimationDurationMS);
+        mProfileMaxMS = clamped(mProfileMaxMS, mProfileMinMS, kSmoothScrollMaxAllowedAnimationDurationMS);
       }
 
       // Keep the animation duration longer than the average event intervals

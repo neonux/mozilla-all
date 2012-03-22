@@ -43,10 +43,6 @@
     background-color: @customToolbarColor@;
   }
 
-  #main-window:not([disablechrome]) #navigator-toolbox:not(:-moz-lwtheme)::after {
-    background-color: #AABCCF;
-  }
-
   .tabbrowser-tab:not(:-moz-lwtheme),
   .tabs-newtab-button:not(:-moz-lwtheme) {
     background-image: @toolbarShadowOnTab@, @bgTabTexture@,

@@ -68,9 +68,7 @@
       <preference id="accessibility.blockautorefresh"  name="accessibility.blockautorefresh"  type="bool"/>
 
       <preference id="general.autoScroll"              name="general.autoScroll"              type="bool"/>
-      <preference id="general.smoothScroll"            name="general.smoothScroll"            type="bool"
-                  onchange="gAdvancedPane.updateQuickSmoothScrolling()"/>
-      <preference id="general.smoothScroll.quickAndFixed"  name="general.smoothScroll.quickAndFixed"  type="bool"/>
+      <preference id="general.smoothScroll"            name="general.smoothScroll"            type="bool"/>
       <preference id="layers.acceleration.disabled"    name="layers.acceleration.disabled"    type="bool"   inverted="true"
                   onchange="gAdvancedPane.updateHardwareAcceleration()"/>
 #ifdef XP_WIN
@@ -185,16 +183,10 @@
                       label="&useAutoScroll.label;"
                       accesskey="&useAutoScroll.accesskey;"
                       preference="general.autoScroll"/>
-            <hbox id="smoothScrollBox" align="center" flex="1">
-              <checkbox id="useSmoothScrolling"
-                        label="&useSmoothScrolling.label;"
-                        accesskey="&useSmoothScrolling.accesskey;"
-                        preference="general.smoothScroll"/>
-              <checkbox id="useSmoothScrollingQuickAndFixed"
-                        label="&useSmoothScrollingQuickAndFixed.label;"
-                        accesskey="&useSmoothScrollingQuickAndFixed.accesskey;"
-                        preference="general.smoothScroll.quickAndFixed"/>
-            </hbox>
+            <checkbox id="useSmoothScrolling"
+                      label="&useSmoothScrolling.label;"
+                      accesskey="&useSmoothScrolling.accesskey;"
+                      preference="general.smoothScroll"/>
             <checkbox id="allowHWAccel"
                       label="&allowHWAccel.label;"
                       accesskey="&allowHWAccel.accesskey;"

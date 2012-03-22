@@ -70,8 +70,6 @@ var gAdvancedPane = {
 #endif
     this.updateActualCacheSize("disk");
     this.updateActualCacheSize("offline");
-    
-    this.updateQuickSmoothScrolling();
   },
 
   /**
@@ -184,17 +182,6 @@ var gAdvancedPane = {
     var toPref = document.getElementById("gfx.direct2d.disabled");
     toPref.value = fromPref.value;
 #endif
-  },
-  
-  /**
-   * Quick smooth scrolling is relevant when smooth scrolling is enabled,
-   * Disable it otherwise.
-   */
-  updateQuickSmoothScrolling: function()
-  {
-    var useSmoothCheckbox = document.getElementById("useSmoothScrolling");
-    var quickCheckbox = document.getElementById("useSmoothScrollingQuickAndFixed");
-    quickCheckbox.disabled = !useSmoothCheckbox.checked;
   },
 
   // NETWORK TAB
