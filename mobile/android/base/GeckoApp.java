@@ -1592,15 +1592,11 @@ abstract public class GeckoApp
     // The ActionBar needs to be refreshed on rotation as different orientation uses different resources
     public void refreshActionBar() {
         if (Build.VERSION.SDK_INT >= 11) {
-            mBrowserToolbar = (BrowserToolbar) getLayoutInflater().inflate(R.layout.browser_toolbar, null);
-            mBrowserToolbar.init();
+            LinearLayout actionBar = (LinearLayout) getLayoutInflater().inflate(R.layout.browser_toolbar, null);
+            mBrowserToolbar.from(actionBar);
             mBrowserToolbar.refresh();
             GeckoActionBar.setBackgroundDrawable(this, getResources().getDrawable(R.drawable.gecko_actionbar_bg));
-            GeckoActionBar.setDisplayOptions(this, ActionBar.DISPLAY_SHOW_CUSTOM, ActionBar.DISPLAY_SHOW_CUSTOM |
-                                                                                  ActionBar.DISPLAY_SHOW_HOME |
-                                                                                  ActionBar.DISPLAY_SHOW_TITLE |
-                                                                                  ActionBar.DISPLAY_USE_LOGO);
-            GeckoActionBar.setCustomView(this, mBrowserToolbar);
+            GeckoActionBar.setCustomView(this, actionBar);
         }
     }
 
@@ -1633,11 +1629,15 @@ abstract public class GeckoApp
 
         setContentView(R.layout.gecko_app);
 
+        LinearLayout actionBar;
         if (Build.VERSION.SDK_INT >= 11) {
-            mBrowserToolbar = (BrowserToolbar) GeckoActionBar.getCustomView(this);
+            actionBar = (LinearLayout) GeckoActionBar.getCustomView(this);
         } else {
-            mBrowserToolbar = (BrowserToolbar) findViewById(R.id.browser_toolbar);
+            actionBar = (LinearLayout) findViewById(R.id.browser_toolbar);
         }
+
+        mBrowserToolbar = new BrowserToolbar(mAppContext);
+        mBrowserToolbar.from(actionBar);
 
         // setup gecko layout
         mGeckoLayout = (RelativeLayout) findViewById(R.id.gecko_layout);
@@ -1670,7 +1670,6 @@ abstract public class GeckoApp
             checkAndLaunchUpdate();
         }
 
-        mBrowserToolbar.init();
         mBrowserToolbar.setTitle(mLastTitle);
 
         String passedUri = null;
@@ -1678,10 +1677,9 @@ abstract public class GeckoApp
         if (uri != null && uri.length() > 0)
             passedUri = mLastTitle = uri;
 
-        mRestoreSession |= getProfile().shouldRestoreSession();
         if (passedUri == null || passedUri.equals("about:home")) {
             // show about:home if we aren't restoring previous session
-            if (!mRestoreSession) {
+            if (! getProfile().hasSession()) {
                 mBrowserToolbar.updateTabCount(1);
                 showAboutHome();
             }
@@ -2786,19 +2784,15 @@ abstract public class GeckoApp
         GeckoAppShell.sendEventToGecko(GeckoEvent.createBroadcastEvent("Tab:Add", args.toString()));
     }
 
+    /* This method is referenced by Robocop via reflection. */
     public GeckoLayerClient getLayerClient() { return mLayerClient; }
     public LayerController getLayerController() { return mLayerController; }
 
     // accelerometer
-    public void onAccuracyChanged(Sensor sensor, int accuracy)
-    {
-        Log.w(LOGTAG, "onAccuracyChanged "+accuracy);
-        GeckoAppShell.sendEventToGecko(GeckoEvent.createSensorAccuracyEvent(accuracy));
-    }
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {}
 
     public void onSensorChanged(SensorEvent event)
     {
-        Log.w(LOGTAG, "onSensorChanged "+event);
         GeckoAppShell.sendEventToGecko(GeckoEvent.createSensorEvent(event));
     }
 
@@ -2806,7 +2800,6 @@ abstract public class GeckoApp
     public void onLocationChanged(Location location)
     {
         Log.w(LOGTAG, "onLocationChanged "+location);
-
         GeckoAppShell.sendEventToGecko(GeckoEvent.createLocationEvent(location));
     }
 

@@ -73,7 +73,6 @@
 #include "nsIXBLService.h"
 #include "nsCaret.h"
 #include "nsPlainTextSerializer.h"
-#include "mozSanitizingSerializer.h"
 #include "nsXMLContentSerializer.h"
 #include "nsXHTMLContentSerializer.h"
 #include "nsRuleNode.h"
@@ -156,8 +155,10 @@ using mozilla::dom::gonk::AudioManager;
 #include "nsSystemPrincipal.h"
 #include "nsNullPrincipal.h"
 #include "nsNetCID.h"
+#ifndef MOZ_WIDGET_GONK
 #if defined(MOZ_WIDGET_ANDROID) || defined(MOZ_PLATFORM_MAEMO)
 #include "nsHapticFeedback.h"
+#endif
 #endif
 #include "nsParserUtils.h"
 
@@ -241,14 +242,7 @@ static void Shutdown();
 #endif
 
 #include "nsGeolocation.h"
-#ifndef MOZ_WIDGET_GONK
-#if defined(XP_UNIX)    || \
-    defined(_WINDOWS)   || \
-    defined(machintosh) || \
-    defined(android)
-#include "nsDeviceMotionSystem.h"
-#endif
-#endif
+#include "nsDeviceMotion.h"
 #include "nsCSPService.h"
 #include "nsISmsService.h"
 #include "nsISmsDatabaseService.h"
@@ -296,13 +290,10 @@ NS_GENERIC_FACTORY_SINGLETON_CONSTRUCTOR(SystemWorkerManager,
 
 #ifdef MOZ_WIDGET_GONK
 NS_GENERIC_FACTORY_CONSTRUCTOR(AudioManager)
-#else
-#if defined(XP_UNIX)    || \
-    defined(_WINDOWS)   || \
-    defined(machintosh) || \
-    defined(android)
-NS_GENERIC_FACTORY_CONSTRUCTOR(nsDeviceMotionSystem)
 #endif
+NS_GENERIC_FACTORY_CONSTRUCTOR(nsDeviceMotion)
+
+#ifndef MOZ_WIDGET_GONK
 #if defined(ANDROID) || defined(MOZ_PLATFORM_MAEMO)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsHapticFeedback)
 #endif
@@ -514,7 +505,6 @@ MAKE_CTOR(CreateXMLContentSerializer,     nsIContentSerializer,        NS_NewXML
 MAKE_CTOR(CreateHTMLContentSerializer,    nsIContentSerializer,        NS_NewHTMLContentSerializer)
 MAKE_CTOR(CreateXHTMLContentSerializer,   nsIContentSerializer,        NS_NewXHTMLContentSerializer)
 MAKE_CTOR(CreatePlainTextSerializer,      nsIContentSerializer,        NS_NewPlainTextSerializer)
-MAKE_CTOR(CreateSanitizingHTMLSerializer, nsIContentSerializer,        NS_NewSanitizingHTMLSerializer)
 MAKE_CTOR(CreateXBLService,               nsIXBLService,               NS_NewXBLService)
 MAKE_CTOR(CreateContentPolicy,            nsIContentPolicy,            NS_NewContentPolicy)
 #ifdef MOZ_XUL
@@ -711,7 +701,6 @@ NS_DEFINE_NAMED_CID(NS_XMLCONTENTSERIALIZER_CID);
 NS_DEFINE_NAMED_CID(NS_XHTMLCONTENTSERIALIZER_CID);
 NS_DEFINE_NAMED_CID(NS_HTMLCONTENTSERIALIZER_CID);
 NS_DEFINE_NAMED_CID(NS_PLAINTEXTSERIALIZER_CID);
-NS_DEFINE_NAMED_CID(MOZ_SANITIZINGHTMLSERIALIZER_CID);
 NS_DEFINE_NAMED_CID(NS_PARSERUTILS_CID);
 NS_DEFINE_NAMED_CID(NS_SCRIPTABLEUNESCAPEHTML_CID);
 NS_DEFINE_NAMED_CID(NS_XBLSERVICE_CID);
@@ -793,14 +782,9 @@ NS_DEFINE_NAMED_CID(NS_NULLPRINCIPAL_CID);
 NS_DEFINE_NAMED_CID(NS_SECURITYNAMESET_CID);
 NS_DEFINE_NAMED_CID(THIRDPARTYUTIL_CID);
 NS_DEFINE_NAMED_CID(NS_STRUCTUREDCLONECONTAINER_CID);
+NS_DEFINE_NAMED_CID(NS_DEVICE_MOTION_CID);
 
 #ifndef MOZ_WIDGET_GONK
-#if defined(XP_UNIX)    || \
-    defined(_WINDOWS)   || \
-    defined(machintosh) || \
-    defined(android)
-NS_DEFINE_NAMED_CID(NS_DEVICE_MOTION_CID);
-#endif
 #if defined(ANDROID) || defined(MOZ_PLATFORM_MAEMO)
 NS_DEFINE_NAMED_CID(NS_HAPTICFEEDBACK_CID);
 #endif
@@ -987,7 +971,6 @@ static const mozilla::Module::CIDEntry kLayoutCIDs[] = {
   { &kNS_HTMLCONTENTSERIALIZER_CID, false, NULL, CreateHTMLContentSerializer },
   { &kNS_XHTMLCONTENTSERIALIZER_CID, false, NULL, CreateXHTMLContentSerializer },
   { &kNS_PLAINTEXTSERIALIZER_CID, false, NULL, CreatePlainTextSerializer },
-  { &kMOZ_SANITIZINGHTMLSERIALIZER_CID, false, NULL, CreateSanitizingHTMLSerializer },
   { &kNS_PARSERUTILS_CID, false, NULL, nsParserUtilsConstructor },
   { &kNS_SCRIPTABLEUNESCAPEHTML_CID, false, NULL, nsParserUtilsConstructor },
   { &kNS_XBLSERVICE_CID, false, NULL, CreateXBLService },
@@ -1067,13 +1050,8 @@ static const mozilla::Module::CIDEntry kLayoutCIDs[] = {
   { &kNS_SYSTEMPRINCIPAL_CID, false, NULL, nsSystemPrincipalConstructor },
   { &kNS_NULLPRINCIPAL_CID, false, NULL, nsNullPrincipalConstructor },
   { &kNS_SECURITYNAMESET_CID, false, NULL, nsSecurityNameSetConstructor },
+  { &kNS_DEVICE_MOTION_CID, false, NULL, nsDeviceMotionConstructor },
 #ifndef MOZ_WIDGET_GONK
-#if defined(XP_UNIX)    || \
-    defined(_WINDOWS)   || \
-    defined(machintosh) || \
-    defined(android)
-  { &kNS_DEVICE_MOTION_CID, false, NULL, nsDeviceMotionSystemConstructor },
-#endif
 #if defined(ANDROID) || defined(MOZ_PLATFORM_MAEMO)
   { &kNS_HAPTICFEEDBACK_CID, false, NULL, nsHapticFeedbackConstructor },
 #endif
@@ -1135,7 +1113,6 @@ static const mozilla::Module::ContractIDEntry kLayoutContracts[] = {
   { NS_CONTENTSERIALIZER_CONTRACTID_PREFIX "text/html", &kNS_HTMLCONTENTSERIALIZER_CID },
   { NS_CONTENTSERIALIZER_CONTRACTID_PREFIX "application/vnd.mozilla.xul+xml", &kNS_XMLCONTENTSERIALIZER_CID },
   { NS_CONTENTSERIALIZER_CONTRACTID_PREFIX "text/plain", &kNS_PLAINTEXTSERIALIZER_CID },
-  { MOZ_SANITIZINGHTMLSERIALIZER_CONTRACTID, &kMOZ_SANITIZINGHTMLSERIALIZER_CID },
   { NS_PARSERUTILS_CONTRACTID, &kNS_PARSERUTILS_CID },
   { NS_SCRIPTABLEUNESCAPEHTML_CONTRACTID, &kNS_SCRIPTABLEUNESCAPEHTML_CID },
   { "@mozilla.org/xbl;1", &kNS_XBLSERVICE_CID },
@@ -1206,13 +1183,8 @@ static const mozilla::Module::ContractIDEntry kLayoutContracts[] = {
   { NS_SYSTEMPRINCIPAL_CONTRACTID, &kNS_SYSTEMPRINCIPAL_CID },
   { NS_NULLPRINCIPAL_CONTRACTID, &kNS_NULLPRINCIPAL_CID },
   { NS_SECURITYNAMESET_CONTRACTID, &kNS_SECURITYNAMESET_CID },
-#ifndef MOZ_WIDGET_GONK
-#if defined(XP_UNIX)    || \
-    defined(_WINDOWS)   || \
-    defined(machintosh) || \
-    defined(android)
   { NS_DEVICE_MOTION_CONTRACTID, &kNS_DEVICE_MOTION_CID },
-#endif
+#ifndef MOZ_WIDGET_GONK
 #if defined(ANDROID) || defined(MOZ_PLATFORM_MAEMO)
   { "@mozilla.org/widget/hapticfeedback;1", &kNS_HAPTICFEEDBACK_CID },
 #endif

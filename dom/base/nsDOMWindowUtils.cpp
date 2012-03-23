@@ -60,7 +60,7 @@
 #include "nsIFrame.h"
 #include "nsIWidget.h"
 #include "nsGUIEvent.h"
-#include "nsIParser.h"
+#include "nsCharsetSource.h"
 #include "nsJSEnvironment.h"
 #include "nsJSUtils.h"
 
@@ -744,6 +744,35 @@ nsDOMWindowUtils::SendNativeMouseEvent(PRInt32 aScreenX,
 
   return widget->SynthesizeNativeMouseEvent(nsIntPoint(aScreenX, aScreenY),
                                             aNativeMessage, aModifierFlags);
+}
+
+NS_IMETHODIMP
+nsDOMWindowUtils::SendNativeMouseScrollEvent(PRInt32 aScreenX,
+                                             PRInt32 aScreenY,
+                                             PRUint32 aNativeMessage,
+                                             double aDeltaX,
+                                             double aDeltaY,
+                                             double aDeltaZ,
+                                             PRUint32 aModifierFlags,
+                                             PRUint32 aAdditionalFlags,
+                                             nsIDOMElement* aElement)
+{
+  if (!IsUniversalXPConnectCapable()) {
+    return NS_ERROR_DOM_SECURITY_ERR;
+  }
+
+  // get the widget to send the event to
+  nsCOMPtr<nsIWidget> widget = GetWidgetForElement(aElement);
+  if (!widget) {
+    return NS_ERROR_FAILURE;
+  }
+
+  return widget->SynthesizeNativeMouseScrollEvent(nsIntPoint(aScreenX,
+                                                             aScreenY),
+                                                  aNativeMessage,
+                                                  aDeltaX, aDeltaY, aDeltaZ,
+                                                  aModifierFlags,
+                                                  aAdditionalFlags);
 }
 
 NS_IMETHODIMP

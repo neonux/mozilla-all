@@ -234,6 +234,7 @@ var BrowserApp = {
     PermissionsHelper.init();
     CharacterEncoding.init();
     SearchEngines.init();
+    ActivityObserver.init();
 
     // Init LoginManager
     Cc["@mozilla.org/login-manager;1"].getService(Ci.nsILoginManager);
@@ -1515,6 +1516,7 @@ Tab.prototype = {
     this.browser.addEventListener("DOMWindowClose", this, true);
     this.browser.addEventListener("DOMWillOpenModalDialog", this, true);
     this.browser.addEventListener("scroll", this, true);
+    this.browser.addEventListener("MozScrolledAreaChanged", this, true);
     this.browser.addEventListener("PluginClickToPlay", this, true);
     this.browser.addEventListener("pagehide", this, true);
     this.browser.addEventListener("pageshow", this, true);
@@ -1562,6 +1564,7 @@ Tab.prototype = {
     this.browser.removeEventListener("DOMWillOpenModalDialog", this, true);
     this.browser.removeEventListener("scroll", this, true);
     this.browser.removeEventListener("PluginClickToPlay", this, true);
+    this.browser.removeEventListener("MozScrolledAreaChanged", this, true);
     this.browser.removeEventListener("pagehide", this, true);
     this.browser.removeEventListener("pageshow", this, true);
 
@@ -1589,6 +1592,10 @@ Tab.prototype = {
       this.browser.setAttribute("type", "content-targetable");
       this.browser.docShellIsActive = false;
     }
+  },
+
+  getActive: function getActive() {
+      return this.browser.docShellIsActive;
   },
 
   setDisplayPort: function(aViewportX, aViewportY, aDisplayPortRect) {
@@ -1689,17 +1696,16 @@ Tab.prototype = {
     return viewport;
   },
 
-  sendViewportUpdate: function() {
+  sendViewportUpdate: function(aPageSizeUpdate) {
     let message;
-    if (BrowserApp.selectedTab == this) {
-      // for foreground tabs, send the viewport update unless the document
-      // displayed is different from the content document
-      if (!BrowserApp.isBrowserContentDocumentDisplayed())
-        return;
+    // for foreground tabs, send the viewport update unless the document
+    // displayed is different from the content document. In that case, just
+    // calculate the display port.
+    if (BrowserApp.selectedTab == this && BrowserApp.isBrowserContentDocumentDisplayed()) {
       message = this.getViewport();
-      message.type = "Viewport:Update";
+      message.type = aPageSizeUpdate ? "Viewport:PageSize" : "Viewport:Update";
     } else {
-      // for bcakground tabs, request a new display port calculation, so that
+      // for background tabs, request a new display port calculation, so that
       // when we do switch to that tab, we have the correct display port and
       // don't need to draw twice (once to allow the first-paint viewport to
       // get to java, and again once java figures out the display port).
@@ -1856,6 +1862,17 @@ Tab.prototype = {
         if (this.userScrollPos.x != win.scrollX || this.userScrollPos.y != win.scrollY) {
           this.sendViewportUpdate();
         }
+        break;
+      }
+
+      case "MozScrolledAreaChanged": {
+        // This event is only fired for root scroll frames, and only when the
+        // scrolled area has actually changed, so no need to check for that.
+        // Just make sure it's the event for the correct root scroll frame.
+        if (aEvent.originalTarget != this.browser.contentDocument)
+          return;
+
+        this.sendViewportUpdate(true);
         break;
       }
 
@@ -2194,11 +2211,12 @@ Tab.prototype = {
           // and then use the metadata to figure out how it needs to be updated
           ViewportHandler.updateMetadata(this);
 
-          // The document element must have a display port on it whenever we are about to
-          // paint. This is the point just before the first paint, so we set the display port
-          // to a default value here. Once Java is aware of this document it will overwrite
-          // it with a better-calculated display port.
-          this.setDisplayPort(0, 0, {left: 0, top: 0, right: gScreenWidth, bottom: gScreenHeight });
+          // If we draw without a display-port, things can go wrong. While it's
+          // almost certain a display-port has been set via the
+          // MozScrolledAreaChanged event, make sure by sending a viewport
+          // update here. As it's the first paint, this will end up being a
+          // display-port request only.
+          this.sendViewportUpdate();
 
           BrowserApp.displayedDocumentChanged();
           this.contentDocumentIsDisplayed = true;
@@ -4405,5 +4423,28 @@ var SearchEngines = {
         }
       }
     });
+  }
+};
+
+var ActivityObserver = {
+  init: function ao_init() {
+    Services.obs.addObserver(this, "application-background", false);
+    Services.obs.addObserver(this, "application-foreground", false);
+  },
+
+  observe: function ao_observe(aSubject, aTopic, aData) {
+    let isForeground = false
+    switch (aTopic) {
+      case "application-background" :
+        isForeground = false;
+        break;
+      case "application-foreground" :
+        isForeground = true;
+        break;
+    }
+
+    if (BrowserApp.selectedTab.getActive() != isForeground) {
+      BrowserApp.selectedTab.setActive(isForeground);
+    }
   }
 };
