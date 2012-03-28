@@ -2631,6 +2631,7 @@ function UpdateUrlbarSearchSplitterState()
       splitter.id = "urlbar-search-splitter";
       splitter.setAttribute("resizebefore", "flex");
       splitter.setAttribute("resizeafter", "flex");
+      splitter.setAttribute("skipintoolbarset", "true");
       splitter.className = "chromeclass-toolbar-additional";
     }
     urlbar.parentNode.insertBefore(splitter, ibefore);
@@ -4069,7 +4070,7 @@ var FullScreen = {
       gBrowser.tabContainer.removeEventListener("TabOpen", this.exitDomFullScreen);
       gBrowser.tabContainer.removeEventListener("TabClose", this.exitDomFullScreen);
       gBrowser.tabContainer.removeEventListener("TabSelect", this.exitDomFullScreen);
-      if (this.useLionFullScreen) {
+      if (!this.useLionFullScreen) {
         window.removeEventListener("deactivate", this);
       }
     }
@@ -4398,7 +4399,6 @@ var FullScreen = {
     // and in tabs-on-bottom mode, move them back to the navigation toolbar.
     // When there is a chance the tab bar may be collapsed, put window
     // controls on nav bar.
-    var fullscreenflex = document.getElementById("fullscreenflex");
     var fullscreenctls = document.getElementById("window-controls");
     var navbar = document.getElementById("nav-bar");
     var ctlsOnTabbar = window.toolbar.visible &&
@@ -4406,14 +4406,12 @@ var FullScreen = {
                           (TabsOnTop.enabled &&
                            !gPrefService.getBoolPref("browser.tabs.autoHide")));
     if (fullscreenctls.parentNode == navbar && ctlsOnTabbar) {
+      fullscreenctls.removeAttribute("flex");
       document.getElementById("TabsToolbar").appendChild(fullscreenctls);
-      // we don't need this space in tabs-on-top mode, so prevent it from 
-      // being shown
-      fullscreenflex.removeAttribute("fullscreencontrol");
     }
     else if (fullscreenctls.parentNode.id == "TabsToolbar" && !ctlsOnTabbar) {
+      fullscreenctls.setAttribute("flex", "1");
       navbar.appendChild(fullscreenctls);
-      fullscreenflex.setAttribute("fullscreencontrol", "true");
     }
 
     var controls = document.getElementsByAttribute("fullscreencontrol", "true");
@@ -8652,6 +8650,31 @@ let gPrivateBrowsingUI = {
 
   get privateBrowsingEnabled() {
     return this._privateBrowsingService.privateBrowsingEnabled;
+  },
+
+  /**
+   * These accessors are used to support per-window Private Browsing mode.
+   * For now the getter returns nsIPrivateBrowsingService.privateBrowsingEnabled,
+   * and the setter should only be used in tests.
+   */
+  get privateWindow() {
+    return window.getInterface(Ci.nsIWebNavigation)
+                 .QueryInterface(Ci.nsIDocShellTreeItem)
+                 .treeOwner
+                 .QueryInterface(Ci.nsIInterfaceRequestor)
+                 .getInterface(Ci.nsIXULWindow)
+                 .docShell.QueryInterface(Ci.nsILoadContext)
+                 .usePrivateBrowsing;
+  },
+
+  set privateWindow(val) {
+    return window.getInterface(Ci.nsIWebNavigation)
+                 .QueryInterface(Ci.nsIDocShellTreeItem)
+                 .treeOwner
+                 .QueryInterface(Ci.nsIInterfaceRequestor)
+                 .getInterface(Ci.nsIXULWindow)
+                 .docShell.QueryInterface(Ci.nsILoadContext)
+                 .usePrivateBrowsing = val;
   }
 };
 

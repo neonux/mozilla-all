@@ -1210,23 +1210,18 @@ nsXMLHttpRequest::GetStatus(PRUint32 *aStatus)
     }
   }
 
-  nsCOMPtr<nsIHttpChannel> httpChannel = GetCurrentHttpChannel();
+  PRUint16 readyState;
+  GetReadyState(&readyState);
+  if (readyState == UNSENT || readyState == OPENED || mErrorLoad) {
+    return NS_OK;
+  }
 
+  nsCOMPtr<nsIHttpChannel> httpChannel = GetCurrentHttpChannel();
   if (httpChannel) {
     nsresult rv = httpChannel->GetResponseStatus(aStatus);
-    if (rv == NS_ERROR_NOT_AVAILABLE) {
-      // Someone's calling this before we got a response... Check our
-      // ReadyState.  If we're at 3 or 4, then this means the connection
-      // errored before we got any data; return 0 in that case.
-      PRUint16 readyState;
-      GetReadyState(&readyState);
-      if (readyState >= LOADING) {
-        *aStatus = 0;
-        return NS_OK;
-      }
+    if (NS_FAILED(rv)) {
+      *aStatus = 0;
     }
-
-    return rv;
   }
 
   return NS_OK;
@@ -2773,10 +2768,13 @@ nsXMLHttpRequest::Send(nsIVariant *aBody)
   // Create our listener
   nsCOMPtr<nsIStreamListener> listener = this;
   if (mState & XML_HTTP_REQUEST_MULTIPART) {
+    Telemetry::Accumulate(Telemetry::MULTIPART_XHR_RESPONSE, 1);
     listener = new nsMultipartProxyListener(listener);
     if (!listener) {
       return NS_ERROR_OUT_OF_MEMORY;
     }
+  } else {
+    Telemetry::Accumulate(Telemetry::MULTIPART_XHR_RESPONSE, 0);
   }
 
   // Blocking gets are common enough out of XHR that we should mark
