@@ -1385,6 +1385,8 @@ function BrowserStartup() {
 
   gPrivateBrowsingUI.init();
 
+  DownloadsButton.initializePlaceholder();
+
   retrieveToolbarIconsizesFromTheme();
 
   gDelayedStartupTimeoutId = setTimeout(delayedStartup, 0, isLoadingBlank, mustLoadSidebar);
@@ -1632,6 +1634,11 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
     }
 #endif
   }, 10000);
+
+  // We can intialize the downloads indicator here in delayedStartup() because
+  // it is initially invisible, at least until the download manager is started,
+  // thus no flickering occurs when we set its position.
+  DownloadsButton.initializeIndicator();
 
 #ifndef XP_MACOSX
   updateEditUIVisibility();
@@ -3265,29 +3272,6 @@ var newWindowButtonObserver = {
   }
 }
 
-var DownloadsButtonDNDObserver = {
-  onDragOver: function (aEvent)
-  {
-    var types = aEvent.dataTransfer.types;
-    if (types.contains("text/x-moz-url") ||
-        types.contains("text/uri-list") ||
-        types.contains("text/plain"))
-      aEvent.preventDefault();
-  },
-
-  onDragExit: function (aEvent)
-  {
-  },
-
-  onDrop: function (aEvent)
-  {
-    let name = { };
-    let url = browserDragAndDrop.drop(aEvent, name);
-    if (url)
-      saveURL(url, name, null, true, true);
-  }
-}
-
 const DOMLinkHandler = {
   handleEvent: function (event) {
     switch (event.type) {
@@ -3715,6 +3699,7 @@ function BrowserCustomizeToolbar()
 
   PlacesToolbarHelper.customizeStart();
   BookmarksMenuButton.customizeStart();
+  DownloadsButton.customizeStart();
 
   TabsInTitlebar.allowedBy("customizing-toolbars", false);
 
@@ -3781,6 +3766,7 @@ function BrowserToolboxCustomizeDone(aToolboxChanged) {
 
   PlacesToolbarHelper.customizeDone();
   BookmarksMenuButton.customizeDone();
+  DownloadsButton.customizeDone();
 
   // The url bar splitter state is dependent on whether stop/reload
   // and the location bar are combined, so we need this ordering
@@ -4474,7 +4460,8 @@ var XULBrowserWindow = {
   startTime: 0,
   statusText: "",
   isBusy: false,
-  inContentWhitelist: ["about:addons", "about:permissions", "about:sync-progress"],
+  inContentWhitelist: ["about:addons", "about:permissions", 
+                       "about:sync-progress", "about:preferences"],
 
   QueryInterface: function (aIID) {
     if (aIID.equals(Ci.nsIWebProgressListener) ||
