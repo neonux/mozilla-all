@@ -6830,6 +6830,16 @@ function warnAboutClosingWindow() {
 #endif
 }
 
+function OnWindowDragEnter(event) {
+  let draggedTab = event.dataTransfer.mozGetDataAt(TAB_DROP_TYPE, 0);
+  if (draggedTab && draggedTab.parentNode) {
+    let panel = draggedTab.parentNode._tabDragPanel;
+    panel._noHide = true;
+    window.focus();
+    delete panel._noHide;
+  }
+}
+
 var MailIntegration = {
   sendLinkForWindow: function (aWindow) {
     this.sendMessage(aWindow.location.href,
