@@ -153,6 +153,10 @@ function gen_resetState()
   // Ensure that the panel is closed and data is unloaded.
   DownloadsCommon.data.clear();
   DownloadsCommon.data._loadState = DownloadsCommon.data.kLoadNone;
+
+  // Wait for focus on the main window.
+  waitForFocus(testRunner.continueTest);
+  yield;
 }
 
 function gen_addDownloadRows(aDataRows)
@@ -215,11 +219,11 @@ function gen_openPanel(aData)
   // Start loading all the downloads from the database asynchronously.
   DownloadsCommon.data.ensurePersistentDataLoaded(false);
 
-  // Open the downloads panel, waiting until loading is completed.
-  DownloadsPanel.showPanel();
-  yield;
-
   // Wait for focus on the main window.
   waitForFocus(testRunner.continueTest);
+  yield;
+
+  // Open the downloads panel, waiting until loading is completed.
+  DownloadsPanel.showPanel();
   yield;
 }
