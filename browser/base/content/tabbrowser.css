@@ -32,14 +32,6 @@ tabpanels {
   background-color: transparent;
 }
 
-.tab-drag-panel[drag=move] {
-  visibility: hidden;
-}
-
-.tab-drag-panel[drag=drop] > .tab-drag-preview {
-  visibility: collapse;
-}
-
 .tab-drop-indicator {
   position: relative;
   z-index: 2;
