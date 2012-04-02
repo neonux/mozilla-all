@@ -361,6 +361,10 @@ pref("places.frecency.unvisitedTypedBonus", 200);
 
 // disable color management
 pref("gfx.color_management.mode", 0);
+#ifdef ANDROID
+// 0=fixed margin, 1=velocity bias, 2=dynamic resolution, 3=no margins
+pref("gfx.displayport.strategy", 0);
+#endif
 
 // don't allow JS to move and resize existing windows
 pref("dom.disable_window_move_resize", true);
@@ -485,6 +489,7 @@ pref("app.faqURL", "http://www.mozilla.com/%LOCALE%/mobile/beta/faq/");
 pref("app.featuresURL", "http://www.mozilla.com/%LOCALE%/mobile/features/");
 pref("app.faqURL", "http://www.mozilla.com/%LOCALE%/mobile/faq/");
 #endif
+pref("app.marketplaceURL", "https://marketplace.mozilla.org/");
 
 // Name of alternate about: page for certificate errors (when undefined, defaults to about:neterror)
 pref("security.alternate_certificate_error_page", "certerror");

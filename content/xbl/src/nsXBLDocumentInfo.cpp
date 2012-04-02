@@ -59,8 +59,12 @@
 #include "mozilla/scache/StartupCache.h"
 #include "mozilla/scache/StartupCacheUtils.h"
 #include "nsCCUncollectableMarker.h"
+#include "mozilla/dom/bindings/Utils.h"
 
 using namespace mozilla::scache;
+using namespace mozilla;
+
+using mozilla::dom::bindings::DestroyProtoOrIfaceCache;
 
 static const char kXBLCachePrefix[] = "xblcache";
 
@@ -179,6 +183,8 @@ nsXBLDocGlobalObject_finalize(JSContext *cx, JSObject *obj)
 
   // The addref was part of JSObject construction
   NS_RELEASE(nativeThis);
+
+  DestroyProtoOrIfaceCache(obj);
 }
 
 static JSBool
@@ -265,14 +271,11 @@ nsXBLDocGlobalObject::SetContext(nsIScriptContext *aScriptContext)
     mScriptContext = nsnull;
     return;
   }
-  NS_ASSERTION(aScriptContext->GetScriptTypeID() ==
-                                        nsIProgrammingLanguage::JAVASCRIPT,
-               "xbl is not multi-language");
   aScriptContext->WillInitializeContext();
   // NOTE: We init this context with a NULL global, so we automatically
   // hook up to the existing nsIScriptGlobalObject global setup by
   // nsGlobalWindow.
-  nsresult rv;
+  DebugOnly<nsresult> rv;
   rv = aScriptContext->InitContext();
   NS_WARN_IF_FALSE(NS_SUCCEEDED(rv), "Script Language's InitContext failed");
   aScriptContext->SetGCOnDestruction(false);

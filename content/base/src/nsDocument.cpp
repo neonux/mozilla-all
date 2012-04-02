@@ -1420,12 +1420,9 @@ nsDOMImplementation::CreateDocument(const nsAString& aNamespaceURI,
 
   nsresult rv;
   if (!aQualifiedName.IsEmpty()) {
-    nsIParserService *parserService = nsContentUtils::GetParserService();
-    NS_ENSURE_TRUE(parserService, NS_ERROR_FAILURE);
-
     const nsAFlatString& qName = PromiseFlatString(aQualifiedName);
     const PRUnichar *colon;
-    rv = parserService->CheckQName(qName, true, &colon);
+    rv = nsContentUtils::CheckQName(qName, true, &colon);
     NS_ENSURE_SUCCESS(rv, rv);
 
     if (colon &&
@@ -1674,6 +1671,8 @@ nsDocument::~nsDocument()
   // unlocked state, and then clear the table.
   SetImageLockingState(false);
   mImageTracker.Clear();
+
+  mPlugins.Clear();
 }
 
 NS_IMPL_CYCLE_COLLECTION_CLASS(nsDocument)
@@ -2024,7 +2023,8 @@ nsDocument::Init()
   mScriptLoader = new nsScriptLoader(this);
   NS_ENSURE_TRUE(mScriptLoader, NS_ERROR_OUT_OF_MEMORY);
 
-  if (!mImageTracker.Init()) {
+  if (!mImageTracker.Init() ||
+      !mPlugins.Init()) {
     return NS_ERROR_OUT_OF_MEMORY;
   }
 
@@ -3104,22 +3104,6 @@ nsDocument::SetHeaderData(nsIAtom* aHeaderField, const nsAString& aData)
     CopyUTF16toUTF8(aData, mContentLanguage);
   }
 
-  // Set the default script-type on the root element.
-  if (aHeaderField == nsGkAtoms::headerContentScriptType) {
-    Element *root = GetRootElement();
-    if (root) {
-      // Get the script-type ID for this value.
-      nsresult rv;
-      nsCOMPtr<nsIScriptRuntime> runtime;
-      rv = NS_GetScriptRuntime(aData, getter_AddRefs(runtime));
-      if (NS_FAILED(rv) || runtime == nsnull) {
-        NS_WARNING("The script-type is unknown");
-      } else {
-        root->SetScriptTypeID(runtime->GetScriptTypeID());
-      }
-    }
-  }
-
   if (aHeaderField == nsGkAtoms::headerDefaultStyle) {
     // Only mess with our stylesheets if we don't have a lastStyleSheetSet, per
     // spec.
@@ -3514,12 +3498,12 @@ nsDocument::AppendChildTo(nsIContent* aKid, bool aNotify)
   return nsDocument::InsertChildAt(aKid, GetChildCount(), aNotify);
 }
 
-nsresult
+void
 nsDocument::RemoveChildAt(PRUint32 aIndex, bool aNotify)
 {
   nsCOMPtr<nsIContent> oldKid = GetChildAt(aIndex);
   if (!oldKid) {
-    return NS_OK;
+    return;
   }
 
   if (oldKid->IsElement()) {
@@ -3527,10 +3511,8 @@ nsDocument::RemoveChildAt(PRUint32 aIndex, bool aNotify)
     DestroyElementMaps();
   }
 
-  nsresult rv =
-    doRemoveChildAt(aIndex, aNotify, oldKid, mChildren);
+  doRemoveChildAt(aIndex, aNotify, oldKid, mChildren);
   mCachedRootElement = nsnull;
-  return rv;
 }
 
 PRInt32
@@ -5986,7 +5968,6 @@ BlastFunc(nsAttrHashKey::KeyType aKey, nsDOMAttribute *aData, void* aUserArg)
 static void
 BlastSubtreeToPieces(nsINode *aNode)
 {
-  PRUint32 i, count;
   if (aNode->IsElement()) {
     nsGenericElement *element = static_cast<nsGenericElement*>(aNode);
     const nsDOMAttributeMap *map = element->GetAttributeMap();
@@ -6008,16 +5989,10 @@ BlastSubtreeToPieces(nsINode *aNode)
     }
   }
 
-  count = aNode->GetChildCount();
-  for (i = 0; i < count; ++i) {
+  PRUint32 count = aNode->GetChildCount();
+  for (PRUint32 i = 0; i < count; ++i) {
     BlastSubtreeToPieces(aNode->GetFirstChild());
-#ifdef DEBUG
-    nsresult rv =
-#endif
-      aNode->RemoveChildAt(0, false);
-
-    // XXX Should we abort here?
-    NS_ASSERTION(NS_SUCCEEDED(rv), "Uhoh, RemoveChildAt shouldn't fail!");
+    aNode->RemoveChildAt(0, false);
   }
 }
 
@@ -6121,8 +6096,7 @@ nsDocument::AdoptNode(nsIDOMNode *aAdoptedNode, nsIDOMNode **aResult)
       // Remove from parent.
       nsCOMPtr<nsINode> parent = adoptedNode->GetNodeParent();
       if (parent) {
-        rv = parent->RemoveChildAt(parent->IndexOf(adoptedNode), true);
-        NS_ENSURE_SUCCESS(rv, rv);
+        parent->RemoveChildAt(parent->IndexOf(adoptedNode), true);
       }
 
       break;
@@ -8362,6 +8336,51 @@ nsDocument::RemoveImage(imgIRequest* aImage)
   return rv;
 }
 
+nsresult
+nsDocument::AddPlugin(nsIObjectLoadingContent* aPlugin)
+{
+  MOZ_ASSERT(aPlugin);
+  if (!mPlugins.PutEntry(aPlugin)) {
+    return NS_ERROR_OUT_OF_MEMORY;
+  }
+  return NS_OK;
+}
+
+void
+nsDocument::RemovePlugin(nsIObjectLoadingContent* aPlugin)
+{
+  MOZ_ASSERT(aPlugin);
+  mPlugins.RemoveEntry(aPlugin);
+}
+
+static bool
+AllSubDocumentPluginEnum(nsIDocument* aDocument, void* userArg)
+{
+  nsTArray<nsIObjectLoadingContent*>* plugins =
+    reinterpret_cast< nsTArray<nsIObjectLoadingContent*>* >(userArg);
+  MOZ_ASSERT(plugins);
+  aDocument->GetPlugins(*plugins);
+  return true;
+}
+
+static PLDHashOperator
+AllPluginEnum(nsPtrHashKey<nsIObjectLoadingContent>* aPlugin, void* userArg)
+{
+  nsTArray<nsIObjectLoadingContent*>* allPlugins =
+    reinterpret_cast< nsTArray<nsIObjectLoadingContent*>* >(userArg);
+  MOZ_ASSERT(allPlugins);
+  allPlugins->AppendElement(aPlugin->GetKey());
+  return PL_DHASH_NEXT;
+}
+
+void
+nsDocument::GetPlugins(nsTArray<nsIObjectLoadingContent*>& aPlugins)
+{
+  aPlugins.SetCapacity(aPlugins.Length() + mPlugins.Count());
+  mPlugins.EnumerateEntries(AllPluginEnum, &aPlugins);
+  EnumerateSubDocuments(AllSubDocumentPluginEnum, &aPlugins);
+}
+
 PLDHashOperator LockEnumerator(imgIRequest* aKey,
                                PRUint32 aData,
                                void*    userArg)
@@ -9233,4 +9252,43 @@ nsDocument::DocSizeOfExcludingThis(nsWindowSizes* aWindowSizes) const
   // Measurement of the following members may be added later if DMD finds it
   // is worthwhile:
   // - many!
+}
+
+bool
+MarkDocumentTreeToBeInSyncOperation(nsIDocument* aDoc, void* aData)
+{
+  nsCOMArray<nsIDocument>* documents =
+    static_cast<nsCOMArray<nsIDocument>*>(aData);
+  if (aDoc) {
+    aDoc->SetIsInSyncOperation(true);
+    documents->AppendObject(aDoc);
+    aDoc->EnumerateSubDocuments(MarkDocumentTreeToBeInSyncOperation, aData);
+  }
+  return true;
+}
+
+nsAutoSyncOperation::nsAutoSyncOperation(nsIDocument* aDoc)
+{
+  mMicroTaskLevel = nsContentUtils::MicroTaskLevel();
+  nsContentUtils::SetMicroTaskLevel(0);
+  if (aDoc) {
+    nsPIDOMWindow* win = aDoc->GetWindow();
+    if (win) {
+      nsCOMPtr<nsIDOMWindow> topWindow;
+      win->GetTop(getter_AddRefs(topWindow));
+      nsCOMPtr<nsPIDOMWindow> top = do_QueryInterface(topWindow);
+      if (top) {                               
+        nsCOMPtr<nsIDocument> doc = do_QueryInterface(top->GetExtantDocument());
+        MarkDocumentTreeToBeInSyncOperation(doc, &mDocuments);
+      }
+    }
+  }
+}
+
+nsAutoSyncOperation::~nsAutoSyncOperation()
+{
+  for (PRInt32 i = 0; i < mDocuments.Count(); ++i) {
+    mDocuments[i]->SetIsInSyncOperation(false);
+  }
+  nsContentUtils::SetMicroTaskLevel(mMicroTaskLevel);
 }

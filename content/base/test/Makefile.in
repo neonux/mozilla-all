@@ -285,6 +285,7 @@ _TEST_FILES1 = \
 		file_XHRDocURI.text \
 		file_XHRDocURI.text^headers^ \
 		test_DOMException.html \
+		test_mutationobservers.html \
 		$(NULL)
 
 _TEST_FILES2 = \
@@ -578,6 +579,7 @@ _TEST_FILES2 = \
 		test_bug650386_redirect_307.html \
 		file_bug650386_content.sjs \
 		file_bug650386_report.sjs \
+		test_bug719533.html \
 		$(NULL)
 
 _CHROME_FILES =	\

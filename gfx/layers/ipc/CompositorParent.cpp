@@ -78,15 +78,39 @@ CompositorParent::Destroy()
   NS_ABORT_IF_FALSE(ManagedPLayersParent().Length() == 0,
                     "CompositorParent destroyed before managed PLayersParent");
 
-  // Ensure that the layer manager is destroyed on the compositor thread.
+  // Ensure that the layer manager is destructed on the compositor thread.
   mLayerManager = NULL;
+}
+
+bool
+CompositorParent::RecvWillStop()
+{
+  mPaused = true;
+
+  // Ensure that the layer manager is destroyed before CompositorChild.
+  mLayerManager->Destroy();
+
+  return true;
 }
 
 bool
 CompositorParent::RecvStop()
 {
-  mPaused = true;
   Destroy();
+  return true;
+}
+
+bool
+CompositorParent::RecvPause()
+{
+  PauseComposition();
+  return true;
+}
+
+bool
+CompositorParent::RecvResume()
+{
+  ResumeComposition();
   return true;
 }
 
@@ -207,6 +231,23 @@ CompositorParent::Composite()
 #endif
 }
 
+// Go down shadow layer tree, setting properties to match their non-shadow
+// counterparts.
+static void
+SetShadowProperties(Layer* aLayer)
+{
+  // FIXME: Bug 717688 -- Do these updates in ShadowLayersParent::RecvUpdate.
+  ShadowLayer* shadow = aLayer->AsShadowLayer();
+  shadow->SetShadowTransform(aLayer->GetTransform());
+  shadow->SetShadowVisibleRegion(aLayer->GetVisibleRegion());
+  shadow->SetShadowClipRect(aLayer->GetClipRect());
+
+  for (Layer* child = aLayer->GetFirstChild();
+      child; child = child->GetNextSibling()) {
+    SetShadowProperties(child);
+  }
+}
+
 #ifdef MOZ_WIDGET_ANDROID
 // Do a breadth-first search to find the first layer in the tree that is
 // scrollable.
@@ -214,6 +255,21 @@ Layer*
 CompositorParent::GetPrimaryScrollableLayer()
 {
   Layer* root = mLayerManager->GetRoot();
+
+  // FIXME: We're currently getting passed layers that are not part of our content, but
+  // we are drawing them anyway. This is causing severe rendering corruption to our background
+  // and checkerboarding. The real fix here is to assert that we don't have any useless layers
+  // and ensure that layout isn't giving us any. This is being tracked in bug 728284.
+  // For now just clip them to the empty rect so we don't draw them.
+  Layer* discardLayer = root->GetFirstChild();
+
+  while (discardLayer) {
+    if (!discardLayer->AsContainerLayer()) {
+      discardLayer->IntersectClipRect(nsIntRect());
+      SetShadowProperties(discardLayer);
+    }
+    discardLayer = discardLayer->GetNextSibling();
+  }
 
   nsTArray<Layer*> queue;
   queue.AppendElement(root);
@@ -239,23 +295,6 @@ CompositorParent::GetPrimaryScrollableLayer()
   return root;
 }
 #endif
-
-// Go down shadow layer tree, setting properties to match their non-shadow
-// counterparts.
-static void
-SetShadowProperties(Layer* aLayer)
-{
-  // FIXME: Bug 717688 -- Do these updates in ShadowLayersParent::RecvUpdate.
-  ShadowLayer* shadow = aLayer->AsShadowLayer();
-  shadow->SetShadowTransform(aLayer->GetTransform());
-  shadow->SetShadowVisibleRegion(aLayer->GetVisibleRegion());
-  shadow->SetShadowClipRect(aLayer->GetClipRect());
-
-  for (Layer* child = aLayer->GetFirstChild();
-      child; child = child->GetNextSibling()) {
-    SetShadowProperties(child);
-  }
-}
 
 void
 CompositorParent::TransformShadowTree()
