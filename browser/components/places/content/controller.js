@@ -1393,6 +1393,7 @@ let PlacesControllerDragHelper = {
       if (!flavor)
         return false;
 
+      let data = dt.mozGetDataAt(flavor, i);
       // Urls can be dropped on any insertionpoint.
       // XXXmano: remember that this method is called for each dragover event!
       // Thus we shouldn't use unwrapNodes here at all if possible.
@@ -1403,10 +1404,13 @@ let PlacesControllerDragHelper = {
       // cannot be dropped in the current insertionpoint. The last case will
       // likely force us to use unwrapNodes for the private data types of
       // places.
-      if (flavor == TAB_DROP_TYPE)
+      if (flavor == TAB_DROP_TYPE) {
+        if (ip.itemId != PlacesUtils.toolbarFolderId ||
+            !data.parentNode || data.parentNode.getAttribute("drag") == "detach")
+          return false;
         continue;
+      }
 
-      let data = dt.mozGetDataAt(flavor, i);
       let dragged;
       try {
         dragged = PlacesUtils.unwrapNodes(data, flavor)[0];
@@ -1525,6 +1529,11 @@ let PlacesControllerDragHelper = {
       }
       else if (data instanceof XULElement && data.localName == "tab" &&
                data.ownerDocument.defaultView instanceof ChromeWindow) {
+        if (insertionPoint.itemId != PlacesUtils.toolbarFolderId ||
+            !data.parentNode || data.parentNode.getAttribute("drag") == "detach")
+          return false;
+        data._dragData.bookmarked = true;
+
         let uri = data.linkedBrowser.currentURI;
         let spec = uri ? uri.spec : "about:blank";
         let title = data.label;
