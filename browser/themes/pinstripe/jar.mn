@@ -45,6 +45,10 @@ browser.jar:
   skin/classic/browser/urlbar-history-dropmarker.png
   skin/classic/browser/urlbar-arrow.png
   skin/classic/browser/urlbar-popup-blocked.png
+  skin/classic/browser/downloads/buttons.png                (downloads/buttons.png)
+  skin/classic/browser/downloads/download-glow.png          (downloads/download-glow.png)
+  skin/classic/browser/downloads/download-notification.png  (downloads/download-notification.png)
+  skin/classic/browser/downloads/downloads.css              (downloads/downloads.css)
   skin/classic/browser/feeds/subscribe.css                  (feeds/subscribe.css)
   skin/classic/browser/feeds/subscribe-ui.css               (feeds/subscribe-ui.css)
   skin/classic/browser/feeds/feedIcon.png                   (feeds/feedIcon.png)
@@ -96,6 +100,7 @@ browser.jar:
 #endif
   skin/classic/browser/preferences/saveFile.png             (preferences/saveFile.png)
 * skin/classic/browser/preferences/preferences.css          (preferences/preferences.css)
+  skin/classic/browser/preferences/in-content/preferences.css          (preferences/in-content/preferences.css)
   skin/classic/browser/preferences/applications.css         (preferences/applications.css)
   skin/classic/browser/preferences/aboutPermissions.css     (preferences/aboutPermissions.css)
   skin/classic/browser/tabbrowser/alltabs-box-bkgnd-icon.png             (tabbrowser/alltabs-box-bkgnd-icon.png)
