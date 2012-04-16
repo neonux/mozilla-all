@@ -50,6 +50,10 @@ browser.jar:
         skin/classic/browser/urlbar-arrow.png
         skin/classic/browser/urlbar-popup-blocked.png
         skin/classic/browser/urlbar-history-dropmarker.png
+        skin/classic/browser/downloads/buttons.png                   (downloads/buttons.png)
+        skin/classic/browser/downloads/download-glow.png             (downloads/download-glow.png)
+        skin/classic/browser/downloads/download-notification.png     (downloads/download-notification.png)
+*       skin/classic/browser/downloads/downloads.css                 (downloads/downloads.css)
         skin/classic/browser/feeds/feedIcon.png                      (feeds/feedIcon.png)
         skin/classic/browser/feeds/feedIcon16.png                    (feeds/feedIcon16.png)
         skin/classic/browser/feeds/audioFeedIcon.png                 (feeds/feedIcon.png)
@@ -89,6 +93,7 @@ browser.jar:
 #endif
         skin/classic/browser/preferences/saveFile.png                (preferences/saveFile.png)
 *       skin/classic/browser/preferences/preferences.css             (preferences/preferences.css)
+        skin/classic/browser/preferences/in-content/preferences.css             (preferences/in-content/preferences.css)
         skin/classic/browser/preferences/applications.css            (preferences/applications.css)
         skin/classic/browser/preferences/aboutPermissions.css        (preferences/aboutPermissions.css)
         skin/classic/browser/tabbrowser/alltabs.png                  (tabbrowser/alltabs.png)
@@ -224,6 +229,10 @@ browser.jar:
         skin/classic/aero/browser/urlbar-arrow.png
         skin/classic/aero/browser/urlbar-popup-blocked.png
         skin/classic/aero/browser/urlbar-history-dropmarker.png
+        skin/classic/aero/browser/downloads/buttons.png              (downloads/buttons-aero.png)
+        skin/classic/aero/browser/downloads/download-glow.png        (downloads/download-glow-aero.png)
+        skin/classic/aero/browser/downloads/download-notification.png (downloads/download-notification.png)
+*       skin/classic/aero/browser/downloads/downloads.css            (downloads/downloads-aero.css)
         skin/classic/aero/browser/feeds/feedIcon.png                 (feeds/feedIcon-aero.png)
         skin/classic/aero/browser/feeds/feedIcon16.png               (feeds/feedIcon16-aero.png)
         skin/classic/aero/browser/feeds/audioFeedIcon.png            (feeds/feedIcon-aero.png)
@@ -263,6 +272,7 @@ browser.jar:
 #endif
         skin/classic/aero/browser/preferences/saveFile.png           (preferences/saveFile-aero.png)
 *       skin/classic/aero/browser/preferences/preferences.css        (preferences/preferences.css)
+        skin/classic/aero/browser/preferences/in-content/preferences.css        (preferences/in-content/preferences.css)
         skin/classic/aero/browser/preferences/applications.css       (preferences/applications.css)
         skin/classic/aero/browser/preferences/aboutPermissions.css   (preferences/aboutPermissions.css)
         skin/classic/aero/browser/tabbrowser/alltabs.png             (tabbrowser/alltabs.png)
