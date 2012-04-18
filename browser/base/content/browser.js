@@ -1391,8 +1391,6 @@ function BrowserStartup() {
 
   gPrivateBrowsingUI.init();
 
-  DownloadsButton.initializePlaceholder();
-
   retrieveToolbarIconsizesFromTheme();
 
   gDelayedStartupTimeoutId = setTimeout(delayedStartup, 0, isLoadingBlank, mustLoadSidebar);
@@ -1622,15 +1620,6 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
   ctrlTab.readPref();
   gPrefService.addObserver(ctrlTab.prefName, ctrlTab, false);
   gPrefService.addObserver(allTabs.prefName, allTabs, false);
-
-  // We delay the intialization of the downloads status indicator to improve the
-  // performance of opening a new window.  If there are running downloads, the
-  // indicator will remain invisible for a few seconds, unless it should be made
-  // visible as an anchor for the Downloads Panel.  The indicator is initially
-  // invisible, thus no flickering occurs when the window is displayed.
-  setTimeout(function() {
-    DownloadsButton.initializeIndicator();
-  }, 2000);
 
   // Initialize the download manager some time after the app starts so that
   // auto-resume downloads begin (such as after crashing or quitting with
@@ -3283,6 +3272,29 @@ var newWindowButtonObserver = {
   }
 }
 
+var DownloadsButtonDNDObserver = {
+  onDragOver: function (aEvent)
+  {
+    var types = aEvent.dataTransfer.types;
+    if (types.contains("text/x-moz-url") ||
+        types.contains("text/uri-list") ||
+        types.contains("text/plain"))
+      aEvent.preventDefault();
+  },
+
+  onDragExit: function (aEvent)
+  {
+  },
+
+  onDrop: function (aEvent)
+  {
+    let name = { };
+    let url = browserDragAndDrop.drop(aEvent, name);
+    if (url)
+      saveURL(url, name, null, true, true);
+  }
+}
+
 const DOMLinkHandler = {
   handleEvent: function (event) {
     switch (event.type) {
@@ -3710,7 +3722,6 @@ function BrowserCustomizeToolbar()
 
   PlacesToolbarHelper.customizeStart();
   BookmarksMenuButton.customizeStart();
-  DownloadsButton.customizeStart();
 
   TabsInTitlebar.allowedBy("customizing-toolbars", false);
 
@@ -3777,7 +3788,6 @@ function BrowserToolboxCustomizeDone(aToolboxChanged) {
 
   PlacesToolbarHelper.customizeDone();
   BookmarksMenuButton.customizeDone();
-  DownloadsButton.customizeDone();
 
   // The url bar splitter state is dependent on whether stop/reload
   // and the location bar are combined, so we need this ordering
