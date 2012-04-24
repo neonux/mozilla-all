@@ -530,6 +530,8 @@ pref("browser.gesture.twist.right", "");
 pref("browser.gesture.twist.left", "");
 pref("browser.gesture.tap", "cmd_fullZoomReset");
 
+pref("browser.snapshots.maxPerTab", 10);
+
 // 0=lines, 1=pages, 2=history , 3=text size
 #ifdef XP_MACOSX
 // On OS X, if the wheel has one axis only, shift+wheel comes through as a
