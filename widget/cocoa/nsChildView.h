@@ -297,7 +297,7 @@ typedef NSInteger NSEventGestureAxis;
 
   // Support for fluid swipe tracking.
 #ifdef __LP64__
-  BOOL *mSwipeAnimationCancelled;
+  void (^mCancelSwipeAnimation)();
 #endif
 
   // Whether this uses off-main-thread compositing.
