@@ -100,8 +100,11 @@ static const char* const sEventNames[] = {
   "MozBeforeResize",
   "mozfullscreenchange",
   "mozfullscreenerror",
+  "MozSwipeGestureStart",
+  "MozSwipeGestureUpdate",
   "mozpointerlockchange",
   "mozpointerlockerror",
+  "MozSwipeGestureEnd",
   "MozSwipeGesture",
   "MozMagnifyGestureStart",
   "MozMagnifyGestureUpdate",
@@ -1513,6 +1516,12 @@ const char* nsDOMEvent::GetEventName(PRUint32 aEventType)
     return sEventNames[eDOMEvents_afterpaint];
   case NS_BEFORERESIZE_EVENT:
     return sEventNames[eDOMEvents_beforeresize];
+  case NS_SIMPLE_GESTURE_SWIPE_START:
+    return sEventNames[eDOMEvents_MozSwipeGestureStart];
+  case NS_SIMPLE_GESTURE_SWIPE_UPDATE:
+    return sEventNames[eDOMEvents_MozSwipeGestureUpdate];
+  case NS_SIMPLE_GESTURE_SWIPE_END:
+    return sEventNames[eDOMEvents_MozSwipeGestureEnd];
   case NS_SIMPLE_GESTURE_SWIPE:
     return sEventNames[eDOMEvents_MozSwipeGesture];
   case NS_SIMPLE_GESTURE_MAGNIFY_START:
