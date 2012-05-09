@@ -622,7 +622,11 @@ pref("plugins.update.notifyUser", false);
 
 pref("plugins.click_to_play", false);
 
+#ifdef XP_WIN
+pref("browser.preferences.instantApply", false);
+#else
 pref("browser.preferences.instantApply", true);
+#endif
 #ifdef XP_MACOSX
 pref("browser.preferences.animateFadeIn", true);
 #else
