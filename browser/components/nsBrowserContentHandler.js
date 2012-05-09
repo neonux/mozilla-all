@@ -290,19 +290,14 @@ function openWindow(parent, url, target, features, args, noExternalArgs) {
 }
 
 function openPreferences() {
-  if (Services.prefs.getBoolPref("browser.preferences.inContent")) { 
-    openUILinkIn("about:preferences", "tab");
-  }
-  else {
-    var features = "chrome,titlebar,toolbar,centerscreen,dialog=no";
-    var url = "chrome://browser/content/preferences/preferences.xul";
-    
-    var win = getMostRecentWindow("Browser:Preferences");
-    if (win) {
-      win.focus();
-    } else {
-      openWindow(null, url, "_blank", features);
-    }
+  var features = "chrome,titlebar,toolbar,centerscreen,dialog=no";
+  var url = "chrome://browser/content/preferences/preferences.xul";
+
+  var win = getMostRecentWindow("Browser:Preferences");
+  if (win) {
+    win.focus();
+  } else {
+    openWindow(null, url, "_blank", features);
   }
 }
 
