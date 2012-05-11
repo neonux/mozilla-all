@@ -112,6 +112,8 @@ static void ToolkitSleepWakeCallback(void *refCon, io_service_t service, natural
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
 
+  nsAutoLockChromeUnstickContent lock;
+
   switch (messageType)
   {
     case kIOMessageSystemWillSleep:

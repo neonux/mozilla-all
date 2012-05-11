@@ -82,7 +82,9 @@ public:
   NS_DECL_NSITRANSPORTEVENTSINK
   NS_DECL_NSIASYNCVERIFYREDIRECTCALLBACK
 
-  nsBaseChannel(); 
+  nsBaseChannel();
+
+  JSZoneId GetZone() { return mListener ? mListener->GetZone() : JS_ZONE_CHROME; }
 
   // This method must be called to initialize the basechannel instance.
   nsresult Init() {
@@ -215,6 +217,7 @@ public:
   // Some subclasses may wish to manually insert a stream listener between this
   // and the channel's listener.  The following methods make that possible.
   void SetStreamListener(nsIStreamListener *listener) {
+    MOZ_ASSERT(listener->GetZone() == mListener->GetZone());
     mListener = listener;
   }
   nsIStreamListener *StreamListener() {

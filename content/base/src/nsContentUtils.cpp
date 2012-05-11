@@ -268,12 +268,12 @@ PRUint32 nsContentUtils::sJSGCThingRootCount;
 nsIBidiKeyboard *nsContentUtils::sBidiKeyboard = nsnull;
 #endif
 PRUint32 nsContentUtils::sScriptBlockerCount = 0;
+static bool sScriptBlockerRemoving = false;
 #ifdef DEBUG
 PRUint32 nsContentUtils::sDOMNodeRemovedSuppressCount = 0;
 #endif
 PRUint32 nsContentUtils::sMicroTaskLevel = 0;
 nsTArray< nsCOMPtr<nsIRunnable> >* nsContentUtils::sBlockedScriptRunners = nsnull;
-PRUint32 nsContentUtils::sRunnersCountAtFirstBlocker = 0;
 nsIInterfaceRequestor* nsContentUtils::sSameOriginChecker = nsnull;
 
 bool nsContentUtils::sIsHandlingKeyBoardEvent = false;
@@ -1531,6 +1531,8 @@ nsContentUtils::CheckSameOrigin(nsINode* aTrustedNode,
   MOZ_ASSERT(aTrustedNode);
   MOZ_ASSERT(unTrustedNode);
 
+  nsAutoLockChrome lock;
+
   bool isSystem = false;
   nsresult rv = sSecurityManager->SubjectPrincipalIsSystem(&isSystem);
   NS_ENSURE_SUCCESS(rv, rv);
@@ -1585,6 +1587,8 @@ nsContentUtils::CanCallerAccess(nsIPrincipal* aSubjectPrincipal,
 bool
 nsContentUtils::CanCallerAccess(nsIDOMNode *aNode)
 {
+  nsAutoLockChrome lock;
+
   // XXXbz why not check the IsCapabilityEnabled thing up front, and not bother
   // with the system principal games?  But really, there should be a simpler
   // API here, dammit.
@@ -1757,6 +1761,8 @@ nsContentUtils::GetDocumentFromContext()
 bool
 nsContentUtils::IsCallerChrome()
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   bool is_caller_chrome = false;
   nsresult rv = sSecurityManager->SubjectPrincipalIsSystem(&is_caller_chrome);
   if (NS_FAILED(rv)) {
@@ -2481,6 +2487,8 @@ nsContentUtils::GetNodeInfoFromQName(const nsAString& aNamespaceURI,
   if (colon) {
     const PRUnichar* end;
     qName.EndReading(end);
+
+    nsAutoLockChrome lock; // for nsIAtom
 
     nsCOMPtr<nsIAtom> prefix = do_GetAtom(Substring(qName.get(), colon));
 
@@ -3461,6 +3469,7 @@ nsContentUtils::DispatchChromeEvent(nsIDocument *aDoc,
                                     bool aCanBubble, bool aCancelable,
                                     bool *aDefaultAction)
 {
+  NS_StickLock(aDoc);
 
   nsCOMPtr<nsIDOMEvent> event;
   nsCOMPtr<nsIDOMEventTarget> target;
@@ -3706,6 +3715,8 @@ nsContentUtils::MaybeFireNodeRemoved(nsINode* aChild, nsINode* aParent,
   NS_PRECONDITION(aChild, "Missing child");
   NS_PRECONDITION(aChild->GetNodeParent() == aParent, "Wrong parent");
   NS_PRECONDITION(aChild->OwnerDoc() == aOwnerDoc, "Wrong owner-doc");
+
+  nsAutoLockChrome lock;
 
   // This checks that IsSafeToRunScript is true since we don't want to fire
   // events when that is false. We can't rely on nsEventDispatcher to assert
@@ -4784,11 +4795,10 @@ nsContentUtils::GetAccessKeyCandidates(nsKeyEvent* aNativeKeyEvent,
 void
 nsContentUtils::AddScriptBlocker()
 {
-  if (!sScriptBlockerCount) {
-    NS_ASSERTION(sRunnersCountAtFirstBlocker == 0,
-                 "Should not already have a count");
-    sRunnersCountAtFirstBlocker = sBlockedScriptRunners->Length();
-  }
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
+  NS_BeginCantLockNewContent();
+
   ++sScriptBlockerCount;
 }
 
@@ -4796,41 +4806,41 @@ nsContentUtils::AddScriptBlocker()
 void
 nsContentUtils::RemoveScriptBlocker()
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
+  NS_EndCantLockNewContent();
+
   NS_ASSERTION(sScriptBlockerCount != 0, "Negative script blockers");
   --sScriptBlockerCount;
-  if (sScriptBlockerCount) {
+  if (sScriptBlockerCount || sScriptBlockerRemoving) {
     return;
   }
 
-  PRUint32 firstBlocker = sRunnersCountAtFirstBlocker;
-  PRUint32 lastBlocker = sBlockedScriptRunners->Length();
-  PRUint32 originalFirstBlocker = firstBlocker;
-  PRUint32 blockersCount = lastBlocker - firstBlocker;
-  sRunnersCountAtFirstBlocker = 0;
-  NS_ASSERTION(firstBlocker <= lastBlocker,
-               "bad sRunnersCountAtFirstBlocker");
+  sScriptBlockerRemoving = true;
 
-  while (firstBlocker < lastBlocker) {
-    nsCOMPtr<nsIRunnable> runnable = (*sBlockedScriptRunners)[firstBlocker];
-    ++firstBlocker;
-
-    runnable->Run();
-    NS_ASSERTION(sRunnersCountAtFirstBlocker == 0,
-                 "Bad count");
-    NS_ASSERTION(!sScriptBlockerCount, "This is really bad");
+  while (!sScriptBlockerCount && sBlockedScriptRunners->Length() > 0) {
+    nsCOMPtr<nsIRunnable> runnable = (*sBlockedScriptRunners)[0];
+    sBlockedScriptRunners->RemoveElementAt(0);
+    if (NS_IsEverythingLocked())
+      NS_DispatchToMainThread(runnable); // for events triggered during GC. urk.
+    else
+      runnable->Run();
   }
-  sBlockedScriptRunners->RemoveElementsAt(originalFirstBlocker, blockersCount);
+
+  sScriptBlockerRemoving = false;
 }
 
 /* static */
 bool
 nsContentUtils::AddScriptRunner(nsIRunnable* aRunnable)
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   if (!aRunnable) {
     return false;
   }
 
-  if (sScriptBlockerCount) {
+  if (!NS_CanLockNewContent()) {
     return sBlockedScriptRunners->AppendElement(aRunnable) != nsnull;
   }
   
@@ -5761,6 +5771,8 @@ nsContentUtils::GetDocumentFromScriptContext(nsIScriptContext *aScriptContext)
 bool
 nsContentUtils::CheckMayLoad(nsIPrincipal* aPrincipal, nsIChannel* aChannel)
 {
+  nsAutoLockChrome lock; // for nsIURI
+
   nsCOMPtr<nsIURI> channelURI;
   nsresult rv = NS_GetFinalChannelURI(aChannel, getter_AddRefs(channelURI));
   NS_ENSURE_SUCCESS(rv, false);
@@ -5916,6 +5928,8 @@ nsContentUtils::WrapNative(JSContext *cx, JSObject *scope, nsISupports *native,
   else {
     sXPConnect->AddRef();
   }
+
+  nsAutoUnstickChrome unstick(cx);
 
   JSContext *topJSContext;
   nsresult rv = sThreadJSContextStack->Peek(&topJSContext);
@@ -6171,6 +6185,8 @@ nsContentUtils::CheckCCWrapperTraversal(nsISupports* aScriptObjectHolder,
 bool
 nsContentUtils::IsFocusedContent(const nsIContent* aContent)
 {
+  nsAutoLockChrome lock;
+
   nsFocusManager* fm = nsFocusManager::GetFocusManager();
 
   return fm && fm->GetFocusedContent() == aContent;
@@ -6346,6 +6362,8 @@ nsContentUtils::AllowXULXBLForPrincipal(nsIPrincipal* aPrincipal)
   if (IsSystemPrincipal(aPrincipal)) {
     return true;
   }
+
+  nsAutoLockChrome lock;
   
   nsCOMPtr<nsIURI> princURI;
   aPrincipal->GetURI(getter_AddRefs(princURI));
@@ -6359,6 +6377,8 @@ already_AddRefed<nsIDocumentLoaderFactory>
 nsContentUtils::FindInternalContentViewer(const char* aType,
                                           ContentViewerType* aLoaderType)
 {
+  nsAutoLockChrome lock;
+
   if (aLoaderType) {
     *aLoaderType = TYPE_UNSUPPORTED;
   }

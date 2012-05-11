@@ -288,7 +288,9 @@ nsSubDocumentFrame::BuildDisplayList(nsDisplayListBuilder*   aBuilder,
 
   nsIFrame* subdocRootFrame = subdocView->GetFrame();
   if (subdocRootFrame) {
-    presShell = subdocRootFrame->PresContext()->PresShell();
+    nsIPresShell* ps = subdocRootFrame->PresContext()->PresShell();
+    if (ps && NS_TryStickLock(ps))
+      presShell = ps;
   }
   // If painting is suppressed in the presshell, we try to look for a better
   // presshell to use.
@@ -304,6 +306,8 @@ nsSubDocumentFrame::BuildDisplayList(nsDisplayListBuilder*   aBuilder,
     }
     if (frame) {
       nsIPresShell* ps = frame->PresContext()->PresShell();
+      if (ps && !NS_TryStickLock(ps))
+        ps = nsnull;
       if (!presShell || (ps && !ps->IsPaintingSuppressed())) {
         subdocView = nextView;
         subdocRootFrame = frame;

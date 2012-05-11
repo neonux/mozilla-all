@@ -136,6 +136,9 @@ nsCSSCompressedDataBlock::MapRuleInfoInto(nsRuleData *aRuleData) const
 
     nsIDocument* doc = aRuleData->mPresContext->Document();
 
+    if (!NS_TryStickLock(doc))
+        return;
+
     for (PRUint32 i = 0; i < mNumProps; i++) {
         nsCSSProperty iProp = PropertyAtIndex(i);
         if (nsCachedStyleData::GetBitForSID(nsCSSProps::kSIDTable[iProp]) &

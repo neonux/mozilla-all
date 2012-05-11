@@ -96,6 +96,11 @@ NS_IMPL_ISUPPORTS4(ChannelMediaResource::Listener,
                    nsIRequestObserver, nsIStreamListener, nsIChannelEventSink,
                    nsIInterfaceRequestor)
 
+ChannelMediaResource::Listener::Listener(ChannelMediaResource* aResource)
+  : mResource(aResource),
+    mZone(aResource->mDecoder ? aResource->mDecoder->GetZone() : JS_ZONE_CHROME)
+{}
+
 nsresult
 ChannelMediaResource::Listener::OnStartRequest(nsIRequest* aRequest,
                                                nsISupports* aContext)
@@ -417,7 +422,7 @@ ChannelMediaResource::OnDataAvailable(nsIRequest* aRequest,
 
 nsresult ChannelMediaResource::Open(nsIStreamListener **aStreamListener)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   nsresult rv = mCacheStream.Init();
   if (NS_FAILED(rv))
@@ -437,7 +442,7 @@ nsresult ChannelMediaResource::Open(nsIStreamListener **aStreamListener)
 
 nsresult ChannelMediaResource::OpenChannel(nsIStreamListener** aStreamListener)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   NS_ENSURE_TRUE(mChannel, NS_ERROR_NULL_POINTER);
   NS_ASSERTION(!mListener, "Listener should have been removed by now");
 
@@ -502,7 +507,7 @@ void ChannelMediaResource::SetupChannelHeaders()
     hc->SetRequestHeader(NS_LITERAL_CSTRING("Range"), rangeString, false);
 
     // Send Accept header for video and audio types only (Bug 489071)
-    NS_ASSERTION(NS_IsMainThread(), "Don't call on non-main thread");
+    MOZ_ASSERT(NS_IsChromeOwningThread());
     nsHTMLMediaElement* element = mDecoder->GetMediaElement();
     if (!element) {
       return;
@@ -515,7 +520,7 @@ void ChannelMediaResource::SetupChannelHeaders()
 
 nsresult ChannelMediaResource::Close()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   mCacheStream.Close();
   CloseChannel();
@@ -524,7 +529,7 @@ nsresult ChannelMediaResource::Close()
 
 already_AddRefed<nsIPrincipal> ChannelMediaResource::GetCurrentPrincipal()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   nsCOMPtr<nsIPrincipal> principal = mCacheStream.GetCurrentPrincipal();
   return principal.forget();
@@ -537,7 +542,7 @@ bool ChannelMediaResource::CanClone()
 
 MediaResource* ChannelMediaResource::CloneData(nsMediaDecoder* aDecoder)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   NS_ASSERTION(mCacheStream.IsAvailableForSharing(), "Stream can't be cloned");
 
   ChannelMediaResource* resource = new ChannelMediaResource(aDecoder, nsnull, mURI);
@@ -558,7 +563,7 @@ MediaResource* ChannelMediaResource::CloneData(nsMediaDecoder* aDecoder)
 
 void ChannelMediaResource::CloseChannel()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   {
     MutexAutoLock lock(mLock);
@@ -624,7 +629,7 @@ nsresult ChannelMediaResource::GetCachedRanges(nsTArray<MediaByteRange>& aRanges
 
 void ChannelMediaResource::Suspend(bool aCloseImmediately)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Don't call on non-main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   nsHTMLMediaElement* element = mDecoder->GetMediaElement();
   if (!element) {
@@ -653,7 +658,7 @@ void ChannelMediaResource::Suspend(bool aCloseImmediately)
 
 void ChannelMediaResource::Resume()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Don't call on non-main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   NS_ASSERTION(mSuspendCount > 0, "Too many resumes!");
 
   nsHTMLMediaElement* element = mDecoder->GetMediaElement();
@@ -726,7 +731,7 @@ ChannelMediaResource::DoNotifyDataReceived()
 void
 ChannelMediaResource::CacheClientNotifyDataReceived()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Don't call on non-main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   // NOTE: this can be called with the media cache lock held, so don't
   // block or do anything which might try to acquire a lock!
 
@@ -734,8 +739,8 @@ ChannelMediaResource::CacheClientNotifyDataReceived()
     return;
 
   mDataReceivedEvent =
-    NS_NewNonOwningRunnableMethod(this, &ChannelMediaResource::DoNotifyDataReceived);
-  NS_DispatchToMainThread(mDataReceivedEvent.get(), NS_DISPATCH_NORMAL);
+    NS_NewNonOwningRunnableMethod(this, &ChannelMediaResource::DoNotifyDataReceived, mDecoder->GetZone());
+  NS_DispatchToMainThread(mDataReceivedEvent.get(), NS_DISPATCH_NORMAL, mDecoder->GetZone());
 }
 
 class DataEnded : public nsRunnable {
@@ -743,6 +748,7 @@ public:
   DataEnded(nsMediaDecoder* aDecoder, nsresult aStatus) :
     mDecoder(aDecoder), mStatus(aStatus) {}
   NS_IMETHOD Run() {
+    NS_StickLock(mDecoder);
     mDecoder->NotifyDownloadEnded(mStatus);
     return NS_OK;
   }
@@ -754,12 +760,13 @@ private:
 void
 ChannelMediaResource::CacheClientNotifyDataEnded(nsresult aStatus)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Don't call on non-main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   // NOTE: this can be called with the media cache lock held, so don't
   // block or do anything which might try to acquire a lock!
 
+
   nsCOMPtr<nsIRunnable> event = new DataEnded(mDecoder, aStatus);
-  NS_DispatchToMainThread(event, NS_DISPATCH_NORMAL);
+  NS_DispatchToMainThread(event, NS_DISPATCH_NORMAL, mDecoder->GetZone());
 }
 
 void
@@ -773,7 +780,7 @@ ChannelMediaResource::CacheClientNotifyPrincipalChanged()
 nsresult
 ChannelMediaResource::CacheClientSeek(PRInt64 aOffset, bool aResume)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Don't call on non-main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   CloseChannel();
 
@@ -998,6 +1005,7 @@ public:
   }
 
   NS_IMETHOD Run() {
+    NS_StickLock(mDecoder);
     mDecoder->NotifyDownloadEnded(NS_OK);
     return NS_OK;
   }
@@ -1017,7 +1025,7 @@ nsresult FileMediaResource::GetCachedRanges(nsTArray<MediaByteRange>& aRanges)
 
 nsresult FileMediaResource::Open(nsIStreamListener** aStreamListener)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   if (aStreamListener) {
     *aStreamListener = nsnull;
@@ -1071,13 +1079,13 @@ nsresult FileMediaResource::Open(nsIStreamListener** aStreamListener)
   }
 
   nsCOMPtr<nsIRunnable> event = new LoadedEvent(mDecoder);
-  NS_DispatchToMainThread(event, NS_DISPATCH_NORMAL);
+  NS_DispatchToMainThread(event, NS_DISPATCH_NORMAL, mDecoder->GetZone());
   return NS_OK;
 }
 
 nsresult FileMediaResource::Close()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   MutexAutoLock lock(mLock);
   if (mChannel) {
@@ -1092,7 +1100,7 @@ nsresult FileMediaResource::Close()
 
 already_AddRefed<nsIPrincipal> FileMediaResource::GetCurrentPrincipal()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   nsCOMPtr<nsIPrincipal> principal;
   nsIScriptSecurityManager* secMan = nsContentUtils::GetSecurityManager();
@@ -1109,7 +1117,7 @@ bool FileMediaResource::CanClone()
 
 MediaResource* FileMediaResource::CloneData(nsMediaDecoder* aDecoder)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   nsHTMLMediaElement* element = aDecoder->GetMediaElement();
   if (!element) {
@@ -1191,8 +1199,7 @@ PRInt64 FileMediaResource::Tell()
 MediaResource*
 MediaResource::Create(nsMediaDecoder* aDecoder, nsIChannel* aChannel)
 {
-  NS_ASSERTION(NS_IsMainThread(),
-	             "MediaResource::Open called on non-main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   // If the channel was redirected, we want the post-redirect URI;
   // but if the URI scheme was expanded, say from chrome: to jar:file:,

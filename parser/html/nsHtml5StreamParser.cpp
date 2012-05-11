@@ -199,7 +199,7 @@ nsHtml5StreamParser::nsHtml5StreamParser(nsHtml5TreeOpExecutor* aExecutor,
   , mFlushTimer(do_CreateInstance("@mozilla.org/timer;1"))
   , mMode(aMode)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Wrong thread!");
   mFlushTimer->SetTarget(mThread);
   mAtomTable.Init(); // we aren't checking for OOM anyway...
 #ifdef DEBUG
@@ -236,7 +236,7 @@ nsHtml5StreamParser::nsHtml5StreamParser(nsHtml5TreeOpExecutor* aExecutor,
 
 nsHtml5StreamParser::~nsHtml5StreamParser()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Wrong thread!");
   mTokenizer->end();
   NS_ASSERTION(!mFlushTimer, "Flush timer was not dropped before dtor!");
 #ifdef DEBUG
@@ -256,7 +256,7 @@ nsHtml5StreamParser::~nsHtml5StreamParser()
 nsresult
 nsHtml5StreamParser::GetChannel(nsIChannel** aChannel)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Wrong thread!");
   return mRequest ? CallQueryInterface(mRequest, aChannel) :
                     NS_ERROR_NOT_AVAILABLE;
 }
@@ -913,7 +913,7 @@ nsHtml5StreamParser::OnStartRequest(nsIRequest* aRequest, nsISupports* aContext)
                   "Got OnStartRequest when the stream had already started.");
   NS_PRECONDITION(!mExecutor->HasStarted(), 
                   "Got OnStartRequest at the wrong stage in the executor life cycle.");
-  NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Wrong thread!");
   if (mObserver) {
     mObserver->OnStartRequest(aRequest, aContext);
   }
@@ -1050,7 +1050,9 @@ class nsHtml5RequestStopper : public nsRunnable
   public:
     nsHtml5RequestStopper(nsHtml5StreamParser* aStreamParser)
       : mStreamParser(aStreamParser)
-    {}
+    {
+      mStreamParser.setZone(aStreamParser->DocumentZone());
+    }
     NS_IMETHODIMP Run()
     {
       mozilla::MutexAutoLock autoLock(mStreamParser->mTokenizerMutex);
@@ -1065,7 +1067,7 @@ nsHtml5StreamParser::OnStopRequest(nsIRequest* aRequest,
                              nsresult status)
 {
   NS_ASSERTION(mRequest == aRequest, "Got Stop on wrong stream.");
-  NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Wrong thread!");
   if (mObserver) {
     mObserver->OnStopRequest(aRequest, aContext, status);
   }
@@ -1138,7 +1140,9 @@ class nsHtml5DataAvailable : public nsRunnable
       : mStreamParser(aStreamParser)
       , mData(aData)
       , mLength(aLength)
-    {}
+    {
+      mStreamParser.setZone(aStreamParser->DocumentZone());
+    }
     NS_IMETHODIMP Run()
     {
       mozilla::MutexAutoLock autoLock(mStreamParser->mTokenizerMutex);
@@ -1308,7 +1312,8 @@ nsHtml5StreamParser::FlushTreeOpsAndDisarmTimer()
     mTokenizer->FlushViewSource();
   }
   mTreeBuilder->Flush();
-  if (NS_FAILED(NS_DispatchToMainThread(mExecutorFlusher))) {
+
+  if (!DocumentDispatch(mExecutorFlusher)) {
     NS_WARNING("failed to dispatch executor flush event");
   }
 }
@@ -1338,7 +1343,7 @@ nsHtml5StreamParser::ParseAvailableData()
             // Dispatch this runnable unconditionally, because the loads
             // that need flushing may have been flushed earlier even if the
             // flush right above here did nothing.
-            if (NS_FAILED(NS_DispatchToMainThread(mLoadFlusher))) {
+            if (!DocumentDispatch(mLoadFlusher)) {
               NS_WARNING("failed to dispatch load flush event");
             }
             return; // no more data for now but expecting more
@@ -1421,7 +1426,9 @@ private:
 public:
   nsHtml5StreamParserContinuation(nsHtml5StreamParser* aStreamParser)
     : mStreamParser(aStreamParser)
-  {}
+  {
+      mStreamParser.setZone(aStreamParser->DocumentZone());
+  }
   NS_IMETHODIMP Run()
   {
     mozilla::MutexAutoLock autoLock(mStreamParser->mTokenizerMutex);
@@ -1436,7 +1443,7 @@ nsHtml5StreamParser::ContinueAfterScripts(nsHtml5Tokenizer* aTokenizer,
                                           nsHtml5TreeBuilder* aTreeBuilder,
                                           bool aLastWasCR)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Wrong thread!");
   NS_ASSERTION(!(mMode == VIEW_SOURCE_HTML || mMode == VIEW_SOURCE_XML),
       "ContinueAfterScripts called in view source mode!");
   if (mExecutor->IsBroken()) {
@@ -1572,7 +1579,7 @@ nsHtml5StreamParser::ContinueAfterScripts(nsHtml5Tokenizer* aTokenizer,
 void
 nsHtml5StreamParser::ContinueAfterFailedCharsetSwitch()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Wrong thread!");
   nsCOMPtr<nsIRunnable> event = new nsHtml5StreamParserContinuation(this);
   if (NS_FAILED(mThread->Dispatch(event, nsIThread::DISPATCH_NORMAL))) {
     NS_WARNING("Failed to dispatch nsHtml5StreamParserContinuation");
@@ -1586,7 +1593,9 @@ private:
 public:
   nsHtml5TimerKungFu(nsHtml5StreamParser* aStreamParser)
     : mStreamParser(aStreamParser)
-  {}
+  {
+      mStreamParser.setZone(aStreamParser->DocumentZone());
+  }
   NS_IMETHODIMP Run()
   {
     if (mStreamParser->mFlushTimer) {
@@ -1600,7 +1609,7 @@ public:
 void
 nsHtml5StreamParser::DropTimer()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Wrong thread!");
   /*
    * Simply nulling out the timer wouldn't work, because if the timer is
    * armed, it needs to be canceled first. Simply canceling it first wouldn't
@@ -1656,7 +1665,7 @@ nsHtml5StreamParser::TimerFlush()
   if (mMode == VIEW_SOURCE_HTML || mMode == VIEW_SOURCE_XML) {
     mTreeBuilder->Flush(); // delete useless ops
     if (mTokenizer->FlushViewSource()) {
-       if (NS_FAILED(NS_DispatchToMainThread(mExecutorFlusher))) {
+      if (!DocumentDispatch(mExecutorFlusher)) {
          NS_WARNING("failed to dispatch executor flush event");
        }
      }
@@ -1664,7 +1673,7 @@ nsHtml5StreamParser::TimerFlush()
     // we aren't speculating and we don't know when new data is
     // going to arrive. Send data to the main thread.
     if (mTreeBuilder->Flush(true)) {
-      if (NS_FAILED(NS_DispatchToMainThread(mExecutorFlusher))) {
+      if (!DocumentDispatch(mExecutorFlusher)) {
         NS_WARNING("failed to dispatch executor flush event");
       }
     }
@@ -1681,7 +1690,7 @@ nsHtml5StreamParser::MarkAsBroken()
   mTreeBuilder->MarkAsBroken();
   mozilla::DebugOnly<bool> hadOps = mTreeBuilder->Flush(false);
   NS_ASSERTION(hadOps, "Should have had the markAsBroken op!");
-  if (NS_FAILED(NS_DispatchToMainThread(mExecutorFlusher))) {
+  if (!DocumentDispatch(mExecutorFlusher)) {
     NS_WARNING("failed to dispatch executor flush event");
   }
 }

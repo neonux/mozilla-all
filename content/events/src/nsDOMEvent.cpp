@@ -308,6 +308,8 @@ GetDOMEventTarget(nsIDOMEventTarget* aTarget,
   nsIDOMEventTarget* realTarget =
     aTarget ? aTarget->GetTargetForDOMEvent() : aTarget;
 
+  NS_StickLock(realTarget);
+
   NS_IF_ADDREF(*aDOMTarget = realTarget);
 
   return NS_OK;

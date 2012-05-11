@@ -355,12 +355,6 @@ GlobalObject::clear(JSContext *cx)
     flags |= FLAGS_CLEARED;
     setSlot(FLAGS, Int32Value(flags));
 
-    /*
-     * Reset the new object cache in the compartment, which assumes that
-     * prototypes cached on the global object are immutable.
-     */
-    cx->runtime->newObjectCache.purge();
-
 #ifdef JS_METHODJIT
     /*
      * Destroy compiled code for any scripts parented to this global. Call ICs

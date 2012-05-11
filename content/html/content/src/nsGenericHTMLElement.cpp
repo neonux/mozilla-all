@@ -198,6 +198,8 @@ public:
   nsAutoFocusEvent(nsGenericHTMLFormElement* aElement) : mElement(aElement) {}
 
   NS_IMETHOD Run() {
+    NS_StickLock(mElement);
+
     nsFocusManager* fm = nsFocusManager::GetFocusManager();
     if (!fm) {
       return NS_ERROR_NULL_POINTER;
@@ -350,6 +352,8 @@ nsGenericHTMLElement::SetAttribute(const nsAString& aName,
   if (!name) {
     nsresult rv = nsContentUtils::CheckQName(aName, false);
     NS_ENSURE_SUCCESS(rv, rv);
+
+    nsAutoLockChrome lock;
 
     nsCOMPtr<nsIAtom> nameAtom;
     if (IsInHTMLDocument()) {
@@ -771,6 +775,8 @@ nsGenericHTMLElement::SetInnerHTML(const nsAString& aInnerHTML)
 
   FireNodeRemovedForChildren();
 
+  nsAutoLockChrome lock;
+
   // Needed when innerHTML is used in combination with contenteditable
   mozAutoDocUpdate updateBatch(doc, UPDATE_CONTENT_MODEL, true);
 
@@ -919,6 +925,8 @@ nsGenericHTMLElement::InsertAdjacentHTML(const nsAString& aPosition,
   }
 
   nsIDocument* doc = OwnerDoc();
+
+  nsAutoLockChrome lock;
 
   // Needed when insertAdjacentHTML is used in combination with contenteditable
   mozAutoDocUpdate updateBatch(doc, UPDATE_CONTENT_MODEL, true);
@@ -2323,6 +2331,8 @@ nsGenericHTMLElement::SetDoubleAttr(nsIAtom* aAttr, double aValue)
 nsresult
 nsGenericHTMLElement::GetURIAttr(nsIAtom* aAttr, nsIAtom* aBaseAttr, nsAString& aResult)
 {
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIURI> uri;
   bool hadAttr = GetURIAttr(aAttr, aBaseAttr, getter_AddRefs(uri));
   if (!hadAttr) {
@@ -2351,6 +2361,8 @@ nsGenericHTMLElement::GetURIAttr(nsIAtom* aAttr, nsIAtom* aBaseAttr, nsIURI** aU
   if (!attr) {
     return false;
   }
+
+  nsAutoLockChrome lock;
 
   nsCOMPtr<nsIURI> baseURI = GetBaseURI();
 
@@ -2963,6 +2975,8 @@ nsGenericHTMLFormElement::FocusState()
   // nothing else.
   nsPIDOMWindow* win = doc->GetWindow();
   if (win) {
+    nsAutoLockChrome lock;
+
     nsCOMPtr<nsIDOMWindow> rootWindow = do_QueryInterface(win->GetPrivateRoot());
 
     nsCOMPtr<nsIFocusManager> fm = do_GetService(FOCUSMANAGER_CONTRACTID);
@@ -3018,6 +3032,9 @@ nsGenericHTMLFormElement::RemoveFormIdObserver()
   GetAttr(kNameSpaceID_None, nsGkAtoms::form, formId);
   NS_ASSERTION(!formId.IsEmpty(),
                "@form value should not be the empty string!");
+
+  nsAutoLockChrome lock; // for atom
+
   nsCOMPtr<nsIAtom> atom = do_GetAtom(formId);
 
   doc->RemoveIDTargetObserver(atom, FormIdUpdated, this, false);
@@ -3188,6 +3205,9 @@ nsGenericHTMLElement::Blur()
   }
 
   nsIDOMWindow* win = doc->GetWindow();
+
+  nsAutoLockChrome lock;
+
   nsIFocusManager* fm = nsFocusManager::GetFocusManager();
   return (win && fm) ? fm->ClearFocus(win) : NS_OK;
 }
@@ -3195,6 +3215,7 @@ nsGenericHTMLElement::Blur()
 nsresult
 nsGenericHTMLElement::Focus()
 {
+  nsAutoLockChrome lock;
   nsIFocusManager* fm = nsFocusManager::GetFocusManager();
   nsCOMPtr<nsIDOMElement> elem = do_QueryInterface(this);
   return fm ? fm->SetFocus(elem, 0) : NS_OK;
@@ -3207,6 +3228,8 @@ nsresult nsGenericHTMLElement::Click()
 
   // Strong in case the event kills it
   nsCOMPtr<nsIDocument> doc = GetCurrentDoc();
+
+  nsAutoLockChrome lock;
 
   nsCOMPtr<nsIPresShell> shell;
   nsRefPtr<nsPresContext> context;
@@ -3521,6 +3544,7 @@ nsGenericHTMLElement::ChangeEditableState(PRInt32 aChange)
   // MakeContentDescendantsEditable is going to call ContentStateChanged for
   // this element and all descendants if editable state has changed.
   // We might as well wrap it all in one script blocker.
+  nsAutoLockChrome lock;
   nsAutoScriptBlocker scriptBlocker;
   MakeContentDescendantsEditable(this, document);
 }

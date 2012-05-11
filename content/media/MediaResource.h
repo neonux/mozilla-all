@@ -427,7 +427,7 @@ public:
                    public nsIChannelEventSink
   {
   public:
-    Listener(ChannelMediaResource* aResource) : mResource(aResource) {}
+    Listener(ChannelMediaResource* aResource);
 
     NS_DECL_ISUPPORTS
     NS_DECL_NSIREQUESTOBSERVER
@@ -435,10 +435,16 @@ public:
     NS_DECL_NSICHANNELEVENTSINK
     NS_DECL_NSIINTERFACEREQUESTOR
 
-    void Revoke() { mResource = nsnull; }
+    JSZoneId GetZone() { return mZone; }
+
+    void Revoke() {
+      MOZ_ASSERT(NS_IsChromeOwningThread()); // XXX not protected by own lock.
+      mResource = nsnull;
+    }
 
   private:
     ChannelMediaResource* mResource;
+    JSZoneId mZone;
   };
   friend class Listener;
 

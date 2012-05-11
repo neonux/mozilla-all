@@ -3573,7 +3573,7 @@ nsXULDocument::OnStreamComplete(nsIStreamLoader* aLoader,
                 // a failure to write to the FastLoad file, because this
                 // method aborts that whole process on error.
                 nsIScriptGlobalObject* global =
-                    mCurrentPrototype->GetScriptGlobalObject();
+                    mCurrentPrototype->GetScriptGlobalObject(JS_ZONE_CHROME);
 
                 NS_ASSERTION(global != nsnull, "master prototype w/o global?!");
                 if (global) {
@@ -4687,6 +4687,7 @@ nsXULDocument::IsDocumentRightToLeft()
 void
 nsXULDocument::ResetDocumentDirection()
 {
+    NS_TryStickLock(this);
     DocumentStatesChanged(NS_DOCUMENT_STATE_RTL_LOCALE);
 }
 

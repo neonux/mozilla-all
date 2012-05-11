@@ -145,7 +145,7 @@ public:
     nsNodeInfoManager *GetNodeInfoManager();
 
     // nsIScriptGlobalObjectOwner methods
-    virtual nsIScriptGlobalObject* GetScriptGlobalObject();
+    virtual nsIScriptGlobalObject* GetScriptGlobalObject(JSZoneId aZone);
 
     void MarkInCCGeneration(PRUint32 aCCGeneration)
     {
@@ -177,7 +177,7 @@ protected:
     friend NS_IMETHODIMP
     NS_NewXULPrototypeDocument(nsXULPrototypeDocument** aResult);
 
-    nsXULPDGlobalObject *NewXULPDGlobalObject();
+    nsXULPDGlobalObject *NewXULPDGlobalObject(JSZoneId aZone);
 
     static nsIPrincipal* gSystemPrincipal;
     static nsXULPDGlobalObject* gSystemGlobal;

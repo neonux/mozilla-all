@@ -65,6 +65,16 @@
 
 namespace js {
 
+inline uintptr_t
+CurrentThreadId()
+{
+#ifdef JS_THREADSAFE
+    return uintptr_t(PR_GetCurrentThread());
+#else
+    return 0;
+#endif
+}
+
 class AutoAtomicIncrement
 {
     int32_t *p;

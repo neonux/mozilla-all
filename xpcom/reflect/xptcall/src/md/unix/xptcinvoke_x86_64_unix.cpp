@@ -131,6 +131,8 @@ invoke_copy_to_stack(PRUint64 * d, PRUint32 paramCount, nsXPTCVariant * s,
     }
 }
 
+#include <dlfcn.h>
+
 EXPORT_XPCOM_API(nsresult)
 NS_InvokeByIndex_P(nsISupports * that, PRUint32 methodIndex,
                  PRUint32 paramCount, nsXPTCVariant * params)

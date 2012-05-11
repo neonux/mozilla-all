@@ -123,7 +123,7 @@ public:
   public:
     NS_DECL_NSIRUNNABLE
     ScrollEvent(nsGfxScrollFrameInner *inner) : mInner(inner) {}
-    void Revoke() { mInner = nsnull; }
+    void Revoke() { MOZ_ASSERT(NS_IsChromeOwningThread()); mInner = nsnull; }
   private:
     nsGfxScrollFrameInner *mInner;
   };
@@ -132,7 +132,7 @@ public:
   public:
     NS_DECL_NSIRUNNABLE
     AsyncScrollPortEvent(nsGfxScrollFrameInner *inner) : mInner(inner) {}
-    void Revoke() { mInner = nsnull; }
+    void Revoke() { MOZ_ASSERT(NS_IsChromeOwningThread()); mInner = nsnull; }
   private:
     nsGfxScrollFrameInner *mInner;
   };
@@ -141,7 +141,7 @@ public:
   public:
     NS_DECL_NSIRUNNABLE
     ScrolledAreaEvent(nsGfxScrollFrameInner *inner) : mInner(inner) {}
-    void Revoke() { mInner = nsnull; }
+    void Revoke() { MOZ_ASSERT(NS_IsChromeOwningThread()); mInner = nsnull; }
   private:
     nsGfxScrollFrameInner *mInner;
   };

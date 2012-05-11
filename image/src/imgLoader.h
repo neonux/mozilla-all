@@ -76,7 +76,7 @@ public:
   nsrefcnt AddRef()
   {
     NS_PRECONDITION(PRInt32(mRefCnt) >= 0, "illegal refcnt");
-    NS_ABORT_IF_FALSE(_mOwningThread.GetThread() == PR_GetCurrentThread(), "imgCacheEntry addref isn't thread-safe!");
+    NS_ABORT_IF_FALSE(_mOwningThread.onCorrectThread(), "imgCacheEntry addref isn't thread-safe!");
     ++mRefCnt;
     NS_LOG_ADDREF(this, mRefCnt, "imgCacheEntry", sizeof(*this));
     return mRefCnt;
@@ -85,7 +85,7 @@ public:
   nsrefcnt Release()
   {
     NS_PRECONDITION(0 != mRefCnt, "dup release");
-    NS_ABORT_IF_FALSE(_mOwningThread.GetThread() == PR_GetCurrentThread(), "imgCacheEntry release isn't thread-safe!");
+    NS_ABORT_IF_FALSE(_mOwningThread.onCorrectThread(), "imgCacheEntry release isn't thread-safe!");
     --mRefCnt;
     NS_LOG_RELEASE(this, mRefCnt, "imgCacheEntry");
     if (mRefCnt == 0) {
@@ -383,6 +383,8 @@ public:
   NS_DECL_ISUPPORTS
   NS_DECL_NSISTREAMLISTENER
   NS_DECL_NSIREQUESTOBSERVER
+
+  JSZoneId GetZone() { return mDestListener ? mDestListener->GetZone() : JS_ZONE_CHROME; }
 
 private:
   nsCOMPtr<nsIStreamListener> mDestListener;

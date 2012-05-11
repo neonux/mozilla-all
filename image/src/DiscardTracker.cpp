@@ -50,7 +50,7 @@ DiscardTracker::Reset(Node *node)
   // We shouldn't call Reset() with a null |img| pointer, on images which can't
   // be discarded, or on animated images (which should be marked as
   // non-discardable, anyway).
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   MOZ_ASSERT(sInitialized);
   MOZ_ASSERT(node->img);
   MOZ_ASSERT(node->img->CanDiscard());
@@ -81,7 +81,7 @@ DiscardTracker::Reset(Node *node)
 void
 DiscardTracker::Remove(Node *node)
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   if (node->isInList())
     node->remove();
@@ -96,7 +96,7 @@ DiscardTracker::Remove(Node *node)
 void
 DiscardTracker::Shutdown()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   if (sTimer) {
     sTimer->Cancel();
@@ -110,7 +110,7 @@ DiscardTracker::Shutdown()
 void
 DiscardTracker::DiscardAll()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   if (!sInitialized)
     return;
@@ -149,7 +149,7 @@ DiscardTracker::InformAllocation(PRInt64 bytes)
 nsresult
 DiscardTracker::Initialize()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   // Watch the timeout pref for changes.
   Preferences::RegisterCallback(DiscardTimeoutChangedCallback,

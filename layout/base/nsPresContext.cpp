@@ -132,6 +132,7 @@ public:
 
   NS_IMETHOD Run()
   {
+    NS_StickLock(mPresContext);
     mPresContext->DoChangeCharSet(mCharSet);
     return NS_OK;
   }
@@ -175,6 +176,7 @@ nsPresContext::PrefChangedUpdateTimerCallback(nsITimer *aTimer, void *aClosure)
 {
   nsPresContext*  presContext = (nsPresContext*)aClosure;
   NS_ASSERTION(presContext != nsnull, "bad instance data");
+
   if (presContext)
     presContext->UpdateAfterPreferencesChanged();
 }
@@ -216,6 +218,8 @@ nsPresContext::nsPresContext(nsIDocument* aDocument, nsPresContextType aType)
 {
   // NOTE! nsPresContext::operator new() zeroes out all members, so don't
   // bother initializing members to 0.
+
+  NS_FIX_OWNINGTHREAD(mDocument->GetZone());
 
   mDoScaledTwips = true;
 
@@ -904,6 +908,7 @@ nsPresContext::PreferenceChanged(const char* aPrefName)
     mPrefChangedTimer = do_CreateInstance("@mozilla.org/timer;1");
     if (!mPrefChangedTimer)
       return;
+    mPrefChangedTimer->SetCallbackZone(GetZone());
     mPrefChangedTimer->InitWithFuncCallback(nsPresContext::PrefChangedUpdateTimerCallback, (void*)this, 0, nsITimer::TYPE_ONE_SHOT);
   }
 }
@@ -1087,6 +1092,7 @@ nsPresContext::SetShell(nsIPresShell* aShell)
     NS_ASSERTION(doc, "expect document here");
     if (doc) {
       // Have to update PresContext's mDocument before calling any other methods.
+      JS_ASSERT(doc->GetZone() == mDocument->GetZone());
       mDocument = doc;
     }
     // Initialize our state from the user preferences, now that we
@@ -1194,7 +1200,7 @@ nsPresContext::Observe(nsISupports* aSubject,
   if (!nsCRT::strcmp(aTopic, "charset")) {
     nsRefPtr<CharSetChangingRunnable> runnable =
       new CharSetChangingRunnable(this, NS_LossyConvertUTF16toASCII(aData));
-    return NS_DispatchToCurrentThread(runnable);
+    return NS_DispatchToMainThread(runnable, NS_DISPATCH_NORMAL, GetZone());
   }
 
   NS_WARNING("unrecognized topic in nsPresContext::Observe");
@@ -1783,9 +1789,10 @@ nsPresContext::PostMediaFeatureValuesChangedEvent()
   // nsRefreshDriver::AddStyleFlushObserver (except the pres shell would
   // need to track whether it's been added).
   if (!mPendingMediaFeatureValuesChanged) {
+    JSZoneId zone = mDocument->GetZone();
     nsCOMPtr<nsIRunnable> ev =
-      NS_NewRunnableMethod(this, &nsPresContext::HandleMediaFeatureValuesChangedEvent);
-    if (NS_SUCCEEDED(NS_DispatchToCurrentThread(ev))) {
+      NS_NewRunnableMethod(this, &nsPresContext::HandleMediaFeatureValuesChangedEvent, zone);
+    if (NS_SUCCEEDED(NS_DispatchToMainThread(ev, NS_DISPATCH_NORMAL, zone))) {
       mPendingMediaFeatureValuesChanged = true;
       mDocument->SetNeedStyleFlush();
     }
@@ -2009,7 +2016,7 @@ nsPresContext::RebuildUserFontSet()
   if (!mPostedFlushUserFontSet) {
     nsCOMPtr<nsIRunnable> ev =
       NS_NewRunnableMethod(this, &nsPresContext::HandleRebuildUserFontSet);
-    if (NS_SUCCEEDED(NS_DispatchToCurrentThread(ev))) {
+    if (NS_SUCCEEDED(NS_DispatchToMainThread(ev, NS_DISPATCH_NORMAL, GetZone()))) {
       mPostedFlushUserFontSet = true;
     }
   }    
@@ -2117,6 +2124,8 @@ MayHavePaintEventListener(nsPIDOMWindow* aInnerWindow)
   if (aInnerWindow->HasPaintEventListeners())
     return true;
 
+  nsAutoLockChrome lock; // parentTarget may be in chrome. fix?
+
   nsIDOMEventTarget* parentTarget = aInnerWindow->GetParentTarget();
   if (!parentTarget)
     return false;
@@ -2196,6 +2205,8 @@ nsPresContext::NotifyInvalidation(const nsRect& aRect, PRUint32 aFlags)
 static bool
 NotifyDidPaintSubdocumentCallback(nsIDocument* aDocument, void* aData)
 {
+  if (!NS_TryStickLock(aDocument))
+    return true;
   nsIPresShell* shell = aDocument->GetShell();
   if (shell) {
     nsPresContext* pc = shell->GetPresContext();
@@ -2219,9 +2230,12 @@ nsPresContext::NotifyDidPaintForSubtree()
 
   if (!mInvalidateRequests.mRequests.IsEmpty()) {
     nsCOMPtr<nsIRunnable> ev =
-      NS_NewRunnableMethod(this, &nsPresContext::FireDOMPaintEvent);
+      NS_NewRunnableMethod(this, &nsPresContext::FireDOMPaintEvent, mDocument->GetZone());
     nsContentUtils::AddScriptRunner(ev);
   }
+
+  mDocument->TryLockSubDocuments();
+  nsAutoCantLockNewContent cantLock;
 
   mDocument->EnumerateSubDocuments(NotifyDidPaintSubdocumentCallback, nsnull);
 }
@@ -2687,6 +2701,8 @@ nsRootPresContext::UpdatePluginGeometry()
   // update when we don't actually want one.
   CancelUpdatePluginGeometryTimer();
 
+  Document()->TryLockSubDocuments();
+
   nsIFrame* f = mUpdatePluginGeometryForFrame;
   if (f) {
     mUpdatePluginGeometryForFrame->PresContext()->
@@ -2788,6 +2804,10 @@ static void
 NotifyDidPaintForSubtreeCallback(nsITimer *aTimer, void *aClosure)
 {
   nsPresContext* presContext = (nsPresContext*)aClosure;
+
+  nsIDocument *doc = presContext->Document();
+  doc->TryLockSubDocuments();
+
   nsAutoScriptBlocker blockScripts;
   presContext->NotifyDidPaintForSubtree();
 }
@@ -2800,6 +2820,7 @@ nsRootPresContext::EnsureEventualDidPaintEvent()
   mNotifyDidPaintTimer = do_CreateInstance("@mozilla.org/timer;1");
   if (!mNotifyDidPaintTimer)
     return;
+  mNotifyDidPaintTimer->SetCallbackZone(GetZone());
   mNotifyDidPaintTimer->InitWithFuncCallback(NotifyDidPaintForSubtreeCallback,
                                              (void*)this, 100, nsITimer::TYPE_ONE_SHOT);
 }

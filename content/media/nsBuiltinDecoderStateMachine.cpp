@@ -164,6 +164,7 @@ public:
 
   NS_IMETHOD Run()
   {
+    NS_StickLock(mDecoder);
     mDecoder->MetadataLoaded(mChannels, mRate, mHasAudio);
     return NS_OK;
   }
@@ -186,12 +187,12 @@ private:
     mStateMachineThread(nsnull)
   {
      MOZ_COUNT_CTOR(StateMachineTracker);
-     NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+     MOZ_ASSERT(NS_IsChromeOwningThread());
   } 
  
   ~StateMachineTracker()
   {
-    NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+    MOZ_ASSERT(NS_IsChromeOwningThread());
 
     MOZ_COUNT_DTOR(StateMachineTracker);
   }
@@ -285,7 +286,7 @@ StateMachineTracker* StateMachineTracker::mInstance = nsnull;
 StateMachineTracker& StateMachineTracker::Instance()
 {
   if (!mInstance) {
-    NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+    MOZ_ASSERT(NS_IsChromeOwningThread());
     mInstance = new StateMachineTracker();
   }
   return *mInstance;
@@ -293,7 +294,7 @@ StateMachineTracker& StateMachineTracker::Instance()
 
 void StateMachineTracker::EnsureGlobalStateMachine() 
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   ReentrantMonitorAutoEnter mon(mMonitor);
   if (mStateMachineCount == 0) {
     NS_ASSERTION(!mStateMachineThread, "Should have null state machine thread!");
@@ -321,7 +322,7 @@ bool StateMachineTracker::IsQueued(nsBuiltinDecoderStateMachine* aStateMachine)
 
 void StateMachineTracker::CleanupGlobalStateMachine() 
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   NS_ABORT_IF_FALSE(mStateMachineCount > 0,
     "State machine ref count must be > 0");
   mStateMachineCount--;
@@ -442,7 +443,7 @@ nsBuiltinDecoderStateMachine::nsBuiltinDecoderStateMachine(nsBuiltinDecoder* aDe
   mEventManager(aDecoder)
 {
   MOZ_COUNT_CTOR(nsBuiltinDecoderStateMachine);
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   StateMachineTracker::Instance().EnsureGlobalStateMachine();
 
@@ -456,7 +457,7 @@ nsBuiltinDecoderStateMachine::nsBuiltinDecoderStateMachine(nsBuiltinDecoder* aDe
 
 nsBuiltinDecoderStateMachine::~nsBuiltinDecoderStateMachine()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   MOZ_COUNT_DTOR(nsBuiltinDecoderStateMachine);
   NS_ASSERTION(!StateMachineTracker::Instance().IsQueued(this),
     "Should not have a pending request for a new decode thread");
@@ -1375,7 +1376,7 @@ void nsBuiltinDecoderStateMachine::UpdatePlaybackPosition(PRInt64 aTime)
 
 void nsBuiltinDecoderStateMachine::ClearPositionChangeFlag()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   mDecoder->GetReentrantMonitor().AssertCurrentThreadIn();
 
   mPositionChangeQueued = false;
@@ -1394,7 +1395,7 @@ nsHTMLMediaElement::NextFrameStatus nsBuiltinDecoderStateMachine::GetNextFrameSt
 
 void nsBuiltinDecoderStateMachine::SetVolume(double volume)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   ReentrantMonitorAutoEnter mon(mDecoder->GetReentrantMonitor());
   mVolume = volume;
 }
@@ -1411,10 +1412,9 @@ void nsBuiltinDecoderStateMachine::SetAudioCaptured(bool aCaptured)
 
 double nsBuiltinDecoderStateMachine::GetCurrentTime() const
 {
-  NS_ASSERTION(NS_IsMainThread() ||
-               OnStateMachineThread() ||
-               OnDecodeThread(),
-               "Should be on main, decode, or state machine thread.");
+  MOZ_ASSERT(NS_IsChromeOwningThread() ||
+             OnStateMachineThread() ||
+             OnDecodeThread());
 
   return static_cast<double>(mCurrentFrameTime) / static_cast<double>(USECS_PER_S);
 }
@@ -1430,8 +1430,8 @@ PRInt64 nsBuiltinDecoderStateMachine::GetDuration()
 
 void nsBuiltinDecoderStateMachine::SetDuration(PRInt64 aDuration)
 {
-  NS_ASSERTION(NS_IsMainThread() || OnDecodeThread(),
-               "Should be on main or decode thread.");
+  MOZ_ASSERT(NS_IsChromeOwningThread() ||
+             OnDecodeThread());
   mDecoder->GetReentrantMonitor().AssertCurrentThreadIn();
 
   if (aDuration == -1) {
@@ -1463,7 +1463,7 @@ void nsBuiltinDecoderStateMachine::SetFragmentEndTime(PRInt64 aEndTime)
 
 void nsBuiltinDecoderStateMachine::SetSeekable(bool aSeekable)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   mDecoder->GetReentrantMonitor().AssertCurrentThreadIn();
 
   mSeekable = aSeekable;
@@ -1471,7 +1471,7 @@ void nsBuiltinDecoderStateMachine::SetSeekable(bool aSeekable)
 
 void nsBuiltinDecoderStateMachine::Shutdown()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   // Once we've entered the shutdown state here there's no going back.
   ReentrantMonitorAutoEnter mon(mDecoder->GetReentrantMonitor());
@@ -1498,7 +1498,7 @@ void nsBuiltinDecoderStateMachine::StartDecoding()
 
 void nsBuiltinDecoderStateMachine::Play()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   // When asked to play, switch to decoding state only if
   // we are currently buffering. In other cases, we'll start playing anyway
   // when the state machine notices the decoder's state change to PLAYING.
@@ -1524,7 +1524,7 @@ void nsBuiltinDecoderStateMachine::NotifyDataArrived(const char* aBuffer,
                                                      PRUint32 aLength,
                                                      PRInt64 aOffset)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   mReader->NotifyDataArrived(aBuffer, aLength, aOffset);
 
   // While playing an unseekable stream of unknown duration, mEndTime is
@@ -1549,7 +1549,7 @@ void nsBuiltinDecoderStateMachine::NotifyDataArrived(const char* aBuffer,
 
 void nsBuiltinDecoderStateMachine::Seek(double aTime)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   ReentrantMonitorAutoEnter mon(mDecoder->GetReentrantMonitor());
   // nsBuiltinDecoder::mPlayState should be SEEKING while we seek, and
   // in that case nsBuiltinDecoder shouldn't be calling us.
@@ -1994,7 +1994,7 @@ public:
                         already_AddRefed<nsBuiltinDecoderStateMachine> aStateMachine)
     : mDecoder(aDecoder), mStateMachine(aStateMachine) {}
   NS_IMETHOD Run() {
-    NS_ASSERTION(NS_IsMainThread(), "Must be on main thread.");
+    MOZ_ASSERT(NS_IsChromeOwningThread());
     mStateMachine->ReleaseDecoder();
     mDecoder->ReleaseStateMachine();
     mStateMachine = nsnull;

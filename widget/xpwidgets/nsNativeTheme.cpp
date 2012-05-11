@@ -54,6 +54,7 @@
 #include "nsProgressFrame.h"
 #include "nsMenuFrame.h"
 #include "mozilla/dom/Element.h"
+#include "nsProxyRelease.h"
 
 nsNativeTheme::nsNativeTheme()
 : mAnimatedContentTimeout(PR_UINT32_MAX)
@@ -580,6 +581,9 @@ nsNativeTheme::Notify(nsITimer* aTimer)
       frame->InvalidateOverflowRect();
     }
   }
+
+  for (int i = 0; i < mAnimatedContentList.Length(); i++)
+    NS_ReleaseReference(mAnimatedContentList[i]);
 
   mAnimatedContentList.Clear();
   mAnimatedContentTimeout = PR_UINT32_MAX;

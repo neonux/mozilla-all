@@ -1170,7 +1170,7 @@ nsNavHistory::DomainNameFromURI(nsIURI *aURI,
 NS_IMETHODIMP
 nsNavHistory::GetHasHistoryEntries(bool* aHasEntries)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG_POINTER(aHasEntries);
 
   // Use cached value if it's been set
@@ -1236,7 +1236,7 @@ nsNavHistory::invalidateFrecencies(const nsCString& aPlaceIdsQueryString)
 NS_IMETHODIMP
 nsNavHistory::MarkPageAsFollowedBookmark(nsIURI* aURI)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aURI);
 
   // don't add when history is disabled
@@ -1271,7 +1271,7 @@ nsNavHistory::MarkPageAsFollowedBookmark(nsIURI* aURI)
 NS_IMETHODIMP
 nsNavHistory::CanAddURI(nsIURI* aURI, bool* canAdd)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aURI);
   NS_ENSURE_ARG_POINTER(canAdd);
 
@@ -1328,7 +1328,7 @@ nsNavHistory::AddVisit(nsIURI* aURI, PRTime aTime, nsIURI* aReferringURI,
                        PRInt32 aTransitionType, bool aIsRedirect,
                        PRInt64 aSessionID, PRInt64* aVisitID)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aURI);
   NS_ENSURE_ARG_POINTER(aVisitID);
 
@@ -1514,7 +1514,7 @@ nsNavHistory::AddVisit(nsIURI* aURI, PRTime aTime, nsIURI* aReferringURI,
 NS_IMETHODIMP
 nsNavHistory::GetNewQuery(nsINavHistoryQuery **_retval)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG_POINTER(_retval);
 
   *_retval = new nsNavHistoryQuery();
@@ -1529,7 +1529,7 @@ nsNavHistory::GetNewQuery(nsINavHistoryQuery **_retval)
 NS_IMETHODIMP
 nsNavHistory::GetNewQueryOptions(nsINavHistoryQueryOptions **_retval)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG_POINTER(_retval);
 
   *_retval = new nsNavHistoryQueryOptions();
@@ -1545,7 +1545,7 @@ NS_IMETHODIMP
 nsNavHistory::ExecuteQuery(nsINavHistoryQuery *aQuery, nsINavHistoryQueryOptions *aOptions,
                            nsINavHistoryResult** _retval)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aQuery);
   NS_ENSURE_ARG(aOptions);
   NS_ENSURE_ARG_POINTER(_retval);
@@ -1571,7 +1571,7 @@ nsNavHistory::ExecuteQueries(nsINavHistoryQuery** aQueries, PRUint32 aQueryCount
                              nsINavHistoryQueryOptions *aOptions,
                              nsINavHistoryResult** _retval)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aQueries);
   NS_ENSURE_ARG(aOptions);
   NS_ENSURE_ARG(aQueryCount);
@@ -2613,7 +2613,7 @@ nsNavHistory::GetQueryResults(nsNavHistoryQueryResultNode *aResultNode,
 NS_IMETHODIMP
 nsNavHistory::AddObserver(nsINavHistoryObserver* aObserver, bool aOwnsWeak)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aObserver);
 
   return mObservers.AppendWeakElement(aObserver, aOwnsWeak);
@@ -2625,7 +2625,7 @@ nsNavHistory::AddObserver(nsINavHistoryObserver* aObserver, bool aOwnsWeak)
 NS_IMETHODIMP
 nsNavHistory::RemoveObserver(nsINavHistoryObserver* aObserver)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aObserver);
 
   return mObservers.RemoveWeakElement(aObserver);
@@ -2667,7 +2667,7 @@ NS_IMETHODIMP
 nsNavHistory::RunInBatchMode(nsINavHistoryBatchCallback* aCallback,
                              nsISupports* aUserData)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aCallback);
 
   UpdateBatchScoper batch(*this);
@@ -2677,7 +2677,7 @@ nsNavHistory::RunInBatchMode(nsINavHistoryBatchCallback* aCallback,
 NS_IMETHODIMP
 nsNavHistory::GetHistoryDisabled(bool *_retval)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG_POINTER(_retval);
 
   *_retval = IsHistoryDisabled();
@@ -2698,7 +2698,7 @@ NS_IMETHODIMP
 nsNavHistory::AddPageWithDetails(nsIURI *aURI, const PRUnichar *aTitle,
                                  PRInt64 aLastVisited)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aURI);
 
   // Don't update the page title inside the private browsing mode.
@@ -2855,7 +2855,7 @@ nsNavHistory::CleanupPlacesOnVisitsDelete(const nsCString& aPlaceIdsQueryString)
 NS_IMETHODIMP
 nsNavHistory::RemovePages(nsIURI **aURIs, PRUint32 aLength)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aURIs);
 
   nsresult rv;
@@ -2893,7 +2893,7 @@ nsNavHistory::RemovePages(nsIURI **aURIs, PRUint32 aLength)
 NS_IMETHODIMP
 nsNavHistory::RemovePage(nsIURI *aURI)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aURI);
 
   // Build a list of place ids to delete.
@@ -2933,7 +2933,7 @@ nsNavHistory::RemovePage(nsIURI *aURI)
 NS_IMETHODIMP
 nsNavHistory::RemovePagesFromHost(const nsACString& aHost, bool aEntireDomain)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
 
   nsresult rv;
   // Local files don't have any host name. We don't want to delete all files in
@@ -3019,7 +3019,7 @@ nsNavHistory::RemovePagesFromHost(const nsACString& aHost, bool aEntireDomain)
 NS_IMETHODIMP
 nsNavHistory::RemovePagesByTimeframe(PRTime aBeginTime, PRTime aEndTime)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
 
   nsresult rv;
   // build a list of place ids to delete
@@ -3083,7 +3083,7 @@ nsNavHistory::RemovePagesByTimeframe(PRTime aBeginTime, PRTime aEndTime)
 NS_IMETHODIMP
 nsNavHistory::RemoveVisitsByTimeframe(PRTime aBeginTime, PRTime aEndTime)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
 
   nsresult rv;
 
@@ -3165,7 +3165,7 @@ nsNavHistory::RemoveVisitsByTimeframe(PRTime aBeginTime, PRTime aEndTime)
 NS_IMETHODIMP
 nsNavHistory::RemoveAllPages()
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
 
   nsresult rv = mDB->MainConn()->ExecuteSimpleSQL(NS_LITERAL_CSTRING(
     "DELETE FROM moz_historyvisits"
@@ -3201,7 +3201,7 @@ nsNavHistory::RemoveAllPages()
 NS_IMETHODIMP
 nsNavHistory::MarkPageAsTyped(nsIURI *aURI)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aURI);
 
   // don't add when history is disabled
@@ -3235,7 +3235,7 @@ nsNavHistory::MarkPageAsTyped(nsIURI *aURI)
 NS_IMETHODIMP
 nsNavHistory::MarkPageAsFollowedLink(nsIURI *aURI)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aURI);
 
   // don't add when history is disabled
@@ -3268,7 +3268,7 @@ NS_IMETHODIMP
 nsNavHistory::SetCharsetForURI(nsIURI* aURI,
                                const nsAString& aCharset)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aURI);
 
   nsAnnotationService* annosvc = nsAnnotationService::GetAnnotationService();
@@ -3304,7 +3304,7 @@ NS_IMETHODIMP
 nsNavHistory::GetCharsetForURI(nsIURI* aURI, 
                                nsAString& aCharset)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aURI);
 
   nsAnnotationService* annosvc = nsAnnotationService::GetAnnotationService();
@@ -3331,7 +3331,7 @@ NS_IMETHODIMP
 nsNavHistory::AddURI(nsIURI *aURI, bool aRedirect,
                      bool aToplevel, nsIURI *aReferrer)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aURI);
 
   // filter out any unwanted URIs
@@ -3488,7 +3488,7 @@ nsNavHistory::AddVisitChain(nsIURI* aURI,
 NS_IMETHODIMP
 nsNavHistory::IsVisited(nsIURI *aURI, bool *_retval)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aURI);
   NS_ENSURE_ARG_POINTER(_retval);
 
@@ -3522,7 +3522,7 @@ NS_IMETHODIMP
 nsNavHistory::SetPageTitle(nsIURI* aURI,
                            const nsAString& aTitle)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aURI);
 
   // Don't update the page title inside the private browsing mode.
@@ -3551,7 +3551,7 @@ nsNavHistory::SetPageTitle(nsIURI* aURI,
 NS_IMETHODIMP
 nsNavHistory::GetPageTitle(nsIURI* aURI, nsAString& aTitle)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aURI);
 
   aTitle.Truncate(0);
@@ -3637,7 +3637,7 @@ nsNavHistory::AsyncExecuteLegacyQueries(nsINavHistoryQuery** aQueries,
                                         mozIStorageStatementCallback* aCallback,
                                         mozIStoragePendingStatement** _stmt)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
   NS_ENSURE_ARG(aQueries);
   NS_ENSURE_ARG(aOptions);
   NS_ENSURE_ARG(aCallback);
@@ -3728,7 +3728,7 @@ NS_IMETHODIMP
 nsNavHistory::Observe(nsISupports *aSubject, const char *aTopic,
                     const PRUnichar *aData)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
 
   if (strcmp(aTopic, TOPIC_PROFILE_TEARDOWN) == 0 ||
       strcmp(aTopic, TOPIC_PROFILE_CHANGE) == 0) {
@@ -4394,7 +4394,7 @@ void
 nsNavHistory::registerEmbedVisit(nsIURI* aURI,
                                  PRInt64 aTime)
 {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
 
   VisitHashKey* visit = mEmbedVisits.PutEntry(aURI);
   if (!visit) {
@@ -4406,14 +4406,14 @@ nsNavHistory::registerEmbedVisit(nsIURI* aURI,
 
 bool
 nsNavHistory::hasEmbedVisit(nsIURI* aURI) {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
 
   return !!mEmbedVisits.GetEntry(aURI);
 }
 
 void
 nsNavHistory::clearEmbedVisits() {
-  NS_ASSERTION(NS_IsMainThread(), "This can only be called on the main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "This can only be called on the main thread");
 
   mEmbedVisits.Clear();
 }

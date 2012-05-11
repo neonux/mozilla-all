@@ -79,6 +79,7 @@
 #include "nsIObjectOutputStream.h"
 #include "nsIWritablePropertyBag2.h"
 #include "nsIContentSecurityPolicy.h"
+#include "nsProxyRelease.h"
 
 static NS_DEFINE_CID(kJSURICID, NS_JSURI_CID);
 
@@ -160,7 +161,7 @@ nsIScriptGlobalObject* GetGlobalObject(nsIChannel* aChannel)
     }
 
     // So far so good: get the script context from its owner.
-    nsIScriptGlobalObject* global = globalOwner->GetScriptGlobalObject();
+    nsIScriptGlobalObject* global = globalOwner->GetScriptGlobalObject(JS_ZONE_NONE);
 
     NS_ASSERTION(global,
                  "Unable to get an nsIScriptGlobalObject from the "
@@ -874,7 +875,12 @@ nsJSChannel::CleanupStrongRefs()
 {
     mListener = nsnull;
     mContext = nsnull;
-    mOriginalInnerWindow = nsnull;
+
+    if (mOriginalInnerWindow)
+        NS_ReleaseReference(mOriginalInnerWindow);
+
+    MOZ_ASSERT(mOriginalInnerWindow == nsnull);
+
     if (mDocumentOnloadBlockedOn) {
         mDocumentOnloadBlockedOn->UnblockOnload(false);
         mDocumentOnloadBlockedOn = nsnull;

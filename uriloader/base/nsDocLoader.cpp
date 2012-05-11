@@ -183,7 +183,8 @@ nsDocLoader::nsDocLoader()
     mIsLoadingDocument(false),
     mIsRestoringDocument(false),
     mDontFlushLayout(false),
-    mIsFlushingLayout(false)
+    mIsFlushingLayout(false),
+    mListenerZone(JS_ZONE_NONE)
 {
 #if defined(PR_LOGGING)
   if (nsnull == gDocLoaderLog) {
@@ -985,6 +986,12 @@ nsDocLoader::AddProgressListener(nsIWebProgressListener *aListener,
 {
   nsresult rv;
 
+  JSZoneId zone = aListener->GetZone();
+  if (zone >= JS_ZONE_CONTENT_START) {
+    MOZ_ASSERT_IF(mListenerZone >= JS_ZONE_CONTENT_START, mListenerZone == zone);
+    mListenerZone = zone;
+  }
+
   nsListenerInfo* info = GetListenerInfo(aListener);
   if (info) {
     // The listener is already registered!
@@ -1354,6 +1361,9 @@ void nsDocLoader::DoFireOnStateChange(nsIWebProgress * const aProgress,
 
   NS_ASSERTION(aRequest, "Firing OnStateChange(...) notification with a NULL request!");
 
+  if (mListenerZone >= JS_ZONE_CONTENT_START)
+    NS_StickContentLock(mListenerZone);
+
   /*                                                                           
    * First notify any listeners of the new state info...
    *
@@ -1536,6 +1546,9 @@ nsDocLoader::GetListenerInfo(nsIWebProgressListener *aListener)
 {
   PRInt32 i, count;
   nsListenerInfo *info;
+
+  if (mListenerZone >= JS_ZONE_CONTENT_START && !NS_TryStickContentLock(mListenerZone))
+    return nsnull;
 
   nsCOMPtr<nsISupports> listener1 = do_QueryInterface(aListener);
   count = mListenerInfoList.Count();

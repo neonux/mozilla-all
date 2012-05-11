@@ -273,7 +273,7 @@ TransportSecurityInfo::GetErrorMessage(PRUnichar** aText)
   NS_ENSURE_ARG_POINTER(aText);
   *aText = nsnull;
 
-  if (!NS_IsMainThread()) {
+  if (!NS_IsChromeOwningThread()) {
     NS_ERROR("nsNSSSocketInfo::GetErrorMessage called off the main thread");
     return NS_ERROR_NOT_SAME_THREAD;
   }
@@ -335,7 +335,7 @@ TransportSecurityInfo::formatErrorMessage(MutexAutoLock const & proofOfLock)
 NS_IMETHODIMP
 TransportSecurityInfo::GetInterface(const nsIID & uuid, void * *result)
 {
-  if (!NS_IsMainThread()) {
+  if (!NS_IsChromeOwningThread()) {
     NS_ERROR("nsNSSSocketInfo::GetInterface called off the main thread");
     return NS_ERROR_NOT_SAME_THREAD;
   }

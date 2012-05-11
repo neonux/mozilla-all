@@ -755,10 +755,23 @@ DecreasePrivateDocShellCount()
 
 static PRUint64 gDocshellIDCounter = 0;
 
+extern bool NS_CanLockContent(JSZoneId zone);
+
+void
+nsDocShell::MaybeFreeWindowZone()
+{
+    if (mOwnsWindowZone) {
+        NS_FreeContentZone(mWindowZone);
+        mOwnsWindowZone = false;
+    }
+}
+
 // Note: operator new zeros our memory
 nsDocShell::nsDocShell():
     nsDocLoader(),
     mDefaultScrollbarPref(Scrollbar_Auto, Scrollbar_Auto),
+    mWindowZone(NS_AllocateContentZone()),
+    mOwnsWindowZone(true),
     mTreeOwner(nsnull),
     mChromeEventHandler(nsnull),
     mCharsetReloadState(eCharsetReloadInit),
@@ -801,6 +814,14 @@ nsDocShell::nsDocShell():
 #endif
     mParentCharsetSource(0)
 {
+    // If this was opened via a call from some content script, use the same
+    // zone as that script. XXX make this less of a gigantic hack.
+    JSZoneId activeZone = JS_GetExecutingContentScriptZone();
+    if (activeZone != JS_ZONE_NONE) {
+        MaybeFreeWindowZone();
+        mWindowZone = activeZone;
+    }
+
     mHistoryID = ++gDocshellIDCounter;
     if (gDocShellCount++ == 0) {
         NS_ASSERTION(sURIFixup == nsnull,
@@ -967,12 +988,20 @@ NS_IMETHODIMP nsDocShell::GetInterface(const nsIID & aIID, void **aSink)
     }
     else if (aIID.Equals(NS_GET_IID(nsIScriptGlobalObject)) &&
              NS_SUCCEEDED(EnsureScriptEnvironment())) {
+        if (mWindowZone >= JS_ZONE_CONTENT_START) {
+            if (!NS_TryStickContentLock(mWindowZone))
+                return NS_NOINTERFACE;
+        }
         *aSink = mScriptGlobal;
     }
     else if ((aIID.Equals(NS_GET_IID(nsPIDOMWindow)) ||
               aIID.Equals(NS_GET_IID(nsIDOMWindow)) ||
               aIID.Equals(NS_GET_IID(nsIDOMWindowInternal))) &&
              NS_SUCCEEDED(EnsureScriptEnvironment())) {
+        if (mWindowZone >= JS_ZONE_CONTENT_START) {
+            if (!NS_TryStickContentLock(mWindowZone))
+                return NS_NOINTERFACE;
+        }
         return mScriptGlobal->QueryInterface(aIID, aSink);
     }
     else if (aIID.Equals(NS_GET_IID(nsIDOMDocument)) &&
@@ -1861,8 +1890,14 @@ nsDocShell::SetCurrentURI(nsIURI *aURI, nsIRequest *aRequest,
         return false;
     }
 
+    nsCOMPtr<nsIURI> clonedURI;
+    if (mWindowZone >= JS_ZONE_CONTENT_START) {
+        NS_ENSURE_SUCCESS(aURI->Clone(getter_AddRefs(clonedURI)), false);
+        aURI = clonedURI;
+    }
+
     mCurrentURI = NS_TryToMakeImmutable(aURI);
-    
+
     bool isRoot = false;   // Is this the root docshell
     bool isSubFrame = false;  // Is this a subframe navigation?
 
@@ -2400,6 +2435,8 @@ nsDocShell::GetSessionStorageForPrincipal(nsIPrincipal* aPrincipal,
     NS_ENSURE_ARG_POINTER(aStorage);
     *aStorage = nsnull;
 
+    MOZ_ASSERT(NS_IsChromeOwningThread());
+
     if (!aPrincipal)
         return NS_OK;
 
@@ -2660,6 +2697,12 @@ nsDocShell::SetItemType(PRInt32 aItemType)
     
     NS_ENSURE_STATE(!mParent || mParent == docLoaderService);
 
+    MOZ_ASSERT(mItemType == typeContent);
+    if (aItemType == typeChrome) {
+        MaybeFreeWindowZone();
+        mWindowZone = JS_ZONE_CHROME;
+    }
+
     mItemType = aItemType;
 
     // disable auth prompting for anything but content
@@ -2670,6 +2713,30 @@ nsDocShell::SetItemType(PRInt32 aItemType)
     if (presContext) {
         presContext->InvalidateIsChromeCache();
     }
+
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocShell::SetParentZone(PRInt32 aZone)
+{
+    MOZ_ASSERT_IF(mWindowZone == JS_ZONE_CHROME, aZone == JS_ZONE_CHROME);
+
+    if (aZone >= JS_ZONE_CONTENT_START) {
+        MaybeFreeWindowZone();
+        mWindowZone = (JSZoneId) aZone;
+    }
+
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocShell::SetChromeZone()
+{
+    /*
+    MaybeFreeWindowZone();
+    mWindowZone = JS_ZONE_CHROME;
+    */
 
     return NS_OK;
 }
@@ -3880,6 +3947,12 @@ nsDocShell::LoadURI(const PRUnichar * aURI,
     } else {
         popupState = openOverridden;
     }
+
+    if (mWindowZone >= JS_ZONE_CONTENT_START) {
+        if (!NS_TryStickContentLock(mWindowZone))
+            return NS_ERROR_FAILURE;
+    }
+
     nsCOMPtr<nsPIDOMWindow> win(do_QueryInterface(mScriptGlobal));
     nsAutoPopupStatePusher statePusher(win, popupState);
 
@@ -4437,6 +4510,9 @@ nsDocShell::GetDocument(nsIDOMDocument ** aDocument)
     NS_ENSURE_ARG_POINTER(aDocument);
     NS_ENSURE_SUCCESS(EnsureContentViewer(), NS_ERROR_FAILURE);
 
+    if (mWindowZone >= JS_ZONE_CONTENT_START && !NS_TryStickContentLock(mWindowZone))
+        return NS_ERROR_FAILURE;
+
     return mContentViewer->GetDOMDocument(aDocument);
 }
 
@@ -4778,6 +4854,24 @@ nsDocShell::GetSize(PRInt32 * aCX, PRInt32 * aCY)
     return GetPositionAndSize(&dummyHolder, &dummyHolder, aCX, aCY);
 }
 
+class nsSetViewerBoundsEvent : public nsRunnable
+{
+    JSZoneId zone;
+    nsCOMPtr<nsIContentViewer> viewer;
+    nsIntRect bounds;
+
+public:
+
+    nsSetViewerBoundsEvent(JSZoneId zone, nsIContentViewer *viewer, nsIntRect bounds)
+        : zone(zone), viewer(viewer), bounds(bounds)
+    {}
+
+    NS_IMETHOD Run() {
+        NS_StickContentLock(zone);
+        return viewer->SetBounds(bounds);
+    }
+};
+
 NS_IMETHODIMP
 nsDocShell::SetPositionAndSize(PRInt32 x, PRInt32 y, PRInt32 cx,
                                PRInt32 cy, bool fRepaint)
@@ -4786,6 +4880,13 @@ nsDocShell::SetPositionAndSize(PRInt32 x, PRInt32 y, PRInt32 cx,
     mBounds.y = y;
     mBounds.width = cx;
     mBounds.height = cy;
+
+    if (mWindowZone >= JS_ZONE_CONTENT_START && !NS_TryStickContentLock(mWindowZone)) {
+        NS_DispatchToMainThread(new nsSetViewerBoundsEvent(mWindowZone, mContentViewer, mBounds),
+                                NS_DISPATCH_NORMAL,
+                                mWindowZone);
+        return NS_OK;
+    }
 
     // Hold strong ref, since SetBounds can make us null out mContentViewer
     nsCOMPtr<nsIContentViewer> viewer = mContentViewer;
@@ -4972,9 +5073,32 @@ nsDocShell::GetIsOffScreenBrowser(bool *aIsOffScreen)
     return NS_OK;
 }
 
+class nsDocShellSetIsActiveEvent : public nsRunnable
+{
+    nsCOMPtr<nsIDocShell> mDocShell;
+    bool mIsActive;
+
+public:
+    nsDocShellSetIsActiveEvent(nsIDocShell *aDocShell, bool aIsActive)
+      : mDocShell(aDocShell), mIsActive(aIsActive)
+    {}
+
+    NS_IMETHOD Run()
+    {
+        return mDocShell->SetIsActive(mIsActive);
+    }
+};
+
 NS_IMETHODIMP
 nsDocShell::SetIsActive(bool aIsActive)
 {
+  if (mWindowZone >= JS_ZONE_CONTENT_START && !NS_TryStickContentLock(mWindowZone)) {
+    NS_DispatchToMainThread(new nsDocShellSetIsActiveEvent(this, aIsActive),
+                            NS_DISPATCH_NORMAL,
+                            mWindowZone);
+    return NS_OK;
+  }
+
   // We disallow setting active on chrome docshells.
   if (mItemType == nsIDocShellTreeItem::typeChrome)
     return NS_ERROR_INVALID_ARG;
@@ -5028,6 +5152,13 @@ nsDocShell::GetIsAppTab(bool *aIsAppTab)
 {
   *aIsAppTab = mIsAppTab;
   return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocShell::GetWindowZone(PRInt32 *pzone)
+{
+    *pzone = mWindowZone;
+    return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -5341,9 +5472,14 @@ nsDocShell::ScrollByPages(PRInt32 numPages)
 //*****************************************************************************   
 
 nsIScriptGlobalObject*
-nsDocShell::GetScriptGlobalObject()
+nsDocShell::GetScriptGlobalObject(JSZoneId aZone)
 {
+    MOZ_ASSERT_IF(aZone != JS_ZONE_NONE, aZone == mWindowZone);
+
     NS_ENSURE_SUCCESS(EnsureScriptEnvironment(), nsnull);
+
+    if (mWindowZone >= JS_ZONE_CONTENT_START)
+        NS_StickContentLock(mWindowZone);
 
     return mScriptGlobal;
 }
@@ -6504,6 +6640,8 @@ nsDocShell::EnsureContentViewer()
 
     NS_TIME_FUNCTION;
 
+    nsAutoLockChrome lock;
+
     nsIPrincipal* principal = nsnull;
     nsCOMPtr<nsIURI> baseURI;
 
@@ -6554,7 +6692,7 @@ nsDocShell::CreateAboutBlankContentViewer(nsIPrincipal* aPrincipal,
   /* mCreatingDocument should never be true at this point. However, it's
      a theoretical possibility. We want to know about it and make it stop,
      and this sounds like a job for an assertion. */
-  NS_ASSERTION(!mCreatingDocument, "infinite(?) loop creating document averted");
+  MOZ_ASSERT(!mCreatingDocument);
   if (mCreatingDocument)
     return NS_ERROR_FAILURE;
 
@@ -7459,6 +7597,9 @@ nsDocShell::CreateContentViewer(const char *aContentType,
                                 nsIRequest * request,
                                 nsIStreamListener ** aContentHandler)
 {
+    if (mWindowZone >= JS_ZONE_CONTENT_START)
+        NS_StickContentLock(mWindowZone);
+
     *aContentHandler = nsnull;
 
     // Can we check the content type of the current content viewer
@@ -8084,6 +8225,8 @@ nsDocShell::InternalLoad(nsIURI * aURI,
                          nsIDocShell** aDocShell,
                          nsIRequest** aRequest)
 {
+    nsAutoLockZone lock(mWindowZone);
+
     nsresult rv = NS_OK;
     mOriginalUriString.Truncate();
 
@@ -10949,10 +11092,14 @@ nsDocShell::EnsureScriptEnvironment()
         (chromeFlags & nsIWebBrowserChrome::CHROME_MODAL) &&
         !(chromeFlags & nsIWebBrowserChrome::CHROME_OPENAS_CHROME);
 
+    Maybe<nsAutoLockZone> lock;
+    if (mWindowZone >= JS_ZONE_CONTENT_START)
+        lock.construct(mWindowZone);
+
     // If our window is modal and we're not opened as chrome, make
     // this window a modal content window.
     nsRefPtr<nsGlobalWindow> window =
-        NS_NewScriptGlobalObject(mItemType == typeChrome, isModalContentWindow);
+        NS_NewScriptGlobalObject(mWindowZone, isModalContentWindow);
     MOZ_ASSERT(window);
     mScriptGlobal = window;
 
@@ -11003,7 +11150,7 @@ NS_IMETHODIMP nsDocShell::EnsureFind()
     // up to point to the focused, or content window, so we have to
     // set that up each time.
 
-    nsIScriptGlobalObject* scriptGO = GetScriptGlobalObject();
+    nsIScriptGlobalObject* scriptGO = GetScriptGlobalObject(mWindowZone);
     NS_ENSURE_TRUE(scriptGO, NS_ERROR_UNEXPECTED);
 
     // default to our window
@@ -11478,6 +11625,11 @@ public:
                    bool aIsTrusted);
 
   NS_IMETHOD Run() {
+    PRInt32 zone;
+    mHandler->GetWindowZone(&zone);
+    if (zone >= JS_ZONE_CONTENT_START)
+        NS_StickContentLock((JSZoneId) zone);
+
     nsCOMPtr<nsPIDOMWindow> window(do_QueryInterface(mHandler->mScriptGlobal));
     nsAutoPopupStatePusher popupStatePusher(window, mPopupState);
 

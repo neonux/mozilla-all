@@ -70,6 +70,8 @@ public:
   NS_DECL_NSIDOMSVGFILTERELEMENT
   NS_DECL_NSIDOMSVGURIREFERENCE
 
+  JSZoneId GetZone() { return nsINode::GetZone(); }
+
   // xxx I wish we could use virtual inheritance
   NS_FORWARD_NSIDOMNODE(nsSVGFilterElementBase::)
   NS_FORWARD_NSIDOMELEMENT(nsSVGFilterElementBase::)

@@ -104,6 +104,10 @@ public:
     return mListener != nsnull;
   }
 
+  inline JSZoneId GetObserverZone() const {
+    return mListener ? mListener->GetZone() : JS_ZONE_CHROME;
+  }
+
   void SetPrincipal(nsIPrincipal *aPrincipal);
 
   // Asynchronously notify this proxy's listener of the current state of the
@@ -154,6 +158,9 @@ protected:
       {}
 
       NS_IMETHOD Run() {
+        JSZoneId zone = mOwner->GetObserverZone();
+        if (zone >= JS_ZONE_CONTENT_START)
+          NS_StickContentLock(zone);
         mOwner->DoCancel(mStatus);
         return NS_OK;
       }
@@ -178,13 +185,24 @@ protected:
   void OnDiscard         ();
   void OnImageIsAnimated ();
 
+  class OnStartContainerEvent;
+  class OnStartFrameEvent;
+  class OnDataAvailableEvent;
+  class OnStopFrameEvent;
+  class OnStopContainerEvent;
+  class OnStopDecodeEvent;
+
   /* non-virtual imgIContainerObserver methods */
   void FrameChanged(imgIContainer *aContainer,
                     const nsIntRect *aDirtyRect);
 
+  class FrameChangedEvent;
+
   /* non-virtual sort-of-nsIRequestObserver methods */
   void OnStartRequest();
   void OnStopRequest(bool aLastPart);
+
+  class OnStopRequestEvent;
 
   /* Finish up canceling ourselves */
   void DoCancel(nsresult status);

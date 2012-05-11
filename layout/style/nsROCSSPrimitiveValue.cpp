@@ -586,7 +586,10 @@ nsROCSSPrimitiveValue::Reset()
       mValue.mString = nsnull;
       break;
     case CSS_URI:
-      NS_IF_RELEASE(mValue.mURI);
+      {
+        nsAutoLockChrome lock;
+        NS_IF_RELEASE(mValue.mURI);
+      }
       break;
     case CSS_RECT:
       NS_ASSERTION(mValue.mRect, "Null Rect should never happen");

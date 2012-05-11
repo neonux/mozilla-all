@@ -92,6 +92,8 @@ nsCanvasFrame::DestroyFrom(nsIFrame* aDestructRoot)
 void
 nsCanvasFrame::ScrollPositionWillChange(nscoord aX, nscoord aY)
 {
+  nsAutoLockChrome lock;
+
   if (mDoPaintFocus) {
     mDoPaintFocus = false;
     PresContext()->FrameManager()->GetRootFrame()->InvalidateFrameSubtree();
@@ -101,6 +103,8 @@ nsCanvasFrame::ScrollPositionWillChange(nscoord aX, nscoord aY)
 NS_IMETHODIMP
 nsCanvasFrame::SetHasFocus(bool aHasFocus)
 {
+  nsAutoLockChrome lock;
+
   if (mDoPaintFocus != aHasFocus) {
     mDoPaintFocus = aHasFocus;
     PresContext()->FrameManager()->GetRootFrame()->InvalidateFrameSubtree();

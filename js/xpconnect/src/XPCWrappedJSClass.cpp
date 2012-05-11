@@ -247,7 +247,7 @@ nsXPCWrappedJSClass::CallQueryInterfaceOnJSObject(XPCCallContext& ccx,
     // whether or not a content object is capable of implementing the
     // interface (i.e. whether the interface is scriptable) and most content
     // objects don't have QI implementations anyway. Also see bug 503926.
-    if (XPCPerThreadData::IsMainThread(ccx) &&
+    if (XPCPerThreadData::IsExecuteThread(ccx) &&
         !xpc::AccessCheck::isChrome(js::GetObjectCompartment(jsobj))) {
         return nsnull;
     }
@@ -549,7 +549,11 @@ GetContextFromObject(JSObject *obj)
 
     if (xpcc) {
         JSContext *cx = xpcc->GetJSContext();
-        JS_AbortIfWrongThread(JS_GetRuntime(cx));
+        JS_AbortIfWrongThread(JS_GetRuntime(cx), JS_GetZone(cx));
+
+        if (JS_GetContextThread(cx) != (uintptr_t) PR_GetCurrentThread())
+            return nsnull;
+
         return cx;
     }
 
@@ -660,6 +664,8 @@ nsXPCWrappedJSClass::DelegatedQueryInterface(nsXPCWrappedJS* self,
         return NS_NOINTERFACE;
     }
 
+    nsAutoUnstickChrome unstick(ccx);
+
     // We support nsISupportsWeakReference iff the root wrapped JSObject
     // claims to support it in its QueryInterface implementation.
     if (aIID.Equals(NS_GET_IID(nsISupportsWeakReference))) {
@@ -717,7 +723,7 @@ nsXPCWrappedJSClass::DelegatedQueryInterface(nsXPCWrappedJS* self,
 
         *aInstancePtr = nsnull;
 
-        if (!XPCPerThreadData::IsMainThread(ccx.GetJSContext()))
+        if (!XPCPerThreadData::IsExecuteThread(ccx.GetJSContext()))
             return NS_NOINTERFACE;
 
         nsXPConnect *xpc = nsXPConnect::GetXPConnect();
@@ -1159,7 +1165,7 @@ class ContextPrincipalGuard
     ContextPrincipalGuard(XPCCallContext &ccx)
       : ssm(nsnull), ccx(ccx) {}
     void principalPushed(nsIScriptSecurityManager *ssm) { this->ssm = ssm; }
-    ~ContextPrincipalGuard() { if (ssm) ssm->PopContextPrincipal(ccx); }
+    ~ContextPrincipalGuard() { if (ssm) { ssm->PopContextPrincipal(ccx); } }
 };
 
 NS_IMETHODIMP
@@ -1194,8 +1200,13 @@ nsXPCWrappedJSClass::CallMethod(nsXPCWrappedJS* wrapper, uint16_t methodIndex,
     if (!cx || !xpcc || !IsReflectable(methodIndex))
         return NS_ERROR_FAILURE;
 
+    nsAutoUnstickChrome unstick(cx);
+
     JSObject *obj = wrapper->GetJSObject();
     JSObject *thisObj = obj;
+
+    if (!EnsureZoneStuck(cx, JS_GetObjectZone(obj)))
+        return NS_ERROR_XPC_CANT_GET_LOCK;
 
     JSAutoEnterCompartment ac;
     if (!ac.enter(cx, obj))
@@ -1205,6 +1216,8 @@ nsXPCWrappedJSClass::CallMethod(nsXPCWrappedJS* wrapper, uint16_t methodIndex,
 
     JS::AutoValueVector args(cx);
     AutoScriptEvaluate scriptEval(cx);
+
+    mozilla::Maybe<nsAutoLockChrome> lock;
     ContextPrincipalGuard principalGuard(ccx);
 
     // XXX ASSUMES that retval is last arg. The xpidl compiler ensures this.
@@ -1219,7 +1232,9 @@ nsXPCWrappedJSClass::CallMethod(nsXPCWrappedJS* wrapper, uint16_t methodIndex,
     xpcc->SetException(nsnull);
     ccx.GetThreadData()->SetException(nsnull);
 
-    if (XPCPerThreadData::IsMainThread(ccx)) {
+    if (XPCPerThreadData::IsExecuteThread(ccx)) {
+        lock.construct();
+
         // TODO Remove me in favor of security wrappers.
         nsIScriptSecurityManager *ssm = XPCWrapper::GetSecurityManager();
         if (ssm) {

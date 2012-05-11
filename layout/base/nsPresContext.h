@@ -177,6 +177,10 @@ public:
 
   nsPresContext(nsIDocument* aDocument, nsPresContextType aType) NS_HIDDEN;
 
+  JSZoneId GetZone() {
+    return mDocument->GetZone();
+  }
+
   /**
    * Initialize the presentation context from a particular device.
    */
@@ -1088,6 +1092,7 @@ protected:
   bool MayHavePaintEventListener();
 
   void HandleRebuildUserFontSet() {
+    NS_StickLock(this);
     mPostedFlushUserFontSet = false;
     FlushUserFontSet();
   }

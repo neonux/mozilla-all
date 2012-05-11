@@ -8,7 +8,7 @@
 # if "$entry_count" is ever changed and the .inc files regenerated then
 # the following issues need to be addressed:
 #
-# 1) The current Linux ARM code has a limitation of only having 256-3 stubs,
+# 1) The current Linux ARM code has a limitation of only having 256-4 stubs,
 #    as a result of the limitations of immediate values in ARM assembly.
 #
 # This number is verified by the IDL parser in xpcom/idl-parser/xpidl.py, as
@@ -17,9 +17,9 @@
 # stubs to run off the entries.
 # If you change this number, please update that location.
 
-# 3 entries are already 'used' by the 3 methods of nsISupports.
-# 3+247+5=255 This should get us in under the Linux ARM limitation
-$entry_count    = 247;
+# 4 entries are already 'used' by the 4 methods of nsISupports.
+# 5+246+4=255 This should get us in under the Linux ARM limitation
+$entry_count    = 246;
 $sentinel_count = 5;
 
 $decl_name = "xptcstubsdecl.inc";
@@ -39,14 +39,15 @@ print OUTFILE "*  declarations of normal stubs...\n";
 print OUTFILE "*  0 is QueryInterface\n";
 print OUTFILE "*  1 is AddRef\n";
 print OUTFILE "*  2 is Release\n";
+print OUTFILE "*  3 is GetZone\n";
 print OUTFILE "*/\n";
 print OUTFILE "#if !defined(__ia64) || (!defined(__hpux) && !defined(__linux__))\n";
 for($i = 0; $i < $entry_count; $i++) {
-    print OUTFILE "NS_IMETHOD Stub",$i+3,"();\n";
+    print OUTFILE "NS_IMETHOD Stub",$i+4,"();\n";
 }
 print OUTFILE "#else\n";
 for($i = 0; $i < $entry_count; $i++) {
-    print OUTFILE "NS_IMETHOD Stub",$i+3,"(PRUint64,PRUint64,\n";
+    print OUTFILE "NS_IMETHOD Stub",$i+4,"(PRUint64,PRUint64,\n";
     print OUTFILE " PRUint64,PRUint64,PRUint64,PRUint64,PRUint64,PRUint64);\n";
 
 }
@@ -76,7 +77,7 @@ print OUTFILE "/* includes ",$entry_count," stub entries, and ",
 }
 
 for($i = 0; $i < $entry_count; $i++) {
-    print OUTFILE "STUB_ENTRY(",$i+3,")\n";
+    print OUTFILE "STUB_ENTRY(",$i+4,")\n";
 }
 
 for($i = 0; $i < $sentinel_count; $i++) {

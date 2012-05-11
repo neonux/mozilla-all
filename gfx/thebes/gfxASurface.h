@@ -401,7 +401,7 @@ public:
   static RawRef Void() { return nsnull; }
   static void Release(RawRef aRawRef)
   {
-    if (NS_IsMainThread()) {
+    if (NS_IsChromeOwningThread()) {
       aRawRef->Release();
       return;
     }
@@ -410,8 +410,7 @@ public:
   }
   static void AddRef(RawRef aRawRef)
   {
-    NS_ASSERTION(NS_IsMainThread(),
-                 "Can only add a reference on the main thread");
+    MOZ_ASSERT(NS_IsChromeOwningThread());
     aRawRef->AddRef();
   }
 };

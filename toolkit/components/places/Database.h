@@ -198,7 +198,7 @@ public:
     if (mShuttingDown) {
       return nsnull;
     }
-    if (NS_IsMainThread()) {
+    if (NS_IsChromeOwningThread()) {
       return mMainThreadStatements.GetCachedStatement(aQuery);
     }
     return mAsyncThreadStatements.GetCachedStatement(aQuery);
@@ -236,7 +236,7 @@ public:
     if (mShuttingDown) {
       return nsnull;
     }
-    MOZ_ASSERT(NS_IsMainThread());
+    MOZ_ASSERT(NS_IsChromeOwningThread());
     return mMainThreadAsyncStatements.GetCachedStatement(aQuery);
   }
 

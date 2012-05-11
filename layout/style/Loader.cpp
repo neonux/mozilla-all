@@ -449,6 +449,8 @@ SheetLoadData::~SheetLoadData()
 NS_IMETHODIMP
 SheetLoadData::Run()
 {
+  NS_StickLock(mSheet);
+
   mLoader->HandleLoadEvent(this);
   return NS_OK;
 }
@@ -483,6 +485,7 @@ SheetLoadData::AfterProcessNextEvent(nsIThreadInternal* aThread,
 void
 SheetLoadData::FireLoadEvent(nsIThreadInternal* aThread)
 {
+  NS_StickLock(mSheet);
   
   // First remove ourselves as a thread observer.  But we need to keep
   // ourselves alive while doing that!
@@ -515,7 +518,7 @@ SheetLoadData::ScheduleLoadEventIfNeeded(nsresult aStatus)
 
   mStatus = aStatus;
 
-  nsCOMPtr<nsIThread> thread = do_GetMainThread();
+  nsCOMPtr<nsIThread> thread = do_GetCurrentThread();
   nsCOMPtr<nsIThreadInternal> internalThread = do_QueryInterface(thread);
   if (NS_SUCCEEDED(internalThread->AddObserver(this))) {
     // Make sure to block onload here
@@ -983,6 +986,9 @@ SheetLoadData::OnStreamComplete(nsIUnicharStreamLoader* aLoader,
     }
   }
 
+  if (mLoader->mDocument)
+    NS_StickLock(mLoader->mDocument);
+
   // Enough to set the URIs on mSheet, since any sibling datas we have share
   // the same mInner as mSheet and will thus get the same URI.
   mSheet->SetURIs(channelURI, originalURI, channelURI);
@@ -1122,11 +1128,15 @@ Loader::CreateSheet(nsIURI* aURI,
     // First, the XUL cache
 #ifdef MOZ_XUL
     if (IsChromeURI(aURI)) {
+      nsAutoLockChrome lock;
       nsXULPrototypeCache* cache = nsXULPrototypeCache::GetInstance();
       if (cache) {
         if (cache->IsEnabled()) {
-          sheet = cache->GetStyleSheet(aURI);
-          LOG(("  From XUL cache: %p", sheet.get()));
+          nsCSSStyleSheet *nsheet = cache->GetStyleSheet(aURI);
+          if (nsheet && (!aLinkingContent || nsheet->GetZone() == aLinkingContent->GetZone())) {
+            sheet = nsheet;
+            LOG(("  From XUL cache: %p", sheet.get()));
+          }
         }
       }
     }
@@ -1748,6 +1758,8 @@ Loader::DoSheetComplete(SheetLoadData* aLoadData, nsresult aStatus,
   // Go through and deal with the whole linked list.
   SheetLoadData* data = aLoadData;
   while (data) {
+    NS_StickLock(data->mSheet);
+
     if (!data->mSheetAlreadyComplete) {
       // If mSheetAlreadyComplete, then the sheet could well be modified between
       // when we posted the async call to SheetComplete and now, since the sheet
@@ -1790,7 +1802,7 @@ Loader::DoSheetComplete(SheetLoadData* aLoadData, nsresult aStatus,
   // complete must have loaded succesfully.
   if (NS_SUCCEEDED(aStatus) && aLoadData->mURI) {
 #ifdef MOZ_XUL
-    if (IsChromeURI(aLoadData->mURI)) {
+    if (IsChromeURI(aLoadData->mURI) && aLoadData->mSheet->GetZone() == JS_ZONE_CHROME) {
       nsXULPrototypeCache* cache = nsXULPrototypeCache::GetInstance();
       if (cache && cache->IsEnabled()) {
         if (!cache->GetStyleSheet(aLoadData->mURI)) {

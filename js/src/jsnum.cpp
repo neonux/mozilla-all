@@ -116,7 +116,7 @@ ComputeAccurateDecimalInteger(JSContext *cx, const jschar *start, const jschar *
 
     char *estr;
     int err = 0;
-    *dp = js_strtod_harder(cx->runtime->dtoaState, cstr, &estr, &err);
+    *dp = js_strtod_harder(cx->thread()->dtoaState, cstr, &estr, &err);
     if (err == JS_DTOA_ENOMEM) {
         JS_ReportOutOfMemory(cx);
         cx->free_(cstr);
@@ -816,7 +816,7 @@ num_to(JSContext *cx, Native native, JSDToStrMode zeroArgMode, JSDToStrMode oneA
         }
     }
 
-    numStr = js_dtostr(cx->runtime->dtoaState, buf, sizeof buf,
+    numStr = js_dtostr(cx->thread()->dtoaState, buf, sizeof buf,
                        oneArgMode, (int)precision + precisionOffset, d);
     if (!numStr) {
         JS_ReportOutOfMemory(cx);
@@ -1083,7 +1083,7 @@ FracNumberToCString(JSContext *cx, ToCStringBuf *cbuf, double d, int base = 10)
         converter.ToShortest(d, &builder);
         numStr = builder.Finalize();
     } else {
-        numStr = cbuf->dbuf = js_dtobasestr(cx->runtime->dtoaState, base, d);
+        numStr = cbuf->dbuf = js_dtobasestr(cx->thread()->dtoaState, base, d);
     }
     return numStr;
 }
@@ -1400,7 +1400,7 @@ js_strtod(JSContext *cx, const jschar *s, const jschar *send,
         estr = istr + 8;
     } else {
         int err;
-        d = js_strtod_harder(cx->runtime->dtoaState, cstr, &estr, &err);
+        d = js_strtod_harder(cx->thread()->dtoaState, cstr, &estr, &err);
         if (d == HUGE_VAL)
             d = js_PositiveInfinity;
         else if (d == -HUGE_VAL)

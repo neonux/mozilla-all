@@ -189,9 +189,34 @@ nsTypeAheadFind::GetCaseSensitive(bool* isCaseSensitive)
   return NS_OK;
 }
 
+class nsTypeAheadFindSetDocShellEvent : public nsRunnable
+{
+  nsCOMPtr<nsITypeAheadFind> mTypeAheadFind;
+  nsCOMPtr<nsIDocShell> mDocShell;
+
+public:
+  nsTypeAheadFindSetDocShellEvent(nsITypeAheadFind *aTypeAheadFind, nsIDocShell *aDocShell)
+    : mTypeAheadFind(aTypeAheadFind), mDocShell(aDocShell)
+  {}
+
+  NS_IMETHOD Run()
+  {
+    return mTypeAheadFind->SetDocShell(mDocShell);
+  }
+};
+
 NS_IMETHODIMP
 nsTypeAheadFind::SetDocShell(nsIDocShell* aDocShell)
 {
+  PRInt32 zone;
+  aDocShell->GetWindowZone(&zone);
+  if (zone >= JS_ZONE_CONTENT_START && !NS_TryStickContentLock((JSZoneId) zone)) {
+    NS_DispatchToMainThread(new nsTypeAheadFindSetDocShellEvent(this, aDocShell),
+                            NS_DISPATCH_NORMAL,
+                            (JSZoneId) zone);
+    return NS_OK;
+  }
+
   mDocShell = do_GetWeakReference(aDocShell);
 
   mWebBrowserFind = do_GetInterface(aDocShell);
@@ -988,6 +1013,8 @@ nsTypeAheadFind::Find(const nsAString& aSearchString, bool aLinksOnly,
     // If false, we will scan from start of selection
     isFirstVisiblePreferred = !atEnd && !mCaretBrowsingOn && isSelectionCollapsed;
     if (isFirstVisiblePreferred) {
+      NS_StickLock(presShell);
+
       // Get the focused content. If there is a focused node, ensure the
       // selection is at that point. Otherwise, we will just want to start
       // from the caret position or the beginning of the document.

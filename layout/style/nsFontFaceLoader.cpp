@@ -801,7 +801,7 @@ nsUserFontSet::LogMessage(gfxProxyFontEntry *aProxy,
   nsString href;
   nsString text;
   nsresult rv;
-  if (rule) {
+  if (rule && NS_TryStickLock(rule)) {
     rv = rule->GetCssText(text);
     NS_ENSURE_SUCCESS(rv, rv);
     nsCOMPtr<nsIDOMCSSStyleSheet> sheet;

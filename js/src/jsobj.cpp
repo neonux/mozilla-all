@@ -877,7 +877,7 @@ class EvalScriptGuard
       : cx_(cx),
         str_(str),
         script_(cx) {
-        bucket_ = cx->runtime->evalCache.bucket(str);
+        bucket_ = cx->thread()->evalCache.bucket(str);
     }
 
     ~EvalScriptGuard() {
@@ -2778,7 +2778,7 @@ js::NewObjectWithGivenProto(JSContext *cx, js::Class *clasp, JSObject *proto, JS
     if (CanBeFinalizedInBackground(kind, clasp))
         kind = GetBackgroundAllocKind(kind);
 
-    NewObjectCache &cache = cx->runtime->newObjectCache;
+    NewObjectCache &cache = cx->thread()->newObjectCache;
 
     NewObjectCache::EntryIndex entry = -1;
     if (proto && (!parent || parent == proto->getParent()) && !proto->isGlobal()) {
@@ -2834,7 +2834,7 @@ js::NewObjectWithClassProto(JSContext *cx, js::Class *clasp, JSObject *proto, JS
      */
     JSProtoKey protoKey = GetClassProtoKey(clasp);
 
-    NewObjectCache &cache = cx->runtime->newObjectCache;
+    NewObjectCache &cache = cx->thread()->newObjectCache;
 
     NewObjectCache::EntryIndex entry = -1;
     if (parent->isGlobal() && protoKey != JSProto_Null) {
@@ -2870,7 +2870,7 @@ js::NewObjectWithType(JSContext *cx, HandleTypeObject type, JSObject *parent, gc
     if (CanBeFinalizedInBackground(kind, &ObjectClass))
         kind = GetBackgroundAllocKind(kind);
 
-    NewObjectCache &cache = cx->runtime->newObjectCache;
+    NewObjectCache &cache = cx->thread()->newObjectCache;
 
     NewObjectCache::EntryIndex entry = -1;
     if (parent == type->proto->getParent()) {
@@ -4646,6 +4646,7 @@ CallResolveOp(JSContext *cx, JSObject *start, HandleObject obj, HandleId id, uns
 
         RootedVarObject obj2(cx);
         obj2 = (clasp->flags & JSCLASS_NEW_RESOLVE_GETS_START) ? start : NULL;
+
         if (!newresolve(cx, obj, id, flags, obj2.address()))
             return false;
 

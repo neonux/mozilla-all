@@ -134,6 +134,8 @@ nsStyledElementNotElementCSSInlineStyle::UnsetAttr(PRInt32 aNameSpaceID,
                                                    nsIAtom* aAttribute,
                                                    bool aNotify)
 {
+  nsAutoLockChrome lock;
+
   nsAutoScriptBlocker scriptBlocker;
   if (aAttribute == nsGkAtoms::id && aNameSpaceID == kNameSpaceID_None) {
     // Have to do this before clearing flag. See RemoveFromIdTable

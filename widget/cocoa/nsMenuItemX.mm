@@ -55,6 +55,7 @@
 #include "nsIPrivateDOMEvent.h"
 #include "nsIDOMEventTarget.h"
 #include "nsIDOMElement.h"
+#include "nsThreadUtils.h"
 
 nsMenuItemX::nsMenuItemX()
 {
@@ -354,6 +355,8 @@ nsresult nsMenuItemX::DispatchDOMEvent(const nsString &eventName, bool *preventD
 {
   if (!mContent)
     return NS_ERROR_FAILURE;
+
+  nsAutoLockChromeUnstickContent lock;
 
   // get owner document for content
   nsCOMPtr<nsIDocument> parentDoc = mContent->OwnerDoc();

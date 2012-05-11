@@ -84,6 +84,7 @@
 #include "mozilla/Preferences.h"
 #include "mozilla/LookAndFeel.h"
 #include "nsIScriptError.h"
+#include "nsProxyRelease.h"
 
 #ifdef MOZ_XUL
 #include "nsIDOMXULTextboxElement.h"
@@ -263,8 +264,11 @@ GetContentWindow(nsIContent* aContent)
   nsIDocument* doc = aContent->GetCurrentDoc();
   if (doc) {
     nsIDocument* subdoc = doc->GetSubDocumentFor(aContent);
-    if (subdoc)
+    if (subdoc) {
+      if (!NS_TryStickLock(subdoc))
+        return nsnull;
       return subdoc->GetWindow();
+    }
   }
 
   return nsnull;
@@ -298,6 +302,7 @@ nsFocusManager::GetFocusedDescendant(nsPIDOMWindow* aWindow, bool aDeep,
     window = GetContentWindow(currentContent);
   }
 
+  NS_StickLock(*aFocusedWindow);
   NS_IF_ADDREF(*aFocusedWindow);
 
   return currentContent;
@@ -381,6 +386,10 @@ nsFocusManager::SetActiveWindow(nsIDOMWindow* aWindow)
 NS_IMETHODIMP
 nsFocusManager::GetFocusedWindow(nsIDOMWindow** aFocusedWindow)
 {
+  if (mFocusedWindow && !NS_TryStickLock(mFocusedWindow)) {
+    *aFocusedWindow = nsnull;
+    return NS_OK;
+  }
   NS_IF_ADDREF(*aFocusedWindow = mFocusedWindow);
   return NS_OK;
 }
@@ -430,10 +439,12 @@ NS_IMETHODIMP nsFocusManager::SetFocusedWindow(nsIDOMWindow* aWindowToFocus)
 NS_IMETHODIMP
 nsFocusManager::GetFocusedElement(nsIDOMElement** aFocusedElement)
 {
-  if (mFocusedContent)
+  if (mFocusedContent) {
+    NS_StickLock(mFocusedContent);
     CallQueryInterface(mFocusedContent, aFocusedElement);
-  else
+  } else {
     *aFocusedElement = nsnull;
+  }
   return NS_OK;
 }
 
@@ -460,6 +471,8 @@ nsFocusManager::SetFocus(nsIDOMElement* aElement, PRUint32 aFlags)
 #ifdef DEBUG_FOCUS
   printf("<<SetFocus>>\n");
 #endif
+
+  LockOrClearFocusedContent();
 
   nsCOMPtr<nsIContent> newFocus = do_QueryInterface(aElement);
   NS_ENSURE_ARG(newFocus);
@@ -915,6 +928,8 @@ nsFocusManager::WindowHidden(nsIDOMWindow* aWindow)
   // currently focused window, just return, as the current focus will not
   // be affected.
 
+  LockOrClearFocusedContent();
+
   nsCOMPtr<nsPIDOMWindow> window = do_QueryInterface(aWindow);
   NS_ENSURE_TRUE(window, NS_ERROR_INVALID_ARG);
 
@@ -946,6 +961,8 @@ nsFocusManager::WindowHidden(nsIDOMWindow* aWindow)
   }
   printf(">>\n");
 #endif
+
+  LockOrClearFocusedContent();
 
   if (!IsSameOrAncestor(window, mFocusedWindow))
     return NS_OK;
@@ -1488,6 +1505,14 @@ nsFocusManager::CheckIfFocusable(nsIContent* aContent, PRUint32 aFlags)
   // IsFocusable method. This skips checking the style system and ensures that
   // offscreen browsers can still be focused.
   nsIDocument* subdoc = doc->GetSubDocumentFor(aContent);
+
+  while (subdoc && !NS_IsOwningThread(subdoc->GetZone())) {
+    if (NS_TryStickLock(subdoc))
+      subdoc = doc->GetSubDocumentFor(aContent);
+    else
+      subdoc = nsnull;
+  }
+
   if (subdoc && IsWindowVisible(subdoc->GetWindow())) {
     const nsStyleUserInterface* ui = frame->GetStyleUserInterface();
     PRInt32 tabIndex = (ui->mUserFocus == NS_STYLE_USER_FOCUS_IGNORE ||
@@ -1498,12 +1523,24 @@ nsFocusManager::CheckIfFocusable(nsIContent* aContent, PRUint32 aFlags)
   return frame->IsFocusable(nsnull, aFlags & FLAG_BYMOUSE) ? aContent : nsnull;
 }
 
+void
+nsFocusManager::LockOrClearFocusedContent()
+{
+  if (mFocusedWindow && !NS_TryStickLock(mFocusedWindow))
+    NS_ReleaseReference(mFocusedWindow);
+
+  if (mFocusedContent && !NS_TryStickLock(mFocusedContent))
+    NS_ReleaseReference(mFocusedContent);
+}
+
 bool
 nsFocusManager::Blur(nsPIDOMWindow* aWindowToClear,
                      nsPIDOMWindow* aAncestorWindowToFocus,
                      bool aIsLeavingDocument,
                      bool aAdjustWidgets)
 {
+  LockOrClearFocusedContent();
+
   // hold a reference to the focused content, which may be null
   nsCOMPtr<nsIContent> content = mFocusedContent;
   if (content) {
@@ -1739,6 +1776,8 @@ nsFocusManager::Focus(nsPIDOMWindow* aWindow,
   // indicate that the window has taken focus.
   if (aWindow->TakeFocus(true, focusMethod))
     aIsNewDocument = true;
+
+  LockOrClearFocusedContent();
 
   mFocusedWindow = aWindow;
 

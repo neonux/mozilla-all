@@ -166,6 +166,7 @@ nsEditor::nsEditor()
 ,  mShouldTxnSetSelection(true)
 ,  mDidPreDestroy(false)
 ,  mDidPostCreate(false)
+,  mZone(JS_ZONE_NONE)
 ,  mHandlingTrustedAction(false)
 ,  mDispatchInputEvent(true)
 {
@@ -226,10 +227,19 @@ NS_INTERFACE_MAP_END
 NS_IMPL_CYCLE_COLLECTING_ADDREF(nsEditor)
 NS_IMPL_CYCLE_COLLECTING_RELEASE(nsEditor)
 
+NS_IMETHODIMP
+nsEditor::InitZone(PRInt32 zone)
+{
+  MOZ_ASSERT(mZone == JS_ZONE_NONE || mZone == zone);
+  mZone = (JSZoneId) zone;
+  return NS_OK;
+}
 
 NS_IMETHODIMP
 nsEditor::Init(nsIDOMDocument *aDoc, nsIContent *aRoot, nsISelectionController *aSelCon, PRUint32 aFlags)
 {
+  MOZ_ASSERT(mZone != JS_ZONE_NONE);
+
   NS_PRECONDITION(aDoc, "bad arg");
   if (!aDoc)
     return NS_ERROR_NULL_POINTER;
@@ -550,6 +560,10 @@ already_AddRefed<nsIDocument>
 nsEditor::GetDocument()
 {
   NS_PRECONDITION(mDocWeak, "bad state, mDocWeak weak pointer not initialized");
+
+  if (!NS_TryStickLock(mDocWeak))
+    return nsnull;
+
   nsCOMPtr<nsIDocument> doc = do_QueryReferent(mDocWeak);
   return doc.forget();
 }
@@ -558,6 +572,10 @@ already_AddRefed<nsIDOMDocument>
 nsEditor::GetDOMDocument()
 {
   NS_PRECONDITION(mDocWeak, "bad state, mDocWeak weak pointer not initialized");
+
+  if (!NS_TryStickLock(mDocWeak))
+    return nsnull;
+
   nsCOMPtr<nsIDOMDocument> doc = do_QueryReferent(mDocWeak);
   return doc.forget();
 }
@@ -5224,6 +5242,9 @@ nsEditor::GetRoot()
     // Let GetRootElement() do the work
     GetRootElement(getter_AddRefs(root));
   }
+
+  if (mRootElement)
+    NS_StickLock(mRootElement);
 
   return mRootElement;
 }

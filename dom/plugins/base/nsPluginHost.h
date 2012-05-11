@@ -242,6 +242,8 @@ private:
   nsresult
   TrySetUpPluginInstance(const char *aMimeType, nsIURI *aURL, nsIPluginInstanceOwner *aOwner);
 
+  class TrySetUpPluginInstanceEvent;
+
   nsresult
   NewEmbeddedPluginStream(nsIURI* aURL, nsObjectLoadingContent *aContent, nsNPAPIPluginInstance* aInstance);
 
@@ -367,13 +369,13 @@ public:
 protected:
   void Init()
   {
-    NS_ASSERTION(NS_IsMainThread(), "Should be on the main thread");
-
     mDelayedDestroy = false;
 
     PR_INIT_CLIST(this);
     PR_INSERT_BEFORE(this, &sListHead);
   }
+
+  nsAutoLockChrome lock;
 
   nsRefPtr<nsNPAPIPluginInstance> mInstance;
   bool mDelayedDestroy;

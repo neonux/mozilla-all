@@ -159,6 +159,7 @@ class nsAutoAtomic {
 
 nsSecureBrowserUIImpl::nsSecureBrowserUIImpl()
   : mReentrantMonitor("nsSecureBrowserUIImpl.mReentrantMonitor")
+  , mZone(JS_ZONE_CHROME)
   , mNotifiedSecurityState(lis_no_security)
   , mNotifiedToplevelIsEV(false)
   , mNewToplevelSecurityState(STATE_IS_INSECURE)
@@ -225,6 +226,8 @@ nsSecureBrowserUIImpl::Init(nsIDOMWindow *aWindow)
   if (pwin->IsInnerWindow()) {
     pwin = pwin->GetOuterWindow();
   }
+
+  mZone = pwin->GetZone();
 
   nsresult rv;
   mWindow = do_GetWeakReference(pwin, &rv);
@@ -622,10 +625,11 @@ nsSecureBrowserUIImpl::OnStateChange(nsIWebProgress* aWebProgress,
                                      PRUint32 aProgressStateFlags,
                                      nsresult aStatus)
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
 #ifdef DEBUG
   nsAutoAtomic atomic(mOnStateLocationChangeReentranceDetection);
-  NS_ASSERTION(mOnStateLocationChangeReentranceDetection == 1,
-               "unexpected parallel nsIWebProgress OnStateChange and/or OnLocationChange notification");
+  MOZ_ASSERT(mOnStateLocationChangeReentranceDetection == 1);
 #endif
   /*
     All discussion, unless otherwise mentioned, only refers to
@@ -1886,7 +1890,7 @@ bool
 nsSecureBrowserUIImpl::GetNSSDialogs(nsCOMPtr<nsISecurityWarningDialogs> & dialogs,
                                      nsCOMPtr<nsIInterfaceRequestor> & ctx)
 {
-  if (!NS_IsMainThread()) {
+  if (!NS_IsChromeOwningThread()) {
     NS_ERROR("nsSecureBrowserUIImpl::GetNSSDialogs called off the main thread");
     return false;
   }

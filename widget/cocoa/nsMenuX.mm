@@ -72,6 +72,7 @@
 #include "nsIScriptGlobalObject.h"
 #include "nsIScriptContext.h"
 #include "nsIXPConnect.h"
+#include "nsThreadUtils.h"
 
 // externs defined in nsChildView.mm
 extern nsIRollupListener * gRollupListener;
@@ -366,6 +367,8 @@ nsresult nsMenuX::RemoveAll()
 
 nsEventStatus nsMenuX::MenuOpened()
 {
+  nsAutoLockChromeUnstickContent lock;
+
   // Open the node.
   mContent->SetAttr(kNameSpaceID_None, nsGkAtoms::open, NS_LITERAL_STRING("true"), true);
 
@@ -396,6 +399,8 @@ nsEventStatus nsMenuX::MenuOpened()
 
 void nsMenuX::MenuClosed()
 {
+  nsAutoLockChromeUnstickContent lock;
+
   if (mConstructed) {
     // Don't close if a handler tells us to stop.
     if (!OnClose())
@@ -451,6 +456,7 @@ void nsMenuX::MenuConstruct()
         if (scriptContext && global) {
           JSContext* cx = (JSContext*)scriptContext->GetNativeContext();
           if (cx) {
+            nsAutoUnstickChrome unstick(cx);
             nsCOMPtr<nsIXPConnectJSObjectHolder> wrapper;
             xpconnect->WrapNative(cx, global,
                                   menuPopup, NS_GET_IID(nsISupports),

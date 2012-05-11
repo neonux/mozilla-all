@@ -5781,7 +5781,7 @@ CClosure::ClosureStub(ffi_cif* cif, void* result, void** args, void* userData)
   JSObject* thisObj = cinfo->thisObj;
   JSObject* jsfnObj = cinfo->jsfnObj;
 
-  JS_AbortIfWrongThread(JS_GetRuntime(cx));
+  JS_AbortIfWrongThread(JS_GetRuntime(cx), JS_GetZone(cx));
 
   JSAutoRequest ar(cx);
 

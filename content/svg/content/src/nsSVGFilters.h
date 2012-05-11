@@ -264,6 +264,8 @@ public:
   // interfaces:
   NS_DECL_ISUPPORTS_INHERITED
 
+  JSZoneId GetZone() { return nsINode::GetZone(); }
+
   // FE Base
   NS_FORWARD_NSIDOMSVGFILTERPRIMITIVESTANDARDATTRIBUTES(nsSVGFEImageElementBase::)
 

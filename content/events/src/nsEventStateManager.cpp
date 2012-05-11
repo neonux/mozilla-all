@@ -1052,6 +1052,17 @@ nsEventStateManager::PreHandleEvent(nsPresContext* aPresContext,
     return NS_ERROR_NULL_POINTER;
   }
 
+  JSZoneId zone = JS_ZONE_NONE;
+  if (mDocument) {
+    zone = mDocument->GetZone();
+  } else {
+    nsIContent *content = aTargetFrame->GetContent();
+    if (content)
+      zone = content->GetZone();
+  }
+  if (zone >= JS_ZONE_CONTENT_START && !NS_TryStickContentLock(zone))
+    return NS_OK;
+
   mCurrentTarget = aTargetFrame;
   mCurrentTargetContent = nsnull;
 
@@ -3947,6 +3958,9 @@ nsEventStateManager::NotifyMouseOut(nsGUIEvent* aEvent, nsIContent* aMovingInto)
   }
   // That could have caused DOM events which could wreak havoc. Reverify
   // things and be careful.
+  if (!mLastMouseOverElement || !NS_TryStickLock(mLastMouseOverElement))
+    return;
+
   if (!mLastMouseOverElement)
     return;
 

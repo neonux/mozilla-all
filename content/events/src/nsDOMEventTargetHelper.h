@@ -133,6 +133,7 @@ public:
 
   bool HasListenersFor(const nsAString& aType)
   {
+    nsAutoLockChrome lock;
     return mListenerManager && mListenerManager->HasListenersFor(aType);
   }
   nsresult RemoveAddEventListener(const nsAString& aType,
@@ -162,7 +163,6 @@ public:
   bool HasOrHasHadOwner() { return mHasOrHasHadOwner; }
 protected:
   nsRefPtr<nsEventListenerManager> mListenerManager;
-private:
   // These may be null (native callers or xpcshell).
   nsPIDOMWindow*             mOwner; // Inner window.
   bool                       mHasOrHasHadOwner;

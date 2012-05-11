@@ -477,6 +477,13 @@ public:
     txNameTest(nsIAtom* aPrefix, nsIAtom* aLocalName, PRInt32 aNSID,
                PRUint16 aNodeType);
 
+    ~txNameTest()
+    {
+        nsAutoLockChrome lock; // for atoms
+        mPrefix = nsnull;
+        mLocalName = nsnull;
+    }
+
     NodeTestType getType();
 
     TX_DECL_NODE_TEST

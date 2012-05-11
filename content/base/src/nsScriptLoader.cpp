@@ -763,6 +763,8 @@ nsScriptLoader::ProcessRequest(nsScriptLoadRequest* aRequest)
 
   nsCOMPtr<nsIDocument> doc;
 
+  NS_StickLock(aRequest->mElement);
+
   nsCOMPtr<nsINode> scriptElem = do_QueryInterface(aRequest->mElement);
 
   // If there's no script text, we try to get it from the element
@@ -1155,6 +1157,9 @@ nsScriptLoader::OnStreamComplete(nsIStreamLoader* aLoader,
   nsScriptLoadRequest* request = static_cast<nsScriptLoadRequest*>(aContext);
   NS_ASSERTION(request, "null request in stream complete handler");
   NS_ENSURE_TRUE(request, NS_ERROR_FAILURE);
+
+  if (request->mElement)
+    NS_StickLock(request->mElement);
 
   nsresult rv = PrepareLoadedRequest(request, aLoader, aStatus, aStringLen,
                                      aString);

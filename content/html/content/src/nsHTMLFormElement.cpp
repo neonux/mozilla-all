@@ -411,6 +411,8 @@ NS_IMPL_STRING_ATTR(nsHTMLFormElement, Target, target)
 NS_IMETHODIMP
 nsHTMLFormElement::Submit()
 {
+  nsAutoLockChrome lock;
+
   // Send the submit event
   nsresult rv = NS_OK;
   nsRefPtr<nsPresContext> presContext = GetPresContext();
@@ -1299,6 +1301,8 @@ nsHTMLFormElement::RemoveElement(nsGenericHTMLFormElement* aChild,
   }
 
   if (aChild == mDefaultSubmitElement) {
+    nsAutoLockChrome lock;
+
     // Need to reset mDefaultSubmitElement.  Do this asynchronously so
     // that we're not doing it while the DOM is in flux.
     mDefaultSubmitElement = nsnull;

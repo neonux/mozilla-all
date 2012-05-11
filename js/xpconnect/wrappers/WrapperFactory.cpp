@@ -162,6 +162,8 @@ WrapperFactory::DoubleWrap(JSContext *cx, JSObject *obj, unsigned flags)
 JSObject *
 WrapperFactory::PrepareForWrapping(JSContext *cx, JSObject *scope, JSObject *obj, unsigned flags)
 {
+    nsAutoUnstickChrome unstick(cx);
+
     // Don't unwrap an outer window, just double wrap it if needed.
     if (js::GetObjectClass(obj)->ext.innerObject)
         return DoubleWrap(cx, obj, flags);

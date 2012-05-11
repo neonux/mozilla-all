@@ -167,4 +167,11 @@
 #  define MOZ_END_EXTERN_C
 #endif
 
+typedef enum JSZoneId {
+    JS_ZONE_NONE = -2,
+    JS_ZONE_CHROME = -1,
+    JS_ZONE_CONTENT_START = 0,
+    JS_ZONE_CONTENT_LIMIT = 64
+} JSZoneId;
+
 #endif  /* mozilla_Types_h_ */

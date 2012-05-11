@@ -87,6 +87,8 @@ public:
   // nsISupports implementation
   NS_DECL_ISUPPORTS
 
+  JSZoneId GetZone() { return mZone; }
+
   // nsITimerCallback implementation
   NS_DECL_NSITIMERCALLBACK
 
@@ -273,6 +275,7 @@ private:
 
   nsPresContext *mPresContext; // weak; pres context passed in constructor
                                // and unset in Disconnect
+  JSZoneId mZone;
 
   bool mFrozen;
   bool mThrottled;
@@ -295,11 +298,6 @@ private:
   // This is the last interval we used for our timer.  May be 0 if we
   // haven't computed a timer interval yet.
   mutable PRInt32 mLastTimerInterval;
-
-  // Helper struct for processing image requests
-  struct ImageRequestParameters {
-      mozilla::TimeStamp ts;
-  };
 };
 
 #endif /* !defined(nsRefreshDriver_h_) */

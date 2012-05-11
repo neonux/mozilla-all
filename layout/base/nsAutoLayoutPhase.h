@@ -60,32 +60,15 @@ struct nsAutoLayoutPhase {
 
   void Enter()
   {
+    MOZ_ASSERT(NS_IsChromeOwningThread());
+
     switch (mPhase) {
       case eLayoutPhase_Paint:
-        NS_ASSERTION(mPresContext->mLayoutPhaseCount[eLayoutPhase_Paint] == 0,
-                     "recurring into paint");
-        NS_ASSERTION(mPresContext->mLayoutPhaseCount[eLayoutPhase_Reflow] == 0,
-                     "painting in the middle of reflow");
-        NS_ASSERTION(mPresContext->mLayoutPhaseCount[eLayoutPhase_FrameC] == 0,
-                     "painting in the middle of frame construction");
-        break;
       case eLayoutPhase_Reflow:
-        NS_ASSERTION(mPresContext->mLayoutPhaseCount[eLayoutPhase_Paint] == 0,
-                     "reflowing in the middle of a paint");
-        NS_ASSERTION(mPresContext->mLayoutPhaseCount[eLayoutPhase_Reflow] == 0,
-                     "recurring into reflow");
-        NS_ASSERTION(mPresContext->mLayoutPhaseCount[eLayoutPhase_FrameC] == 0,
-                     "reflowing in the middle of frame construction");
-        break;
       case eLayoutPhase_FrameC:
-        NS_ASSERTION(mPresContext->mLayoutPhaseCount[eLayoutPhase_Paint] == 0,
-                     "constructing frames in the middle of a paint");
-        NS_ASSERTION(mPresContext->mLayoutPhaseCount[eLayoutPhase_Reflow] == 0,
-                     "constructing frames in the middle of reflow");
-        NS_ASSERTION(mPresContext->mLayoutPhaseCount[eLayoutPhase_FrameC] == 0,
-                     "recurring into frame construction");
-        NS_ASSERTION(!nsContentUtils::IsSafeToRunScript(),
-                     "constructing frames and scripts are not blocked");
+        MOZ_ASSERT(mPresContext->mLayoutPhaseCount[eLayoutPhase_Paint] == 0);
+        MOZ_ASSERT(mPresContext->mLayoutPhaseCount[eLayoutPhase_Reflow] == 0);
+        MOZ_ASSERT(mPresContext->mLayoutPhaseCount[eLayoutPhase_FrameC] == 0);
         break;
       default:
         break;
@@ -96,8 +79,9 @@ struct nsAutoLayoutPhase {
 
   void Exit()
   {
-    NS_ASSERTION(mCount > 0 && mPresContext->mLayoutPhaseCount[mPhase] > 0,
-                 "imbalanced");
+    MOZ_ASSERT(NS_IsChromeOwningThread());
+
+    MOZ_ASSERT(mCount > 0 && mPresContext->mLayoutPhaseCount[mPhase] > 0);
     --(mPresContext->mLayoutPhaseCount[mPhase]);
     --mCount;
   }
@@ -106,6 +90,10 @@ private:
   nsPresContext* mPresContext;
   nsLayoutPhase mPhase;
   PRUint32 mCount;
+
+#ifdef DEBUG
+  nsAutoCantLockNewContent mLockGuard;
+#endif
 };
 
 #define AUTO_LAYOUT_PHASE_ENTRY_POINT(pc_, phase_) \

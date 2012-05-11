@@ -154,7 +154,7 @@ class LinkerHelper : public JSC::LinkBuffer
     JSC::ExecutablePool *init(JSContext *cx) {
         // The pool is incref'd after this call, so it's necessary to release()
         // on any failure.
-        JSC::ExecutableAllocator *allocator = &cx->runtime->execAlloc();
+        JSC::ExecutableAllocator *allocator = &cx->compartment->execAlloc();
         allocator->setDestroyCallback(Probes::discardExecutableRegion);
         JSC::ExecutablePool *pool;
         m_code = executableAllocAndCopy(masm, allocator, &pool);

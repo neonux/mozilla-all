@@ -193,6 +193,10 @@ js_InitAtomState(JSRuntime *rt)
 {
     JSAtomState *state = &rt->atomState;
 
+    state->lock = PR_NewLock();
+    if (!state->lock)
+        return false;
+
     JS_ASSERT(!state->atoms.initialized());
     if (!state->atoms.init(JS_STRING_HASH_COUNT))
         return false;
@@ -214,10 +218,32 @@ js_FinishAtomState(JSRuntime *rt)
         return;
     }
 
+    PR_DestroyLock(state->lock);
+
     FreeOp fop(rt, false, false);
     for (AtomSet::Range r = state->atoms.all(); !r.empty(); r.popFront())
         r.front().asPtr()->finalize(&fop);
 }
+
+class AutoLockAtomsCompartment {
+  private:
+    JSContext *cx;
+    JS_DECL_USE_GUARD_OBJECT_NOTIFIER
+
+  public:
+    AutoLockAtomsCompartment(JSContext *cx
+                             JS_GUARD_OBJECT_NOTIFIER_PARAM)
+      : cx(cx)
+    {
+        JS_GUARD_OBJECT_NOTIFIER_INIT;
+        PR_Lock(cx->runtime->atomState.lock);
+    }
+
+    ~AutoLockAtomsCompartment()
+    {
+        PR_Unlock(cx->runtime->atomState.lock);
+    }
+};
 
 bool
 js::InitCommonAtoms(JSContext *cx)
@@ -294,6 +320,8 @@ AtomIsInterned(JSContext *cx, JSAtom *atom)
     if (StaticStrings::isStatic(atom))
         return true;
 
+    AutoLockAtomsCompartment lock(cx);
+
     AtomSet::Ptr p = cx->runtime->atomState.atoms.lookup(atom);
     if (!p)
         return false;
@@ -321,6 +349,8 @@ AtomizeInline(JSContext *cx, const jschar **pchars, size_t length,
 
     if (JSAtom *s = cx->runtime->staticStrings.lookup(chars, length))
         return s;
+
+    AutoLockAtomsCompartment lock(cx);
 
     AtomSet &atoms = cx->runtime->atomState.atoms;
     AtomSet::AddPtr p = atoms.lookupForAdd(AtomHasher::Lookup(chars, length));
@@ -382,6 +412,8 @@ js_AtomizeString(JSContext *cx, JSString *str, InternBehavior ib)
         if (ib != InternAtom || js::StaticStrings::isStatic(&atom))
             return &atom;
 
+        AutoLockAtomsCompartment lock(cx);
+
         AtomSet &atoms = cx->runtime->atomState.atoms;
         AtomSet::Ptr p = atoms.lookup(AtomHasher::Lookup(&atom));
         JS_ASSERT(p); /* Non-static atom must exist in atom state set. */
@@ -403,7 +435,7 @@ js_AtomizeString(JSContext *cx, JSString *str, InternBehavior ib)
 JSAtom *
 js_Atomize(JSContext *cx, const char *bytes, size_t length, InternBehavior ib, FlationCoding fc)
 {
-    CHECK_REQUEST(cx);
+    //CHECK_REQUEST(cx);
 
     if (!JSString::validateLength(cx, length))
         return NULL;
@@ -458,6 +490,7 @@ js_GetExistingStringAtom(JSContext *cx, const jschar *chars, size_t length)
 {
     if (JSAtom *atom = cx->runtime->staticStrings.lookup(chars, length))
         return atom;
+    AutoLockAtomsCompartment lock(cx);
     if (AtomSet::Ptr p = cx->runtime->atomState.atoms.lookup(AtomHasher::Lookup(chars, length)))
         return p->asPtr();
     return NULL;

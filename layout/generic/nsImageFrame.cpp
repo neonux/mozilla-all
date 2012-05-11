@@ -1970,7 +1970,6 @@ void nsImageFrame::IconLoad::GetPrefs()
 }
 
 
-
 NS_IMETHODIMP
 nsImageFrame::IconLoad::OnStartRequest(imgIRequest *aRequest)
 {

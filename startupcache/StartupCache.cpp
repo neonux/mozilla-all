@@ -323,7 +323,7 @@ GetBufferFromZipArchive(nsZipArchive *zip, bool doCRC, const char* id,
 nsresult
 StartupCache::GetBuffer(const char* id, char** outbuf, PRUint32* length) 
 {
-  NS_ASSERTION(NS_IsMainThread(), "Startup cache only available on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Startup cache only available on main thread");
   WaitOnWriteThread();
   if (!mStartupWriteInitiated) {
     CacheEntry* entry; 
@@ -356,7 +356,7 @@ StartupCache::GetBuffer(const char* id, char** outbuf, PRUint32* length)
 nsresult
 StartupCache::PutBuffer(const char* id, const char* inbuf, PRUint32 len) 
 {
-  NS_ASSERTION(NS_IsMainThread(), "Startup cache only available on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Startup cache only available on main thread");
   WaitOnWriteThread();
   if (StartupCache::gShutdownInitiated) {
     return NS_ERROR_NOT_AVAILABLE;
@@ -516,7 +516,7 @@ StartupCache::InvalidateCache()
 void
 StartupCache::WaitOnWriteThread()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Startup cache should only wait for io thread on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Startup cache should only wait for io thread on main thread");
   if (!mWriteThread || mWriteThread == PR_GetCurrentThread())
     return;
 

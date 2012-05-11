@@ -1029,6 +1029,8 @@ TextInputHandler::HandleKeyDownEvent(NSEvent* aNativeEvent)
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK_RETURN;
 
+  nsAutoLockChromeUnstickContent lock;
+
   if (Destroyed()) {
     PR_LOG(gLog, PR_LOG_ALWAYS,
       ("%p TextInputHandler::HandleKeyDownEvent, "
@@ -1088,6 +1090,7 @@ TextInputHandler::HandleKeyDownEvent(NSEvent* aNativeEvent)
       [aNativeEvent modifierFlags] & NSDeviceIndependentModifierFlagsMask;
     if (modifierFlags == NSControlKeyMask &&
         [[aNativeEvent charactersIgnoringModifiers] isEqualToString:@" "]) {
+      nsAutoLockChromeUnstickContent lock;
       nsMouseEvent contextMenuEvent(true, NS_CONTEXTMENU,
                                     [mView widget], nsMouseEvent::eReal,
                                     nsMouseEvent::eContextMenuKey);
@@ -1177,6 +1180,8 @@ TextInputHandler::HandleKeyUpEvent(NSEvent* aNativeEvent)
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
 
+  nsAutoLockChromeUnstickContent lock;
+
   PR_LOG(gLog, PR_LOG_ALWAYS,
     ("%p TextInputHandler::HandleKeyUpEvent, aNativeEvent=%p, "
      "type=%s, keyCode=%lld (0x%X), modifierFlags=0x%X, characters=\"%s\", "
@@ -1224,6 +1229,8 @@ TextInputHandler::HandleFlagsChanged(NSEvent* aNativeEvent)
        "widget has been already destroyed", this));
     return;
   }
+
+  nsAutoLockChromeUnstickContent lock;
 
   nsRefPtr<nsChildView> kungFuDeathGrip(mWidget);
 

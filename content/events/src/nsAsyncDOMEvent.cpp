@@ -63,6 +63,8 @@ NS_IMETHODIMP nsAsyncDOMEvent::Run()
     return NS_OK;
   }
 
+  NS_StickLock(mEventNode);
+
   if (mEvent) {
     NS_ASSERTION(!mDispatchChromeOnly, "Can't do that");
     nsCOMPtr<nsIDOMEventTarget> target = do_QueryInterface(mEventNode);
@@ -84,7 +86,8 @@ NS_IMETHODIMP nsAsyncDOMEvent::Run()
 
 nsresult nsAsyncDOMEvent::PostDOMEvent()
 {
-  return NS_DispatchToCurrentThread(this);
+  return NS_DispatchToMainThread(this, NS_DISPATCH_NORMAL,
+                                 mEventNode ? mEventNode->GetZone() : JS_ZONE_CHROME);
 }
 
 void nsAsyncDOMEvent::RunDOMEventWhenSafe()

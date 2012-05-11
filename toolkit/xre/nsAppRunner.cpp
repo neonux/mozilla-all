@@ -65,6 +65,7 @@
 
 #include "nsAppRunner.h"
 #include "nsUpdateDriver.h"
+#include "nsThreadUtils.h"
 
 #ifdef MOZ_INSTRUMENT_EVENT_LOOP
 #include "EventTracer.h"
@@ -1109,6 +1110,8 @@ private:
 
 ScopedXPCOMStartup::~ScopedXPCOMStartup()
 {
+  nsAutoLockChromeUnstickContent lock;
+
   NS_IF_RELEASE(gNativeAppSupport);
 
   if (mServiceManager) {
@@ -1694,6 +1697,8 @@ ProfileLockedDialog(nsILocalFile* aProfileDir, nsILocalFile* aProfileLocalDir,
   rv = xpcom.Initialize();
   NS_ENSURE_SUCCESS(rv, rv);
 
+  nsAutoLockChromeUnstickContent lock;
+
   rv = xpcom.SetWindowCreator(aNative);
   NS_ENSURE_SUCCESS(rv, NS_ERROR_FAILURE);
 
@@ -1775,6 +1780,8 @@ ProfileMissingDialog(nsINativeAppSupport* aNative)
   rv = xpcom.Initialize();
   NS_ENSURE_SUCCESS(rv, rv);
 
+  nsAutoLockChromeUnstickContent lock;
+
   rv = xpcom.SetWindowCreator(aNative);
   NS_ENSURE_SUCCESS(rv, NS_ERROR_FAILURE);
 
@@ -1829,6 +1836,8 @@ ShowProfileManager(nsIToolkitProfileService* aProfileSvc,
     ScopedXPCOMStartup xpcom;
     rv = xpcom.Initialize();
     NS_ENSURE_SUCCESS(rv, rv);
+
+    nsAutoLockChromeUnstickContent lock;
 
     rv = xpcom.SetWindowCreator(aNative);
     NS_ENSURE_SUCCESS(rv, NS_ERROR_FAILURE);
@@ -3777,6 +3786,8 @@ XREMain::XRE_mainRun()
   NS_TIME_FUNCTION_MARK("appStartup->Run");
 
   {
+    nsAutoUnlockEverything unlock;
+
     rv = appStartup->Run();
     if (NS_FAILED(rv)) {
       NS_ERROR("failed to run appstartup");
@@ -3852,9 +3863,13 @@ XREMain::XRE_main(int argc, char* argv[], const nsXREAppData* aAppData)
   rv = mScopedXPCom->Initialize();
   NS_ENSURE_SUCCESS(rv, 1);
 
-  // run!
-  NS_TIME_FUNCTION_MARK("XRE_main run");
-  rv = XRE_mainRun();
+  {
+    nsAutoLockChromeUnstickContent lock;
+
+    // run!
+    NS_TIME_FUNCTION_MARK("XRE_main run");
+    rv = XRE_mainRun();
+  }
 
   NS_TIME_FUNCTION_MARK("XRE_main shutdown");
 #ifdef MOZ_INSTRUMENT_EVENT_LOOP

@@ -48,7 +48,7 @@ double VideoFrameContainer::GetFrameDelay()
 
 void VideoFrameContainer::Invalidate()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Must call on main thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   if (!mElement) {
     // Element has been destroyed
     return;

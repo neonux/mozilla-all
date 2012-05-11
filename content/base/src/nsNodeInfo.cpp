@@ -62,6 +62,12 @@
 
 using namespace mozilla;
 
+JSZoneId
+nsINode::GetZone()
+{
+  return mNodeInfo->GetZone();
+}
+
 static const size_t kNodeInfoPoolSizes[] = {
   sizeof(nsNodeInfo)
 };

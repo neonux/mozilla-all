@@ -943,6 +943,9 @@ nsXBLBinding::ExecuteAttachedHandler()
   if (mNextBinding)
     mNextBinding->ExecuteAttachedHandler();
 
+  if (mBoundElement)
+    NS_StickLock(mBoundElement);
+
   if (AllowScripts())
     mPrototypeBinding->BindingAttached(mBoundElement);
 }
@@ -1048,7 +1051,7 @@ nsXBLBinding::ChangeDocument(nsIDocument* aOldDocument, nsIDocument* aNewDocumen
           nsCOMPtr<nsIScriptContext> context = global->GetContext();
           if (context && scope) {
             JSContext *cx = context->GetNativeContext();
- 
+
             nsCxPusher pusher;
             pusher.Push(cx);
 

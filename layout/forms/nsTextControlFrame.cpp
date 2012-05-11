@@ -340,6 +340,7 @@ nsTextControlFrame::EnsureEditorInitialized()
 
   // Make sure that editor init doesn't do things that would kill us off
   // (especially off the script blockers it'll create for its DOM mutations).
+  nsAutoLockChrome lock;
   nsAutoScriptBlocker scriptBlocker;
 
   // Time to mess with our security context... See comments in GetValue()
@@ -642,18 +643,23 @@ nsTextControlFrame::IsLeaf() const
 NS_IMETHODIMP
 nsTextControlFrame::ScrollOnFocusEvent::Run()
 {
-  if (mFrame) {
-    nsCOMPtr<nsITextControlElement> txtCtrl = do_QueryInterface(mFrame->GetContent());
-    NS_ASSERTION(txtCtrl, "Content not a text control element");
-    nsISelectionController* selCon = txtCtrl->GetSelectionController();
-    if (selCon) {
-      mFrame->mScrollEvent.Forget();
-      selCon->ScrollSelectionIntoView(nsISelectionController::SELECTION_NORMAL,
-                                      nsISelectionController::SELECTION_FOCUS_REGION,
-                                      nsISelectionController::SCROLL_SYNCHRONOUS);
-    }
+  if (!mFrame)
+    return NS_OK;
+
+  NS_StickLock(mFrame->GetContent());
+
+  if (!mFrame)
+    return NS_OK;
+
+  nsCOMPtr<nsITextControlElement> txtCtrl = do_QueryInterface(mFrame->GetContent());
+  NS_ASSERTION(txtCtrl, "Content not a text control element");
+  nsISelectionController* selCon = txtCtrl->GetSelectionController();
+  if (selCon) {
+    mFrame->mScrollEvent.Forget();
+    selCon->ScrollSelectionIntoView(nsISelectionController::SELECTION_NORMAL,
+                                    nsISelectionController::SELECTION_FOCUS_REGION,
+                                    nsISelectionController::SCROLL_SYNCHRONOUS);
   }
-  return NS_OK;
 }
 
 //IMPLEMENTING NS_IFORMCONTROLFRAME
@@ -697,6 +703,8 @@ void nsTextControlFrame::SetFocus(bool aOn, bool aRepaint)
       return;
     }
   }
+
+  nsAutoLockChrome lock; // for nsISelection
 
   nsCOMPtr<nsISelection> ourSel;
   selCon->GetSelection(nsISelectionController::SELECTION_NORMAL, 
@@ -835,6 +843,8 @@ nsTextControlFrame::SetSelectionInternal(nsIDOMNode *aStartNode,
   NS_ASSERTION(txtCtrl, "Content not a text control element");
   nsISelectionController* selCon = txtCtrl->GetSelectionController();
   NS_ENSURE_TRUE(selCon, NS_ERROR_FAILURE);
+
+  nsAutoLockChrome lock; // for nsISelection
 
   nsCOMPtr<nsISelection> selection;
   selCon->GetSelection(nsISelectionController::SELECTION_NORMAL, getter_AddRefs(selection));  
@@ -1158,6 +1168,9 @@ nsTextControlFrame::GetSelectionRange(PRInt32* aSelectionStart,
   NS_ASSERTION(txtCtrl, "Content not a text control element");
   nsISelectionController* selCon = txtCtrl->GetSelectionController();
   NS_ENSURE_TRUE(selCon, NS_ERROR_FAILURE);
+
+  nsAutoLockChrome lock; // for nsISelection
+
   nsCOMPtr<nsISelection> selection;
   rv = selCon->GetSelection(nsISelectionController::SELECTION_NORMAL, getter_AddRefs(selection));  
   NS_ENSURE_SUCCESS(rv, rv);

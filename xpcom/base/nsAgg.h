@@ -159,7 +159,7 @@ _class::Internal::Release(void)                                             \
         return 0;                                                           \
     }                                                                       \
     return agg->mRefCnt;                                                    \
-}                                                                           \
+}
 
 #define NS_IMPL_CYCLE_COLLECTING_AGGREGATED(_class)                         \
                                                                             \
@@ -170,8 +170,8 @@ _class::Internal::AddRef(void)                                              \
 {                                                                           \
     _class* agg = NS_CYCLE_COLLECTION_CLASSNAME(_class)::Downcast(this);    \
     NS_PRECONDITION(PRInt32(agg->mRefCnt) >= 0, "illegal refcnt");          \
-    NS_CheckThreadSafe(agg->_mOwningThread.GetThread(),                     \
-                       #_class " not thread-safe");                         \
+    NS_ASSERTION(agg->_mOwningThread.onCorrectThread(),                     \
+                 #_class " not thread-safe");                               \
     nsrefcnt count = agg->mRefCnt.incr(this);                               \
     NS_LOG_ADDREF(this, count, #_class, sizeof(*agg));                      \
     return count;                                                           \
@@ -182,8 +182,8 @@ _class::Internal::Release(void)                                             \
 {                                                                           \
     _class* agg = NS_CYCLE_COLLECTION_CLASSNAME(_class)::Downcast(this);    \
     NS_PRECONDITION(0 != agg->mRefCnt, "dup release");                      \
-    NS_CheckThreadSafe(agg->_mOwningThread.GetThread(),                     \
-                       #_class " not thread-safe");                         \
+    NS_ASSERTION(agg->_mOwningThread.onCorrectThread(),                     \
+                 #_class " not thread-safe");                               \
     nsrefcnt count = agg->mRefCnt.decr(this);                               \
     NS_LOG_RELEASE(this, count, #_class);                                   \
     if (count == 0) {                                                       \

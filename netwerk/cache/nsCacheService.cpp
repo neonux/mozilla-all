@@ -247,7 +247,7 @@ public:
 
     NS_IMETHOD Run() 
     {
-        NS_ASSERTION(NS_IsMainThread(), 
+        NS_ASSERTION(NS_IsChromeOwningThread(), 
                      "Setting smart size data off the main thread");
 
         // Main thread may have already called nsCacheService::Shutdown
@@ -1875,7 +1875,7 @@ nsCacheService::OpenCacheEntry(nsCacheSession *           session,
 
     // Process the request on the background thread if we are on the main thread
     // and the the request is asynchronous
-    if (NS_IsMainThread() && listener && gService->mCacheIOThread) {
+    if (NS_IsExecuteThread() && listener && gService->mCacheIOThread) {
         nsCOMPtr<nsIRunnable> ev =
             new nsProcessRequestEvent(request);
         rv = DispatchToCacheIOThread(ev);

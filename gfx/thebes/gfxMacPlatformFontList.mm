@@ -899,6 +899,8 @@ void
 gfxMacPlatformFontList::ATSNotification(ATSFontNotificationInfoRef aInfo,
                                     void* aUserArg)
 {
+    nsAutoLockChrome lock;
+
     // xxx - should be carefully pruning the list of fonts, not rebuilding it from scratch
     gfxMacPlatformFontList *qfc = (gfxMacPlatformFontList*)aUserArg;
     qfc->UpdateFontList();

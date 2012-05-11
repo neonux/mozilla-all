@@ -111,7 +111,7 @@ public:
   }
 
   virtual nsIScriptObjectPrincipal* GetObjectPrincipal() { return this; }
-  virtual JSContext* GetJSContextForEventHandlers() { return mCx; }
+  virtual JSContext* GetJSContextForEventHandlers() { return GetJSContext(); }
   virtual nsIPrincipal* GetPrincipal() { return mPrincipal; }
   void LoadFrameScript(const nsAString& aURL);
   void Disconnect();

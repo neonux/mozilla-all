@@ -765,6 +765,9 @@ nsTransitionManager::WillRefresh(mozilla::TimeStamp aTime)
     return;
   }
 
+  if (!NS_TryStickLock(mPresContext))
+    return;
+
   nsTArray<TransitionEventInfo> events;
 
   // Trim transitions that have completed, and post restyle events for

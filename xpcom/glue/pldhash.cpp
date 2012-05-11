@@ -604,8 +604,7 @@ PL_DHashTableOperate(PLDHashTable *table, const void *key, PLDHashOperator op)
     PRUint32 size;
     int deltaLog2;
 
-    NS_ASSERTION(op == PL_DHASH_LOOKUP || RECURSION_LEVEL(table) == 0,
-                 "op == PL_DHASH_LOOKUP || RECURSION_LEVEL(table) == 0");
+    MOZ_ASSERT(op == PL_DHASH_LOOKUP || RECURSION_LEVEL(table) == 0);
     INCREMENT_RECURSION_LEVEL(table);
 
     keyHash = table->ops->hashKey(table, key);

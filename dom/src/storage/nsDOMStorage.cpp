@@ -1408,6 +1408,8 @@ nsDOMStorage::CanUseStorage(bool* aSessionOnly)
     return false;
   }
 
+  nsAutoLockChrome lock;
+
   // chrome can always use storage regardless of permission preferences
   if (nsContentUtils::IsCallerChrome())
     return true;
@@ -1757,6 +1759,7 @@ NS_INTERFACE_MAP_END
 
 nsDOMStorage2::nsDOMStorage2()
 {
+  NS_FIX_OWNINGTHREAD(JS_ZONE_CHROME);
 }
 
 nsDOMStorage2::nsDOMStorage2(nsDOMStorage2& aThat)
@@ -1910,24 +1913,28 @@ nsDOMStorage2::BroadcastChangeNotification(const nsSubstring &aKey,
 NS_IMETHODIMP
 nsDOMStorage2::GetLength(PRUint32 *aLength)
 {
+  nsAutoLockChrome lock;
   return mStorage->GetLength(aLength);
 }
 
 NS_IMETHODIMP
 nsDOMStorage2::Key(PRUint32 aIndex, nsAString& aKey)
 {
+  nsAutoLockChrome lock;
   return mStorage->Key(aIndex, aKey);
 }
 
 NS_IMETHODIMP
 nsDOMStorage2::GetItem(const nsAString& aKey, nsAString &aData)
 {
+  nsAutoLockChrome lock;
   return mStorage->GetItem(aKey, aData);
 }
 
 NS_IMETHODIMP
 nsDOMStorage2::SetItem(const nsAString& aKey, const nsAString& aData)
 {
+  nsAutoLockChrome lock;
   mStorage->mEventBroadcaster = this;
   return mStorage->SetItem(aKey, aData);
 }
@@ -1935,6 +1942,7 @@ nsDOMStorage2::SetItem(const nsAString& aKey, const nsAString& aData)
 NS_IMETHODIMP
 nsDOMStorage2::RemoveItem(const nsAString& aKey)
 {
+  nsAutoLockChrome lock;
   mStorage->mEventBroadcaster = this;
   return mStorage->RemoveItem(aKey);
 }
@@ -1942,6 +1950,7 @@ nsDOMStorage2::RemoveItem(const nsAString& aKey)
 NS_IMETHODIMP
 nsDOMStorage2::Clear()
 {
+  nsAutoLockChrome lock;
   mStorage->mEventBroadcaster = this;
   return mStorage->Clear();
 }

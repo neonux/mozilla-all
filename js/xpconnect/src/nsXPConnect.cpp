@@ -166,12 +166,6 @@ nsXPConnect::~nsXPConnect()
 nsXPConnect*
 nsXPConnect::GetXPConnect()
 {
-    // Do a release-mode assert that we're not doing anything significant in
-    // XPConnect off the main thread. If you're an extension developer hitting
-    // this, you need to change your code. See bug 716167.
-    if (!NS_LIKELY(NS_IsMainThread() || NS_IsCycleCollectorThread()))
-        MOZ_Assert("NS_IsMainThread()", __FILE__, __LINE__);
-
     if (!gSelf) {
         if (gOnceAliveNowDead)
             return nsnull;
@@ -194,12 +188,16 @@ nsXPConnect::GetXPConnect()
         //
         // The cycle collector sometimes calls GetXPConnect, but it should never
         // be the one that initializes gSelf.
+
+        // XXX fixme
+        /*
         MOZ_ASSERT(NS_IsMainThread());
         nsCOMPtr<nsIThreadInternal> thread = do_QueryInterface(NS_GetCurrentThread());
         if (NS_FAILED(thread->AddObserver(gSelf))) {
             NS_RELEASE(gSelf);
             // Fall through to returning null
         }
+        */
     }
     return gSelf;
 }
@@ -220,6 +218,8 @@ nsXPConnect::ReleaseXPConnectSingleton()
     nsXPConnect* xpc = gSelf;
     if (xpc) {
 
+        // XXX fixme
+        /*
         // The thread subsystem may have been shut down already, so make sure
         // to check for null here.
         nsCOMPtr<nsIThreadInternal> thread = do_QueryInterface(NS_GetCurrentThread());
@@ -227,6 +227,7 @@ nsXPConnect::ReleaseXPConnectSingleton()
             MOZ_ASSERT(NS_IsMainThread());
             thread->RemoveObserver(xpc);
         }
+        */
 
 #ifdef DEBUG
         // force a dump of the JavaScript gc heap if JS is still alive
@@ -542,32 +543,34 @@ bool
 nsXPConnect::NotifyLeaveMainThread()
 {
     NS_ABORT_IF_FALSE(NS_IsMainThread(), "Off main thread");
+    return true;
+    /*
     JSRuntime *rt = mRuntime->GetJSRuntime();
     if (JS_IsInRequest(rt) || JS_IsInSuspendedRequest(rt))
         return false;
-    JS_ClearRuntimeThread(rt);
     return true;
+    */
 }
 
 void
 nsXPConnect::NotifyEnterCycleCollectionThread()
 {
     NS_ABORT_IF_FALSE(!NS_IsMainThread(), "On main thread");
-    JS_SetRuntimeThread(mRuntime->GetJSRuntime());
+    //JS_SetRuntimeThread(mRuntime->GetJSRuntime());
 }
 
 void
 nsXPConnect::NotifyLeaveCycleCollectionThread()
 {
     NS_ABORT_IF_FALSE(!NS_IsMainThread(), "On main thread");
-    JS_ClearRuntimeThread(mRuntime->GetJSRuntime());
+    //JS_ClearRuntimeThread(mRuntime->GetJSRuntime());
 }
 
 void
 nsXPConnect::NotifyEnterMainThread()
 {
     NS_ABORT_IF_FALSE(NS_IsMainThread(), "Off main thread");
-    JS_SetRuntimeThread(mRuntime->GetJSRuntime());
+    //JS_SetRuntimeThread(mRuntime->GetJSRuntime());
 }
 
 nsresult
@@ -640,6 +643,9 @@ static void
 UnmarkGrayChildren(JSTracer *trc, void **thingp, JSGCTraceKind kind)
 {
     void *thing = *thingp;
+
+    // XXX restore
+#if 0
     int stackDummy;
     if (!JS_CHECK_STACK_SIZE(js::GetNativeStackLimit(trc->runtime), &stackDummy)) {
         /*
@@ -650,6 +656,7 @@ UnmarkGrayChildren(JSTracer *trc, void **thingp, JSGCTraceKind kind)
         xpc->EnsureGCBeforeCC();
         return;
     }
+#endif
 
     if (!xpc_IsGrayGCThing(thing))
         return;
@@ -1003,6 +1010,8 @@ nsXPConnect::InitClasses(JSContext * aJSContext, JSObject * aGlobalJSObj)
     NS_ASSERTION(aJSContext, "bad param");
     NS_ASSERTION(aGlobalJSObj, "bad param");
 
+    nsAutoUnstickChrome unstick(aJSContext);
+
     // Nest frame chain save/restore in request created by XPCCallContext.
     XPCCallContext ccx(NATIVE_CALLER, aJSContext);
     if (!ccx.IsValid())
@@ -1023,7 +1032,7 @@ nsXPConnect::InitClasses(JSContext * aJSContext, JSObject * aGlobalJSObj)
     if (!nsXPCComponents::AttachComponentsObject(ccx, scope, aGlobalJSObj))
         return UnexpectedFailure(NS_ERROR_FAILURE);
 
-    if (XPCPerThreadData::IsMainThread(ccx)) {
+    if (XPCPerThreadData::IsExecuteThread(ccx)) {
         if (!XPCNativeWrapper::AttachNewConstructorObject(ccx, aGlobalJSObj))
             return UnexpectedFailure(NS_ERROR_FAILURE);
     }
@@ -1032,7 +1041,8 @@ nsXPConnect::InitClasses(JSContext * aJSContext, JSObject * aGlobalJSObj)
 }
 
 static bool
-CreateNewCompartment(JSContext *cx, JSClass *clasp, nsIPrincipal *principal,
+CreateNewCompartment(JSContext *cx, JSClass *clasp, JSZoneId zone,
+                     nsIPrincipal *principal,
                      xpc::CompartmentPrivate *priv, JSObject **global,
                      JSCompartment **compartment)
 {
@@ -1041,7 +1051,7 @@ CreateNewCompartment(JSContext *cx, JSClass *clasp, nsIPrincipal *principal,
     // that case it will be free'd in CompartmentCallback during GC).
     nsAutoPtr<xpc::CompartmentPrivate> priv_holder(priv);
     JSObject *tempGlobal =
-        JS_NewCompartmentAndGlobalObject(cx, clasp, nsJSPrincipals::get(principal));
+        JS_NewCompartmentAndGlobalObject(cx, clasp, nsJSPrincipals::get(principal), zone);
 
     if (!tempGlobal)
         return false;
@@ -1127,7 +1137,7 @@ CheckTypeInference(JSContext *cx, JSClass *clasp, nsIPrincipal *principal)
 #endif
 
 nsresult
-xpc_CreateGlobalObject(JSContext *cx, JSClass *clasp,
+xpc_CreateGlobalObject(JSContext *cx, JSClass *clasp, JSZoneId zone,
                        nsIPrincipal *principal, nsISupports *ptr,
                        bool wantXrays, JSObject **global,
                        JSCompartment **compartment)
@@ -1136,10 +1146,8 @@ xpc_CreateGlobalObject(JSContext *cx, JSClass *clasp,
     // Sandboxes and compilation scopes are exceptions. See bug 744034.
     CheckTypeInference(cx, clasp, principal);
 
-    NS_ABORT_IF_FALSE(NS_IsMainThread(), "using a principal off the main thread?");
-
     xpc::CompartmentPrivate *priv = new xpc::CompartmentPrivate(wantXrays);
-    if (!CreateNewCompartment(cx, clasp, principal, priv, global, compartment))
+    if (!CreateNewCompartment(cx, clasp, zone, principal, priv, global, compartment))
         return UnexpectedFailure(NS_ERROR_FAILURE);
 
     XPCCompartmentSet& set = nsXPConnect::GetRuntimeInstance()->GetCompartmentSet();
@@ -1171,6 +1179,7 @@ xpc_CreateGlobalObject(JSContext *cx, JSClass *clasp,
 NS_IMETHODIMP
 nsXPConnect::InitClassesWithNewWrappedGlobal(JSContext * aJSContext,
                                              nsISupports *aCOMObj,
+                                             PRInt32 aZone,
                                              nsIPrincipal * aPrincipal,
                                              PRUint32 aFlags,
                                              nsIXPConnectJSObjectHolder **_retval)
@@ -1178,6 +1187,8 @@ nsXPConnect::InitClassesWithNewWrappedGlobal(JSContext * aJSContext,
     NS_ASSERTION(aJSContext, "bad param");
     NS_ASSERTION(aCOMObj, "bad param");
     NS_ASSERTION(_retval, "bad param");
+
+    nsAutoUnstickChrome unstick(aJSContext);
 
     // We pass null for the 'extra' pointer during global object creation, so
     // we need to have a principal.
@@ -1191,7 +1202,7 @@ nsXPConnect::InitClassesWithNewWrappedGlobal(JSContext * aJSContext,
     MOZ_ASSERT(helper.GetScriptableFlags() & nsIXPCScriptable::IS_GLOBAL_OBJECT);
     nsRefPtr<XPCWrappedNative> wrappedGlobal;
     nsresult rv =
-        XPCWrappedNative::WrapNewGlobal(ccx, helper, aPrincipal,
+        XPCWrappedNative::WrapNewGlobal(ccx, helper, (JSZoneId) aZone, aPrincipal,
                                         aFlags & nsIXPConnect::INIT_JS_STANDARD_CLASSES,
                                         getter_AddRefs(wrappedGlobal));
     NS_ENSURE_SUCCESS(rv, rv);
@@ -1213,7 +1224,7 @@ nsXPConnect::InitClassesWithNewWrappedGlobal(JSContext * aJSContext,
         if (!nsXPCComponents::AttachComponentsObject(ccx, wrappedGlobal->GetScope(), global))
             return UnexpectedFailure(NS_ERROR_FAILURE);
 
-        if (XPCPerThreadData::IsMainThread(ccx)) {
+        if (XPCPerThreadData::IsExecuteThread(ccx)) {
             if (!XPCNativeWrapper::AttachNewConstructorObject(ccx, global))
                 return UnexpectedFailure(NS_ERROR_FAILURE);
         }
@@ -1231,6 +1242,8 @@ nsXPConnect::InitClassesWithNewWrappedGlobal(JSContext * aJSContext,
 nsresult
 xpc_MorphSlimWrapper(JSContext *cx, nsISupports *tomorph)
 {
+    nsAutoUnstickChrome unstick(cx);
+
     nsWrapperCache *cache;
     CallQueryInterface(tomorph, &cache);
     if (!cache)
@@ -1252,6 +1265,19 @@ NativeInterface2JSObject(XPCLazyCallContext & lccx,
                          jsval *aVal,
                          nsIXPConnectJSObjectHolder **aHolder)
 {
+    mozilla::Maybe<nsAutoTryLockZone> lockContent;
+
+    JSZoneId zone = JS_GetObjectZone(aScope);
+    if (zone >= JS_ZONE_CONTENT_START) {
+        lockContent.construct(zone);
+        if (!lockContent.ref().succeeded) {
+            if (!NS_CanBlockOnContent()) {
+                JS_ReportError(lccx.GetJSContext(), "Attempt to block content on main thread");
+                return NS_ERROR_FAILURE;
+            }
+        }
+    }
+
     JSAutoEnterCompartment ac;
     if (!ac.enter(lccx.GetJSContext(), aScope))
         return NS_ERROR_OUT_OF_MEMORY;
@@ -1538,6 +1564,8 @@ nsXPConnect::ReparentWrappedNativeIfFound(JSContext * aJSContext,
                                           nsISupports *aCOMObj,
                                           nsIXPConnectJSObjectHolder **_retval)
 {
+    nsAutoUnstickChrome unstick(aJSContext);
+
     XPCCallContext ccx(NATIVE_CALLER, aJSContext);
     if (!ccx.IsValid())
         return UnexpectedFailure(NS_ERROR_FAILURE);
@@ -2026,6 +2054,8 @@ nsXPConnect::GetWrappedNativePrototype(JSContext * aJSContext,
 NS_IMETHODIMP
 nsXPConnect::ReleaseJSContext(JSContext * aJSContext, bool noGC)
 {
+    // XXX this code is insane.
+#if 0
     NS_ASSERTION(aJSContext, "bad param");
     XPCPerThreadData* tls = XPCPerThreadData::GetData(aJSContext);
     if (tls) {
@@ -2059,6 +2089,7 @@ nsXPConnect::ReleaseJSContext(JSContext * aJSContext, bool noGC)
         JS_DestroyContextNoGC(aJSContext);
     else
         JS_DestroyContext(aJSContext);
+#endif
     return NS_OK;
 }
 
@@ -2292,7 +2323,7 @@ nsXPConnect::GetRuntime(JSRuntime **runtime)
         return NS_ERROR_NULL_POINTER;
 
     JSRuntime *rt = GetRuntime()->GetJSRuntime();
-    JS_AbortIfWrongThread(rt);
+    //JS_AbortIfWrongThread(rt);
     *runtime = rt;
     return NS_OK;
 }
@@ -2482,7 +2513,7 @@ nsXPConnect::Push(JSContext * cx)
     if (!data)
         return NS_ERROR_FAILURE;
 
-     if (gDebugMode != gDesiredDebugMode && NS_IsMainThread()) {
+     if (gDebugMode != gDesiredDebugMode && NS_IsChromeOwningThread()) {
          const InfallibleTArray<XPCJSContextInfo>* stack = data->GetJSContextStack()->GetStack();
          if (!gDesiredDebugMode) {
              /* Turn off debug mode immediately, even if JS code is currently running */

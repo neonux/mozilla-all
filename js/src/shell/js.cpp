@@ -2549,7 +2549,7 @@ static JSClass sandbox_class = {
 static JSObject *
 NewSandbox(JSContext *cx, bool lazy)
 {
-    RootedVarObject obj(cx, JS_NewCompartmentAndGlobalObject(cx, &sandbox_class, NULL));
+    RootedVarObject obj(cx, JS_NewCompartmentAndGlobalObject(cx, &sandbox_class, NULL, JS_ZONE_CHROME));
     if (!obj)
         return NULL;
 
@@ -4585,7 +4585,7 @@ NewGlobalObject(JSContext *cx, CompartmentKind compartment)
     RootedVarObject glob(cx);
 
     glob = (compartment == NEW_COMPARTMENT)
-           ? JS_NewCompartmentAndGlobalObject(cx, &global_class, NULL)
+           ? JS_NewCompartmentAndGlobalObject(cx, &global_class, NULL, JS_ZONE_CHROME)
            : JS_NewGlobalObject(cx, &global_class);
     if (!glob)
         return NULL;
@@ -4992,12 +4992,12 @@ main(int argc, char **argv, char **envp)
     if (!rt)
         return 1;
 
+    JS_SetNativeStackQuota(rt, gMaxStackSize);
+
     JS_SetGCParameter(rt, JSGC_MAX_BYTES, 0xffffffff);
 
     JS_SetTrustedPrincipals(rt, &shellTrustedPrincipals);
     JS_SetSecurityCallbacks(rt, &securityCallbacks);
-
-    JS_SetNativeStackQuota(rt, gMaxStackSize);
 
     if (!InitWatchdog(rt))
         return 1;

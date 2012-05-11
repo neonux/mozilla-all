@@ -651,6 +651,8 @@ nsAttrAndChildArray::Clear()
     ATTRS(mImpl)[i].~InternalAttr();
   }
 
+  nsAutoLockChrome lock;
+
   nsAutoScriptBlocker scriptBlocker;
   PRUint32 end = slotCount * ATTRSIZE + ChildCount();
   for (i = slotCount * ATTRSIZE; i < end; ++i) {

@@ -184,6 +184,7 @@ public:
 
   NS_IMETHOD Run()
   {
+    NS_StickLock(mWindow);
     mWindow->ResumeTimeouts(false);
     return NS_OK;
   }
@@ -483,6 +484,8 @@ nsXMLHttpRequest::nsXMLHttpRequest()
     mResultJSON(JSVAL_VOID),
     mResultArrayBuffer(nsnull)
 {
+  NS_FIX_OWNINGTHREAD(JS_ZONE_CHROME);
+
   nsLayoutStatics::AddRef();
 
   SetIsDOMBinding();
@@ -1709,6 +1712,9 @@ nsXMLHttpRequest::DispatchProgressEvent(nsDOMEventTargetHelper* aTarget,
                               aLoaded, (aTotal == LL_MAXUINT) ? 0 : aTotal);
 
   if (aUseLSEventWrapper) {
+    if (mOwner)
+      NS_StickLock(mOwner);
+
     nsCOMPtr<nsIDOMProgressEvent> xhrprogressEvent =
       new nsXMLHttpProgressEvent(progress, aPosition, aTotalSize, GetOwner());
     event = xhrprogressEvent;
@@ -1805,6 +1811,8 @@ nsXMLHttpRequest::Open(const nsACString& method, const nsACString& url,
                        bool async, const nsAString& user,
                        const nsAString& password)
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   NS_ENSURE_ARG(!method.IsEmpty());
 
   Telemetry::Accumulate(Telemetry::XMLHTTPREQUEST_ASYNC_OR_SYNC,
@@ -1870,7 +1878,7 @@ nsXMLHttpRequest::Open(const nsACString& method, const nsACString& url,
   NS_ENSURE_SUCCESS(rv, rv);
   nsCOMPtr<nsIDocument> doc =
     nsContentUtils::GetDocumentFromScriptContext(sc);
-  
+
   nsCOMPtr<nsIURI> baseURI;
   if (mBaseURI) {
     baseURI = mBaseURI;
@@ -2082,6 +2090,9 @@ nsXMLHttpRequest::OnDataAvailable(nsIRequest *request,
 {
   NS_ENSURE_ARG_POINTER(inStr);
 
+  if (mOwner)
+    NS_StickLock(mOwner);
+
   NS_ABORT_IF_FALSE(mContext.get() == ctxt,"start context different from OnDataAvailable context");
 
   mProgressSinceLastProgressEvent = true;
@@ -2161,6 +2172,9 @@ nsXMLHttpRequest::OnStartRequest(nsIRequest *request, nsISupports *ctxt)
   if (mState & XML_HTTP_REQUEST_TIMED_OUT) {
     return NS_OK;
   }
+
+  if (mOwner)
+    NS_StickLock(mOwner);
 
   nsCOMPtr<nsIChannel> channel(do_QueryInterface(request));
   NS_ENSURE_TRUE(channel, NS_ERROR_UNEXPECTED);
@@ -2799,6 +2813,8 @@ nsXMLHttpRequest::Send(nsIVariant *aBody, JSContext *aCx)
 nsresult
 nsXMLHttpRequest::Send(JSContext *aCx, nsIVariant* aVariant, const Nullable<RequestBody>& aBody)
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   NS_ENSURE_TRUE(mPrincipal, NS_ERROR_NOT_INITIALIZED);
 
   nsresult rv = CheckInnerWindowCorrectness();
@@ -3148,6 +3164,8 @@ nsXMLHttpRequest::Send(JSContext *aCx, nsIVariant* aVariant, const Nullable<Requ
       // Note, calling ChangeState may have cleared
       // XML_HTTP_REQUEST_SYNCLOOPING flag.
       nsIThread *thread = NS_GetCurrentThread();
+
+      nsAutoUnlockEverything unlock;
       while (mState & XML_HTTP_REQUEST_SYNCLOOPING) {
         if (!NS_ProcessNextEvent(thread)) {
           rv = NS_ERROR_UNEXPECTED;

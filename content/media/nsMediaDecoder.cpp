@@ -74,6 +74,11 @@ nsMediaDecoder::~nsMediaDecoder()
   MediaMemoryReporter::RemoveMediaDecoder(this);
 }
 
+JSZoneId nsMediaDecoder::GetZone()
+{
+  return mElement ? mElement->GetZone() : JS_ZONE_CHROME;
+}
+
 bool nsMediaDecoder::Init(nsHTMLMediaElement* aElement)
 {
   mElement = aElement;
@@ -110,6 +115,8 @@ static void ProgressCallback(nsITimer* aTimer, void* aClosure)
 
 void nsMediaDecoder::Progress(bool aTimer)
 {
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
+
   if (!mElement)
     return;
 
@@ -143,6 +150,7 @@ nsresult nsMediaDecoder::StartProgress()
     return NS_OK;
 
   mProgressTimer = do_CreateInstance("@mozilla.org/timer;1");
+  mProgressTimer->SetCallbackZone(GetZone());
   return mProgressTimer->InitWithFuncCallback(ProgressCallback,
                                               this,
                                               PROGRESS_MS,

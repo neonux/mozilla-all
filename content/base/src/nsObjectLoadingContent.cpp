@@ -148,6 +148,8 @@ public:
 NS_IMETHODIMP
 nsAsyncInstantiateEvent::Run()
 {
+  NS_StickLock(mContent);
+
   // do nothing if we've been revoked
   if (mContent->mPendingInstantiateEvent != this) {
     return NS_OK;
@@ -178,6 +180,8 @@ public:
 NS_IMETHODIMP
 InDocCheckEvent::Run()
 {
+  NS_StickLock(mContent);
+
   if (!mContent->IsInDoc()) {
     nsCOMPtr<nsIObjectLoadingContent> olc = do_QueryInterface(mContent);
     if (olc) {
@@ -208,6 +212,8 @@ public:
 NS_IMETHODIMP
 nsPluginErrorEvent::Run()
 {
+  NS_StickLock(mContent);
+
   LOG(("OBJLC []: Firing plugin not found event for content %p\n",
        mContent.get()));
   nsString type;
@@ -272,6 +278,8 @@ nsPluginCrashedEvent::Run()
 {
   LOG(("OBJLC []: Firing plugin crashed event for content %p\n",
        mContent.get()));
+
+  NS_StickLock(mContent);
 
   nsCOMPtr<nsIDOMDocument> domDoc =
     do_QueryInterface(mContent->GetDocument());
@@ -769,6 +777,8 @@ nsObjectLoadingContent::OnStartRequest(nsIRequest *aRequest,
 {
   SAMPLE_LABEL("nsObjectLoadingContent", "OnStartRequest");
 
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
+
   if (aRequest != mChannel || !aRequest) {
     // This is a bit of an edge case - happens when a new load starts before the
     // previous one got here
@@ -1243,6 +1253,8 @@ nsObjectLoadingContent::LoadObject(const nsAString& aURI,
   nsCOMPtr<nsIContent> thisContent = 
     do_QueryInterface(static_cast<nsIImageLoadingContent*>(this));
   NS_ASSERTION(thisContent, "must be a content");
+
+  nsAutoLockChrome lock; // for URI
 
   nsIDocument* doc = thisContent->OwnerDoc();
   nsCOMPtr<nsIURI> baseURI;

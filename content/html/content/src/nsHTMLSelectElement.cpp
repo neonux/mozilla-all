@@ -320,6 +320,7 @@ nsHTMLSelectElement::RemoveOptionsFromList(nsIContent* aOptions,
     // Tell the widget we removed the options
     nsISelectControlFrame* selectFrame = GetSelectFrame();
     if (selectFrame) {
+      nsAutoLockChrome lock;
       nsAutoScriptBlocker scriptBlocker;
       for (PRInt32 i = aListIndex; i < aListIndex + numRemoved; ++i) {
         selectFrame->RemoveOption(i);

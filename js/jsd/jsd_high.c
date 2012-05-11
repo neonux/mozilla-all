@@ -139,7 +139,7 @@ _newJSDContext(JSRuntime*         jsrt,
 
     JS_BeginRequest(jsdc->dumbContext);
 
-    jsdc->glob = JS_NewCompartmentAndGlobalObject(jsdc->dumbContext, &global_class, NULL);
+    jsdc->glob = JS_NewCompartmentAndGlobalObject(jsdc->dumbContext, &global_class, NULL, JS_ZONE_CHROME);
 
     if( ! jsdc->glob )
         goto label_newJSDContext_failure;

@@ -237,8 +237,10 @@ IsCallerChrome(JSContext* cx)
 {
     nsresult rv;
 
+    nsAutoLockChrome lock;
+
     nsCOMPtr<nsIScriptSecurityManager> secMan;
-    if (XPCPerThreadData::IsMainThread(cx)) {
+    if (XPCPerThreadData::IsExecuteThread(cx)) {
         secMan = XPCWrapper::GetSecurityManager();
     } else {
         nsXPConnect* xpc = nsXPConnect::GetXPConnect();

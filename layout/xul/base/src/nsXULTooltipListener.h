@@ -102,6 +102,8 @@ protected:
   nsWeakPtr mTargetNode;
   nsWeakPtr mCurrentTooltip;
 
+  JSZoneId mTargetZone;
+
   // a timer for showing the tooltip
   nsCOMPtr<nsITimer> mTooltipTimer;
   static void sTooltipCallback (nsITimer* aTimer, void* aListener);

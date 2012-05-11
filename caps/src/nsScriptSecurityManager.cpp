@@ -104,7 +104,6 @@ static NS_DEFINE_CID(kZipReaderCID, NS_ZIPREADER_CID);
 
 nsIIOService    *nsScriptSecurityManager::sIOService = nsnull;
 nsIXPConnect    *nsScriptSecurityManager::sXPConnect = nsnull;
-nsIThreadJSContextStack *nsScriptSecurityManager::sJSContextStack = nsnull;
 nsIStringBundle *nsScriptSecurityManager::sStrBundle = nsnull;
 JSRuntime       *nsScriptSecurityManager::sRuntime   = 0;
 bool nsScriptSecurityManager::sStrictFileOriginPolicy = true;
@@ -329,7 +328,7 @@ private:
 
 class AutoCxPusher {
 public:
-    AutoCxPusher(nsIJSContextStack *aStack, JSContext *cx)
+    AutoCxPusher(XPCJSContextStack *aStack, JSContext *cx)
         : mStack(aStack), mContext(cx)
     {
         if (NS_FAILED(mStack->Push(mContext))) {
@@ -340,30 +339,34 @@ public:
     ~AutoCxPusher()
     {
         if (mStack) {
-            mStack->Pop(nsnull);
+            mStack->Pop();
         }
     }
 
 private:
-    nsCOMPtr<nsIJSContextStack> mStack;
+    XPCJSContextStack *mStack;
     JSContext *mContext;
 };
+
+static XPCJSContextStack *
+GetCurrentJSContextStack()
+{
+    XPCPerThreadData* data = XPCPerThreadData::GetData(NULL);
+    return data->GetJSContextStack();
+}
 
 JSContext *
 nsScriptSecurityManager::GetCurrentJSContext()
 {
     // Get JSContext from stack.
-    JSContext *cx;
-    if (NS_FAILED(sJSContextStack->Peek(&cx)))
-        return nsnull;
-    return cx;
+    return GetCurrentJSContextStack()->Peek();
 }
 
 JSContext *
 nsScriptSecurityManager::GetSafeJSContext()
 {
     // Get JSContext from stack.
-    return sJSContextStack->GetSafeJSContext();
+    return GetCurrentJSContextStack()->GetSafeJSContext();
 }
 
 /* static */
@@ -418,6 +421,7 @@ nsScriptSecurityManager::GetCxSubjectPrincipal(JSContext *cx)
 {
     NS_ASSERTION(cx == GetCurrentJSContext(),
                  "Uh, cx is not the current JS context!");
+    MOZ_ASSERT(NS_IsChromeOwningThread());
 
     nsresult rv = NS_ERROR_FAILURE;
     nsIPrincipal *principal = GetSubjectPrincipal(cx, &rv);
@@ -432,6 +436,7 @@ nsScriptSecurityManager::GetCxSubjectPrincipalAndFrame(JSContext *cx, JSStackFra
 {
     NS_ASSERTION(cx == GetCurrentJSContext(),
                  "Uh, cx is not the current JS context!");
+    MOZ_ASSERT(NS_IsChromeOwningThread());
 
     nsresult rv = NS_ERROR_FAILURE;
     nsIPrincipal *principal = GetPrincipalAndFrame(cx, fp, &rv);
@@ -446,6 +451,8 @@ nsScriptSecurityManager::PushContextPrincipal(JSContext *cx,
                                               JSStackFrame *fp,
                                               nsIPrincipal *principal)
 {
+    MOZ_ASSERT(NS_IsChromeOwningThread());
+
     NS_ASSERTION(principal, "Must pass a non-null principal");
 
     ContextPrincipal *cp = new ContextPrincipal(mContextPrincipals, cx, fp,
@@ -460,11 +467,21 @@ nsScriptSecurityManager::PushContextPrincipal(JSContext *cx,
 NS_IMETHODIMP
 nsScriptSecurityManager::PopContextPrincipal(JSContext *cx)
 {
-    NS_ASSERTION(mContextPrincipals->mCx == cx, "Mismatched push/pop");
+    MOZ_ASSERT(NS_IsChromeOwningThread());
 
-    ContextPrincipal *next = mContextPrincipals->mNext;
-    delete mContextPrincipals;
-    mContextPrincipals = next;
+    // Watch for contexts interleaved due to pushes by different threads.
+    ContextPrincipal *prev = NULL, *cur = mContextPrincipals;
+    while (cur->mCx != cx) {
+        prev = cur;
+        cur = cur->mNext;
+    }
+
+    ContextPrincipal *next = cur->mNext;
+    delete cur;
+    if (prev)
+        prev->mNext = next;
+    else
+        mContextPrincipals = next;
 
     return NS_OK;
 }
@@ -565,6 +582,8 @@ nsScriptSecurityManager::ObjectPrincipalFinder(JSObject *aObj)
 JSBool
 nsScriptSecurityManager::ContentSecurityPolicyPermitsJSAction(JSContext *cx)
 {
+    nsAutoLockChrome lock;
+
     // Get the security manager
     nsScriptSecurityManager *ssm =
         nsScriptSecurityManager::GetScriptSecurityManager();
@@ -634,6 +653,8 @@ nsScriptSecurityManager::CheckObjectAccess(JSContext *cx, JSObject *obj,
                                            jsid id, JSAccessMode mode,
                                            jsval *vp)
 {
+    nsAutoLockChrome lock;
+
     // Get the security manager
     nsScriptSecurityManager *ssm =
         nsScriptSecurityManager::GetScriptSecurityManager();
@@ -1046,6 +1067,8 @@ nsScriptSecurityManager::CheckSameOriginPrincipal(nsIPrincipal* aSubject,
     // Default to false, and change if that turns out wrong.
     bool subjectSetDomain = false;
     bool objectSetDomain = false;
+
+    nsAutoLockChrome lock;
     
     nsCOMPtr<nsIURI> subjectURI;
     nsCOMPtr<nsIURI> objectURI;
@@ -2318,6 +2341,8 @@ nsScriptSecurityManager::GetPrincipalAndFrame(JSContext *cx,
                                               JSStackFrame **frameResult,
                                               nsresult* rv)
 {
+    MOZ_ASSERT(NS_IsChromeOwningThread());
+
     NS_PRECONDITION(rv, "Null out param");
     //-- If there's no principal on the stack, look at the global object
     //   and return the innermost frame for annotations.
@@ -2518,6 +2543,7 @@ nsScriptSecurityManager::doGetObjectPrincipal(JSObject *aObj
         jsClass = js::GetObjectClass(aObj);
     } while (1);
 
+    /*
 #ifdef DEBUG
     if (aAllowShortCircuit) {
         nsIPrincipal *principal = doGetObjectPrincipal(origObj, false);
@@ -2529,6 +2555,7 @@ nsScriptSecurityManager::doGetObjectPrincipal(JSObject *aObj
                      "Principal mismatch.  Not good");
     }
 #endif
+    */
 
     return result;
 }
@@ -2538,6 +2565,8 @@ NS_IMETHODIMP
 nsScriptSecurityManager::IsCapabilityEnabled(const char *capability,
                                              bool *result)
 {
+    nsAutoLockChrome lock;
+
     nsresult rv;
     JSStackFrame *fp = nsnull;
     JSContext *cx = GetCurrentJSContext();
@@ -3110,7 +3139,6 @@ nsresult nsScriptSecurityManager::Init()
         return NS_ERROR_FAILURE;
 
     NS_ADDREF(sXPConnect = xpconnect);
-    NS_ADDREF(sJSContextStack = xpconnect);
 
     JSContext* cx = GetSafeJSContext();
     if (!cx) return NS_ERROR_FAILURE;   // this can happen of xpt loading fails
@@ -3193,7 +3221,6 @@ nsScriptSecurityManager::Shutdown()
 
     NS_IF_RELEASE(sIOService);
     NS_IF_RELEASE(sXPConnect);
-    NS_IF_RELEASE(sJSContextStack);
     NS_IF_RELEASE(sStrBundle);
 }
 
@@ -3288,7 +3315,7 @@ nsScriptSecurityManager::InitPolicies()
     // Get a JS context - we need it to create internalized strings later.
     JSContext* cx = GetSafeJSContext();
     NS_ASSERTION(cx, "failed to get JS context");
-    AutoCxPusher autoPusher(sJSContextStack, cx);
+    AutoCxPusher autoPusher(GetCurrentJSContextStack(), cx);
     rv = InitDomainPolicy(cx, "default", mDefaultPolicy);
     NS_ENSURE_SUCCESS(rv, rv);
 

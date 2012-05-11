@@ -321,6 +321,8 @@ nsNodeUtils::CallUserDataHandlers(nsCOMArray<nsINode> &aNodesWithProperties,
                   "Expected aNodesWithProperties to contain original and "
                   "cloned nodes.");
 
+  nsAutoLockChrome lock;
+
   if (!nsContentUtils::IsSafeToRunScript()) {
     if (nsContentUtils::IsChromeDoc(aOwnerDocument)) {
       NS_WARNING("Fix the caller! Userdata callback disabled.");

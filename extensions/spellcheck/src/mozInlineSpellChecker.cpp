@@ -1476,6 +1476,9 @@ mozInlineSpellChecker::ResumeCheck(mozInlineSpellStatus* aStatus)
     mFullSpellCheckScheduled = false;
   }
 
+  if (mEditor)
+    NS_StickLock(mEditor);
+
   if (! mSpellCheck)
     return NS_OK; // spell checking has been turned off
 

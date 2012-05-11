@@ -161,6 +161,8 @@ nsAttrValue::Reset()
     }
     case eAtomBase:
     {
+      nsAutoLockChrome lock; // for atom
+
       nsIAtom* atom = GetAtomValue();
       NS_RELEASE(atom);
 
@@ -200,6 +202,7 @@ nsAttrValue::SetTo(const nsAttrValue& aOther)
     case eAtomBase:
     {
       ResetIfSet();
+      nsAutoLockChrome lock;
       nsIAtom* atom = aOther.GetAtomValue();
       NS_ADDREF(atom);
       SetPtrValueAndType(atom, eAtomBase);
@@ -247,6 +250,7 @@ nsAttrValue::SetTo(const nsAttrValue& aOther)
     }
     case eAtomArray:
     {
+      nsAutoLockChrome lock;
       if (!EnsureEmptyAtomArray() ||
           !GetAtomArrayValue()->AppendElements(*otherCont->mAtomArray)) {
         Reset();
@@ -1143,7 +1147,7 @@ nsAttrValue::ParseAtomArray(const nsAString& aValue)
   aValue.BeginReading(iter);
   aValue.EndReading(end);
   bool hasSpace = false;
-  
+
   // skip initial whitespace
   while (iter != end && nsContentUtils::IsHTMLWhitespace(*iter)) {
     hasSpace = true;
@@ -1553,6 +1557,7 @@ nsAttrValue::SetMiscAtomOrString(const nsAString* aValue)
                  "Empty string?");
     MiscContainer* cont = GetMiscContainer();
     if (len <= NS_ATTRVALUE_MAX_STRINGLENGTH_ATOM) {
+      nsAutoLockChrome lock;
       nsIAtom* atom = NS_NewAtom(*aValue);
       if (atom) {
         cont->mStringBits = reinterpret_cast<PtrBits>(atom) | eAtomBase;

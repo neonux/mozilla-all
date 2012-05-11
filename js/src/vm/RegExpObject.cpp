@@ -220,7 +220,7 @@ RegExpCode::compile(JSContext *cx, JSLinearString &pattern, unsigned *parenCount
 
 #if ENABLE_YARR_JIT && defined(JS_METHODJIT)
     if (isJITRuntimeEnabled(cx) && !yarrPattern.m_containsBackreferences) {
-        JSC::ExecutableAllocator *execAlloc = cx->runtime->getExecAlloc(cx);
+        JSC::ExecutableAllocator *execAlloc = cx->compartment->getExecAlloc(cx);
         if (!execAlloc)
             return false;
 
@@ -231,7 +231,7 @@ RegExpCode::compile(JSContext *cx, JSLinearString &pattern, unsigned *parenCount
     }
 #endif
 
-    WTF::BumpPointerAllocator *bumpAlloc = cx->runtime->getBumpPointerAllocator(cx);
+    WTF::BumpPointerAllocator *bumpAlloc = cx->compartment->getBumpPointerAllocator(cx);
     if (!bumpAlloc) {
         js_ReportOutOfMemory(cx);
         return false;

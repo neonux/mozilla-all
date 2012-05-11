@@ -129,6 +129,7 @@ struct ElementAnimations : public mozilla::css::CommonElementAnimationData
   }
 
   void PostRestyleForAnimation(nsPresContext *aPresContext) {
+    NS_StickLock(mElement);
     nsRestyleHint hint = IsForElement() ? eRestyle_Self : eRestyle_Subtree;
     aPresContext->PresShell()->RestyleForAnimation(mElement, hint);
   }

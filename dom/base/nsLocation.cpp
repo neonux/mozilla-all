@@ -140,6 +140,17 @@ GetDocumentCharacterSetForURI(const nsAString& aHref, nsACString& aCharset)
 nsLocation::nsLocation(nsIDocShell *aDocShell)
 {
   mDocShell = do_GetWeakReference(aDocShell);
+
+  if (aDocShell) {
+    PRInt32 zone;
+    aDocShell->GetWindowZone(&zone);
+    mZone = (JSZoneId) zone;
+  } else {
+    mZone = JS_ZONE_CHROME;
+  }
+
+  if (mZone >= JS_ZONE_CONTENT_START)
+    NS_FIX_OWNINGTHREAD(mZone);
 }
 
 nsLocation::~nsLocation()
@@ -163,6 +174,22 @@ void
 nsLocation::SetDocShell(nsIDocShell *aDocShell)
 {
    mDocShell = do_GetWeakReference(aDocShell);
+
+#ifdef DEBUG
+   if (aDocShell) {
+     PRInt32 zone;
+     aDocShell->GetWindowZone(&zone);
+     MOZ_ASSERT(mZone == (JSZoneId) zone);
+   } else {
+     MOZ_ASSERT(mZone == JS_ZONE_CHROME);
+   }
+#endif
+}
+
+JSZoneId
+nsLocation::GetZone()
+{
+  return mZone;
 }
 
 nsIDocShell *
@@ -295,6 +322,8 @@ nsLocation::GetURI(nsIURI** aURI, bool aGetInnermostURI)
 {
   *aURI = nsnull;
 
+  nsAutoLockChrome lock;
+
   nsresult rv;
   nsCOMPtr<nsIDocShell> docShell(do_QueryReferent(mDocShell));
   nsCOMPtr<nsIWebNavigation> webNav(do_QueryInterface(docShell, &rv));
@@ -333,6 +362,8 @@ nsLocation::GetWritableURI(nsIURI** aURI)
 {
   *aURI = nsnull;
 
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIURI> uri;
 
   nsresult rv = GetURI(getter_AddRefs(uri));
@@ -346,6 +377,8 @@ nsLocation::GetWritableURI(nsIURI** aURI)
 nsresult
 nsLocation::SetURI(nsIURI* aURI, bool aReplace)
 {
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIDocShell> docShell(do_QueryReferent(mDocShell));
   if (docShell) {
     nsCOMPtr<nsIDocShellLoadInfo> loadInfo;
@@ -371,6 +404,8 @@ NS_IMETHODIMP
 nsLocation::GetHash(nsAString& aHash)
 {
   aHash.SetLength(0);
+
+  nsAutoLockChrome lock;
 
   nsCOMPtr<nsIURI> uri;
   nsresult rv = GetURI(getter_AddRefs(uri));
@@ -421,6 +456,8 @@ nsLocation::GetHash(nsAString& aHash)
 NS_IMETHODIMP
 nsLocation::SetHash(const nsAString& aHash)
 {
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIURI> uri;
   nsresult rv = GetWritableURI(getter_AddRefs(uri));
   if (NS_FAILED(rv) || !uri) {
@@ -444,6 +481,8 @@ nsLocation::GetHost(nsAString& aHost)
 {
   aHost.Truncate();
 
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIURI> uri;
   nsresult result;
 
@@ -465,6 +504,8 @@ nsLocation::GetHost(nsAString& aHost)
 NS_IMETHODIMP
 nsLocation::SetHost(const nsAString& aHost)
 {
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIURI> uri;
   nsresult rv = GetWritableURI(getter_AddRefs(uri));
 
@@ -482,6 +523,8 @@ NS_IMETHODIMP
 nsLocation::GetHostname(nsAString& aHostname)
 {
   aHostname.Truncate();
+
+  nsAutoLockChrome lock;
 
   nsCOMPtr<nsIURI> uri;
   nsresult result;
@@ -504,6 +547,8 @@ nsLocation::GetHostname(nsAString& aHostname)
 NS_IMETHODIMP
 nsLocation::SetHostname(const nsAString& aHostname)
 {
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIURI> uri;
   nsresult rv = GetWritableURI(getter_AddRefs(uri));
 
@@ -521,6 +566,8 @@ NS_IMETHODIMP
 nsLocation::GetHref(nsAString& aHref)
 {
   aHref.Truncate();
+
+  nsAutoLockChrome lock;
 
   nsCOMPtr<nsIURI> uri;
   nsresult result;
@@ -564,6 +611,7 @@ nsLocation::SetHref(const nsAString& aHref)
     rv = GetHref(oldHref);
 
     if (NS_SUCCEEDED(rv)) {
+      nsAutoLockChrome lock;
       nsCOMPtr<nsIURI> oldUri;
 
       rv = NS_NewURI(getter_AddRefs(oldUri), oldHref);
@@ -581,6 +629,8 @@ nsresult
 nsLocation::SetHrefWithContext(JSContext* cx, const nsAString& aHref,
                                bool aReplace)
 {
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIURI> base;
 
   // Get the source of the caller
@@ -597,6 +647,8 @@ nsresult
 nsLocation::SetHrefWithBase(const nsAString& aHref, nsIURI* aBase,
                             bool aReplace)
 {
+  nsAutoLockChrome lock;
+
   nsresult result;
   nsCOMPtr<nsIURI> newUri;
 
@@ -654,6 +706,8 @@ nsLocation::GetPathname(nsAString& aPathname)
 {
   aPathname.Truncate();
 
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIURI> uri;
   nsresult result = NS_OK;
 
@@ -676,6 +730,8 @@ nsLocation::GetPathname(nsAString& aPathname)
 NS_IMETHODIMP
 nsLocation::SetPathname(const nsAString& aPathname)
 {
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIURI> uri;
   nsresult rv = GetWritableURI(getter_AddRefs(uri));
 
@@ -693,6 +749,8 @@ NS_IMETHODIMP
 nsLocation::GetPort(nsAString& aPort)
 {
   aPort.SetLength(0);
+
+  nsAutoLockChrome lock;
 
   nsCOMPtr<nsIURI> uri;
   nsresult result = NS_OK;
@@ -719,6 +777,8 @@ nsLocation::GetPort(nsAString& aPort)
 NS_IMETHODIMP
 nsLocation::SetPort(const nsAString& aPort)
 {
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIURI> uri;
   nsresult rv = GetWritableURI(getter_AddRefs(uri));
 
@@ -751,6 +811,8 @@ nsLocation::GetProtocol(nsAString& aProtocol)
 {
   aProtocol.SetLength(0);
 
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIURI> uri;
   nsresult result = NS_OK;
 
@@ -773,6 +835,8 @@ nsLocation::GetProtocol(nsAString& aProtocol)
 NS_IMETHODIMP
 nsLocation::SetProtocol(const nsAString& aProtocol)
 {
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIURI> uri;
   nsresult rv = GetWritableURI(getter_AddRefs(uri));
 
@@ -790,6 +854,8 @@ NS_IMETHODIMP
 nsLocation::GetSearch(nsAString& aSearch)
 {
   aSearch.SetLength(0);
+
+  nsAutoLockChrome lock;
 
   nsCOMPtr<nsIURI> uri;
   nsresult result = NS_OK;
@@ -815,6 +881,8 @@ nsLocation::GetSearch(nsAString& aSearch)
 NS_IMETHODIMP
 nsLocation::SetSearch(const nsAString& aSearch)
 {
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIURI> uri;
   nsresult rv = GetWritableURI(getter_AddRefs(uri));
 

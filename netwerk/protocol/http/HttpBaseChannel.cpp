@@ -116,6 +116,8 @@ HttpBaseChannel::Init(nsIURI *aURI,
   nsresult rv = nsHashPropertyBag::Init();
   if (NS_FAILED(rv)) return rv;
 
+  mZone = JS_ZONE_CHROME;
+
   mURI = aURI;
   mOriginalURI = aURI;
   mDocumentURI = nsnull;
@@ -638,6 +640,8 @@ HttpBaseChannel::ApplyContentConversions()
         LOG(("Unexpected failure of AsyncConvertData %s\n", val));
         return rv;
       }
+
+      MOZ_ASSERT(converter->GetZone() == mZone);
 
       LOG(("converter removed '%s' content-encoding\n", val));
       mListener = converter;
@@ -1468,6 +1472,10 @@ HttpBaseChannel::SetNewListener(nsIStreamListener *aListener, nsIStreamListener 
     return NS_ERROR_FAILURE;
 
   NS_ENSURE_ARG_POINTER(aListener);
+
+  MOZ_ASSERT(aListener->GetZone() == mZone);
+  if (aListener->GetZone() != mZone)
+    return NS_ERROR_FAILURE;
 
   nsCOMPtr<nsIStreamListener> wrapper = new nsStreamListenerWrapper(mListener);
 

@@ -487,9 +487,7 @@ TabChild::~TabChild()
     if (webBrowser) {
       webBrowser->SetContainerWindow(nsnull);
     }
-    if (mCx) {
-      DestroyCx();
-    }
+    DestroyCx();
     
     if (mTabChildGlobal) {
       nsEventListenerManager* elm = mTabChildGlobal->GetListenerManager(false);
@@ -806,7 +804,7 @@ TabChild::DeallocPOfflineCacheUpdate(POfflineCacheUpdateChild* actor)
 bool
 TabChild::RecvLoadRemoteScript(const nsString& aURL)
 {
-  if (!mCx && !InitTabChildGlobal())
+  if (!mTabChildGlobal && !InitTabChildGlobal())
     // This can happen if we're half-destroyed.  It's not a fatal
     // error.
     return true;
@@ -888,7 +886,7 @@ TabChild::DeallocPRenderFrame(PRenderFrameChild* aFrame)
 bool
 TabChild::InitTabChildGlobal()
 {
-  if (mCx && mTabChildGlobal)
+  if (mTabChildGlobal)
     return true;
 
   nsCOMPtr<nsPIDOMWindow> window = do_GetInterface(mWebNav);

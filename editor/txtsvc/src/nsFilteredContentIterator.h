@@ -56,6 +56,8 @@ public:
   NS_DECL_CYCLE_COLLECTING_ISUPPORTS
   NS_DECL_CYCLE_COLLECTION_CLASS(nsFilteredContentIterator)
 
+  JSZoneId GetZone() { return mRange ? mRange->GetZone() : JS_ZONE_CHROME; }
+
   nsFilteredContentIterator(nsITextServicesFilter* aFilter);
 
   virtual ~nsFilteredContentIterator();

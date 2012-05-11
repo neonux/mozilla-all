@@ -75,7 +75,8 @@ nsXULTooltipListener* nsXULTooltipListener::mInstance = nsnull;
 //// nsISupports
 
 nsXULTooltipListener::nsXULTooltipListener()
-  : mMouseScreenX(0)
+  : mTargetZone(JS_ZONE_CHROME)
+  , mMouseScreenX(0)
   , mMouseScreenY(0)
   , mTooltipShownOnce(false)
 #ifdef MOZ_XUL
@@ -237,8 +238,10 @@ nsXULTooltipListener::MouseMove(nsIDOMEvent* aEvent)
 
     mTooltipTimer = do_CreateInstance("@mozilla.org/timer;1");
     if (mTooltipTimer) {
+      mTargetZone = eventTarget->GetZone();
       mTargetNode = do_GetWeakReference(eventTarget);
       if (mTargetNode) {
+        mTooltipTimer->SetCallbackZone(mTargetZone);
         nsresult rv =
           mTooltipTimer->InitWithFuncCallback(sTooltipCallback, this,
             LookAndFeel::GetInt(LookAndFeel::eIntID_TooltipDelay, 500),
@@ -541,6 +544,9 @@ nsXULTooltipListener::LaunchTooltip()
 
   nsXULPopupManager* pm = nsXULPopupManager::GetInstance();
   if (pm) {
+    if (mTargetZone >= JS_ZONE_CONTENT_START)
+      NS_StickContentLock(mTargetZone);
+
     nsCOMPtr<nsIContent> target = do_QueryReferent(mTargetNode);
     pm->ShowTooltipAtScreen(currentTooltip, target, mMouseScreenX, mMouseScreenY);
 

@@ -547,9 +547,9 @@ nsEventDispatcher::Dispatch(nsISupports* aTarget,
         NS_FAILED(rv)) {
       nsCOMPtr<nsINode> node = do_QueryInterface(target);
       if (node && nsContentUtils::IsChromeDoc(node->OwnerDoc())) {
-        NS_WARNING("Fix the caller!");
+        MOZ_ASSERT(!"Fix the caller!");
       } else {
-        NS_ERROR("This is unsafe! Fix the caller!");
+        MOZ_ASSERT(!"This is unsafe! Fix the caller!");
       }
     }
   }

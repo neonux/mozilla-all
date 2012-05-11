@@ -189,6 +189,24 @@ JS_END_EXTERN_C
 
 namespace js {
 
+struct ThreadFriendFields
+{
+    /* Base address of the native stack for the current thread. */
+    uintptr_t           nativeStackBase;
+
+    /* Limit pointer for checking native stack consumption. */
+    uintptr_t           nativeStackLimit;
+
+    ThreadFriendFields()
+      : nativeStackBase(0),
+        nativeStackLimit(0)
+    {}
+
+    static ThreadFriendFields *get(Thread *t) {
+        return reinterpret_cast<ThreadFriendFields *>(t);
+    }
+};
+
 struct RuntimeFriendFields {
     /*
      * If non-zero, we were been asked to call the operation callback as soon
@@ -196,15 +214,27 @@ struct RuntimeFriendFields {
      */
     volatile int32_t    interrupt;
 
-    /* Limit pointer for checking native stack consumption. */
-    uintptr_t           nativeStackLimit;
+    RegisterContextOp registerContextStick;
 
     RuntimeFriendFields()
-      : interrupt(0),
-        nativeStackLimit(0) { }
+      : interrupt(0)
+    {}
 
     static const RuntimeFriendFields *get(const JSRuntime *rt) {
         return reinterpret_cast<const RuntimeFriendFields *>(rt);
+    }
+};
+
+struct CompartmentFriendFields {
+    JSRuntime                    *rt;
+    JSZoneId                     zone;
+
+    CompartmentFriendFields(JSRuntime *rt, JSZoneId zone)
+      : rt(rt), zone(zone)
+    {}
+
+    static CompartmentFriendFields *get(JSCompartment *c) {
+        return reinterpret_cast<CompartmentFriendFields *>(c);
     }
 };
 
@@ -212,6 +242,44 @@ inline JSRuntime *
 GetRuntime(const JSContext *cx)
 {
     return ContextFriendFields::get(cx)->runtime;
+}
+
+inline JSZoneId
+GetContextZone(JSContext *cx_)
+{
+    ContextFriendFields *cx = ContextFriendFields::get(cx_);
+    return cx->compartment ? CompartmentFriendFields::get(cx->compartment)->zone : JS_ZONE_NONE;
+}
+
+inline void
+RemoveStickContent(JSContext *cx)
+{
+    ContextFriendFields::get(cx)->contentStuckMask = 0;
+}
+
+inline bool
+IsZoneStuck(JSContext *cx_, JSZoneId zone)
+{
+    JS_ASSERT(zone != JS_ZONE_NONE);
+    ContextFriendFields *cx = ContextFriendFields::get(cx_);
+    if (zone == JS_ZONE_CHROME)
+        return cx->chromeStickState->chromeStuck;
+    return cx->contentStuckMask & (1 << zone);
+}
+
+inline void
+SetZoneStuck(JSContext *cx_, JSZoneId zone)
+{
+    JS_ASSERT(!IsZoneStuck(cx_, zone));
+
+    ContextFriendFields *cx = ContextFriendFields::get(cx_);
+    if (zone == JS_ZONE_CHROME) {
+        cx->chromeStickState->chromeStuck = true;
+    } else {
+        if (cx->contentStuckMask == 0)
+            RuntimeFriendFields::get(cx->runtime)->registerContextStick(cx_);
+        cx->contentStuckMask |= (1 << zone);
+    }
 }
 
 typedef bool
@@ -231,6 +299,8 @@ class JS_FRIEND_API(AutoSwitchCompartment) {
   private:
     JSContext *cx;
     JSCompartment *oldCompartment;
+    JSZoneId oldZone;
+    bool oldInferenceEnabled;
   public:
     AutoSwitchCompartment(JSContext *cx, JSCompartment *newCompartment
                           JS_GUARD_OBJECT_NOTIFIER_PARAM);
@@ -513,15 +583,15 @@ IsObjectInContextCompartment(const JSObject *obj, const JSContext *cx);
 #define JSITER_FOR_OF     0x20  /* harmony for-of loop */
 
 inline uintptr_t
-GetNativeStackLimit(const JSRuntime *rt)
+GetNativeStackLimit(JSContext *cx)
 {
-    return RuntimeFriendFields::get(rt)->nativeStackLimit;
+    return ThreadFriendFields::get(ContextFriendFields::get(cx)->thread_)->nativeStackLimit;
 }
 
 #define JS_CHECK_RECURSION(cx, onerror)                                         \
     JS_BEGIN_MACRO                                                              \
         int stackDummy_;                                                        \
-        if (!JS_CHECK_STACK_SIZE(js::GetNativeStackLimit(js::GetRuntime(cx)), &stackDummy_)) { \
+        if (!JS_CHECK_STACK_SIZE(js::GetNativeStackLimit(cx), &stackDummy_)) {  \
             js_ReportOverRecursed(cx);                                          \
             onerror;                                                            \
         }                                                                       \
@@ -546,9 +616,6 @@ JS_FRIEND_API(JSString *)
 GetPCCountScriptContents(JSContext *cx, size_t script);
 
 #ifdef JS_THREADSAFE
-JS_FRIEND_API(void *)
-GetOwnerThread(const JSContext *cx);
-
 JS_FRIEND_API(unsigned)
 GetContextOutstandingRequests(const JSContext *cx);
 #endif

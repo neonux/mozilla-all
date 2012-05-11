@@ -389,6 +389,21 @@ nsObjectFrame::GetFrameName(nsAString& aResult) const
 }
 #endif
 
+class nsShowAndEnableWidgetEvent : public nsRunnable
+{
+  nsCOMPtr<nsIWidget> mWidget;
+
+public:
+  nsShowAndEnableWidgetEvent(nsIWidget *widget) : mWidget(widget) {}
+
+  NS_IMETHOD Run()
+  {
+    mWidget->Show(true);
+    mWidget->Enable(true);
+    return NS_OK;
+  }
+};
+
 nsresult
 nsObjectFrame::PrepForDrawing(nsIWidget *aWidget)
 {
@@ -437,8 +452,13 @@ nsObjectFrame::PrepForDrawing(nsIWidget *aWidget)
     viewMan->InsertChild(view, mInnerView, nsnull, true);
 
     mWidget->SetParent(parentWidget);
-    mWidget->Show(true);
-    mWidget->Enable(true);
+
+    if (NS_CanLockNewContent()) {
+      mWidget->Show(true);
+      mWidget->Enable(true);
+    } else {
+      nsContentUtils::AddScriptRunner(new nsShowAndEnableWidgetEvent(mWidget));
+    }
 
     // Set the plugin window to have an empty cliprect. The cliprect
     // will be reset when nsRootPresContext::UpdatePluginGeometry

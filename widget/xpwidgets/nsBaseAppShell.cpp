@@ -125,6 +125,8 @@ nsBaseAppShell::NativeEventCallback()
     mBlockNativeEvent = true;
   }
 
+  MOZ_ASSERT(!NS_IsChromeOwningThread());
+
   ++mEventloopNestingLevel;
   EventloopNestingState prevVal = mEventloopNestingState;
   NS_ProcessPendingEvents(thread, THREAD_EVENT_STARVATION_LIMIT);
@@ -153,6 +155,8 @@ nsBaseAppShell::DoProcessMoreGeckoEvents()
 bool
 nsBaseAppShell::DoProcessNextNativeEvent(bool mayWait, PRUint32 recursionDepth)
 {
+  nsAutoUnlockEverything unlock;
+
   // The next native event to be processed may trigger our NativeEventCallback,
   // in which case we do not want it to process any thread events since we'll
   // do that when this function returns.

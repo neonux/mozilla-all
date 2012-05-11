@@ -149,6 +149,7 @@ public:
     {
       PRUint16                         mFlags;
       nsWeakPtr                        mElement;
+      JSZoneId                         mZone;
     } mEntries[sMaxDeferred];
   };
 

@@ -118,6 +118,7 @@ XPCJSContextStack::Push(JSContext *cx)
     XPCJSContextInfo &e = mStack[mStack.Length() - 1];
     if (e.cx) {
         if (e.cx == cx) {
+            nsAutoLockChrome lock;
             nsIScriptSecurityManager* ssm = XPCWrapper::GetSecurityManager();
             if (ssm) {
                 if (nsIPrincipal* globalObjectPrincipal = GetPrincipalFromCx(cx)) {
@@ -227,7 +228,7 @@ XPCJSContextStack::GetSafeJSContext()
         JS_SetErrorReporter(mSafeJSContext, mozJSLoaderErrorReporter);
 
         JSCompartment *compartment;
-        nsresult rv = xpc_CreateGlobalObject(mSafeJSContext, &global_class,
+        nsresult rv = xpc_CreateGlobalObject(mSafeJSContext, &global_class, JS_ZONE_CHROME,
                                              principal, principal, false,
                                              &glob, &compartment);
         if (NS_FAILED(rv))
@@ -271,8 +272,6 @@ XPCJSContextStack::GetSafeJSContext()
 PRUintn           XPCPerThreadData::gTLSIndex       = BAD_TLS_INDEX;
 Mutex*            XPCPerThreadData::gLock           = nsnull;
 XPCPerThreadData* XPCPerThreadData::gThreads        = nsnull;
-XPCPerThreadData *XPCPerThreadData::sMainThreadData = nsnull;
-void *            XPCPerThreadData::sMainJSThread   = nsnull;
 
 XPCPerThreadData::XPCPerThreadData()
     :   mJSContextStack(new XPCJSContextStack()),
@@ -413,14 +412,6 @@ XPCPerThreadData::GetDataImpl(JSContext *cx)
             delete data;
             return nsnull;
         }
-    }
-
-    if (cx && !sMainJSThread && NS_IsMainThread()) {
-        sMainJSThread = js::GetOwnerThread(cx);
-
-        sMainThreadData = data;
-
-        sMainThreadData->mThread = PR_GetCurrentThread();
     }
 
     return data;

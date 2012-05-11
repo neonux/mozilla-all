@@ -174,6 +174,8 @@ public:
   NS_DECL_CYCLE_COLLECTION_CLASS_AMBIGUOUS(nsEditor,
                                            nsIEditor)
 
+  JSZoneId GetZone() { MOZ_ASSERT(mZone != JS_ZONE_NONE); return mZone; }
+
   /* ------------ utility methods   -------------- */
   already_AddRefed<nsIDOMDocument> GetDOMDocument();
   already_AddRefed<nsIDocument> GetDocument();
@@ -856,6 +858,7 @@ protected:
   nsCOMArray<nsIEditorObserver> mEditorObservers;  // just notify once per high level change
   nsCOMArray<nsIDocumentStateListener> mDocStateListeners;// listen to overall doc state (dirty or not, just created, etc)
 
+  JSZoneId          mZone;
   nsSelectionState  mSavedSel;           // cached selection for nsAutoSelectionReset
   nsRangeUpdater    mRangeUpdater;       // utility class object for maintaining preserved ranges
 

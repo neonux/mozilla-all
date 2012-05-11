@@ -380,9 +380,7 @@ public:
     // This event is first dispatched to the background thread to ensure that
     // all pending asynchronous events are completed, and then back to the
     // calling thread to actually close and notify.
-    bool onCallingThread = false;
-    (void)mCallingThread->IsOnCurrentThread(&onCallingThread);
-    if (!onCallingThread) {
+    if (!NS_IsExecuteThread()) {
       (void)mCallingThread->Dispatch(this, NS_DISPATCH_NORMAL);
       return NS_OK;
     }
@@ -793,15 +791,6 @@ Connection::progressHandler()
 nsresult
 Connection::setClosedState()
 {
-  // Ensure that we are on the correct thread to close the database.
-  bool onOpenedThread;
-  nsresult rv = threadOpenedOn->IsOnCurrentThread(&onOpenedThread);
-  NS_ENSURE_SUCCESS(rv, rv);
-  if (!onOpenedThread) {
-    NS_ERROR("Must close the database on the thread that you opened it with!");
-    return NS_ERROR_UNEXPECTED;
-  }
-
   // Flag that we are shutting down the async thread, so that
   // getAsyncExecutionTarget knows not to expose/create the async thread.
   {
@@ -833,12 +822,7 @@ Connection::internalClose()
                  "Did not call setClosedState!");
   }
 
-  { // Ensure that we are being called on the thread we were opened with.
-    bool onOpenedThread = false;
-    (void)threadOpenedOn->IsOnCurrentThread(&onOpenedThread);
-    NS_ASSERTION(onOpenedThread,
-                 "Not called on the thread the database was opened on!");
-  }
+  _mOwningThread.onCorrectThread();
 #endif
 
 #ifdef PR_LOGGING

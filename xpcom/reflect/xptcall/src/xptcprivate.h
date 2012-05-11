@@ -75,6 +75,8 @@ class nsXPTCStubBase : public nsIXPTCStubBase
 public:
     NS_DECL_ISUPPORTS_INHERITED
 
+    JSZoneId GetZone() { return mOuter->GetZone(); }
+
 #include "xptcstubsdef.inc"
 
     nsXPTCStubBase(nsIXPTCProxy* aOuter, xptiInterfaceEntry *aEntry) :

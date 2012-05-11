@@ -42,6 +42,7 @@
 #include "nsIObserver.h"
 #include "nsIContent.h"
 #include "nsIWidget.h"
+#include "nsThreadUtils.h"
 
 #define FOCUSMETHOD_MASK 0xF000
 #define FOCUSMETHODANDRING_MASK 0xF0F000
@@ -84,7 +85,11 @@ public:
   /**
    * Retrieve the single focus manager.
    */
-  static nsFocusManager* GetFocusManager() { return sInstance; }
+  static nsFocusManager* GetFocusManager()
+  {
+    MOZ_ASSERT(NS_IsChromeOwningThread());
+    return sInstance;
+  }
 
   /**
    * A faster version of nsIFocusManager::GetFocusedElement, returning a
@@ -510,6 +515,8 @@ private:
   static void NotifyFocusStateChange(nsIContent* aContent,
                                      bool aWindowShouldShowFocusRing,
                                      bool aGettingFocus);
+
+  void LockOrClearFocusedContent();
 
   // the currently active and front-most top-most window
   nsCOMPtr<nsPIDOMWindow> mActiveWindow;

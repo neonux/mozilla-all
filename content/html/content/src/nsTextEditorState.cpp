@@ -1234,6 +1234,7 @@ nsTextEditorState::PrepareEditor(const nsAString *aValue)
     nsCxPusher pusher;
     pusher.PushNull();
 
+    newEditor->InitZone(domdoc->GetZone());
     rv = newEditor->Init(domdoc, GetRootNode(), mSelCon, editorFlags);
     NS_ENSURE_SUCCESS(rv, rv);
   }
@@ -1752,6 +1753,8 @@ nsTextEditorState::GetValue(nsAString& aValue, bool aIgnoreWrap) const
 void
 nsTextEditorState::SetValue(const nsAString& aValue, bool aUserInput)
 {
+  nsAutoLockChrome lock;
+
   if (mEditor && mBoundFrame) {
     // The InsertText call below might flush pending notifications, which
     // could lead into a scheduled PrepareEditor to be called.  That will

@@ -246,6 +246,8 @@ JS_END_EXTERN_C
 
 #ifdef __cplusplus
 
+namespace js { struct Thread; }
+
 namespace JS {
 
 template <typename T>
@@ -267,11 +269,29 @@ enum ThingRootKind
     THING_ROOT_LIMIT
 };
 
+struct StickState
+{
+    JSBool chromeStuck;
+    StickState *prev;
+};
+
 struct ContextFriendFields {
     JSRuntime *const    runtime;
 
+    JSCompartment       *compartment;
+
+    StickState          *chromeStickState;
+    uint64_t            contentStuckMask;
+
+    js::Thread          *thread_;
+
     ContextFriendFields(JSRuntime *rt)
-      : runtime(rt) { }
+      : runtime(rt),
+        compartment(NULL),
+        chromeStickState(NULL),
+        contentStuckMask(0),
+        thread_(NULL)
+    {}
 
     static const ContextFriendFields *get(const JSContext *cx) {
         return reinterpret_cast<const ContextFriendFields *>(cx);

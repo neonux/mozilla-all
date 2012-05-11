@@ -103,6 +103,8 @@ public:
     NS_DECL_NSIASYNCVERIFYREDIRECTCALLBACK
     NS_DECL_NSITIMEDCHANNEL
 
+    JSZoneId GetZone() { return HttpBaseChannel::GetZone(); }
+
     // nsIHttpAuthenticableChannel. We can't use
     // NS_DECL_NSIHTTPAUTHENTICABLECHANNEL because it duplicates cancel() and
     // others.

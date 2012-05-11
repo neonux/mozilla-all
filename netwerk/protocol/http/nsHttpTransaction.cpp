@@ -154,6 +154,8 @@ nsHttpTransaction::~nsHttpTransaction()
     NS_IF_RELEASE(mConnection);
     NS_IF_RELEASE(mConnInfo);
 
+    NS_StickLock(mCallbacks);
+
     delete mResponseHead;
     delete mForTakeResponseHead;
     delete mChunkedDecoder;

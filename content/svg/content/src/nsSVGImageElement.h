@@ -71,6 +71,8 @@ public:
   NS_DECL_NSIDOMSVGIMAGEELEMENT
   NS_DECL_NSIDOMSVGURIREFERENCE
 
+  JSZoneId GetZone() { return nsINode::GetZone(); }
+
   // xxx I wish we could use virtual inheritance
   NS_FORWARD_NSIDOMNODE(nsSVGImageElementBase::)
   NS_FORWARD_NSIDOMELEMENT(nsSVGImageElementBase::)

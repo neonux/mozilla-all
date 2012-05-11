@@ -212,6 +212,8 @@ public:
 
   NS_IMETHOD Run()
   {
+    NS_StickLock(mElement);
+
     // Silently cancel if our load has been cancelled.
     if (IsCancelled())
       return NS_OK;
@@ -233,6 +235,7 @@ public:
   }
 
   NS_IMETHOD Run() {
+    NS_StickLock(mElement);
     // Silently cancel if our load has been cancelled.
     if (IsCancelled())
       return NS_OK;
@@ -266,13 +269,17 @@ class nsHTMLMediaElement::MediaLoadListener MOZ_FINAL : public nsIStreamListener
 public:
   MediaLoadListener(nsHTMLMediaElement* aElement)
     : mElement(aElement),
+      mZone(aElement->GetZone()),
       mLoadID(aElement->GetCurrentLoadID())
   {
     NS_ABORT_IF_FALSE(mElement, "Must pass an element to call back");
   }
 
+  JSZoneId GetZone() { return mZone; }
+
 private:
   nsRefPtr<nsHTMLMediaElement> mElement;
+  JSZoneId mZone;
   nsCOMPtr<nsIStreamListener> mNextListener;
   PRUint32 mLoadID;
 };
@@ -682,6 +689,7 @@ public:
     // Silently cancel if our load has been cancelled.
     if (IsCancelled())
       return NS_OK;
+    NS_StickLock(mElement);
     (mElement.get()->*mClosure)();
     return NS_OK;
   }
@@ -3113,8 +3121,8 @@ void nsHTMLMediaElement::AddRemoveSelfReference()
       // Dispatch Release asynchronously so that we don't destroy this object
       // inside a call stack of method calls on this object
       nsCOMPtr<nsIRunnable> event =
-        NS_NewRunnableMethod(this, &nsHTMLMediaElement::DoRemoveSelfReference);
-      NS_DispatchToMainThread(event);
+        NS_NewRunnableMethod(this, &nsHTMLMediaElement::DoRemoveSelfReference, GetZone());
+      NS_DispatchToMainThread(event, NS_DISPATCH_NORMAL, GetZone());
     }
   }
 }
@@ -3149,7 +3157,7 @@ void nsHTMLMediaElement::DispatchAsyncSourceError(nsIContent* aSourceElement)
   LOG_EVENT(PR_LOG_DEBUG, ("%p Queuing simple source error event", this));
 
   nsCOMPtr<nsIRunnable> event = new nsSourceErrorEventRunner(this, aSourceElement);
-  NS_DispatchToMainThread(event, NS_DISPATCH_NORMAL);
+  NS_DispatchToMainThread(event, NS_DISPATCH_NORMAL, aSourceElement->GetZone());
 }
 
 void nsHTMLMediaElement::NotifyAddedSource()
@@ -3325,7 +3333,7 @@ void nsHTMLMediaElement::SetRequestHeaders(nsIHttpChannel* aChannel)
 
 void nsHTMLMediaElement::FireTimeUpdate(bool aPeriodic)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   TimeStamp now = TimeStamp::Now();
   double time = 0;

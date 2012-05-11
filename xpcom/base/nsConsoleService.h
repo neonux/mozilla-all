@@ -61,13 +61,13 @@ public:
     NS_DECL_NSICONSOLESERVICE
 
     void SetIsDelivering() {
-        MOZ_ASSERT(NS_IsMainThread());
+        MOZ_ASSERT(NS_IsChromeOwningThread());
         MOZ_ASSERT(!mDeliveringMessage);
         mDeliveringMessage = true;
     }
 
     void SetDoneDelivering() {
-        MOZ_ASSERT(NS_IsMainThread());
+        MOZ_ASSERT(NS_IsChromeOwningThread());
         MOZ_ASSERT(mDeliveringMessage);
         mDeliveringMessage = false;
     }

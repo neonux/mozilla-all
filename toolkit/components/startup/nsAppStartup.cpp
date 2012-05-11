@@ -835,6 +835,10 @@ nsAppStartup::TrackStartupCrashBegin(bool *aIsSafeModeNecessary)
   const PRInt32 MAX_STARTUP_BUFFER = 10;
   nsresult rv;
 
+  // XXX disable
+  *aIsSafeModeNecessary = false;
+  return NS_OK;
+
   mStartupCrashTrackingEnded = false;
 
   StartupTimeline::Record(StartupTimeline::STARTUP_CRASH_DETECTION_BEGIN);

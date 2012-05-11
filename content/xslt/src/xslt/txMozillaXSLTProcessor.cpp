@@ -566,7 +566,7 @@ txMozillaXSLTProcessor::DoTransform()
     NS_ENSURE_TRUE(mSource, NS_ERROR_UNEXPECTED);
     NS_ENSURE_TRUE(mStylesheet, NS_ERROR_UNEXPECTED);
     NS_ASSERTION(mObserver, "no observer");
-    NS_ASSERTION(NS_IsMainThread(), "should only be on main thread");
+    NS_ASSERTION(NS_IsChromeOwningThread(), "should only be on main thread");
 
     nsresult rv;
     nsCOMPtr<nsIDocument> document = do_QueryInterface(mSource, &rv);
@@ -651,6 +651,8 @@ txMozillaXSLTProcessor::TransformToDocument(nsIDOMNode *aSource,
 nsresult
 txMozillaXSLTProcessor::TransformToDoc(nsIDOMDocument **aResult)
 {
+    NS_StickLock(mSource);
+
     nsAutoPtr<txXPathNode> sourceNode(txXPathNativeNode::createXPathNode(mSource));
     if (!sourceNode) {
         return NS_ERROR_OUT_OF_MEMORY;
@@ -1114,6 +1116,8 @@ txMozillaXSLTProcessor::reportError(nsresult aResult,
 void
 txMozillaXSLTProcessor::notifyError()
 {
+    NS_StickLock(mSource);
+
     nsresult rv;
     nsCOMPtr<nsIDOMDocument> errorDocument = do_CreateInstance(kXMLDocumentCID,
                                                                &rv);

@@ -86,6 +86,9 @@ public:
   virtual ~nsSecureBrowserUIImpl();
   
   NS_DECL_ISUPPORTS
+
+  JSZoneId GetZone() { return mZone; }
+
   NS_DECL_NSIWEBPROGRESSLISTENER
   NS_DECL_NSISECUREBROWSERUI
   
@@ -102,6 +105,7 @@ protected:
   mozilla::ReentrantMonitor mReentrantMonitor;
   
   nsWeakPtr mWindow;
+  JSZoneId mZone;
   nsCOMPtr<nsINetUtil> mIOService;
   nsCOMPtr<nsIStringBundle> mStringBundle;
   nsCOMPtr<nsIURI> mCurrentURI;

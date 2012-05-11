@@ -92,6 +92,25 @@ interface nsIThreadManager : nsISupports
    */
   readonly attribute nsIThread currentThread;
 
+  [noscript] long allocateContentZone();
+  [noscript] void freeContentZone(in long zone);
+  [noscript] void lockZone(in long zone, in bool sticky);
+  [noscript] bool tryLockZone(in long zone, in bool sticky);
+  [noscript] void unlockZone(in long zone);
+  [noscript] void zoneLockDepth(in long zone, out unsigned long depth, out bool sticky);
+  [noscript] bool isOwningThread(in long zone);
+  [noscript] void findThreadBitmask(out bool chrome, out unsigned long long contentBitmask);
+  [noscript] long findExecuteThreadZone();
+  [noscript] nsIThread getExecuteThread(in long zone);
+  [noscript] void unstickAllContent();
+  [noscript] bool lockEverything();
+  [noscript] bool isEverythingLocked();
+  [noscript] void unlockEverything();
+  [noscript] unsigned long long nativeStackTopForThread(in PRThread thread);
+  [noscript] void beginCantLockNewContent();
+  [noscript] void endCantLockNewContent();
+  [noscript] bool canLockNewContent();
+
   /**
    * This attribute is true if the calling thread is the main thread of the
    * application process.

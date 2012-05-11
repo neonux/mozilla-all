@@ -551,6 +551,9 @@ castNativeFromWrapper(JSContext *cx,
     if (!native)
         return nsnull;
 
+    if (!EnsureZoneStuck(cx, native->GetZone()))
+        return nsnull;
+
     NS_ASSERTION(IS_WRAPPER_CLASS(js::GetObjectClass(cur)), "Not a wrapper?");
 
     XPCWrappedNativeJSClass *clasp =

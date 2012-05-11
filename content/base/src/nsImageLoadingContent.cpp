@@ -173,6 +173,7 @@ nsImageLoadingContent::FrameChanged(imgIRequest* aRequest,
 /*
  * imgIDecoderObserver impl
  */
+
 NS_IMETHODIMP
 nsImageLoadingContent::OnStartRequest(imgIRequest* aRequest)
 {
@@ -668,6 +669,8 @@ nsImageLoadingContent::LoadImage(const nsAString& aNewURI,
     // No reason to bother, I think...
     return NS_OK;
   }
+
+  nsAutoLockChrome lock; // for URI
 
   nsCOMPtr<nsIURI> imageURI;
   nsresult rv = StringToURI(aNewURI, doc, getter_AddRefs(imageURI));

@@ -332,7 +332,7 @@ SniffMimeTypeForIconData(nsIRequest* aRequest,
                          const nsCString& aData,
                          nsCString& _mimeType)
 {
-  NS_PRECONDITION(NS_IsMainThread(),
+  NS_PRECONDITION(NS_IsChromeOwningThread(),
                   "This should be called on the main thread");
 
   nsCOMPtr<nsICategoryManager> categoryManager =
@@ -376,7 +376,7 @@ SniffMimeTypeForIconData(nsIRequest* aRequest,
 PRTime
 GetExpirationTimeFromChannel(nsIChannel* aChannel)
 {
-  NS_PRECONDITION(NS_IsMainThread(),
+  NS_PRECONDITION(NS_IsChromeOwningThread(),
                   "This should be called on the main thread");
 
   // Attempt to get an expiration time from the cache.  If this fails, we'll
@@ -416,7 +416,7 @@ nsresult
 OptimizeIconSize(IconData& aIcon,
                  nsFaviconService* aFaviconSvc)
 {
-  NS_PRECONDITION(NS_IsMainThread(),
+  NS_PRECONDITION(NS_IsChromeOwningThread(),
                   "This should be called on the main thread");
 
   // Even if the page provides a large image for the favicon (eg, a highres
@@ -470,7 +470,7 @@ AsyncFetchAndSetIconForPage::start(nsIURI* aFaviconURI,
                                    enum AsyncFaviconFetchMode aFetchMode,
                                    nsIFaviconDataCallback* aCallback)
 {
-  NS_PRECONDITION(NS_IsMainThread(),
+  NS_PRECONDITION(NS_IsChromeOwningThread(),
                   "This should be called on the main thread");
 
   PageData page;
@@ -610,7 +610,7 @@ AsyncFetchAndSetIconFromNetwork::~AsyncFetchAndSetIconFromNetwork()
 NS_IMETHODIMP
 AsyncFetchAndSetIconFromNetwork::Run()
 {
-  NS_PRECONDITION(NS_IsMainThread(),
+  NS_PRECONDITION(NS_IsChromeOwningThread(),
                   "This should be called on the main thread");
 
   // Ensure data is cleared, since it's going to be overwritten.
@@ -686,7 +686,7 @@ AsyncFetchAndSetIconFromNetwork::OnStopRequest(nsIRequest* aRequest,
                                                nsISupports* aContext,
                                                nsresult aStatusCode)
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   nsFaviconService* favicons = nsFaviconService::GetFaviconService();
   NS_ENSURE_STATE(favicons);
@@ -842,7 +842,7 @@ AsyncGetFaviconURLForPage::start(nsIURI* aPageURI,
 {
   NS_ENSURE_ARG(aCallback);
   NS_ENSURE_ARG(aPageURI);
-  NS_PRECONDITION(NS_IsMainThread(),
+  NS_PRECONDITION(NS_IsChromeOwningThread(),
                   "This should be called on the main thread.");
 
   nsCAutoString pageSpec;
@@ -907,7 +907,7 @@ AsyncGetFaviconDataForPage::start(nsIURI* aPageURI,
 {
   NS_ENSURE_ARG(aCallback);
   NS_ENSURE_ARG(aPageURI);
-  NS_PRECONDITION(NS_IsMainThread(),
+  NS_PRECONDITION(NS_IsChromeOwningThread(),
                   "This should be called on the main thread.");
 
   nsCAutoString pageSpec;
@@ -976,7 +976,7 @@ nsresult
 AsyncReplaceFaviconData::start(IconData *aIcon)
 {
   NS_ENSURE_ARG(aIcon);
-  NS_PRECONDITION(NS_IsMainThread(),
+  NS_PRECONDITION(NS_IsChromeOwningThread(),
                   "This should be called on the main thread.");
 
   nsCOMPtr<nsIFaviconDataCallback> callback;
@@ -1048,7 +1048,7 @@ RemoveIconDataCacheEntry::~RemoveIconDataCacheEntry()
 NS_IMETHODIMP
 RemoveIconDataCacheEntry::Run()
 {
-  NS_PRECONDITION(NS_IsMainThread(),
+  NS_PRECONDITION(NS_IsChromeOwningThread(),
                   "This should be called on the main thread");
 
   nsCOMPtr<nsIURI> iconURI;
@@ -1084,7 +1084,7 @@ NotifyIconObservers::~NotifyIconObservers()
 NS_IMETHODIMP
 NotifyIconObservers::Run()
 {
-  NS_PRECONDITION(NS_IsMainThread(),
+  NS_PRECONDITION(NS_IsChromeOwningThread(),
                   "This should be called on the main thread");
 
   nsCOMPtr<nsIURI> iconURI;

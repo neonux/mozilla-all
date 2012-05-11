@@ -758,6 +758,9 @@ nsRange::DoSetRange(nsINode* aStartN, PRInt32 aStartOffset,
   // This needs to be the last thing this function does.  See comment
   // in ParentChainChanged.
   mRoot = aRoot;
+
+  if (mRoot)
+    NS_FIX_OWNINGTHREAD(mRoot->GetZone());
 }
 
 static PRInt32

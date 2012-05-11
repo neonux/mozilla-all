@@ -240,7 +240,6 @@ AsyncExecuteStatements::AsyncExecuteStatements(StatementDataArray &aStatements,
 : mConnection(aConnection)
 , mTransactionManager(nsnull)
 , mCallback(aCallback)
-, mCallingThread(::do_GetCurrentThread())
 , mMaxWait(TimeDuration::FromMilliseconds(MAX_MILLISECONDS_BETWEEN_RESULTS))
 , mIntervalStart(TimeStamp::Now())
 , mState(PENDING)
@@ -259,11 +258,9 @@ AsyncExecuteStatements::shouldNotify()
 {
 #ifdef DEBUG
   mMutex.AssertNotCurrentThreadOwns();
-
-  bool onCallingThread = false;
-  (void)mCallingThread->IsOnCurrentThread(&onCallingThread);
-  NS_ASSERTION(onCallingThread, "runEvent not running on the calling thread!");
 #endif
+
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   // We do not need to acquire mMutex here because it can only ever be written
   // to on the calling thread, and the only thread that can call us is the
@@ -495,7 +492,7 @@ AsyncExecuteStatements::notifyComplete()
   // We no longer own mCallback (the CompletionNotifier takes ownership).
   mCallback = nsnull;
 
-  (void)mCallingThread->Dispatch(completionEvent, NS_DISPATCH_NORMAL);
+  NS_DispatchToMainThread(completionEvent, NS_DISPATCH_NORMAL);
 
   return NS_OK;
 }
@@ -529,7 +526,7 @@ AsyncExecuteStatements::notifyError(mozIStorageError *aError)
     new ErrorNotifier(mCallback, aError, this);
   NS_ENSURE_TRUE(notifier, NS_ERROR_OUT_OF_MEMORY);
 
-  return mCallingThread->Dispatch(notifier, NS_DISPATCH_NORMAL);
+  return NS_DispatchToMainThread(notifier, NS_DISPATCH_NORMAL);
 }
 
 nsresult
@@ -542,7 +539,7 @@ AsyncExecuteStatements::notifyResults()
     new CallbackResultNotifier(mCallback, mResultSet, this);
   NS_ENSURE_TRUE(notifier, NS_ERROR_OUT_OF_MEMORY);
 
-  nsresult rv = mCallingThread->Dispatch(notifier, NS_DISPATCH_NORMAL);
+  nsresult rv = NS_DispatchToMainThread(notifier, NS_DISPATCH_NORMAL);
   if (NS_SUCCEEDED(rv))
     mResultSet = nsnull; // we no longer own it on success
   return rv;
@@ -575,11 +572,7 @@ AsyncExecuteStatements::statementsNeedTransaction()
 NS_IMETHODIMP
 AsyncExecuteStatements::Cancel()
 {
-#ifdef DEBUG
-  bool onCallingThread = false;
-  (void)mCallingThread->IsOnCurrentThread(&onCallingThread);
-  NS_ASSERTION(onCallingThread, "Not canceling from the calling thread!");
-#endif
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   // If we have already canceled, we have an error, but always indicate that
   // we are trying to cancel.

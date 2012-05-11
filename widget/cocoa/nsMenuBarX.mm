@@ -80,7 +80,7 @@ NS_IMPL_ISUPPORTS1(nsNativeMenuServiceX, nsINativeMenuService)
 
 NS_IMETHODIMP nsNativeMenuServiceX::CreateNativeMenuBar(nsIWidget* aParent, nsIContent* aMenuBarNode)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Attempting to create native menu bar on wrong thread!");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Attempting to create native menu bar on wrong thread!");
 
   nsRefPtr<nsMenuBarX> mb = new nsMenuBarX();
   if (!mb)
@@ -926,6 +926,7 @@ static BOOL gMenuItemsExecuteCommands = YES;
   // given the commandID, look it up in our hashtable and dispatch to
   // that menu item.
   if (menuGroupOwner) {
+    nsAutoLockChromeUnstickContent lock;
     nsMenuItemX* menuItem = menuGroupOwner->GetMenuItemForCommandID(static_cast<PRUint32>(tag));
     if (menuItem)
       menuItem->DoCommand();

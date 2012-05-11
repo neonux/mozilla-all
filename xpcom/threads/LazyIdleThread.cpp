@@ -473,6 +473,12 @@ LazyIdleThread::ProcessNextEvent(bool aMayWait,
 }
 
 NS_IMETHODIMP
+LazyIdleThread::ProcessNextEventFromScript(bool mayWait, bool *result)
+{
+  return ProcessNextEvent(mayWait, result);
+}
+
+NS_IMETHODIMP
 LazyIdleThread::Notify(nsITimer* aTimer)
 {
   ASSERT_OWNING_THREAD();

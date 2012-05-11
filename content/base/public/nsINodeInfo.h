@@ -312,6 +312,11 @@ public:
     return mDocument;
   }
 
+  JSZoneId GetZone()
+  {
+    return mOwnerManager->GetZone();
+  }
+
 protected:
   /*
    * nsNodeInfoInner is used for two things:
@@ -360,6 +365,7 @@ protected:
   friend class nsNodeInfoManager;
 
   nsIDocument* mDocument; // Weak. Cache of mOwnerManager->mDocument
+  JSZoneId mZone;
 
   nsNodeInfoInner mInner;
 

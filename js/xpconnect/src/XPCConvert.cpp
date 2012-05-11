@@ -1051,7 +1051,7 @@ XPCConvert::NativeInterface2JSObject(XPCLazyCallContext& lccx,
     // XPCWrappedNative as-is here.
     flat = wrapper->GetFlatJSObject();
     jsval v = OBJECT_TO_JSVAL(flat);
-    if (!XPCPerThreadData::IsMainThread(lccx.GetJSContext()) ||
+    if (!XPCPerThreadData::IsExecuteThread(lccx.GetJSContext()) ||
         !allowNativeWrapper) {
         *d = v;
         if (dest)
@@ -1059,6 +1059,19 @@ XPCConvert::NativeInterface2JSObject(XPCLazyCallContext& lccx,
         if (pErr)
             *pErr = NS_OK;
         return true;
+    }
+
+    mozilla::Maybe<nsAutoTryLockZone> lockContent;
+
+    JSZoneId zone = JS_GetObjectZone(flat);
+    if (zone >= JS_ZONE_CONTENT_START) {
+        lockContent.construct(zone);
+        if (!lockContent.ref().succeeded) {
+            if (!NS_CanBlockOnContent()) {
+                JS_ReportError(lccx.GetJSContext(), "Attempt to block content on main thread");
+                return false;
+            }
+        }
     }
 
     JSObject *original = flat;

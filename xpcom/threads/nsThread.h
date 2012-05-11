@@ -59,7 +59,8 @@ public:
 
   enum MainThreadFlag {
     MAIN_THREAD,
-    NOT_MAIN_THREAD
+    GECKO_THREAD,
+    OTHER_THREAD
   };
 
   nsThread(MainThreadFlag aMainThread, PRUint32 aStackSize);
@@ -165,5 +166,26 @@ namespace mozilla {
 void ScheduleMemoryPressureEvent();
 
 } // namespace mozilla
+
+struct NSAutoreleasePool;
+
+class ScopedNSAutoreleasePool {
+ public:
+#if 0 // XXX how to test for OSX?
+  ScopedNSAutoreleasePool() {}
+  void Recycle() { }
+#else
+  ScopedNSAutoreleasePool();
+  ~ScopedNSAutoreleasePool();
+
+  // Clear out the pool in case its position on the stack causes it to be
+  // alive for long periods of time (such as the entire length of the app).
+  // Only use then when you're certain the items currently in the pool are
+  // no longer needed.
+  void Recycle();
+ private:
+  NSAutoreleasePool* autorelease_pool_;
+#endif
+};
 
 #endif  // nsThread_h__

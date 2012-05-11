@@ -255,6 +255,8 @@ NS_GetContentList(nsINode* aRootNode,
 {
   NS_ASSERTION(aRootNode, "content list has to have a root");
 
+  nsAutoLockChrome lock;
+
   nsContentList* list = nsnull;
 
   static PLDHashTableOps hash_table_ops =
@@ -356,6 +358,8 @@ NS_GetFuncStringContentList(nsINode* aRootNode,
                             const nsAString& aString)
 {
   NS_ASSERTION(aRootNode, "content list has to have a root");
+
+  nsAutoLockChrome lock;
 
   nsCacheableFuncStringContentList* list = nsnull;
 
@@ -570,6 +574,8 @@ nsContentList::NamedItem(const nsAString& aName, bool aDoFlush)
   BringSelfUpToDate(aDoFlush);
     
   PRUint32 i, count = mElements.Length();
+
+  nsAutoLockChrome lock;
 
   // Typically IDs and names are atomized
   nsCOMPtr<nsIAtom> name = do_GetAtom(aName);

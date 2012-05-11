@@ -210,6 +210,12 @@ interface nsITimer : nsISupports
   attribute unsigned long type;
 
   /**
+   * The zone whose lock will be acquired before running the timer, and on
+   * whose thread the timer will run.
+   */
+  [noscript] attribute long callbackZone;
+
+  /**
    * The opaque pointer pass to initWithFuncCallback.
    */  
   [noscript] readonly attribute voidPtr closure;

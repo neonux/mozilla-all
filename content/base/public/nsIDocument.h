@@ -995,6 +995,7 @@ public:
   typedef bool (*nsSubDocEnumFunc)(nsIDocument *aDocument, void *aData);
   virtual void EnumerateSubDocuments(nsSubDocEnumFunc aCallback,
                                      void *aData) = 0;
+  virtual void TryLockSubDocuments() = 0;
 
   /**
    * Check whether it is safe to cache the presentation of this document

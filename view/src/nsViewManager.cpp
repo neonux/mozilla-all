@@ -111,6 +111,8 @@ nsViewManager::nsViewManager()
 
 nsViewManager::~nsViewManager()
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   if (mRootView) {
     // Destroy any remaining views
     mRootView->Destroy();
@@ -185,6 +187,8 @@ nsViewManager::GetRootView()
 
 NS_IMETHODIMP nsViewManager::SetRootView(nsIView *aView)
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   nsView* view = static_cast<nsView*>(aView);
 
   NS_PRECONDITION(!view || view->GetViewManager() == this,
@@ -364,6 +368,13 @@ void nsViewManager::Refresh(nsView *aView, nsIWidget *aWidget,
     RootViewManager()->mRecursiveRefreshPending = true;
     return;
   }  
+
+  if (mPresShell) {
+    // XXX would be nice to only lock zones which are actually going to be painted.
+    nsIDocument *doc = mPresShell->GetDocument();
+    if (doc)
+      doc->TryLockSubDocuments();
+  }
 
   {
     nsAutoScriptBlocker scriptBlocker;
@@ -1335,6 +1346,8 @@ nsViewManager::ProcessPendingUpdates()
     return;
   }
 
+  nsAutoCantLockNewContent cantLock;
+
   if (mHasPendingUpdates) {
     ProcessPendingUpdatesForView(mRootView, true);
     mHasPendingUpdates = false;
@@ -1360,14 +1373,17 @@ nsViewManager::CallWillPaintOnObservers(bool aWillSendDidPaint)
 {
   NS_PRECONDITION(IsRootVM(), "Must be root VM for this to be called!");
 
+  // MOZ_ASSERT(!NS_CanLockNewContent());
+
   PRInt32 index;
   for (index = 0; index < mVMCount; index++) {
     nsViewManager* vm = (nsViewManager*)gViewManagers->ElementAt(index);
     if (vm->RootViewManager() == this) {
       // One of our kids.
       if (vm->mRootView && vm->mRootView->IsEffectivelyVisible()) {
-        nsCOMPtr<nsIPresShell> shell = vm->GetPresShell();
-        if (shell) {
+        nsIPresShell *ps = vm->GetPresShell();
+        if (ps && NS_TryStickLock(ps)) {
+          nsCOMPtr<nsIPresShell> shell = ps;
           shell->WillPaint(aWillSendDidPaint);
         }
       }
@@ -1412,4 +1428,11 @@ nsViewManager::InvalidateHierarchy()
       mRootViewManager = this;
     }
   }
+}
+
+NS_IMETHODIMP
+nsViewManager::GetDeletedViewCount(PRInt32 *pres)
+{
+  *pres = mDeletedViewCount;
+  return NS_OK;
 }

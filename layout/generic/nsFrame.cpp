@@ -5312,6 +5312,8 @@ nsFrame::XMLQuote(nsString& aString)
 
 bool
 nsIFrame::IsVisibleForPainting(nsDisplayListBuilder* aBuilder) {
+  if (mContent && !NS_TryStickLock(mContent))
+    return false;
   if (!GetStyleVisibility()->IsVisible())
     return false;
   nsISelection* sel = aBuilder->GetBoundingSelection();

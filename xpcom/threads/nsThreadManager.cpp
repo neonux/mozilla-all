@@ -43,6 +43,9 @@
 #include "nsTArray.h"
 #include "nsAutoPtr.h"
 #include "nsCycleCollectorUtils.h"
+#include "nsContentUtils.h"
+
+#include <sys/time.h>
 
 using namespace mozilla;
 
@@ -74,6 +77,7 @@ AppendAndRemoveThread(PRThread *key, nsRefPtr<nsThread> &thread, void *arg)
 //-----------------------------------------------------------------------------
 
 nsThreadManager nsThreadManager::sInstance;
+bool nsThreadManager::sInitialized = false;
 
 // statically allocated instance
 NS_IMETHODIMP_(nsrefcnt) nsThreadManager::AddRef() { return 2; }
@@ -89,6 +93,8 @@ NS_IMPL_CI_INTERFACE_GETTER1(nsThreadManager, nsIThreadManager)
 nsresult
 nsThreadManager::Init()
 {
+  sInitialized = true;
+
   if (!mThreadsByPRThread.Init())
     return NS_ERROR_OUT_OF_MEMORY;
 
@@ -97,8 +103,19 @@ nsThreadManager::Init()
 
   mLock = new Mutex("nsThreadManager.mLock");
 
+  mChromeZone.lock = PR_NewLock();
+  for (size_t i = 0; i < JS_ZONE_CONTENT_LIMIT; i++) {
+    Zone &zone = mContentZones[i];
+    zone.lock = PR_NewLock();
+    zone.thread = new nsThread(nsThread::GECKO_THREAD, 0);
+    zone.thread->Init();
+    zone.thread->GetPRThread(&zone.prThread);
+  }
+  mEverythingLocked = false;
+  mAllocatedBitmask = 0;
+
   // Setup "main" thread
-  mMainThread = new nsThread(nsThread::MAIN_THREAD, 0);
+  mMainThread = mChromeZone.thread = new nsThread(nsThread::MAIN_THREAD, 0);
   if (!mMainThread)
     return NS_ERROR_OUT_OF_MEMORY;
 
@@ -112,11 +129,15 @@ nsThreadManager::Init()
   // GetIsMainThread calls that occur post-Shutdown.
   mMainThread->GetPRThread(&mMainPRThread);
 
+  mMainThreadStackPosition = 0;
+
 #ifdef XP_WIN
   TlsSetValue(gTLSThreadIDIndex, (void*) mozilla::threads::Main);
 #elif defined(NS_TLS)
   gTLSThreadID = mozilla::threads::Main;
 #endif
+
+  mCantLockNewContent = 0;
 
   mInitialized = true;
   return NS_OK;
@@ -184,6 +205,8 @@ nsThreadManager::Shutdown()
 
   // Remove the TLS entry for the main thread.
   PR_SetThreadPrivate(mCurThreadIndex, nsnull);
+
+  sInitialized = false;
 }
 
 void
@@ -225,7 +248,7 @@ nsThreadManager::GetCurrentThread()
   }
 
   // OK, that's fine.  We'll dynamically create one :-)
-  nsRefPtr<nsThread> thread = new nsThread(nsThread::NOT_MAIN_THREAD, 0);
+  nsRefPtr<nsThread> thread = new nsThread(nsThread::OTHER_THREAD, 0);
   if (!thread || NS_FAILED(thread->InitCurrentThread()))
     return nsnull;
 
@@ -240,7 +263,7 @@ nsThreadManager::NewThread(PRUint32 creationFlags,
   // No new threads during Shutdown
   NS_ENSURE_TRUE(mInitialized, NS_ERROR_NOT_INITIALIZED);
 
-  nsThread *thr = new nsThread(nsThread::NOT_MAIN_THREAD, stackSize);
+  nsThread *thr = new nsThread(nsThread::OTHER_THREAD, stackSize);
   if (!thr)
     return NS_ERROR_OUT_OF_MEMORY;
   NS_ADDREF(thr);
@@ -310,5 +333,523 @@ NS_IMETHODIMP
 nsThreadManager::GetIsCycleCollectorThread(bool *result)
 {
   *result = bool(NS_IsCycleCollectorThread());
+  return NS_OK;
+}
+
+void
+nsThreadManager::SaveLock(SavedZone &v)
+{
+  v.depth = v.zone->depth;
+  v.sticky = v.zone->sticky;
+  v.zone->depth = 0;
+  v.zone->sticky = false;
+  v.zone->owner = NULL;
+  v.zone->stalled = false;
+  v.zone->unlockCount++;
+  PR_Unlock(v.zone->lock);
+}
+
+void
+nsThreadManager::RestoreLock(SavedZone &v, PRThread *current)
+{
+  PR_Lock(v.zone->lock);
+  MOZ_ASSERT(v.zone->owner == NULL);
+  v.zone->owner = current;
+  v.zone->depth = v.depth;
+  v.zone->sticky = v.sticky;
+}
+
+extern bool NS_CanUnstickLocks();
+
+///////////////////////////
+// BEGIN PROFILING STUFF //
+///////////////////////////
+
+struct LockProfile
+{
+  const char *name;
+  PRInt32 count;
+
+  LockProfile(const char *name);
+  void Bump();
+};
+
+LockProfile gLockContent("LockContent");
+LockProfile gLockChrome("LockChrome");
+LockProfile gRelockContent("RelockContent");
+LockProfile gRelockChrome("RelockChrome");
+LockProfile gTryLockContent("TryLockContent");
+LockProfile gTryLockChrome("TryLockChrome");
+LockProfile gTryRelockContent("TryRelockContent");
+LockProfile gTryRelockChrome("TryRelockChrome");
+
+LockProfile *gProfileList[] = {
+  &gLockContent,
+  &gLockChrome,
+  &gRelockContent,
+  &gRelockChrome,
+  &gTryLockContent,
+  &gTryLockChrome,
+  &gTryRelockContent,
+  &gTryRelockChrome,
+  NULL
+};
+
+LockProfile::LockProfile(const char *name)
+  : name(name), count(0)
+{}
+
+void
+LockProfile::Bump()
+{
+  PR_ATOMIC_INCREMENT(&count);
+}
+
+void NS_PrintLockProfiles()
+{
+  LockProfile **plock = gProfileList;
+  while (*plock) {
+    printf("Lock %s: %d\n", (*plock)->name, (*plock)->count);
+    plock++;
+  }
+  fflush(stdout);
+}
+
+/////////////////////////
+// END PROFILING STUFF //
+/////////////////////////
+
+NS_IMETHODIMP
+nsThreadManager::LockZone(PRInt32 zone_, bool sticky)
+{
+  MOZ_ASSERT(NS_IsExecuteThread());
+  MOZ_ASSERT_IF(sticky, zone_ >= JS_ZONE_CONTENT_START);
+
+  PRThread *current = PR_GetCurrentThread();
+
+  Zone &zone = getZone(zone_);
+
+  if (current == zone.owner) {
+    if (zone_ == JS_ZONE_CHROME)
+      gRelockChrome.Bump();
+    else
+      gRelockContent.Bump();
+
+    if (!sticky || !zone.sticky)
+      zone.depth++;
+    if (sticky)
+      zone.sticky = true;
+  } else {
+    if (zone_ == JS_ZONE_CHROME)
+      gLockChrome.Bump();
+    else
+      gLockContent.Bump();
+
+    // XXX reenable
+    /*
+#ifdef DEBUG
+    bool hasLockedContent = false;
+    for (size_t i = 0; i < mContentZoneCount; i++) {
+      if (getZone(i).owner == current)
+        hasLockedContent = true;
+    }
+    MOZ_ASSERT_IF(zone_ != JS_ZONE_CHROME && hasLockedContent,
+                  JS_GetExecutingContentScriptZone() == JS_ZONE_NONE);
+#endif
+    */
+
+    nsTArray<SavedZone> relockZones;
+    if (zone_ >= JS_ZONE_CONTENT_START) {
+      if (mChromeZone.owner == current) {
+        MOZ_ASSERT(!mCantLockNewContent);
+        relockZones.AppendElement(&mChromeZone);
+      }
+      for (size_t i = 0; i < zone_; i++) {
+        if (getZone(i).owner == current)
+          relockZones.AppendElement(&getZone(i));
+      }
+    }
+
+    MOZ_ASSERT_IF(mEverythingLocked, relockZones.Length() == 0);
+
+    for (size_t i = 0; i < relockZones.Length(); i++)
+      SaveLock(relockZones[i]);
+
+    if (zone.waiting) {
+      struct timespec ts;
+      ts.tv_sec = 0;
+      ts.tv_nsec = 400 * 1000;
+      nanosleep(&ts, &ts);
+    }
+
+    PR_Lock(zone.lock);
+    MOZ_ASSERT(zone.owner == NULL);
+    zone.owner = current;
+    zone.depth = 1;
+    if (sticky)
+      zone.sticky = true;
+
+    for (int i = relockZones.Length() - 1; i >= 0; i--)
+      RestoreLock(relockZones[i], current);
+  }
+  return NS_OK;
+}
+
+static const uint32_t TRY_LOCK_MILLIS = 1000;
+
+NS_IMETHODIMP
+nsThreadManager::TryLockZone(PRInt32 zone_, bool sticky, bool *result)
+{
+  MOZ_ASSERT(NS_IsExecuteThread());
+  MOZ_ASSERT_IF(sticky, zone_ >= JS_ZONE_CONTENT_START);
+
+  PRThread *current = PR_GetCurrentThread();
+
+  Zone &zone = getZone(zone_);
+
+  if (current == zone.owner) {
+    if (zone_ == JS_ZONE_CHROME)
+      gTryRelockChrome.Bump();
+    else
+      gTryRelockContent.Bump();
+
+    if (!sticky || !zone.sticky)
+      zone.depth++;
+    if (sticky)
+      zone.sticky = true;
+    *result = true;
+    return NS_OK;
+  }
+
+  if (zone_ == JS_ZONE_CHROME)
+    gTryLockChrome.Bump();
+  else
+    gTryLockContent.Bump();
+
+  if (zone.stalled && zone.owner) {
+    NS_DumpBacktrace("STALL");
+    *result = false;
+  } else {
+    bool unlockChrome = mChromeZone.owner == current && !mCantLockNewContent;
+
+    SavedZone restoreChrome(&mChromeZone);
+    if (unlockChrome)
+      SaveLock(restoreChrome);
+
+    size_t unlockCount = zone.unlockCount;
+
+    zone.waiting = true;
+    bool success = PR_TryLock(zone.lock, TRY_LOCK_MILLIS * 1000);
+    zone.waiting = false;
+
+    if (success) {
+      MOZ_ASSERT(zone.owner == NULL);
+      zone.owner = current;
+      zone.depth++;
+      zone.stalled = false;
+      if (sticky)
+        zone.sticky = true;
+      *result = true;
+    } else {
+      zone.stalled = true;
+      printf("ZONE %p %d STALLED %p %d\n", current, zone_, zone.owner, (int) (zone.unlockCount - unlockCount));
+      *result = false;
+    }
+
+    if (unlockChrome)
+      RestoreLock(restoreChrome, current);
+  }
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsThreadManager::UnlockZone(PRInt32 zone_)
+{
+  Zone &zone = getZone(zone_);
+
+  MOZ_ASSERT(zone.owner == PR_GetCurrentThread());
+  MOZ_ASSERT(zone.depth > 0);
+  MOZ_ASSERT_IF(zone.sticky, zone.depth > 1);
+  if (--zone.depth == 0) {
+    MOZ_ASSERT(!mEverythingLocked);
+    MOZ_ASSERT_IF(zone_ == JS_ZONE_CHROME, !mCantLockNewContent);
+    zone.owner = NULL;
+    zone.stalled = false;
+    zone.unlockCount++;
+    PR_Unlock(zone.lock);
+
+    int stackDummy;
+    PRThread *current = PR_GetCurrentThread();
+    if (current == mMainPRThread) {
+      mMainThreadStackPosition = (uintptr_t) &stackDummy;
+    } else {
+      for (int i = JS_ZONE_CHROME; i < JS_ZONE_CONTENT_LIMIT; i++) {
+        Zone &zone = (i == JS_ZONE_CHROME) ? mChromeZone : mContentZones[i];
+        if (zone.prThread == current) {
+          zone.threadStackPosition = (uintptr_t) &stackDummy;
+          break;
+        }
+      }
+    }
+  }
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsThreadManager::ZoneLockDepth(PRInt32 zone_, PRUint32 *result, bool *psticky)
+{
+  Zone &zone = getZone(zone_);
+
+  // OK to race on zone.owner, other threads cannot change it to/from the current thread.
+  if (zone.owner == PR_GetCurrentThread()) {
+    *result = zone.sticky ? zone.depth - 1 : zone.depth;
+    *psticky = zone.sticky;
+  } else {
+    *result = 0;
+    *psticky = false;
+  }
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsThreadManager::IsOwningThread(PRInt32 zone_, bool *result)
+{
+  if (zone_ == JS_ZONE_NONE) {
+    *result = true;
+  } else {
+    Zone &zone = getZone(zone_);
+    *result = (PR_GetCurrentThread() == zone.owner);
+  }
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsThreadManager::FindThreadBitmask(bool *pchrome, PRUint64 *pcontentBitmask)
+{
+  *pchrome = false;
+  *pcontentBitmask = 0;
+
+  PRThread *current = PR_GetCurrentThread();
+
+  if (current == mChromeZone.owner)
+    *pchrome = true;
+
+  for (size_t i = 0; i < JS_ZONE_CONTENT_LIMIT; i++) {
+    if (getZone(i).owner == current)
+      SetBit(pcontentBitmask, i);
+  }
+
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsThreadManager::UnstickAllContent()
+{
+  PRThread *current = PR_GetCurrentThread();
+
+  for (size_t i = 0; i < JS_ZONE_CONTENT_LIMIT; i++) {
+    Zone &zone = getZone(i);
+    if (current == zone.owner) {
+      MOZ_ASSERT(zone.sticky);
+      zone.sticky = false;
+      if (--zone.depth == 0) {
+        MOZ_ASSERT(!mEverythingLocked);
+        zone.owner = NULL;
+        zone.stalled = false;
+        zone.unlockCount++;
+        PR_Unlock(zone.lock);
+      }
+    }
+  }
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsThreadManager::LockEverything(bool *psuccess)
+{
+  uint64_t bitmask;
+  {
+    LockZone(JS_ZONE_CHROME, false);
+    bitmask = mAllocatedBitmask;
+    UnlockZone(JS_ZONE_CHROME);
+  }
+
+  for (int zone = JS_ZONE_CONTENT_LIMIT - 1; zone >= 0; zone--) {
+    if (!HasBit(bitmask, zone))
+      continue;
+    bool succeeded;
+    TryLockZone(zone, false, &succeeded);
+    if (!succeeded) {
+      for (zone++; zone < JS_ZONE_CONTENT_LIMIT; zone++) {
+        if (HasBit(bitmask, zone))
+          UnlockZone(zone);
+      }
+      *psuccess = false;
+      return NS_OK;
+    }
+  }
+
+  LockZone(JS_ZONE_CHROME, false);
+
+  if (bitmask != mAllocatedBitmask) {
+    for (int zone = 0; zone < JS_ZONE_CONTENT_LIMIT; zone++) {
+      if (HasBit(bitmask, zone))
+        UnlockZone(zone);
+    }
+    UnlockZone(JS_ZONE_CHROME);
+    *psuccess = false;
+    return NS_OK;
+  }
+
+  MOZ_ASSERT(!mEverythingLocked);
+  mEverythingLocked = true;
+
+  *psuccess = true;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsThreadManager::IsEverythingLocked(bool *psuccess)
+{
+  *psuccess = mEverythingLocked || !sInitialized;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsThreadManager::UnlockEverything()
+{
+  MOZ_ASSERT(mEverythingLocked);
+  mEverythingLocked = false;
+
+  for (int zone = 0; zone < JS_ZONE_CONTENT_LIMIT; zone++) {
+    if (HasBit(mAllocatedBitmask, zone))
+      UnlockZone(zone);
+  }
+
+  UnlockZone(JS_ZONE_CHROME);
+
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsThreadManager::NativeStackTopForThread(PRThread *thread, PRUint64 *pstack)
+{
+  if (thread == mMainPRThread) {
+    *pstack = (PRUint64) mMainThreadStackPosition;
+    return NS_OK;
+  }
+
+  for (int i = JS_ZONE_CHROME; i < JS_ZONE_CONTENT_LIMIT; i++) {
+    Zone &zone = (i == JS_ZONE_CHROME) ? mChromeZone : mContentZones[i];
+    if (zone.prThread == thread) {
+      *pstack = (PRUint64) zone.threadStackPosition;
+      return NS_OK;
+    }
+  }
+
+  *pstack = 0;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsThreadManager::BeginCantLockNewContent()
+{
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+  mCantLockNewContent++;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsThreadManager::EndCantLockNewContent()
+{
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+  MOZ_ASSERT(mCantLockNewContent > 0);
+  mCantLockNewContent--;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsThreadManager::CanLockNewContent(bool *pres)
+{
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+  *pres = !mCantLockNewContent && !mEverythingLocked;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsThreadManager::FindExecuteThreadZone(PRInt32 *pzone)
+{
+  *pzone = (PRInt32) JS_ZONE_NONE;
+
+  PRThread *current = PR_GetCurrentThread();
+
+  if (current == mChromeZone.prThread) {
+    *pzone = (PRInt32) JS_ZONE_CHROME;
+    return NS_OK;
+  }
+
+  for (size_t i = 0; i < JS_ZONE_CONTENT_LIMIT; i++) {
+    if (current == getZone(i).prThread) {
+      *pzone = i;
+      return NS_OK;
+    }
+  }
+
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsThreadManager::GetExecuteThread(PRInt32 zone_, nsIThread **pthread)
+{
+  JSZoneId zone = (JSZoneId) zone_;
+  MOZ_ASSERT(zone != JS_ZONE_NONE);
+
+  *pthread = getZone(zone_).thread;
+  NS_ADDREF(*pthread);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsThreadManager::AllocateContentZone(PRInt32 *pzone)
+{
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+  MOZ_ASSERT(NS_CanUnstickLocks());
+
+  PRThread *current = PR_GetCurrentThread();
+
+  *pzone = JS_ZONE_CONTENT_LIMIT;
+  for (size_t i = 0; i < JS_ZONE_CONTENT_LIMIT; i++) {
+    if (!HasBit(mAllocatedBitmask, i) &&
+        (getZone(i).owner == current || getZone(i).owner == NULL) /* XXX: race? */) {
+      *pzone = i;
+      break;
+    }
+  }
+  MOZ_ASSERT(*pzone < JS_ZONE_CONTENT_LIMIT);
+
+  SetBit(&mAllocatedBitmask, *pzone);
+
+  Zone &zone = getZone(*pzone);
+
+  if (zone.owner != current) {
+    PR_Lock(zone.lock);
+    zone.owner = PR_GetCurrentThread();
+    zone.depth = 1;
+    zone.sticky = true;
+  }
+
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsThreadManager::FreeContentZone(PRInt32 zone_)
+{
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+  MOZ_ASSERT(zone_ >= JS_ZONE_CONTENT_START && zone_ < JS_ZONE_CONTENT_LIMIT);
+  MOZ_ASSERT(getZone(zone_).owner == PR_GetCurrentThread());
+
+  MOZ_ASSERT(HasBit(mAllocatedBitmask, zone_));
+  ClearBit(&mAllocatedBitmask, zone_);
+
   return NS_OK;
 }

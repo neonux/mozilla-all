@@ -100,6 +100,8 @@ private:
 NS_IMETHODIMP
 nsImageBoxFrameEvent::Run()
 {
+  NS_StickLock(mContent);
+
   nsIPresShell *pres_shell = mContent->OwnerDoc()->GetShell();
   if (!pres_shell) {
     return NS_OK;

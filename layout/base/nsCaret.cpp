@@ -151,6 +151,7 @@ AdjustCaretFrameForLineEnd(nsIFrame** aFrame, PRInt32* aOffset)
 
 nsCaret::nsCaret()
 : mPresShell(nsnull)
+, mZone(JS_ZONE_CHROME)
 , mBlinkRate(500)
 , mVisible(false)
 , mDrawn(false)
@@ -180,6 +181,9 @@ nsresult nsCaret::Init(nsIPresShell *inPresShell)
 
   mPresShell = do_GetWeakReference(inPresShell);    // the presshell owns us, so no addref
   NS_ASSERTION(mPresShell, "Hey, pres shell should support weak refs");
+
+  mZone = inPresShell->GetZone();
+  NS_FIX_OWNINGTHREAD(mZone);
 
   // XXX we should just do this LookAndFeel consultation every time
   // we need these values.
@@ -429,6 +433,7 @@ void nsCaret::DrawCaretAfterBriefDelay()
       return;
   }    
 
+  mBlinkTimer->SetCallbackZone(GetZone());
   mBlinkTimer->InitWithFuncCallback(CaretBlinkCallback, this, 0,
                                     nsITimer::TYPE_ONE_SHOT);
 }
@@ -1082,6 +1087,7 @@ void nsCaret::DrawCaret(bool aInvalidate)
       mDrawn = false;
       return;
     }
+
     if (!mLastContent->IsInDoc() ||
         presShell->GetDocument() != mLastContent->GetCurrentDoc())
     {
@@ -1172,6 +1178,8 @@ void nsCaret::CaretBlinkCallback(nsITimer *aTimer, void *aClosure)
 {
   nsCaret   *theCaret = reinterpret_cast<nsCaret*>(aClosure);
   if (!theCaret) return;
+
+  NS_StickLock(theCaret);
   
   theCaret->DrawCaret(true);
 }

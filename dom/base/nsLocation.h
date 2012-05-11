@@ -69,6 +69,8 @@ public:
   void SetDocShell(nsIDocShell *aDocShell);
   nsIDocShell *GetDocShell();
 
+  JSZoneId GetZone();
+
   // nsIDOMLocation
   NS_DECL_NSIDOMLOCATION
 
@@ -91,6 +93,7 @@ protected:
 
   nsString mCachedHash;
   nsWeakPtr mDocShell;
+  JSZoneId mZone;
 };
 
 #endif // nsLocation_h__

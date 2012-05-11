@@ -58,9 +58,9 @@ public:
   NS_DECLARE_STATIC_IID_ACCESSOR(NS_ISCRIPTGLOBALOBJECTOWNER_IID)
 
   /**
-   * Returns the script global object
+   * Returns the script global object, must be in the specified zone.
    */
-  virtual nsIScriptGlobalObject* GetScriptGlobalObject() = 0;
+  virtual nsIScriptGlobalObject* GetScriptGlobalObject(JSZoneId aZone) = 0;
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsIScriptGlobalObjectOwner,

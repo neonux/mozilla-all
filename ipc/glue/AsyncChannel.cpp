@@ -171,8 +171,8 @@ AsyncChannel::ProcessLink::Open(mozilla::ipc::Transport* aTransport,
 
     mIOLoop = aIOLoop;
 
-    NS_ASSERTION(mIOLoop, "need an IO loop");
-    NS_ASSERTION(mChan->mWorkerLoop, "need a worker loop");
+    MOZ_ASSERT(mIOLoop);
+    MOZ_ASSERT(mChan->mWorkerLoop);
 
     if (needOpen) {             // child process
         MonitorAutoLock lock(*mChan->mMonitor);

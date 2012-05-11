@@ -484,6 +484,15 @@ AutoCompartment::~AutoCompartment()
 bool
 AutoCompartment::enter()
 {
+    if (!origin || origin->zone != destination->zone) {
+        if (destination->zone == JS_ZONE_CHROME) {
+            context->runtime->lockOp(destination->zone);
+        } else if (!context->runtime->tryLockOp(destination->zone)) {
+            JS_ReportError(context, "Could not acquire lock in cross-compartment wrapper");
+            return false;
+        }
+    }
+
     JS_ASSERT(!entered);
     if (origin != destination) {
         JSObject &scopeChain = target->global();
@@ -509,6 +518,9 @@ AutoCompartment::leave()
         context->resetCompartment();
     }
     entered = false;
+
+    if (!origin || origin->zone != destination->zone)
+        context->runtime->unlockOp(destination->zone);
 }
 
 ErrorCopier::~ErrorCopier()
@@ -738,11 +750,26 @@ CrossCompartmentWrapper::iterate(JSContext *cx, JSObject *wrapper, unsigned flag
            CanReify(vp) ? Reify(cx, call.origin, vp) : call.origin->wrap(cx, vp));
 }
 
-bool
-CrossCompartmentWrapper::call(JSContext *cx, JSObject *wrapper_, unsigned argc, Value *vp)
+struct AutoLockZone
 {
-    RootedVarObject wrapper(cx, wrapper_);
+    JSRuntime *rt;
+    JSZoneId zone;
 
+    AutoLockZone(JSRuntime *rt, JSZoneId zone)
+      : rt(rt), zone(zone)
+    {
+        rt->lockOp(zone);
+    }
+
+    ~AutoLockZone()
+    {
+        rt->unlockOp(zone);
+    }
+};
+
+bool
+CrossCompartmentWrapper::call(JSContext *cx, JSObject *wrapper, unsigned argc, Value *vp)
+{
     AutoCompartment call(cx, wrappedObject(wrapper));
     if (!call.enter())
         return false;

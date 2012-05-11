@@ -44,11 +44,16 @@ public:
   NS_DECL_NSIINTERFACEREQUESTOR
 
   nsInterfaceRequestorAgg(nsIInterfaceRequestor *aFirst,
-                          nsIInterfaceRequestor *aSecond)
+                          nsIInterfaceRequestor *aSecond,
+                          JSZoneId aZone)
     : mFirst(aFirst)
-    , mSecond(aSecond) {}
+    , mSecond(aSecond)
+    , mZone(aZone) {}
+
+  JSZoneId GetZone() { return mZone; }
 
   nsCOMPtr<nsIInterfaceRequestor> mFirst, mSecond;
+  JSZoneId mZone;
 };
 
 // XXX This needs to support threadsafe refcounting until we fix bug 243591.
@@ -68,9 +73,10 @@ nsInterfaceRequestorAgg::GetInterface(const nsIID &aIID, void **aResult)
 nsresult
 NS_NewInterfaceRequestorAggregation(nsIInterfaceRequestor *aFirst,
                                     nsIInterfaceRequestor *aSecond,
+                                    JSZoneId              aZone,
                                     nsIInterfaceRequestor **aResult)
 {
-  *aResult = new nsInterfaceRequestorAgg(aFirst, aSecond);
+  *aResult = new nsInterfaceRequestorAgg(aFirst, aSecond, aZone);
   if (!*aResult)
     return NS_ERROR_OUT_OF_MEMORY;
   NS_ADDREF(*aResult);

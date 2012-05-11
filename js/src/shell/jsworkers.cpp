@@ -640,12 +640,13 @@ class Worker MOZ_FINAL : public WorkerParent
             JS_ReportOutOfMemory(parentcx);
             return false;
         }
-        JS_ClearRuntimeThread(runtime);
+        JS_SetNativeStackQuota(runtime, gMaxStackSize);
+        //JS_ClearRuntimeThread(runtime);
         return true;
     }
 
     bool createContext(JSContext *parentcx, WorkerParent *parent) {
-        JSAutoSetRuntimeThread guard(runtime);
+        //JSAutoSetRuntimeThread guard(runtime);
         context = JS_NewContext(runtime, 8192);
         if (!context)
             return false;
@@ -782,8 +783,8 @@ class Worker MOZ_FINAL : public WorkerParent
             PR_DestroyLock(lock);
             lock = NULL;
         }
-        if (runtime)
-            JS_SetRuntimeThread(runtime);
+        //if (runtime)
+        //    JS_SetRuntimeThread(runtime);
         if (context) {
             JS_DestroyContextNoGC(context);
             context = NULL;
@@ -1152,7 +1153,7 @@ Worker::processOneEvent()
         event = current = events.pop();
     }
 
-    JS_SetRuntimeThread(runtime);
+    JS_SetContextThread(context);
 
     Event::Result result;
     {
@@ -1186,7 +1187,7 @@ Worker::processOneEvent()
 
     if (event)
         event->destroy(context);
-    JS_ClearRuntimeThread(runtime);
+    JS_ClearContextThread(context);
 
     {
         AutoLock hold2(lock);

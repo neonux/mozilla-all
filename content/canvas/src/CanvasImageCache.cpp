@@ -126,6 +126,7 @@ public:
   {
     RemoveObject(aObject);
     // Deleting the entry will delete aObject since the entry owns aObject
+    NS_StickLock(aObject->mCanvas);
     mCache.RemoveEntry(ImageCacheKey(aObject->mImage, aObject->mCanvas));
   }
 

@@ -457,6 +457,7 @@ nsEditingSession::SetupEditorOnWindow(nsIDOMWindow *aWindow)
   } else {
     editor = do_CreateInstance(classString, &rv);
     NS_ENSURE_SUCCESS(rv, rv);
+    editor->InitZone(aWindow->GetZone());
     mExistingEditor = do_GetWeakReference(editor);
   }
   // set the editor on the docShell. The docShell now owns it.

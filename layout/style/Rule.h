@@ -79,6 +79,9 @@ public:
   // for implementing nsISupports
   NS_IMETHOD_(nsrefcnt) AddRef();
   NS_IMETHOD_(nsrefcnt) Release();
+
+  JSZoneId GetZone();
+
 protected:
   nsAutoRefCnt mRefCnt;
   NS_DECL_OWNINGTHREAD

@@ -40,7 +40,7 @@ gfxReusableSurfaceWrapper::~gfxReusableSurfaceWrapper()
 void
 gfxReusableSurfaceWrapper::ReadLock()
 {
-  NS_CheckThreadSafe(_mOwningThread.GetThread(), "Only the owner thread can call ReadOnlyLock");
+  NS_ASSERT_OWNINGTHREAD("gfxReusableSurfaceWrapper");
   PR_ATOMIC_INCREMENT(&mReadCount);
 }
 
@@ -54,7 +54,7 @@ gfxReusableSurfaceWrapper::ReadUnlock()
 gfxReusableSurfaceWrapper*
 gfxReusableSurfaceWrapper::GetWritable(gfxImageSurface** aSurface)
 {
-  NS_CheckThreadSafe(_mOwningThread.GetThread(), "Only the owner thread can call GetWritable");
+  NS_ASSERT_OWNINGTHREAD("gfxReusableSurfaceWrapper");
 
   if (mReadCount == 0) {
     *aSurface = mSurface;

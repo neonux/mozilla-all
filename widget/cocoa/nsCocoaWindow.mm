@@ -123,6 +123,8 @@ NS_IMPL_ISUPPORTS_INHERITED1(nsCocoaWindow, Inherited, nsPIWidgetCocoa)
 // roll up any popup windows
 static void RollUpPopups()
 {
+  nsAutoLockChrome lock;
+
   if (gRollupListener && gRollupWidget)
     gRollupListener->Rollup(0);
 }
@@ -691,17 +693,20 @@ NS_IMETHODIMP nsCocoaWindow::Show(bool bState)
         // tell it to show again. Otherwise the number of calls to
         // [NSApp beginSheet...] won't match up with [NSApp endSheet...].
         if (![mWindow isVisible]) {
-          mSheetNeedsShow = false;
+         mSheetNeedsShow = false;
           mSheetWindowParent = topNonSheetWindow;
           // Only set contextInfo if our parent isn't a sheet.
           NSWindow* contextInfo = parentIsSheet ? nil : mSheetWindowParent;
-          [TopLevelWindowData deactivateInWindow:mSheetWindowParent];
-          [NSApp beginSheet:mWindow
-             modalForWindow:mSheetWindowParent
-              modalDelegate:mDelegate
-             didEndSelector:@selector(didEndSheet:returnCode:contextInfo:)
-                contextInfo:contextInfo];
-          [TopLevelWindowData activateInWindow:mWindow];
+          {
+            nsAutoUnlockEverything unlock;
+            [TopLevelWindowData deactivateInWindow:mSheetWindowParent];
+            [NSApp beginSheet:mWindow
+               modalForWindow:mSheetWindowParent
+                modalDelegate:mDelegate
+               didEndSelector:@selector(didEndSheet:returnCode:contextInfo:)
+                  contextInfo:contextInfo];
+            [TopLevelWindowData activateInWindow:mWindow];
+          }
           SendSetZLevelEvent();
         }
       }
@@ -713,6 +718,7 @@ NS_IMETHODIMP nsCocoaWindow::Show(bool bState)
       }
     }
     else if (mWindowType == eWindowType_popup) {
+      nsAutoUnlockEverything unlock;
       // If a popup window is shown after being hidden, it needs to be "reset"
       // for it to receive any mouse events aside from mouse-moved events
       // (because it was removed from the "window cache" when it was hidden
@@ -754,6 +760,7 @@ NS_IMETHODIMP nsCocoaWindow::Show(bool bState)
     }
     else {
       NS_OBJC_BEGIN_TRY_LOGONLY_BLOCK;
+      nsAutoUnlockEverything unlock;
       if (mWindowType == eWindowType_toplevel &&
           [mWindow respondsToSelector:@selector(setAnimationBehavior:)]) {
         NSWindowAnimationBehavior behavior;
@@ -845,6 +852,8 @@ NS_IMETHODIMP nsCocoaWindow::Show(bool bState)
       }
     }
     else {
+      nsAutoUnlockEverything unlock;
+
       // If the window is a popup window with a parent window we need to
       // unhook it here before ordering it out. When you order out the child
       // of a window it hides the parent window.
@@ -1076,6 +1085,8 @@ NS_IMETHODIMP nsCocoaWindow::Move(PRInt32 aX, PRInt32 aY)
   if (!mWindow || (mBounds.x == aX && mBounds.y == aY))
     return NS_OK;
 
+  nsAutoUnlockEverything unlock;
+
   // The point we have is in Gecko coordinates (origin top-left). Convert
   // it to Cocoa ones (origin bottom-left).
   NSPoint coord = {static_cast<CGFloat>(aX), nsCocoaUtils::FlippedScreenY(aY)};
@@ -1243,6 +1254,8 @@ NS_IMETHODIMP nsCocoaWindow::Resize(PRInt32 aX, PRInt32 aY, PRInt32 aWidth, PRIn
 
   NSRect newFrame = nsCocoaUtils::GeckoRectToCocoaRect(newBounds);
 
+  nsAutoUnlockEverything unlock;
+
   // We ignore aRepaint -- we have to call display:YES, otherwise the
   // title bar doesn't immediately get repainted and is displayed in
   // the wrong place, leading to a visual jump.
@@ -1350,6 +1363,10 @@ bool nsCocoaWindow::DragEvent(unsigned int aMessage, Point aMouseGlobal, UInt16 
 
 NS_IMETHODIMP nsCocoaWindow::SendSetZLevelEvent()
 {
+  Maybe<nsAutoLockChromeUnstickContent> lock;
+  if (!NS_IsChromeOwningThread())
+    lock.construct();
+
   nsZLevelEvent event(true, NS_SETZLEVEL, this);
 
   event.refPoint.x = mBounds.x;
@@ -1416,6 +1433,10 @@ nsCocoaWindow::DispatchEvent(nsGUIEvent* event, nsEventStatus& aStatus)
 {
   aStatus = nsEventStatus_eIgnore;
 
+  Maybe<nsAutoLockChromeUnstickContent> lock;
+  if (!NS_IsChromeOwningThread())
+    lock.construct();
+
   nsIWidget* aWidget = event->widget;
   NS_IF_ADDREF(aWidget);
 
@@ -1458,6 +1479,10 @@ nsCocoaWindow::ReportMoveEvent()
 
   UpdateBounds();
 
+  Maybe<nsAutoLockChromeUnstickContent> lock;
+  if (!NS_IsChromeOwningThread())
+    lock.construct();
+
   // Dispatch the move event to Gecko
   nsGUIEvent guiEvent(true, NS_MOVE, this);
   guiEvent.refPoint.x = mBounds.x;
@@ -1482,6 +1507,8 @@ nsCocoaWindow::DispatchSizeModeEvent()
   if (mInFullScreenTransition || mSizeMode == newMode) {
     return;
   }
+
+  nsAutoLockChrome lock;
 
   mSizeMode = newMode;
   nsSizeModeEvent event(true, NS_SIZEMODE, this);
@@ -1926,6 +1953,11 @@ bool nsCocoaWindow::ShouldFocusPlugin()
   if (!mGeckoWindow)
     return;
 
+  // Watch out in case this event is delivered in the middle of reflow.
+  Maybe<nsAutoLockChromeUnstickContent> lock;
+  if (!NS_IsChromeOwningThread())
+    lock.construct();
+
   // Resizing might have changed our zoom state.
   mGeckoWindow->DispatchSizeModeEvent();
   mGeckoWindow->ReportSizeEvent();
@@ -1998,6 +2030,8 @@ bool nsCocoaWindow::ShouldFocusPlugin()
 
 - (void)windowDidResignMain:(NSNotification *)aNotification
 {
+  nsAutoLockChromeUnstickContent lock;
+
   RollUpPopups();
   ChildViewMouseTracker::ReEvaluateMouseEnterState();
 
@@ -2055,6 +2089,8 @@ bool nsCocoaWindow::ShouldFocusPlugin()
 
 - (BOOL)windowShouldClose:(id)sender
 {
+  nsAutoLockChromeUnstickContent lock;
+
   // We only want to send NS_XUL_CLOSE and let gecko close the window
   nsGUIEvent guiEvent(true, NS_XUL_CLOSE, mGeckoWindow);
   guiEvent.time = PR_IntervalNow();
@@ -2099,6 +2135,8 @@ bool nsCocoaWindow::ShouldFocusPlugin()
   if (!mGeckoWindow)
     return;
 
+  nsAutoLockChromeUnstickContent lock;
+
   nsEventStatus status = nsEventStatus_eIgnore;
   nsGUIEvent focusGuiEvent(true, eventType, mGeckoWindow);
   focusGuiEvent.time = PR_IntervalNow();
@@ -2108,6 +2146,8 @@ bool nsCocoaWindow::ShouldFocusPlugin()
 - (void)didEndSheet:(NSWindow*)sheet returnCode:(int)returnCode contextInfo:(void*)contextInfo
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
+
+  nsAutoUnlockEverything unlock;
 
   // Note: 'contextInfo' (if it is set) is the window that is the parent of
   // the sheet.  The value of contextInfo is determined in
@@ -2597,6 +2637,7 @@ static const NSString* kStateShowsToolbarButton = @"showsToolbarButton";
     if (!geckoWindow)
       return;
     nsEventStatus status = nsEventStatus_eIgnore;
+    nsAutoLockChromeUnstickContent lock;
     nsGUIEvent guiEvent(true, NS_OS_TOOLBAR, geckoWindow);
     guiEvent.time = PR_IntervalNow();
     geckoWindow->DispatchEvent(&guiEvent, status);

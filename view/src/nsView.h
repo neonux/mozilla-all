@@ -203,6 +203,9 @@ protected:
 
 private:
   void InitializeWindow(bool aEnableDragDrop, bool aResetVisibility);
+
+  void ShowWindow();
+  void HideWindow();
 };
 
 #endif

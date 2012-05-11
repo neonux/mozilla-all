@@ -394,6 +394,8 @@ NS_InitXPCOM2(nsIServiceManager* *result,
     rv = nsThreadManager::get()->Init();
     if (NS_FAILED(rv)) return rv;
 
+    nsAutoLockChrome lock;
+
     NS_TIME_FUNCTION_MARK("Next: timer startup");
 
     // Set up the timer globals/timer thread
@@ -610,7 +612,11 @@ ShutdownXPCOM(nsIServiceManager* servMgr)
             }
         }
 
-        NS_ProcessPendingEvents(thread);
+        {
+            nsAutoUnlockEverything unlock;
+            NS_ProcessPendingEvents(thread);
+        }
+
         mozilla::scache::StartupCache::DeleteSingleton();
         if (observerService)
             (void) observerService->
@@ -619,20 +625,26 @@ ShutdownXPCOM(nsIServiceManager* servMgr)
 
         nsCycleCollector_shutdownThreads();
 
-        NS_ProcessPendingEvents(thread);
+        {
+            nsAutoUnlockEverything unlock;
+            NS_ProcessPendingEvents(thread);
+        }
 
         // Shutdown the timer thread and all timers that might still be alive before
         // shutting down the component manager
         nsTimerImpl::Shutdown();
 
-        NS_ProcessPendingEvents(thread);
+        {
+            nsAutoUnlockEverything unlock;
+            NS_ProcessPendingEvents(thread);
 
-        // Shutdown all remaining threads.  This method does not return until
-        // all threads created using the thread manager (with the exception of
-        // the main thread) have exited.
-        nsThreadManager::get()->Shutdown();
+            // Shutdown all remaining threads.  This method does not return until
+            // all threads created using the thread manager (with the exception of
+            // the main thread) have exited.
+            nsThreadManager::get()->Shutdown();
 
-        NS_ProcessPendingEvents(thread);
+            NS_ProcessPendingEvents(thread);
+        }
 
         HangMonitor::NotifyActivity();
 

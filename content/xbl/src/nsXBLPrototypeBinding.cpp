@@ -1560,7 +1560,7 @@ nsXBLPrototypeBinding::Read(nsIObjectInputStream* aStream,
   }
 
   nsCOMPtr<nsIScriptGlobalObjectOwner> globalOwner(do_QueryObject(aDocInfo));
-  nsIScriptGlobalObject* globalObject = globalOwner->GetScriptGlobalObject();
+  nsIScriptGlobalObject* globalObject = globalOwner->GetScriptGlobalObject(aDocument->GetZone());
   NS_ENSURE_TRUE(globalObject, NS_ERROR_UNEXPECTED);
 
   nsIScriptContext *context = globalObject->GetContext();
@@ -1695,7 +1695,7 @@ nsXBLPrototypeBinding::Write(nsIObjectOutputStream* aStream)
   // computed on demand.
 
   nsCOMPtr<nsIScriptGlobalObjectOwner> globalOwner(do_QueryObject(mXBLDocInfoWeak));
-  nsIScriptGlobalObject* globalObject = globalOwner->GetScriptGlobalObject();
+  nsIScriptGlobalObject* globalObject = globalOwner->GetScriptGlobalObject(JS_ZONE_CHROME);
   NS_ENSURE_TRUE(globalObject, NS_ERROR_UNEXPECTED);
 
   nsIScriptContext *context = globalObject->GetContext();

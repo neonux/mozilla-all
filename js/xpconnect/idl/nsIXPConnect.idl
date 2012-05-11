@@ -140,6 +140,7 @@ class nsWrapperCache;
 #define NS_ERROR_XPC_HAS_BEEN_SHUTDOWN                 GENERATE_XPC_FAILURE(51)
 #define NS_ERROR_XPC_CANT_MODIFY_PROP_ON_WN            GENERATE_XPC_FAILURE(52)
 #define NS_ERROR_XPC_BAD_CONVERT_JS_ZERO_ISNOT_NULL    GENERATE_XPC_FAILURE(53)
+#define NS_ERROR_XPC_CANT_GET_LOCK                     GENERATE_XPC_FAILURE(54)
 
 // any new errors here should have an associated entry added in xpc.msg
 /***************************************************************************/
@@ -432,6 +433,7 @@ interface nsIXPConnect : nsISupports
      *
      * @param aJSContext the context to use while creating the global object.
      * @param aCOMObj the native object that represents the global object.
+     * @param aZone zone to create the global object in.
      * @param aPrincipal the principal of the code that will run in this
      *                   compartment. Can be null if not on the main thread.
      * @param aFlags one of the flags below specifying what options this
@@ -441,6 +443,7 @@ interface nsIXPConnect : nsISupports
     initClassesWithNewWrappedGlobal(
                   in JSContextPtr aJSContext,
                   in nsISupports  aCOMObj,
+                  in PRInt32      aZone,
                   in nsIPrincipal aPrincipal,
                   in PRUint32     aFlags);
 

@@ -75,6 +75,8 @@ AccessCheck::isSameOrigin(JSCompartment *a, JSCompartment *b)
     if (!aprin || !bprin)
         return true;
 
+    nsAutoLockChrome lock; // for URIs within principal comparison
+
     bool equals;
     nsresult rv = aprin->EqualsIgnoringDomain(bprin, &equals);
     if (NS_FAILED(rv)) {
@@ -116,6 +118,8 @@ AccessCheck::isLocationObjectSameOrigin(JSContext *cx, JSObject *wrapper)
 bool
 AccessCheck::isChrome(JSCompartment *compartment)
 {
+    nsAutoLockChrome lock;
+
     nsIScriptSecurityManager *ssm = XPCWrapper::GetSecurityManager();
     if (!ssm) {
         return false;
@@ -280,6 +284,8 @@ AccessCheck::documentDomainMakesSameOrigin(JSContext *cx, JSObject *obj)
         object = GetPrincipal(JS_GetGlobalForObject(cx, obj));
     }
 
+    nsAutoLockChrome lock;
+
     bool subsumes;
     return NS_SUCCEEDED(subject->Subsumes(object, &subsumes)) && subsumes;
 }
@@ -288,6 +294,8 @@ bool
 AccessCheck::isCrossOriginAccessPermitted(JSContext *cx, JSObject *wrapper, jsid id,
                                           Wrapper::Action act)
 {
+    nsAutoLockChrome lock;
+
     if (!XPCWrapper::GetSecurityManager())
         return true;
 
@@ -339,6 +347,8 @@ AccessCheck::isCrossOriginAccessPermitted(JSContext *cx, JSObject *wrapper, jsid
 bool
 AccessCheck::isSystemOnlyAccessPermitted(JSContext *cx)
 {
+    nsAutoLockChrome lock;
+
     nsIScriptSecurityManager *ssm = XPCWrapper::GetSecurityManager();
     if (!ssm) {
         return true;

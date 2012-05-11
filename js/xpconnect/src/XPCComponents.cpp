@@ -3205,7 +3205,7 @@ xpc_CreateSandboxObject(JSContext * cx, jsval * vp, nsISupports *prinOrSop, JSOb
     JSObject *sandbox;
 
     nsRefPtr<Identity> identity = new Identity();
-    rv = xpc_CreateGlobalObject(cx, &SandboxClass, principal, identity,
+    rv = xpc_CreateGlobalObject(cx, &SandboxClass, JS_ZONE_CHROME, principal, identity,
                                 wantXrays, &sandbox, &compartment);
     NS_ENSURE_SUCCESS(rv, rv);
 
@@ -3594,7 +3594,7 @@ xpc_EvalInSandbox(JSContext *cx, JSObject *sandbox, const nsAString& source,
                   const char *filename, PRInt32 lineNo,
                   JSVersion jsVersion, bool returnStringOnly, jsval *rval)
 {
-    JS_AbortIfWrongThread(JS_GetRuntime(cx));
+    //JS_AbortIfWrongThread(JS_GetRuntime(cx));
 
 #ifdef DEBUG
     // NB: The "unsafe" unwrap here is OK because we must be called from chrome.

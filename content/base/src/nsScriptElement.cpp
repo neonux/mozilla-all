@@ -58,6 +58,8 @@ nsScriptElement::ScriptAvailable(nsresult aResult,
                                  PRInt32 aLineNo)
 {
   if (!aIsInline && NS_FAILED(aResult)) {
+    NS_StickLock(aElement);
+
     nsCOMPtr<nsIContent> cont =
       do_QueryInterface((nsIScriptElement*) this);
 

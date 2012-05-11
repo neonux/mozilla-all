@@ -500,6 +500,8 @@ interface nsIDocShell : nsISupports
    */
   [noscript, notxpcom] void DetachEditorFromWindow();
 
+  [noscript] void setChromeZone();
+
   /**
    * If true, this browser is not visible in the traditional sense, but
    * is actively being rendered to the screen (ex. painted on a canvas)
@@ -542,6 +544,8 @@ interface nsIDocShell : nsISupports
    * handling link clicks. Docshells are not app tabs unless told otherwise.
    */
   attribute boolean isAppTab;
+
+  readonly attribute long windowZone;
 
   /**
    * Create a new about:blank document and content viewer.

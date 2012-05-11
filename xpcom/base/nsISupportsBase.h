@@ -44,6 +44,8 @@
 #include "nsID.h"
 #endif
 
+#include "mozilla/Types.h"
+
 
 /*@{*/
 /**
@@ -101,6 +103,8 @@ public:
    * @return The resulting reference count.
    */
   NS_IMETHOD_(nsrefcnt) Release(void) = 0;
+
+  NS_IMETHOD_(JSZoneId) GetZone() { return JS_ZONE_CHROME; }
 
   //@}
 };

@@ -109,6 +109,37 @@ XPCCallContext::GetJSContext() const
     return mJSContext;
 }
 
+inline bool
+EnsureZoneStuck(JSContext *cx, JSZoneId zone)
+{
+    if (js::IsZoneStuck(cx, zone))
+        return true;
+    if (zone == JS_ZONE_CHROME) {
+        NS_LockZone(JS_ZONE_CHROME);
+        js::SetZoneStuck(cx, JS_ZONE_CHROME);
+        return true;
+    }
+
+    if (!NS_TryStickContentLock(zone))
+        return false;
+    js::SetZoneStuck(cx, zone);
+    return true;
+}
+
+inline bool
+XPCCallContext::CheckObjectLock(nsISupports *object)
+{
+    CHECK_STATE(HAVE_CONTEXT);
+    return EnsureZoneStuck(GetJSContext(), object->GetZone());
+}
+
+inline void
+XPCCallContext::CheckChromeLock()
+{
+    CHECK_STATE(HAVE_CONTEXT);
+    EnsureZoneStuck(GetJSContext(), JS_ZONE_CHROME);
+}
+
 inline JSBool
 XPCCallContext::GetContextPopRequired() const
 {

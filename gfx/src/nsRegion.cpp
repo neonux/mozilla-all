@@ -37,6 +37,7 @@
 #include "nsRegion.h"
 #include "nsISupportsImpl.h"
 #include "nsTArray.h"
+#include "nsThreadUtils.h"
 
 /*
  * The SENTINEL values below guaranties that a < or >
@@ -109,18 +110,21 @@ class RgnRectMemoryAllocator
   PRUint32  mFreeEntries;
   void*     mChunkListHead;
 #if defined (DEBUG)
-  NS_DECL_OWNINGTHREAD
-
-  void InitLock ()    { NS_ASSERT_OWNINGTHREAD (RgnRectMemoryAllocator); }
-  void DestroyLock () { NS_ASSERT_OWNINGTHREAD (RgnRectMemoryAllocator); }
-  void Lock ()        { NS_ASSERT_OWNINGTHREAD (RgnRectMemoryAllocator); }
-  void Unlock ()      { NS_ASSERT_OWNINGTHREAD (RgnRectMemoryAllocator); }
+  PRThread  *mThread;
+  inline void CheckThread() {
+    if (mThread)
+      MOZ_ASSERT(mThread == PR_GetCurrentThread());
+    else
+      mThread = PR_GetCurrentThread();
+  }
 #else
-  void InitLock ()    { }
-  void DestroyLock () { }
-  void Lock ()        { }
-  void Unlock ()      { }
+  inline void CheckThread() {}
 #endif
+
+  void InitLock ()    { CheckThread(); }
+  void DestroyLock () { CheckThread(); }
+  void Lock ()        { CheckThread(); }
+  void Unlock ()      { CheckThread(); }
 
   void* AllocChunk (PRUint32 aEntries, void* aNextChunk, nsRegion::RgnRect* aTailDest)
   {
@@ -153,10 +157,13 @@ public:
 
 RgnRectMemoryAllocator::RgnRectMemoryAllocator (PRUint32 aNumOfEntries)
 {
-  InitLock ();
   mChunkListHead = AllocChunk (aNumOfEntries, nsnull, nsnull);
   mFreeEntries   = aNumOfEntries;
   mFreeListHead  = ChunkHead (mChunkListHead);
+#ifdef DEBUG
+  mThread = NULL;
+#endif
+  InitLock ();
 }
 
 RgnRectMemoryAllocator::~RgnRectMemoryAllocator ()
@@ -187,6 +194,8 @@ RgnRectMemoryAllocator::~RgnRectMemoryAllocator ()
 
 nsRegion::RgnRect* RgnRectMemoryAllocator::Alloc ()
 {
+  nsAutoLockChrome lock;
+
   Lock ();
 
   if (mFreeEntries == 0)

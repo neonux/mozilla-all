@@ -61,6 +61,7 @@
 #include "js/MemoryMetrics.h"
 #include "mozilla/dom/DOMJSClass.h"
 
+#include "nsThreadUtils.h"
 #include "nsJSPrincipals.h"
 
 #ifdef MOZ_CRASHREPORTER
@@ -239,6 +240,7 @@ ContextCallback(JSContext *cx, unsigned operation)
             if (!self->OnJSContextNew(cx))
                 return false;
         } else if (operation == JSCONTEXT_DESTROY) {
+            NS_UnregisterContextStick(cx);
             delete XPCContext::GetXPCContext(cx);
         }
     }
@@ -400,7 +402,7 @@ TraceDOMExpandos(nsPtrHashKey<JSObject> *expando, void *aClosure)
 void XPCJSRuntime::TraceXPConnectRoots(JSTracer *trc)
 {
     JSContext *iter = nsnull;
-    while (JSContext *acx = JS_ContextIterator(GetJSRuntime(), &iter)) {
+    while (JSContext *acx = JS_ContextIteratorWithGCLocked(GetJSRuntime(), &iter)) {
         JS_ASSERT(js::HasUnrootedGlobal(acx));
         if (JSObject *global = JS_GetGlobalObject(acx))
             JS_CALL_OBJECT_TRACER(trc, global, "XPC global object");
@@ -1929,6 +1931,16 @@ bool PreserveWrapper(JSContext *cx, JSObject *obj)
     return true;
 }
 
+static JSBool IsExecuteZoneThread(JSZoneId zone)
+{
+    return NS_FindExecuteThreadZone() == zone;
+}
+
+static JSBool CanUnlockChrome()
+{
+    return NS_IsChromeOwningThread() && NS_CanLockNewContent() && !NS_IsEverythingLocked();
+}
+
 XPCJSRuntime::XPCJSRuntime(nsXPConnect* aXPConnect)
  : mXPConnect(aXPConnect),
    mJSRuntime(nsnull),
@@ -1978,6 +1990,21 @@ XPCJSRuntime::XPCJSRuntime(nsXPConnect* aXPConnect)
     if (!mJSRuntime)
         NS_RUNTIMEABORT("JS_NewRuntime failed.");
 
+#ifdef MOZ_ASAN
+    // ASan requires more stack space due to redzones
+    JS_SetNativeStackQuota(mJSRuntime, 2 * 128 * sizeof(size_t) * 1024);
+#else  
+    JS_SetNativeStackQuota(mJSRuntime, 128 * sizeof(size_t) * 1024);
+#endif
+
+    JS_SetThreadCallbacks(mJSRuntime,
+                          NS_IsOwningThread, IsExecuteZoneThread,
+                          NS_ThreadLockDepth, NS_LockZone, NS_TryLockZone, NS_UnlockZone,
+                          NS_RegisterContextStick,
+                          NS_LockEverything, NS_IsEverythingLocked, NS_UnlockEverything,
+                          NS_FindNativeStackTopForThread,
+                          CanUnlockChrome);
+
     // Unconstrain the runtime's threshold on nominal heap size, to avoid
     // triggering GC too often if operating continuously near an arbitrary
     // finite threshold (0xffffffff is infinity for uint32_t parameters).
@@ -1985,12 +2012,6 @@ XPCJSRuntime::XPCJSRuntime(nsXPConnect* aXPConnect)
     // to cause period, and we hope hygienic, last-ditch GCs from within
     // the GC's allocator.
     JS_SetGCParameter(mJSRuntime, JSGC_MAX_BYTES, 0xffffffff);
-#ifdef MOZ_ASAN
-    // ASan requires more stack space due to redzones
-    JS_SetNativeStackQuota(mJSRuntime, 2 * 128 * sizeof(size_t) * 1024);
-#else  
-    JS_SetNativeStackQuota(mJSRuntime, 128 * sizeof(size_t) * 1024);
-#endif
     JS_SetContextCallback(mJSRuntime, ContextCallback);
     JS_SetDestroyCompartmentCallback(mJSRuntime, CompartmentDestroyedCallback);
     JS_SetGCCallback(mJSRuntime, GCCallback);
@@ -2127,6 +2148,8 @@ JSBool
 XPCJSRuntime::DeferredRelease(nsISupports* obj)
 {
     NS_ASSERTION(obj, "bad param");
+
+    MOZ_ASSERT(NS_IsChromeOwningThread());
 
     if (mNativesToReleaseArray.IsEmpty()) {
         // This array sometimes has 1000's

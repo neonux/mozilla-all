@@ -289,11 +289,11 @@ CreateJSContextForWorker(WorkerPrivate* aWorkerPrivate)
     return nsnull;
   }
 
+  JS_SetNativeStackQuota(runtime, WORKER_CONTEXT_NATIVE_STACK_LIMIT);
+
   // This is the real place where we set the max memory for the runtime.
   JS_SetGCParameter(runtime, JSGC_MAX_BYTES,
                     aWorkerPrivate->GetJSRuntimeHeapSize());
-
-  JS_SetNativeStackQuota(runtime, WORKER_CONTEXT_NATIVE_STACK_LIMIT);
 
   JSContext* workerCx = JS_NewContext(runtime, 0);
   if (!workerCx) {
@@ -397,8 +397,6 @@ JSBool
 ResolveWorkerClasses(JSContext* aCx, JSObject* aObj, jsid aId, unsigned aFlags,
                      JSObject** aObjp)
 {
-  AssertIsOnMainThread();
-
   // Don't care about assignments or declarations, bail now.
   if (aFlags & (JSRESOLVE_ASSIGNING | JSRESOLVE_DECLARING)) {
     *aObjp = nsnull;

@@ -49,6 +49,7 @@
 extern nsresult
 NS_NewInterfaceRequestorAggregation(nsIInterfaceRequestor  *aFirst,
                                     nsIInterfaceRequestor  *aSecond,
+                                    JSZoneId                aZone,
                                     nsIInterfaceRequestor **aResult);
 
 #endif // !defined( nsInterfaceRequestorAgg_h__ )

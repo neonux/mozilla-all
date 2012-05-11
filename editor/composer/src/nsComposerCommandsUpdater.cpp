@@ -52,6 +52,7 @@
 
 #include "nsIDocShell.h"
 #include "nsITransactionManager.h"
+#include "nsThreadUtils.h"
 
 nsComposerCommandsUpdater::nsComposerCommandsUpdater()
 :  mDirtyState(eStateUninitialized)
@@ -368,6 +369,9 @@ nsComposerCommandsUpdater::UpdateOneCommand(const char *aCommand)
 bool
 nsComposerCommandsUpdater::SelectionIsCollapsed()
 {
+  if (!NS_TryStickLock(mDOMWindow))
+    return true;
+
   nsCOMPtr<nsIDOMWindow> domWindow = do_QueryReferent(mDOMWindow);
   NS_ENSURE_TRUE(domWindow, true);
 

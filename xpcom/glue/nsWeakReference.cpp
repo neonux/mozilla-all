@@ -43,6 +43,7 @@
 #include "mozilla/Attributes.h"
 
 #include "nsWeakReference.h"
+#include "nsThreadUtils.h"
 #include "nsCOMPtr.h"
 
 class nsWeakReference MOZ_FINAL : public nsIWeakReference
@@ -51,6 +52,8 @@ class nsWeakReference MOZ_FINAL : public nsIWeakReference
     // nsISupports...
       NS_DECL_ISUPPORTS
 
+      JSZoneId GetZone() { return mZone; }
+
     // nsIWeakReference...
       NS_DECL_NSIWEAKREFERENCE
 
@@ -58,7 +61,7 @@ class nsWeakReference MOZ_FINAL : public nsIWeakReference
       friend class nsSupportsWeakReference;
 
       nsWeakReference( nsSupportsWeakReference* referent )
-          : mReferent(referent)
+          : mReferent(referent), mZone(referent->GetZone())
           // ...I can only be constructed by an |nsSupportsWeakReference|
         {
           // nothing else to do here
@@ -67,6 +70,7 @@ class nsWeakReference MOZ_FINAL : public nsIWeakReference
       ~nsWeakReference()
            // ...I will only be destroyed by calling |delete| myself.
         {
+          MOZ_ASSERT(NS_IsOwningThread(mZone));
           if ( mReferent )
             mReferent->NoticeProxyDestruction();
         }
@@ -75,10 +79,12 @@ class nsWeakReference MOZ_FINAL : public nsIWeakReference
       NoticeReferentDestruction()
           // ...called (only) by an |nsSupportsWeakReference| from _its_ dtor.
         {
+          MOZ_ASSERT(NS_IsOwningThread(mZone));
           mReferent = 0;
         }
 
       nsSupportsWeakReference*  mReferent;
+      JSZoneId mZone;
   };
 
 nsresult
@@ -123,6 +129,9 @@ NS_GetWeakReference( nsISupports* aInstancePtr, nsresult* aErrorPtr )
     return result;
   }
 
+extern void
+NS_DumpBacktrace(const char *str, bool flush);
+
 NS_COM_GLUE nsresult
 nsSupportsWeakReference::GetWeakReference( nsIWeakReference** aInstancePtr )
   {
@@ -150,6 +159,7 @@ NS_IMPL_ISUPPORTS1(nsWeakReference, nsIWeakReference)
 NS_IMETHODIMP
 nsWeakReference::QueryReferent( const nsIID& aIID, void** aInstancePtr )
   {
+    MOZ_ASSERT(NS_IsOwningThread(mZone));
     return mReferent ? mReferent->QueryInterface(aIID, aInstancePtr) : NS_ERROR_NULL_POINTER;
   }
 
@@ -163,3 +173,11 @@ nsSupportsWeakReference::ClearWeakReferences()
 			}
 	}
 
+void
+nsSupportsWeakReference::UpdateWeakReferencesZone()
+{
+  // For use when an object's zone changes after creation (its actual zone was
+  // not known at the point of creation) and weak references to it may exist.
+  if (mProxy)
+    mProxy->mZone = GetZone();
+}

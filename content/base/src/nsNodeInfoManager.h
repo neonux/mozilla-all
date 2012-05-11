@@ -119,6 +119,16 @@ public:
     return mDocument;
   }
 
+  JSZoneId GetZone() const
+  {
+    return mZone;
+  }
+
+  void SetZone(JSZoneId zone)
+  {
+    mZone = zone;
+  }
+
   /**
    * Gets the principal of the document this nodeinfo manager belongs to.
    */
@@ -157,6 +167,7 @@ private:
 
   PLHashTable *mNodeInfoHash;
   nsIDocument *mDocument; // WEAK
+  JSZoneId mZone;
   PRUint32 mNonDocumentNodeInfos;
   nsIPrincipal *mPrincipal; // STRONG, but not nsCOMPtr to avoid include hell
                             // while inlining DocumentPrincipal().  Never null

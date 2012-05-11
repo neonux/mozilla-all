@@ -118,6 +118,8 @@ nsDOMCSSDeclaration::GetCssText(nsAString& aCssText)
 NS_IMETHODIMP
 nsDOMCSSDeclaration::SetCssText(const nsAString& aCssText)
 {
+  nsAutoLockChrome lock;
+
   // We don't need to *do* anything with the old declaration, but we need
   // to ensure that it exists, or else SetCSSDeclaration may crash.
   css::Declaration* olddecl = GetCSSDeclaration(true);
@@ -292,6 +294,8 @@ nsDOMCSSDeclaration::ParsePropertyValue(const nsCSSProperty aPropID,
     return NS_ERROR_FAILURE;
   }
 
+  nsAutoLockChrome lock;
+
   CSSParsingEnvironment env;
   GetCSSParsingEnvironment(env);
   if (!env.mPrincipal) {
@@ -328,6 +332,8 @@ nsDOMCSSDeclaration::RemoveProperty(const nsCSSProperty aPropID)
   if (!decl) {
     return NS_OK; // no decl, so nothing to remove
   }
+
+  nsAutoLockChrome lock;
 
   // For nsDOMCSSAttributeDeclaration, SetCSSDeclaration will lead to
   // Attribute setting code, which leads in turn to BeginUpdate.  We

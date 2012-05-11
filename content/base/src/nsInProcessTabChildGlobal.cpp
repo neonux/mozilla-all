@@ -129,7 +129,7 @@ nsInProcessTabChildGlobal::nsInProcessTabChildGlobal(nsIDocShell* aShell,
 
 nsInProcessTabChildGlobal::~nsInProcessTabChildGlobal()
 {
-  NS_ASSERTION(!mCx, "Couldn't release JSContext?!?");
+  // NS_ASSERTION(!mCx, "Couldn't release JSContext?!?");
 }
 
 nsresult
@@ -147,7 +147,7 @@ nsInProcessTabChildGlobal::Init()
                                               nsnull,
                                               this,
                                               nsnull,
-                                              mCx);
+                                              GetJSContext());
   return NS_OK;
 }
 
@@ -262,9 +262,7 @@ nsInProcessTabChildGlobal::DelayedDisconnect()
   if (!mLoadingScript) {
     nsContentUtils::ReleaseWrapper(static_cast<nsIDOMEventTarget*>(this),
                                    this);
-    if (mCx) {
-      DestroyCx();
-    }
+    DestroyCx();
   } else {
     mDelayedDisconnect = true;
   }

@@ -405,6 +405,9 @@ CheckForGhostWindowsEnumerator(nsISupports *aKey, TimeStamp& aTimeStamp,
   CheckForGhostWindowsEnumeratorData *data =
     static_cast<CheckForGhostWindowsEnumeratorData*>(aClosure);
 
+  if (!NS_TryStickLock(aKey))
+    return PL_DHASH_NEXT;
+
   nsWeakPtr weakKey = do_QueryInterface(aKey);
   nsCOMPtr<nsPIDOMWindow> window = do_QueryReferent(weakKey);
   if (!window) {
@@ -534,6 +537,8 @@ nsWindowMemoryReporter::CheckForGhostWindows(
     { &nonDetachedWindowDomains, tldService };
   windowsById->EnumerateRead(GetNonDetachedWindowDomainsEnumerator,
                              &nonDetachedEnumData);
+
+  nsAutoCantLockNewContent cantLock;
 
   // Update mDetachedWindows and write the ghost window IDs into aOutGhostIDs,
   // if it's not null.

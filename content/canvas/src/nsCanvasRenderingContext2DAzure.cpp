@@ -1261,6 +1261,8 @@ nsCanvasRenderingContext2DAzure::SetDimensions(PRInt32 width, PRInt32 height)
       ownerDoc = content->OwnerDoc();
     }
 
+    nsAutoLockChrome lock;
+
     nsRefPtr<LayerManager> layerManager = nsnull;
 
     if (ownerDoc) {

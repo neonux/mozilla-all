@@ -493,6 +493,8 @@ WrapAndReturnHistogram(Histogram *h, JSContext *cx, jsval *ret)
     JS_EnumerateStub, JS_ResolveStub, JS_ConvertStub
   };
 
+  JSAutoRequest request(cx);
+
   JSObject *obj = JS_NewObject(cx, &JSHistogram_class, NULL, NULL);
   if (!obj)
     return NS_ERROR_FAILURE;

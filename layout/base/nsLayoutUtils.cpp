@@ -1435,6 +1435,8 @@ nsLayoutUtils::GetFramesForArea(nsIFrame* aFrame, const nsRect& aRect,
                                 bool aShouldIgnoreSuppression,
                                 bool aIgnoreRootScrollFrame)
 {
+  nsAutoLockChrome lock;
+
   SAMPLE_LABEL("nsLayoutUtils","GetFramesForArea");
   nsDisplayListBuilder builder(aFrame, nsDisplayListBuilder::EVENT_DELIVERY,
 		                       false);

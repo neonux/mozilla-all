@@ -42,6 +42,7 @@
 #include "nsServiceManagerUtils.h"
 #include "nsString.h"
 #include "nsCRT.h"
+#include "nsThreadUtils.h"
 
 #import <Cocoa/Cocoa.h>
 #import <netinet/in.h>
@@ -225,6 +226,8 @@ nsNetworkLinkService::ReachabilityChanged(SCNetworkReachabilityRef target,
 {
     nsNetworkLinkService *service =
         static_cast<nsNetworkLinkService*>(info);
+
+    nsAutoLockChrome lock;
 
     service->UpdateReachability();
     service->SendEvent();

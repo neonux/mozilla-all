@@ -100,6 +100,8 @@ public:
   // nsISupports
   NS_DECL_ISUPPORTS
 
+  JSZoneId GetZone() { return mDocument ? mDocument->GetZone() : JS_ZONE_CHROME; }
+
   // nsIPresShell
   virtual NS_HIDDEN_(nsresult) Init(nsIDocument* aDocument,
                                    nsPresContext* aPresContext,

@@ -309,7 +309,7 @@ nsXBLDocGlobalObject::EnsureScriptEnvironment()
   nsIPrincipal *principal = GetPrincipal();
   JSCompartment *compartment;
 
-  rv = xpc_CreateGlobalObject(cx, &gSharedGlobalClass, principal, nsnull,
+  rv = xpc_CreateGlobalObject(cx, &gSharedGlobalClass, JS_ZONE_CHROME, principal, nsnull,
                               false, &mJSObject, &compartment);
   NS_ENSURE_SUCCESS(rv, NS_OK);
 
@@ -751,8 +751,10 @@ nsXBLDocumentInfo::FlushSkinStylesheets()
 //
 
 nsIScriptGlobalObject*
-nsXBLDocumentInfo::GetScriptGlobalObject()
+nsXBLDocumentInfo::GetScriptGlobalObject(JSZoneId aZone)
 {
+  MOZ_ASSERT(aZone == JS_ZONE_CHROME);
+
   if (!mGlobalObject) {
     nsXBLDocGlobalObject *global = new nsXBLDocGlobalObject(this);
     if (!global)

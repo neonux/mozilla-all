@@ -60,6 +60,7 @@ interface nsISupports {
                       [iid_is(uuid),retval] out nsQIResult result);
   [noscript, notxpcom] nsrefcnt AddRef();
   [noscript, notxpcom] nsrefcnt Release();
+  [noscript, notxpcom] long GetZone();
 };
 
 %{C++

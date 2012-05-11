@@ -546,6 +546,7 @@ public:
    */
   static nsIScriptSecurityManager* GetSecurityManager()
   {
+    MOZ_ASSERT(NS_IsChromeOwningThread());
     return sSecurityManager;
   }
 
@@ -1555,6 +1556,7 @@ public:
    * run anything else, when this function returns false, but this is ok.
    */
   static bool IsSafeToRunScript() {
+    MOZ_ASSERT(NS_IsChromeOwningThread());
     return sScriptBlockerCount == 0;
   }
 
@@ -2112,8 +2114,6 @@ private:
   static PRUint32 sMicroTaskLevel;
   // Not an nsCOMArray because removing elements from those is slower
   static nsTArray< nsCOMPtr<nsIRunnable> >* sBlockedScriptRunners;
-  static PRUint32 sRunnersCountAtFirstBlocker;
-  static PRUint32 sScriptBlockerCountWhereRunnersPrevented;
 
   static nsIInterfaceRequestor* sSameOriginChecker;
 

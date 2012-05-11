@@ -136,6 +136,7 @@
 #ifdef MOZ_REFLOW_PERF
 #include "nsFontMetrics.h"
 #endif
+#include "nsProxyRelease.h"
 
 #include "nsIReflowCallback.h"
 
@@ -783,6 +784,8 @@ PresShell::Init(nsIDocument* aDocument,
   mDocument = aDocument;
   NS_ADDREF(mDocument);
   mViewManager = aViewManager;
+
+  NS_FIX_OWNINGTHREAD(mDocument->GetZone());
 
   // Create our frame constructor.
   mFrameConstructor = new nsCSSFrameConstructor(mDocument, this);
@@ -1736,6 +1739,7 @@ PresShell::InitialReflow(nscoord aWidth, nscoord aHeight)
         Preferences::GetInt("nglayout.initialpaint.delay",
                             PAINTLOCK_EVENT_DELAY);
 
+      mPaintSuppressionTimer->SetCallbackZone(GetZone());
       mPaintSuppressionTimer->InitWithFuncCallback(sPaintSuppressionCallback,
                                                    this, delay, 
                                                    nsITimer::TYPE_ONE_SHOT);
@@ -1870,8 +1874,8 @@ PresShell::ResizeReflowIgnoreOverride(nscoord aWidth, nscoord aHeight)
       }
     } else {
       nsRefPtr<nsRunnableMethod<PresShell> > resizeEvent =
-        NS_NewRunnableMethod(this, &PresShell::FireResizeEvent);
-      if (NS_SUCCEEDED(NS_DispatchToCurrentThread(resizeEvent))) {
+        NS_NewRunnableMethod(this, &PresShell::FireResizeEvent, GetZone());
+      if (NS_SUCCEEDED(NS_DispatchToMainThread(resizeEvent, NS_DISPATCH_NORMAL, GetZone()))) {
         mResizeEvent = resizeEvent;
         mDocument->SetNeedStyleFlush();
       }
@@ -1890,7 +1894,10 @@ PresShell::FireBeforeResizeEvent()
   // Send beforeresize event from here.
   nsEvent event(true, NS_BEFORERESIZE_EVENT);
 
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   nsPIDOMWindow *window = mDocument->GetWindow();
+
   if (window) {
     nsCOMPtr<nsIPresShell> kungFuDeathGrip(this);
     nsEventDispatcher::Dispatch(window, mPresContext, &event);
@@ -1900,6 +1907,8 @@ PresShell::FireBeforeResizeEvent()
 void
 PresShell::FireResizeEvent()
 {
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
+
   if (mAsyncResizeTimerIsActive) {
     mAsyncResizeTimerIsActive = false;
     mAsyncResizeEventTimer->Cancel();
@@ -3682,7 +3691,6 @@ PresShell::IsSafeToFlush() const
   return isSafeToFlush;
 }
 
-
 void
 PresShell::FlushPendingNotifications(mozFlushType aType)
 {
@@ -3691,6 +3699,8 @@ PresShell::FlushPendingNotifications(mozFlushType aType)
    * method, make sure to add the relevant SetNeedLayoutFlush or
    * SetNeedStyleFlush calls on the document.
    */
+
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
 
 #ifdef NS_FUNCTION_TIMER
   NS_TIME_FUNCTION_DECLARE_DOCURL;
@@ -3976,7 +3986,7 @@ PresShell::ContentAppended(nsIDocument *aDocument,
   NS_PRECONDITION(!mIsDocumentGone, "Unexpected ContentAppended");
   NS_PRECONDITION(aDocument == mDocument, "Unexpected aDocument");
   NS_PRECONDITION(aContainer, "must have container");
-  
+
   if (!mDidInitialReflow) {
     return;
   }
@@ -4004,7 +4014,7 @@ PresShell::ContentInserted(nsIDocument* aDocument,
   if (!mDidInitialReflow) {
     return;
   }
-  
+
   nsAutoCauseReflowNotifier crNotifier(this);
 
   // Call this here so it only happens for real content mutations and
@@ -5088,6 +5098,9 @@ PresShell::ProcessSynthMouseMoveEvent(bool aFromScroll)
   // Hold a ref to ourselves so DispatchEvent won't destroy us (since
   // we need to access members after we call DispatchEvent).
   nsCOMPtr<nsIPresShell> kungFuDeathGrip(this);
+
+  mDocument->TryLockSubDocuments();
+  nsAutoCantLockNewContent cantLock;
   
 #ifdef DEBUG_MOUSE_LOCATION
   printf("[ps=%p]synthesizing mouse move to (%d,%d)\n",
@@ -5140,8 +5153,9 @@ PresShell::ProcessSynthMouseMoveEvent(bool aFromScroll)
   // XXX set event.modifiers ?
   // XXX mnakano I think that we should get the latest information from widget.
 
-  nsCOMPtr<nsIPresShell> shell = pointVM->GetPresShell();
-  if (shell) {
+  nsIPresShell *ps = pointVM->GetPresShell();
+  if (ps && NS_TryStickLock(ps)) {
+    nsCOMPtr<nsIPresShell> shell = ps;
     shell->DispatchSynthMouseMove(&event, !aFromScroll);
   }
 
@@ -5192,6 +5206,9 @@ PresShell::Paint(nsIView*           aViewToPaint,
   NS_ASSERTION(aWidgetToPaint, "Can't paint without a widget");
 
   nsAutoNotifyDidPaint notifyDidPaint(aWillSendDidPaint);
+
+  if (mDocument)
+    mDocument->TryLockSubDocuments();
 
   nsPresContext* presContext = GetPresContext();
   AUTO_LAYOUT_PHASE_ENTRY_POINT(presContext, Paint);
@@ -5581,6 +5598,9 @@ PresShell::HandleEvent(nsIFrame        *aFrame,
     NS_IS_MOUSE_EVENT(aEvent) || aEvent->eventStructType == NS_MOUSE_SCROLL_EVENT ?
       GetCapturingContent() : nsnull;
 
+  if (capturingContent && !NS_TryStickLock(capturingContent))
+    return NS_OK;
+
   nsCOMPtr<nsIDocument> retargetEventDoc;
   if (!aDontRetargetEvents) {
     // key and IME related events should not cross top level window boundary.
@@ -5818,6 +5838,11 @@ PresShell::HandleEvent(nsIFrame        *aFrame,
         eventPoint = nsLayoutUtils::GetEventCoordinatesRelativeTo(aEvent, frame);
       }
       {
+        if (mDocument)
+          mDocument->TryLockSubDocuments();
+
+        nsAutoScriptBlocker scriptBlocker;
+
         bool ignoreRootScrollFrame = false;
         if (aEvent->eventStructType == NS_MOUSE_EVENT) {
           ignoreRootScrollFrame = static_cast<nsMouseEvent*>(aEvent)->ignoreRootScrollFrame;
@@ -5881,7 +5906,8 @@ PresShell::HandleEvent(nsIFrame        *aFrame,
       nsEventStateManager::GetActiveEventStateManager();
     if (activeESM && NS_IS_MOUSE_EVENT(aEvent) &&
         activeESM != shell->GetPresContext()->EventStateManager() &&
-        static_cast<nsEventStateManager*>(activeESM)->GetPresContext()) {
+        static_cast<nsEventStateManager*>(activeESM)->GetPresContext() &&
+        NS_TryStickLock(activeESM->GetPresContext())) {
       nsIPresShell* activeShell =
         static_cast<nsEventStateManager*>(activeESM)->GetPresContext()->GetPresShell();
       if (activeShell &&
@@ -5938,6 +5964,12 @@ PresShell::HandleEvent(nsIFrame        *aFrame,
         } else {
           eventTarget = mDocument->GetRootElement();
         }
+      }
+
+      // XXX changes to gKeyDownTarget possible when chrome lock is released?
+      if (gKeyDownTarget && !NS_TryStickLock(gKeyDownTarget)) {
+        NS_ReleaseReferenceRaw(gKeyDownTarget);
+        gKeyDownTarget = NULL;
       }
 
       if (aEvent->message == NS_KEY_DOWN) {
@@ -6066,7 +6098,7 @@ PresShell::HandlePositionedEvent(nsIFrame*      aTargetFrame,
                                  nsEventStatus* aEventStatus)
 {
   nsresult rv = NS_OK;
-  
+
   PushCurrentEventInfo(nsnull, nsnull);
   
   mCurrentEventFrame = aTargetFrame;
@@ -7245,8 +7277,10 @@ PresShell::ScheduleReflowOffTimer()
 
   if (!mReflowContinueTimer) {
     mReflowContinueTimer = do_CreateInstance("@mozilla.org/timer;1");
-    if (!mReflowContinueTimer ||
-        NS_FAILED(mReflowContinueTimer->
+    if (!mReflowContinueTimer)
+      return false;
+    mReflowContinueTimer->SetCallbackZone(GetZone());
+    if (NS_FAILED(mReflowContinueTimer->
                     InitWithFuncCallback(sReflowContinueCallback, this, 30,
                                          nsITimer::TYPE_ONE_SHOT))) {
       return false;
@@ -7635,6 +7669,8 @@ PresShell::Observe(nsISupports* aSubject,
                    const char* aTopic,
                    const PRUnichar* aData)
 {
+  MOZ_ASSERT_IF(aSubject, aSubject->GetZone() == JS_ZONE_CHROME);
+
 #ifdef MOZ_XUL
   if (!nsCRT::strcmp(aTopic, "chrome-flush-skin-caches")) {
     nsIFrame *rootFrame = mFrameConstructor->GetRootFrame();

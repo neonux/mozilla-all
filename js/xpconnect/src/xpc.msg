@@ -96,7 +96,7 @@ XPC_MSG_DEF(NS_ERROR_XPC_BAD_INITIALIZER_NAME           , "Bad initializer name 
 XPC_MSG_DEF(NS_ERROR_XPC_HAS_BEEN_SHUTDOWN              , "Operation failed because the XPConnect subsystem has been shutdown")
 XPC_MSG_DEF(NS_ERROR_XPC_CANT_MODIFY_PROP_ON_WN         , "Cannot modify properties of a WrappedNative")
 XPC_MSG_DEF(NS_ERROR_XPC_BAD_CONVERT_JS_ZERO_ISNOT_NULL , "Could not convert JavaScript argument - 0 was passed, expected object. Did you mean null?")
-
+XPC_MSG_DEF(NS_ERROR_XPC_CANT_GET_LOCK                  , "Attempt to access blocked content")
 
 /* common global codes (from nsError.h) */
 

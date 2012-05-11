@@ -49,10 +49,23 @@ class NS_STACK_CLASS mozAutoDocUpdate
 {
 public:
   mozAutoDocUpdate(nsIDocument* aDocument, nsUpdateType aUpdateType,
-                   bool aNotify) :
-    mDocument(aNotify ? aDocument : nsnull),
-    mUpdateType(aUpdateType)
+                   bool aNotify)
+    : mDocument(nsnull)
+    , mUpdateType(aUpdateType)
   {
+    if (aNotify && aDocument) {
+      mDocument = aDocument;
+
+      JSZoneId zone = mDocument->GetZone();
+      MOZ_ASSERT(NS_IsOwningThread(zone));
+
+      if (zone != JS_ZONE_CHROME)
+        mLock.construct();
+    }
+    else {
+      mLock.construct();
+    }
+
     if (mDocument) {
       mDocument->BeginUpdate(mUpdateType);
     }
@@ -73,6 +86,7 @@ public:
 
 private:
   nsCOMPtr<nsIDocument> mDocument;
+  mozilla::Maybe<nsAutoLockChrome> mLock;
   nsUpdateType mUpdateType;
 };
 

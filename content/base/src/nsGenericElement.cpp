@@ -155,6 +155,7 @@
 #include "xpcpublic.h"
 #include "xpcprivate.h"
 #include "nsLayoutStatics.h"
+#include "nsProxyRelease.h"
 #include "mozilla/Telemetry.h"
 
 #include "mozilla/CORSMode.h"
@@ -1152,6 +1153,8 @@ nsINode::DispatchEvent(nsIDOMEvent *aEvent, bool* aRetVal)
     return NS_OK;
   }
 
+  nsAutoLockChrome lock;
+
   // Obtain a presentation shell
   nsIPresShell *shell = document->GetShell();
   nsRefPtr<nsPresContext> context;
@@ -1334,6 +1337,8 @@ Element::UpdateLinkState(nsEventStates aState)
 void
 Element::UpdateState(bool aNotify)
 {
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
+
   nsEventStates oldState = mState;
   mState = IntrinsicState() | (oldState & ESM_MANAGED_STATES);
   if (aNotify) {
@@ -1341,6 +1346,7 @@ Element::UpdateState(bool aNotify)
     if (!changedStates.IsEmpty()) {
       nsIDocument* doc = GetCurrentDoc();
       if (doc) {
+        nsAutoLockChrome lock;
         nsAutoScriptBlocker scriptBlocker;
         doc->ContentStateChanged(this, changedStates);
       }
@@ -1612,6 +1618,9 @@ already_AddRefed<nsIURI>
 nsIContent::GetBaseURI() const
 {
   nsIDocument* doc = OwnerDoc();
+
+  nsAutoLockChrome lock;
+
   // Start with document base
   nsCOMPtr<nsIURI> base = doc->GetDocBaseURI();
 
@@ -2716,6 +2725,8 @@ nsGenericElement::SetAttribute(const nsAString& aName,
     nsresult rv = nsContentUtils::CheckQName(aName, false);
     NS_ENSURE_SUCCESS(rv, rv);
 
+    nsAutoLockChrome lock; // for nsIAtom
+
     nsCOMPtr<nsIAtom> nameAtom = do_GetAtom(aName);
     NS_ENSURE_TRUE(nameAtom, NS_ERROR_OUT_OF_MEMORY);
 
@@ -2737,6 +2748,8 @@ nsGenericElement::RemoveAttribute(const nsAString& aName)
     // local name below, so we return early.
     return NS_OK;
   }
+
+  nsAutoLockChrome lock; // for nsIAtom
 
   // Hold a strong reference here so that the atom or nodeinfo doesn't go
   // away during UnsetAttr. If it did UnsetAttr would be left with a
@@ -2884,6 +2897,8 @@ nsresult
 nsGenericElement::RemoveAttributeNS(const nsAString& aNamespaceURI,
                                     const nsAString& aLocalName)
 {
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIAtom> name = do_GetAtom(aLocalName);
   PRInt32 nsid =
     nsContentUtils::NameSpaceManager()->GetNameSpaceID(aNamespaceURI);
@@ -3777,6 +3792,7 @@ nsINode::doInsertChildAt(nsIContent* aKid, PRUint32 aIndex,
 
   // Do this before checking the child-count since this could cause mutations
   nsIDocument* doc = GetCurrentDoc();
+
   mozAutoDocUpdate updateBatch(doc, UPDATE_CONTENT_MODEL, aNotify);
 
   if (!HasSameOwnerDoc(aKid)) {
@@ -4434,7 +4450,8 @@ NS_IMPL_CYCLE_COLLECTION_CLASS(nsGenericElement)
 class ContentUnbinder : public nsRunnable
 {
 public:
-  ContentUnbinder()
+  ContentUnbinder(JSZoneId aZone)
+    : mZone(aZone)
   {
     nsLayoutStatics::AddRef();
     mLast = this;
@@ -4474,6 +4491,9 @@ public:
 
   NS_IMETHOD Run()
   {
+    if (mZone >= JS_ZONE_CONTENT_START)
+      NS_StickContentLock(mZone);
+
     nsAutoScriptBlocker scriptBlocker;
     PRUint32 len = mSubtreeRoots.Length();
     if (len) {
@@ -4485,15 +4505,18 @@ public:
       Telemetry::Accumulate(Telemetry::CYCLE_COLLECTOR_CONTENT_UNBIND,
                             PRUint32(PR_Now() - start) / PR_USEC_PER_MSEC);
     }
-    if (this == sContentUnbinder) {
-      sContentUnbinder = nsnull;
+
+    ContentUnbinder *&unbinder = (mZone == JS_ZONE_CHROME) ? sChromeUnbinder : sContentUnbinders[mZone];
+
+    if (this == unbinder) {
+      unbinder = nsnull;
       if (mNext) {
         nsRefPtr<ContentUnbinder> next;
         next.swap(mNext);
-        sContentUnbinder = next;
+        unbinder = next;
         next->mLast = mLast;
         mLast = nsnull;
-        NS_DispatchToMainThread(next);
+        NS_DispatchToMainThread(next, NS_DISPATCH_NORMAL, mZone);
       }
     }
     return NS_OK;
@@ -4501,29 +4524,37 @@ public:
 
   static void Append(nsIContent* aSubtreeRoot)
   {
-    if (!sContentUnbinder) {
-      sContentUnbinder = new ContentUnbinder();
-      nsCOMPtr<nsIRunnable> e = sContentUnbinder;
-      NS_DispatchToMainThread(e);
+    MOZ_ASSERT(NS_IsChromeOwningThread());
+
+    JSZoneId zone = aSubtreeRoot->GetZone();
+    ContentUnbinder *&unbinder = (zone == JS_ZONE_CHROME) ? sChromeUnbinder : sContentUnbinders[zone];
+
+    if (!unbinder) {
+      unbinder = new ContentUnbinder(zone);
+      nsCOMPtr<nsIRunnable> e = unbinder;
+      NS_DispatchToMainThread(e, NS_DISPATCH_NORMAL, zone);
     }
 
-    if (sContentUnbinder->mLast->mSubtreeRoots.Length() >=
+    if (unbinder->mLast->mSubtreeRoots.Length() >=
         SUBTREE_UNBINDINGS_PER_RUNNABLE) {
-      sContentUnbinder->mLast->mNext = new ContentUnbinder();
-      sContentUnbinder->mLast = sContentUnbinder->mLast->mNext;
+      unbinder->mLast->mNext = new ContentUnbinder(zone);
+      unbinder->mLast = unbinder->mLast->mNext;
     }
-    sContentUnbinder->mLast->mSubtreeRoots.AppendElement(aSubtreeRoot);
+    unbinder->mLast->mSubtreeRoots.AppendElement(aSubtreeRoot);
   }
 
 private:
   nsAutoTArray<nsCOMPtr<nsIContent>,
                SUBTREE_UNBINDINGS_PER_RUNNABLE> mSubtreeRoots;
+  JSZoneId                                      mZone;
   nsRefPtr<ContentUnbinder>                     mNext;
   ContentUnbinder*                              mLast;
-  static ContentUnbinder*                       sContentUnbinder;
+  static ContentUnbinder*                       sChromeUnbinder;
+  static ContentUnbinder*                       sContentUnbinders[JS_ZONE_CONTENT_LIMIT];
 };
 
-ContentUnbinder* ContentUnbinder::sContentUnbinder = nsnull;
+ContentUnbinder* ContentUnbinder::sChromeUnbinder = nsnull;
+ContentUnbinder* ContentUnbinder::sContentUnbinders[] = { nsnull };
 
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN(nsGenericElement)
   nsINode::Unlink(tmp);
@@ -5246,6 +5277,8 @@ nsGenericElement::SetAttr(PRInt32 aNamespaceID, nsIAtom* aName,
   nsresult rv = BeforeSetAttr(aNamespaceID, aName, &value, aNotify);
   NS_ENSURE_SUCCESS(rv, rv);
 
+  nsAutoLockChrome lock;
+
   if (aNotify) {
     nsNodeUtils::AttributeWillChange(this, aNamespaceID, aName, modType);
   }
@@ -5313,9 +5346,14 @@ nsGenericElement::SetAttrAndNotify(PRInt32 aNamespaceID,
                                    bool aNotify,
                                    bool aCallAfterSetAttr)
 {
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
+
   nsresult rv;
 
   nsIDocument* document = GetCurrentDoc();
+  if (document && !NS_TryStickLock(document))
+    return NS_OK;
+
   mozAutoDocUpdate updateBatch(document, UPDATE_CONTENT_MODEL, aNotify);
 
   nsMutationGuard::DidMutate();
@@ -6236,6 +6274,8 @@ nsGenericElement::doQuerySelector(nsINode* aRoot, const nsAString& aSelector,
 {
   NS_PRECONDITION(aResult, "Null out param?");
 
+  nsAutoLockChrome lock;
+
   ElementHolder holder;
   *aResult = FindMatchingElements<true>(aRoot, aSelector, holder);
 
@@ -6253,6 +6293,8 @@ nsGenericElement::doQuerySelectorAll(nsINode* aRoot,
   nsSimpleContentList* contentList = new nsSimpleContentList(aRoot);
   NS_ENSURE_TRUE(contentList, NS_ERROR_OUT_OF_MEMORY);
   NS_ADDREF(*aReturn = contentList);
+
+  nsAutoLockChrome lock;
   
   return FindMatchingElements<false>(aRoot, aSelector, *contentList);
 }
@@ -6261,6 +6303,8 @@ nsGenericElement::doQuerySelectorAll(nsINode* aRoot,
 bool
 nsGenericElement::MozMatchesSelector(const nsAString& aSelector, nsresult* aResult)
 {
+  nsAutoLockChrome lock;
+
   nsAutoPtr<nsCSSSelectorList> selectorList;
   bool matches = false;
 

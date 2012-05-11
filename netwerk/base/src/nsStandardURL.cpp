@@ -290,6 +290,8 @@ nsStandardURL::nsStandardURL(bool aSupportsFileURL)
     , mMutable(true)
     , mSupportsFileURL(aSupportsFileURL)
 {
+    NS_FIX_OWNINGTHREAD(JS_ZONE_CHROME);
+
 #if defined(PR_LOGGING)
     if (!gStandardURLLog)
         gStandardURLLog = PR_NewLogModule("nsStandardURL");
@@ -1756,7 +1758,6 @@ nsStandardURL::Clone(nsIURI **result)
 {
     return CloneInternal(eHonorRef, result);
 }
-
 
 NS_IMETHODIMP
 nsStandardURL::CloneIgnoringRef(nsIURI **result)

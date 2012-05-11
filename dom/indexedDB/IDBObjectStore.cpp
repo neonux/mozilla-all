@@ -2431,7 +2431,7 @@ class ThreadLocalJSRuntime
 
     JSAutoRequest ar(mContext);
 
-    mGlobal = JS_NewCompartmentAndGlobalObject(mContext, &sGlobalClass, NULL);
+    mGlobal = JS_NewCompartmentAndGlobalObject(mContext, &sGlobalClass, NULL, JS_ZONE_CHROME);
     NS_ENSURE_TRUE(mGlobal, NS_ERROR_OUT_OF_MEMORY);
 
     JS_SetGlobalObject(mContext, mGlobal);

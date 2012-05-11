@@ -495,6 +495,8 @@ WrapNativeParent(JSContext* cx, JSObject* scope, T* p)
   if (!p)
     return scope;
 
+  nsAutoUnstickChrome unstick(cx);
+
   nsWrapperCache* cache = GetWrapperCache(p);
   JSObject* obj;
   if (cache && (obj = cache->GetWrapper())) {

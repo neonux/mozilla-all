@@ -105,6 +105,7 @@ protected:
                  nsStringBuffer::FromData(mString)->StorageSize() &&
                  mString[mLength] == 0,
                  "Not initialized atom");
+    NS_FIX_OWNINGTHREAD(JS_ZONE_CHROME);
   }
 
   // We don't need a virtual destructor here because PermanentAtomImpl
@@ -329,6 +330,8 @@ NS_PurgeAtomTable()
 
 AtomImpl::AtomImpl(const nsAString& aString, PLDHashNumber aKeyHash)
 {
+  NS_FIX_OWNINGTHREAD(JS_ZONE_CHROME);
+
   mLength = aString.Length();
   nsStringBuffer* buf = nsStringBuffer::FromString(aString);
   if (buf) {
@@ -355,6 +358,8 @@ AtomImpl::AtomImpl(const nsAString& aString, PLDHashNumber aKeyHash)
 AtomImpl::AtomImpl(nsStringBuffer* aStringBuffer, PRUint32 aLength,
                    PLDHashNumber aKeyHash)
 {
+  NS_FIX_OWNINGTHREAD(JS_ZONE_CHROME);
+
   mLength = aLength;
   mString = static_cast<PRUnichar*>(aStringBuffer->Data());
   // Technically we could currently avoid doing this addref by instead making
@@ -400,13 +405,13 @@ PermanentAtomImpl::~PermanentAtomImpl()
 
 NS_IMETHODIMP_(nsrefcnt) PermanentAtomImpl::AddRef()
 {
-  NS_ASSERTION(NS_IsMainThread(), "wrong thread");
+  //NS_ASSERTION(NS_IsChromeOwningThread(), "wrong thread");
   return 2;
 }
 
 NS_IMETHODIMP_(nsrefcnt) PermanentAtomImpl::Release()
 {
-  NS_ASSERTION(NS_IsMainThread(), "wrong thread");
+  //NS_ASSERTION(NS_IsChromeOwningThread(), "wrong thread");
   return 1;
 }
 
@@ -512,7 +517,7 @@ EnsureTableExists()
 static inline AtomTableEntry*
 GetAtomHashEntry(const char* aString, PRUint32 aLength)
 {
-  NS_ASSERTION(NS_IsMainThread(), "wrong thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "wrong thread");
   if (!EnsureTableExists()) {
     return nsnull;
   }
@@ -524,7 +529,7 @@ GetAtomHashEntry(const char* aString, PRUint32 aLength)
 static inline AtomTableEntry*
 GetAtomHashEntry(const PRUnichar* aString, PRUint32 aLength)
 {
-  NS_ASSERTION(NS_IsMainThread(), "wrong thread");
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   if (!EnsureTableExists()) {
     return nsnull;
   }

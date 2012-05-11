@@ -54,6 +54,9 @@ class nsINIParserFactory :
 {
 public:
   NS_DECL_ISUPPORTS
+
+  JSZoneId GetZone() { return JS_ZONE_CHROME; }
+
   NS_DECL_NSIINIPARSERFACTORY
   NS_DECL_NSIFACTORY
 };

@@ -397,6 +397,9 @@ protected:
     {}
 
     NS_DECL_ISUPPORTS
+
+    JSZoneId GetZone();
+
     NS_DECL_NSISTREAMLISTENER
     NS_DECL_NSIREQUESTOBSERVER
 
@@ -754,6 +757,11 @@ public:
   // for radio group
   nsRadioGroupStruct* GetRadioGroup(const nsAString& aName);
 
+  JSZoneId GetZone()
+  {
+    return nsINode::GetZone();
+  }
+
   // nsIDOMNode
   NS_DECL_NSIDOMNODE
 
@@ -809,6 +817,7 @@ public:
 
   virtual NS_HIDDEN_(void) EnumerateSubDocuments(nsSubDocEnumFunc aCallback,
                                                  void *aData);
+  virtual NS_HIDDEN_(void) TryLockSubDocuments();
 
   virtual NS_HIDDEN_(bool) CanSavePresentation(nsIRequest *aNewRequest);
   virtual NS_HIDDEN_(void) Destroy();
@@ -1076,9 +1085,12 @@ protected:
   virtual nsIScriptGlobalObject* GetScriptHandlingObjectInternal() const;
   virtual bool InternalAllowXULXBL();
 
-#define NS_DOCUMENT_NOTIFY_OBSERVERS(func_, params_)                        \
-  NS_OBSERVER_ARRAY_NOTIFY_XPCOM_OBSERVERS(mObservers, nsIDocumentObserver, \
-                                           func_, params_);
+#define NS_DOCUMENT_NOTIFY_OBSERVERS(func_, params_)                          \
+  do {                                                                        \
+    MOZ_ASSERT(NS_IsOwningThread(nsINode::GetZone()));                        \
+    NS_OBSERVER_ARRAY_NOTIFY_XPCOM_OBSERVERS(mObservers, nsIDocumentObserver, \
+                                             func_, params_);                 \
+  } while (0)
   
 #ifdef DEBUG
   void VerifyRootContentState();
@@ -1111,7 +1123,7 @@ protected:
   nsCOMArray<nsIStyleSheet> mStyleSheets;
   nsCOMArray<nsIStyleSheet> mCatalogSheets;
 
-  // Array of observers
+  // Array of observers.
   nsTObserverArray<nsIDocumentObserver*> mObservers;
 
   // If document is created for example using

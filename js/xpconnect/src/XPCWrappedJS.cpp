@@ -202,7 +202,7 @@ nsXPCWrappedJS::Release(void)
 {
     NS_PRECONDITION(0 != mRefCnt, "dup release");
 
-    if (mMainThreadOnly && !NS_IsMainThread()) {
+    if (mMainThreadOnly && !NS_IsChromeOwningThread()) {
         // We'd like to abort here, but this can happen if someone uses a proxy
         // for the nsXPCWrappedJS.
         nsCOMPtr<nsIThread> mainThread = do_GetMainThread();
@@ -289,7 +289,7 @@ static bool
 CheckMainThreadOnly(nsXPCWrappedJS *aWrapper)
 {
     if(aWrapper->IsMainThreadOnly())
-        return NS_IsMainThread();
+        return NS_IsChromeOwningThread();
 
     nsCOMPtr<nsIClassInfo> ci;
     CallQueryInterface(aWrapper, getter_AddRefs(ci));
@@ -298,7 +298,7 @@ CheckMainThreadOnly(nsXPCWrappedJS *aWrapper)
         if (NS_SUCCEEDED(ci->GetFlags(&flags)) && !(flags & nsIClassInfo::MAIN_THREAD_ONLY))
             return true;
 
-        if (!NS_IsMainThread())
+        if (!NS_IsChromeOwningThread())
             return false;
     }
 
@@ -372,12 +372,14 @@ nsXPCWrappedJS::GetNewOrUsed(XPCCallContext& ccx,
                 map->Add(root);
             }
 
+            /*
             if (!CheckMainThreadOnly(root)) {
                 XPCAutoLock lock(rt->GetMapLock());
                 map->Remove(root);
 
                 wrapper = NULL;
             }
+            */
 
             goto return_wrapper;
         } else {
@@ -405,12 +407,14 @@ nsXPCWrappedJS::GetNewOrUsed(XPCCallContext& ccx,
                 map->Add(root);
             }
 
+            /*
             if (!CheckMainThreadOnly(root)) {
                 XPCAutoLock lock(rt->GetMapLock());
                 map->Remove(root);
 
                 goto return_wrapper;
             }
+            */
         }
     }
 
@@ -455,7 +459,6 @@ nsXPCWrappedJS::nsXPCWrappedJS(XPCCallContext& ccx,
       mRoot(root ? root : this),
       mNext(nsnull),
       mOuter(root ? nsnull : aOuter),
-      mMainThread(NS_IsMainThread()),
       mMainThreadOnly(root && root->mMainThreadOnly)
 {
 #ifdef DEBUG_stats_jband
@@ -465,7 +468,7 @@ nsXPCWrappedJS::nsXPCWrappedJS(XPCCallContext& ccx,
         printf("//////// %d instances of nsXPCWrappedJS created\n", count);
 #endif
 
-    JS_ASSERT_IF(mMainThreadOnly, mMainThread);
+    JS_ASSERT_IF(mMainThreadOnly, NS_IsChromeOwningThread());
 
     InitStub(GetClass()->GetIID());
 
@@ -599,7 +602,8 @@ nsXPCWrappedJS::CallMethod(PRUint16 methodIndex,
 {
     if (!IsValid())
         return NS_ERROR_UNEXPECTED;
-    if (NS_IsMainThread() != mMainThread) {
+    /*
+    if (NS_IsChromeOwningThread() != mMainThread) {
         NS_NAMED_LITERAL_STRING(kFmt, "Attempt to use JS function on a different thread calling %s.%s. JS objects may not be shared across threads.");
         PRUnichar* msg =
             nsTextFormatter::smprintf(kFmt.get(),
@@ -613,6 +617,7 @@ nsXPCWrappedJS::CallMethod(PRUint16 methodIndex,
 
         return NS_ERROR_NOT_SAME_THREAD;
     }
+    */
     return GetClass()->CallMethod(this, methodIndex, info, params);
 }
 

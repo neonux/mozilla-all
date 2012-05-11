@@ -145,6 +145,8 @@ public:
 
   NS_DECL_ISUPPORTS
 
+  JSZoneId GetZone();
+
   NS_DECLARE_STATIC_IID_ACCESSOR(NS_CSS_STYLE_SHEET_IMPL_CID)
 
   // nsIStyleSheet interface

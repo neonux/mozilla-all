@@ -369,6 +369,8 @@ nsFrameLoader::LoadFrame()
     return NS_OK;
   }
 
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIURI> base_uri = mOwnerContent->GetBaseURI();
   const nsAFlatCString &doc_charset = doc->GetDocumentCharacterSet();
   const char *charset = doc_charset.IsEmpty() ? nsnull : doc_charset.get();
@@ -504,6 +506,8 @@ nsFrameLoader::ReallyStartLoadingInternal()
 nsresult
 nsFrameLoader::CheckURILoad(nsIURI* aURI)
 {
+  nsAutoLockChrome lock;
+
   // Check for security.  The fun part is trying to figure out what principals
   // to use.  The way I figure it, if we're doing a LoadFrame() accidentally
   // (eg someone created a frame/iframe node, we're being parsed, XUL iframes
@@ -698,6 +702,8 @@ AddTreeItemToTreeOwner(nsIDocShellTreeItem* aItem, nsIContent* aOwningContent,
 
     aItem->SetItemType(aParentType);
   }
+
+  aItem->SetParentZone(aOwningContent->GetZone());
 
   // Now that we have our type set, add ourselves to the parent, as needed.
   if (aParentNode) {
@@ -1404,6 +1410,18 @@ nsFrameLoader::ShouldUseRemoteProcess()
                                            eCaseMatters);
 }
 
+void
+nsFrameLoader::MarkAsChrome()
+{
+  if (mIsChrome)
+    return;
+
+  if (mDocShell)
+    mDocShell->SetChromeZone();
+
+  mIsChrome = true;
+}
+
 nsresult
 nsFrameLoader::MaybeCreateDocShell()
 {
@@ -1442,6 +1460,9 @@ nsFrameLoader::MaybeCreateDocShell()
   // Create the docshell...
   mDocShell = do_CreateInstance("@mozilla.org/docshell;1");
   NS_ENSURE_TRUE(mDocShell, NS_ERROR_FAILURE);
+
+  if (mIsChrome)
+    mDocShell->SetChromeZone();
 
   if (!mNetworkCreated) {
     nsCOMPtr<nsIDocShellHistory> history = do_QueryInterface(mDocShell);

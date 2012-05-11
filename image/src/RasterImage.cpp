@@ -1499,6 +1499,7 @@ RasterImage::AddSourceData(const char *aBuffer, PRUint32 aCount)
     // from the network. In this case, we want to display data as soon as we
     // get it, so we want to flush invalidations after every write.
     nsRefPtr<Decoder> kungFuDeathGrip = mDecoder;
+    nsAutoCantLockNewContent check;
     mInDecoder = true;
     mDecoder->FlushInvalidations();
     mInDecoder = false;
@@ -2334,9 +2335,12 @@ RasterImage::ShutdownDecoder(eShutdownIntent aIntent)
   nsRefPtr<Decoder> decoder = mDecoder;
   mDecoder = nsnull;
 
-  mInDecoder = true;
-  decoder->Finish();
-  mInDecoder = false;
+  {
+    nsAutoCantLockNewContent check;
+    mInDecoder = true;
+    decoder->Finish();
+    mInDecoder = false;
+  }
 
   // Kill off our decode request, if it's pending.  (If not, this call is
   // harmless.)
@@ -2385,9 +2389,12 @@ RasterImage::WriteToDecoder(const char *aBuffer, PRUint32 aCount)
 
   // Write
   nsRefPtr<Decoder> kungFuDeathGrip = mDecoder;
-  mInDecoder = true;
-  mDecoder->Write(aBuffer, aCount);
-  mInDecoder = false;
+  {
+    nsAutoCantLockNewContent check;
+    mInDecoder = true;
+    mDecoder->Write(aBuffer, aCount);
+    mInDecoder = false;
+  }
 
   // We unlock the current frame, even if that frame is different from the
   // frame we entered the decoder with. (See above.)
@@ -2543,9 +2550,12 @@ RasterImage::SyncDecode()
   // time  to flush any invalidations (in case we don't have all the data and what
   // we got left us mid-frame).
   nsRefPtr<Decoder> kungFuDeathGrip = mDecoder;
-  mInDecoder = true;
-  mDecoder->FlushInvalidations();
-  mInDecoder = false;
+  {
+    nsAutoCantLockNewContent check;
+    mInDecoder = true;
+    mDecoder->FlushInvalidations();
+    mInDecoder = false;
+  }
 
   // If we finished the decode, shutdown the decoder
   if (mDecoder && IsDecodeFinished()) {
@@ -2736,7 +2746,6 @@ RasterImage::DecodeSomeData(PRUint32 aMaxBytes)
   if (mBytesDecoded == mSourceData.Length())
     return NS_OK;
 
-
   // write the proper amount of data
   PRUint32 bytesToDecode = NS_MIN(aMaxBytes,
                                   mSourceData.Length() - mBytesDecoded);
@@ -2892,7 +2901,11 @@ RasterImage::DecodeWorker::MarkAsASAP(RasterImage* aImg)
     // AddDecodeRequest, not RequestDecode, and AddDecodeRequest does not call
     // EnsurePendingInEventLoop.  Therefore, it is an error to call MarkAsASAP
     // from within DecodeWorker::Run.)
-    MOZ_ASSERT(mPendingInEventLoop);
+    //
+    // There may still be a DecodeWorker::Run frame on another thread's stack,
+    // in which case the worker should be rescheduled regardless.
+
+    EnsurePendingInEventLoop();
   }
 }
 
@@ -3075,6 +3088,7 @@ RasterImage::DecodeWorker::DecodeSomeOfImage(
   if (aDecodeType != DECODE_TYPE_UNTIL_SIZE &&
       !aImg->mDecoder->HasError() &&
       !aImg->mHasSourceData) {
+    nsAutoCantLockNewContent cantLock;
     aImg->mInDecoder = true;
     aImg->mDecoder->FlushInvalidations();
     aImg->mInDecoder = false;

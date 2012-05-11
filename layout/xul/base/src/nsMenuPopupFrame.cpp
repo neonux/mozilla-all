@@ -781,6 +781,7 @@ nsMenuPopupFrame::HidePopup(bool aDeselectMenu, nsPopupState aNewState)
     // if the popup had a trigger node set, clear the global window popup node
     // as well
     if (mTriggerContent) {
+      NS_StickLock(mTriggerContent);
       nsIDocument* doc = mContent->GetCurrentDoc();
       if (doc) {
         nsPIDOMWindow* win = doc->GetWindow();

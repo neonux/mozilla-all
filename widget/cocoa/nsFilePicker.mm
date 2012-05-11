@@ -362,6 +362,8 @@ nsFilePicker::GetLocalFiles(const nsString& inTitle, bool inAllowMultiple, nsCOM
       theDir = @"";
     }
 
+    nsAutoUnlockEverything unlock;
+
     NSPopUpButtonObserver* observer = [[NSPopUpButtonObserver alloc] init];
 
     NSView* accessoryView = GetAccessoryView();

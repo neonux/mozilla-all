@@ -113,5 +113,6 @@ interface nsIThread : nsIEventTarget
    *   Indicates that this method was erroneously called when this thread was
    *   not the current thread.
    */
-  boolean processNextEvent(in boolean mayWait);
+  [noscript] boolean processNextEvent(in boolean mayWait);
+  boolean processNextEventFromScript(in boolean mayWait);
 };

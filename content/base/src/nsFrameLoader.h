@@ -289,6 +289,8 @@ public:
 
   bool ShouldClampScrollPosition() { return mClampScrollPosition; }
 
+  void MarkAsChrome();
+
 private:
 
   void SetOwnerContent(mozilla::dom::Element* aContent);
@@ -351,6 +353,7 @@ private:
   bool mRemoteFrame : 1;
   bool mClipSubdocument : 1;
   bool mClampScrollPosition : 1;
+  bool mIsChrome : 1;
 
   // XXX leaking
   nsCOMPtr<nsIObserver> mChildHost;

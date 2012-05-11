@@ -1127,6 +1127,7 @@ XPCShellEnvironment::Init()
 
     nsCOMPtr<nsIXPConnectJSObjectHolder> holder;
     rv = xpc->InitClassesWithNewWrappedGlobal(cx, backstagePass,
+                                              JS_ZONE_CHROME,
                                               principal,
                                               nsIXPConnect::
                                                   FLAG_SYSTEM_GLOBAL_OBJECT,

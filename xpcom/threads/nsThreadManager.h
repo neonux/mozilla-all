@@ -52,9 +52,8 @@ public:
   NS_DECL_ISUPPORTS
   NS_DECL_NSITHREADMANAGER
 
-  static nsThreadManager *get() {
-    return &sInstance;
-  }
+  static nsThreadManager *get() { return &sInstance; }
+  static bool initialized() { return sInitialized; }
 
   nsresult Init();
 
@@ -78,6 +77,8 @@ public:
   // class with older compilers (e.g., egcs-2.91.66).
   ~nsThreadManager() {}
 
+  nsThread *getChromeThread() { return mChromeZone.thread; }
+
 private:
   nsThreadManager()
     : mCurThreadIndex(0)
@@ -87,15 +88,93 @@ private:
   }
   
   static nsThreadManager sInstance;
+  static bool sInitialized;
 
   nsRefPtrHashtable<nsPtrHashKey<PRThread>, nsThread> mThreadsByPRThread;
   PRUintn             mCurThreadIndex;  // thread-local-storage index
   nsRefPtr<nsThread>  mMainThread;
   PRThread           *mMainPRThread;
+  uintptr_t           mMainThreadStackPosition;
   // This is a pointer in order to allow creating nsThreadManager from
   // the static context in debug builds.
   nsAutoPtr<mozilla::Mutex> mLock;  // protects tables
   bool                mInitialized;
+  size_t              mCantLockNewContent;
+
+  struct Zone {
+    Zone()
+      : thread(NULL)
+      , prThread(NULL)
+      , threadStackPosition(0)
+      , lock(NULL)
+      , owner(NULL)
+      , depth(0)
+      , stalled(false)
+      , waiting(false)
+      , sticky(false)
+      , unlockCount(0)
+    {}
+
+    nsRefPtr<nsThread> thread; // XXX leaks
+    PRThread *prThread;
+    uintptr_t threadStackPosition;
+    PRLock *lock;
+    PRThread *owner;
+    size_t depth;
+    bool stalled;
+    bool waiting;
+    bool sticky;
+    size_t unlockCount; // XXX remove -- debugging
+
+    void clearOwner() {
+      MOZ_ASSERT(owner);
+      owner = NULL;
+      depth = 0;
+      stalled = false;
+      sticky = false;
+    }
+  };
+
+  struct SavedZone {
+    SavedZone(Zone *zone) : zone(zone), depth(0), sticky(false) {}
+    Zone *zone;
+    size_t depth;
+    bool sticky;
+  };
+
+  void SaveLock(SavedZone &v);
+  void RestoreLock(SavedZone &v, PRThread *current);
+
+  Zone mChromeZone;
+  Zone mContentZones[JS_ZONE_CONTENT_LIMIT];
+  bool mEverythingLocked;
+  PRUint64 mAllocatedBitmask;
+
+  static inline bool HasBit(PRUint64 bitmask, size_t bit)
+  {
+    MOZ_ASSERT(bit < 64);
+    return bitmask & (1 << bit);
+  }
+
+  static inline void SetBit(PRUint64 *pbitmask, size_t bit)
+  {
+    MOZ_ASSERT(bit < 64);
+    (*pbitmask) |= (1 << bit);
+  }
+
+  static inline void ClearBit(PRUint64 *pbitmask, size_t bit)
+  {
+    MOZ_ASSERT(bit < 64);
+    (*pbitmask) &= ~(1 << bit);
+  }
+
+  Zone &getZone(PRInt32 zone) {
+    MOZ_ASSERT(zone != JS_ZONE_NONE);
+    if (zone == JS_ZONE_CHROME)
+      return mChromeZone;
+    MOZ_ASSERT(zone < JS_ZONE_CONTENT_LIMIT);
+    return mContentZones[zone];
+  }
 };
 
 #define NS_THREADMANAGER_CLASSNAME "nsThreadManager"

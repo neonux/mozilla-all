@@ -64,6 +64,8 @@ public:
     NS_DECL_CYCLE_COLLECTION_CLASS_AMBIGUOUS(nsXPathExpression,
                                              nsIDOMXPathExpression)
 
+    JSZoneId GetZone() { return mDocument ? mDocument->GetZone() : JS_ZONE_CHROME; }
+
     // nsIDOMXPathExpression interface
     NS_DECL_NSIDOMXPATHEXPRESSION
 

@@ -2170,11 +2170,16 @@ nsNSSComponent::VerifySignature(const char* aRSABuf, PRUint32 aRSABufLen,
     digest.len = SHA1_LENGTH;
   }
 
-  //-- Verify signature
-  bool rv = SEC_PKCS7VerifyDetachedSignature(p7_info, certUsageObjectSigner,
+  {
+    // SEC_PKCS7VerifyDetachedSignature does I/O ???
+    nsAutoUnlockEverything unlock;
+
+    //-- Verify signature
+    bool rv = SEC_PKCS7VerifyDetachedSignature(p7_info, certUsageObjectSigner,
                                                &digest, HASH_AlgSHA1, false);
-  if (!rv) {
-    *aErrorCode = PR_GetError();
+    if (!rv) {
+      *aErrorCode = PR_GetError();
+    }
   }
 
   // Get the signing cert //

@@ -91,6 +91,8 @@ public:
   nsHTMLImageElement(already_AddRefed<nsINodeInfo> aNodeInfo);
   virtual ~nsHTMLImageElement();
 
+  JSZoneId GetZone() { return nsINode::GetZone(); }
+
   // nsISupports
   NS_DECL_ISUPPORTS_INHERITED
 
@@ -205,6 +207,8 @@ nsHTMLImageElement::nsHTMLImageElement(already_AddRefed<nsINodeInfo> aNodeInfo)
 {
   // We start out broken
   AddStatesSilently(NS_EVENT_STATE_BROKEN);
+
+  NS_FIX_OWNINGTHREAD(GetZone());
 }
 
 nsHTMLImageElement::~nsHTMLImageElement()
@@ -328,6 +332,8 @@ nsHTMLImageElement::GetWidthHeight()
     size.width = nsPresContext::AppUnitsToIntCSSPixels(size.width);
     size.height = nsPresContext::AppUnitsToIntCSSPixels(size.height);
   } else {
+    nsAutoLockChrome lock; // for imgIContainer
+
     const nsAttrValue* value;
     nsCOMPtr<imgIContainer> image;
     if (mCurrentRequest) {
@@ -594,6 +600,8 @@ nsHTMLImageElement::BindToTree(nsIDocument* aDocument, nsIContent* aParent,
 void
 nsHTMLImageElement::MaybeLoadImage()
 {
+  NS_StickLock(this);
+
   // Our base URI may have changed; claim that our URI changed, and the
   // nsImageLoadingContent will decide whether a new image load is warranted.
   // Note, check LoadingEnabled() after LoadImage call.

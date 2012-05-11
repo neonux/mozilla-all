@@ -293,7 +293,7 @@ nsIOService::InitializeNetworkLinkService()
     if (mNetworkLinkServiceInitialized)
         return rv;
 
-    if (!NS_IsMainThread()) {
+    if (!NS_IsChromeOwningThread()) {
         NS_WARNING("Network link service should be created on main thread"); 
         return NS_ERROR_FAILURE; 
     }
@@ -559,7 +559,7 @@ class AutoIncrement
 nsresult
 nsIOService::NewURI(const nsACString &aSpec, const char *aCharset, nsIURI *aBaseURI, nsIURI **result)
 {
-    NS_ASSERTION(NS_IsMainThread(), "wrong thread");
+    NS_ASSERTION(NS_IsChromeOwningThread(), "wrong thread");
 
     static PRUint32 recursionCount = 0;
     if (recursionCount >= MAX_RECURSION_COUNT)

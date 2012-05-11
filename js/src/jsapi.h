@@ -2483,6 +2483,31 @@ JS_IsBuiltinFunctionConstructor(JSFunction *fun);
 extern JS_PUBLIC_API(JSRuntime *)
 JS_NewRuntime(uint32_t maxbytes);
 
+typedef JSBool (* ThreadLockCheckOp)(JSZoneId);
+typedef uint32_t (* ThreadLockDepthOp)(JSZoneId);
+typedef void (* ThreadLockChangeOp)(JSZoneId);
+typedef void (* RegisterContextOp)(JSContext*);
+typedef JSBool (* LockEverythingOp)();
+typedef void (* UnlockEverythingOp)();
+typedef uintptr_t (* NativeStackTopOp)(/*(PRThread*)*/uintptr_t);
+typedef JSBool (* CanUnlockChromeOp)();
+
+extern JS_PUBLIC_API(void)
+JS_SetThreadCallbacks(JSRuntime *rt, ThreadLockCheckOp lockCheck, ThreadLockCheckOp zoneCheck,
+                      ThreadLockDepthOp depth,
+                      ThreadLockChangeOp lock, ThreadLockCheckOp tryLock, ThreadLockChangeOp unlock,
+                      RegisterContextOp registerContextStick,
+                      LockEverythingOp lockEverything, LockEverythingOp isEverythingLocked, UnlockEverythingOp unlockEverything,
+                      NativeStackTopOp nativeStackTop,
+                      CanUnlockChromeOp canUnlockChrome);
+
+/* Get the topmost zone of any content script executing on the current thread. */
+extern JS_PUBLIC_API(JSZoneId)
+JS_GetExecutingContentScriptZone();
+
+extern JS_PUBLIC_API(JSBool)
+JS_IsJITCodeAddress(void *ptr);
+
 /* Deprecated. */
 #define JS_CommenceRuntimeShutDown(rt) ((void) 0)
 
@@ -2518,10 +2543,10 @@ extern JS_PUBLIC_API(void)
 JS_ResumeRequest(JSContext *cx, unsigned saveDepth);
 
 extern JS_PUBLIC_API(JSBool)
-JS_IsInRequest(JSRuntime *rt);
+JS_IsInRequest(JSContext *cx);
 
 extern JS_PUBLIC_API(JSBool)
-JS_IsInSuspendedRequest(JSRuntime *rt);
+JS_IsInSuspendedRequest(JSContext *cx);
 
 #ifdef __cplusplus
 JS_END_EXTERN_C
@@ -2621,14 +2646,14 @@ class JSAutoCheckRequest {
     JSAutoCheckRequest(JSContext *cx JS_GUARD_OBJECT_NOTIFIER_PARAM) {
 #if defined JS_THREADSAFE && defined DEBUG
         mContext = cx;
-        JS_ASSERT(JS_IsInRequest(JS_GetRuntime(cx)));
+        JS_ASSERT(JS_IsInRequest(cx));
 #endif
         JS_GUARD_OBJECT_NOTIFIER_INIT;
     }
 
     ~JSAutoCheckRequest() {
 #if defined JS_THREADSAFE && defined DEBUG
-        JS_ASSERT(JS_IsInRequest(JS_GetRuntime(mContext)));
+        JS_ASSERT(JS_IsInRequest(mContext));
 #endif
     }
 
@@ -2672,6 +2697,9 @@ JS_GetRuntime(JSContext *cx);
 
 extern JS_PUBLIC_API(JSContext *)
 JS_ContextIterator(JSRuntime *rt, JSContext **iterp);
+
+extern JS_PUBLIC_API(JSContext *)
+JS_ContextIteratorWithGCLocked(JSRuntime *rt, JSContext **iterp);
 
 extern JS_PUBLIC_API(JSVersion)
 JS_GetVersion(JSContext *cx);
@@ -3604,7 +3632,7 @@ JS_GetExternalStringFinalizer(JSString *str);
  * stack size checking pass 0.
  */
 extern JS_PUBLIC_API(void)
-JS_SetNativeStackQuota(JSRuntime *cx, size_t stackSize);
+JS_SetNativeStackQuota(JSRuntime *rt, size_t stackSize);
 
 /************************************************************************/
 
@@ -3933,7 +3961,13 @@ extern JS_PUBLIC_API(JSObject *)
 JS_NewGlobalObject(JSContext *cx, JSClass *clasp);
 
 extern JS_PUBLIC_API(JSObject *)
-JS_NewCompartmentAndGlobalObject(JSContext *cx, JSClass *clasp, JSPrincipals *principals);
+JS_NewCompartmentAndGlobalObject(JSContext *cx, JSClass *clasp, JSPrincipals *principals, JSZoneId zone);
+
+extern JS_PUBLIC_API(JSZoneId)
+JS_GetZone(JSContext *cx);
+
+extern JS_PUBLIC_API(JSZoneId)
+JS_GetObjectZone(JSObject *obj);
 
 extern JS_PUBLIC_API(JSObject *)
 JS_NewObject(JSContext *cx, JSClass *clasp, JSObject *proto, JSObject *parent);
@@ -5539,53 +5573,20 @@ JS_ThrowReportedError(JSContext *cx, const char *message,
 extern JS_PUBLIC_API(JSBool)
 JS_ThrowStopIteration(JSContext *cx);
 
+extern JS_PUBLIC_API(uintptr_t)
+JS_GetContextThread(JSContext *cx);
+
+extern JS_PUBLIC_API(uintptr_t)
+JS_SetContextThread(JSContext *cx);
+
+extern JS_PUBLIC_API(uintptr_t)
+JS_ClearContextThread(JSContext *cx);
+
 extern JS_PUBLIC_API(intptr_t)
 JS_GetCurrentThread();
 
-/*
- * A JS runtime always has an "owner thread". The owner thread is set when the
- * runtime is created (to the current thread) and practically all entry points
- * into the JS engine check that a runtime (or anything contained in the
- * runtime: context, compartment, object, etc) is only touched by its owner
- * thread. Embeddings may check this invariant outside the JS engine by calling
- * JS_AbortIfWrongThread (which will abort if not on the owner thread, even for
- * non-debug builds).
- *
- * It is possible to "move" a runtime between threads. This is accomplished by
- * calling JS_ClearRuntimeThread on a runtime's owner thread and then calling
- * JS_SetRuntimeThread on the new owner thread. The runtime must not be
- * accessed between JS_ClearRuntimeThread and JS_SetRuntimeThread. Also, the
- * caller is responsible for synchronizing the calls to Set/Clear.
- */
-
 extern JS_PUBLIC_API(void)
-JS_AbortIfWrongThread(JSRuntime *rt);
-
-extern JS_PUBLIC_API(void)
-JS_ClearRuntimeThread(JSRuntime *rt);
-
-extern JS_PUBLIC_API(void)
-JS_SetRuntimeThread(JSRuntime *rt);
-
-#ifdef __cplusplus
-JS_END_EXTERN_C
-
-class JSAutoSetRuntimeThread
-{
-    JSRuntime *runtime;
-
-  public:
-    JSAutoSetRuntimeThread(JSRuntime *runtime) : runtime(runtime) {
-        JS_SetRuntimeThread(runtime);
-    }
-
-    ~JSAutoSetRuntimeThread() {
-        JS_ClearRuntimeThread(runtime);
-    }
-};
-
-JS_BEGIN_EXTERN_C
-#endif
+JS_AbortIfWrongThread(JSRuntime *rt, JSZoneId zone);
 
 /************************************************************************/
 

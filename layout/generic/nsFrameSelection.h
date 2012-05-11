@@ -223,6 +223,8 @@ public:
   NS_DECL_CYCLE_COLLECTING_ISUPPORTS
   NS_DECL_CYCLE_COLLECTION_CLASS(nsFrameSelection)
 
+  JSZoneId GetZone() { return mZone; }
+
   /** Init will initialize the frame selector with the necessary pres shell to 
    *  be used by most of the methods
    *  @param aShell is the parameter to be used for most of the other calls for callbacks etc
@@ -719,6 +721,7 @@ private:
   nsIContent *mAncestorLimiter; // Limit selection navigation to a descendant of
                                 // this node.
   nsIPresShell *mShell;
+  JSZoneId mZone;
 
   PRInt16 mSelectionChangeReason; // reason for notifications of selection changing
   PRInt16 mDisplaySelection; //for visual display purposes.

@@ -466,7 +466,7 @@ public:
 
   NS_IMETHOD Run()
   {
-    NS_PRECONDITION(NS_IsMainThread(),
+    NS_PRECONDITION(NS_IsChromeOwningThread(),
                     "This should be called on the main thread");
     // We are in the main thread, no need to lock.
     if (mHistory->IsShuttingDown()) {
@@ -539,7 +539,7 @@ public:
 
   NS_IMETHOD Run()
   {
-    NS_PRECONDITION(NS_IsMainThread(),
+    NS_PRECONDITION(NS_IsChromeOwningThread(),
                     "This should be called on the main thread");
 
     nsNavHistory* navHistory = nsNavHistory::GetHistoryService();
@@ -574,7 +574,7 @@ public:
 
   NS_IMETHOD Run()
   {
-    NS_PRECONDITION(NS_IsMainThread(),
+    NS_PRECONDITION(NS_IsChromeOwningThread(),
                     "This should be called on the main thread");
 
     nsCOMPtr<nsIURI> referrerURI;
@@ -630,7 +630,7 @@ public:
 
   NS_IMETHOD Run()
   {
-    if (NS_IsMainThread()) {
+    if (NS_IsChromeOwningThread()) {
       (void)mCallback->HandleCompletion();
     }
     else {
@@ -722,7 +722,7 @@ public:
                         nsTArray<VisitData>& aPlaces,
                         mozIVisitInfoCallback* aCallback = NULL)
   {
-    NS_PRECONDITION(NS_IsMainThread(),
+    NS_PRECONDITION(NS_IsChromeOwningThread(),
                     "This should be called on the main thread");
     NS_PRECONDITION(aPlaces.Length() > 0, "Must pass a non-empty array!");
 
@@ -801,7 +801,7 @@ private:
   , mCallback(aCallback)
   , mHistory(History::GetService())
   {
-    NS_PRECONDITION(NS_IsMainThread(),
+    NS_PRECONDITION(NS_IsChromeOwningThread(),
                     "This should be called on the main thread");
 
     (void)mPlaces.SwapElements(aPlaces);
@@ -1190,7 +1190,7 @@ public:
                         nsIURI* aURI,
                         const nsAString& aTitle)
   {
-    NS_PRECONDITION(NS_IsMainThread(),
+    NS_PRECONDITION(NS_IsChromeOwningThread(),
                     "This should be called on the main thread");
     NS_PRECONDITION(aURI, "Must pass a non-null URI object!");
 
@@ -1396,7 +1396,7 @@ StoreAndNotifyEmbedVisit(VisitData& aPlace,
 {
   NS_PRECONDITION(aPlace.transitionType == nsINavHistoryService::TRANSITION_EMBED,
                   "Must only pass TRANSITION_EMBED visits to this!");
-  NS_PRECONDITION(NS_IsMainThread(), "Must be called on the main thread!");
+  NS_PRECONDITION(NS_IsChromeOwningThread(), "Must be called on the main thread!");
 
   nsCOMPtr<nsIURI> uri;
   (void)NS_NewURI(getter_AddRefs(uri), aPlace.spec);
@@ -1487,6 +1487,27 @@ History::NotifyVisited(nsIURI* aURI)
 {
   NS_ASSERTION(aURI, "Ruh-roh!  A NULL URI was passed to us!");
 
+  // Try to get a zone on this URI to lock, while chrome can still be unlocked
+  // (helps to avoid stalls while locking inside the script blocker).
+  if (mObservers.IsInitialized()) {
+    KeyClass* key = mObservers.GetEntry(aURI);
+
+    JSZoneId zone = JS_ZONE_NONE;
+    if (key) {
+      ObserverArray::ForwardIterator iter(key->array);
+      while (iter.HasMore()) {
+        Link* link = iter.GetNext();
+        JSZoneId nzone = link->GetZone();
+        if (nzone >= JS_ZONE_CONTENT_START) {
+          zone = nzone;
+          break;
+        }
+      }
+    }
+    if (zone >= JS_ZONE_CONTENT_START)
+      NS_TryStickContentLock(zone);
+  }
+
   nsAutoScriptBlocker scriptBlocker;
 
   if (XRE_GetProcessType() == GeckoProcessType_Default) {
@@ -1516,6 +1537,10 @@ History::NotifyVisited(nsIURI* aURI)
     ObserverArray::ForwardIterator iter(key->array);
     while (iter.HasMore()) {
       Link* link = iter.GetNext();
+
+      if (!NS_TryStickLock(link))
+        continue;
+
       link->SetLinkState(eLinkState_Visited);
       // Verify that the observers hash doesn't mutate while looping through
       // the links associated with this URI.
@@ -2138,7 +2163,7 @@ History::UpdatePlaces(const jsval& aPlaceInfos,
                       mozIVisitInfoCallback* aCallback,
                       JSContext* aCtx)
 {
-  NS_ENSURE_TRUE(NS_IsMainThread(), NS_ERROR_UNEXPECTED);
+  NS_ENSURE_TRUE(NS_IsChromeOwningThread(), NS_ERROR_UNEXPECTED);
   NS_ENSURE_TRUE(!JSVAL_IS_PRIMITIVE(aPlaceInfos), NS_ERROR_INVALID_ARG);
 
   uint32_t infosLength = 1;
@@ -2295,7 +2320,7 @@ NS_IMETHODIMP
 History::IsURIVisited(nsIURI* aURI,
                       mozIVisitedStatusCallback* aCallback)
 {
-  NS_ENSURE_STATE(NS_IsMainThread());
+  NS_ENSURE_STATE(NS_IsChromeOwningThread());
   NS_ENSURE_ARG(aURI);
   NS_ENSURE_ARG(aCallback);
 

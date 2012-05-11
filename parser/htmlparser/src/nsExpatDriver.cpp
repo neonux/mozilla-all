@@ -1007,6 +1007,12 @@ nsExpatDriver::ParseBuffer(const PRUnichar *aBuffer,
   NS_PRECONDITION(XML_GetCurrentByteIndex(mExpatParser) % sizeof(PRUnichar) == 0,
                   "Consumed part of a PRUnichar?");
 
+  if (mOriginalSink) {
+    nsISupports *target = mOriginalSink->GetTarget();
+    if (target)
+      NS_StickLock(target);
+  }
+
   if (mExpatParser && (mInternalState == NS_OK || BlockedOrInterrupted())) {
     PRInt32 parserBytesBefore = XML_GetCurrentByteIndex(mExpatParser);
     NS_ASSERTION(parserBytesBefore >= 0, "Unexpected value");

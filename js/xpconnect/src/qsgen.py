@@ -875,6 +875,7 @@ def writeQuickStub(f, customMethodCalls, member, stubName, isSetter=False):
     f.write(signature % (stubName, additionalArguments))
     f.write("{\n")
     f.write("    XPC_QS_ASSERT_CONTEXT_OK(cx);\n")
+    f.write("    nsAutoUnstickChrome unstick(cx);\n")
 
     # For methods, compute "this".
     if isMethod:

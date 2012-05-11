@@ -356,6 +356,8 @@ private:
    */
   nsresult CreateDeviceContext(nsIView* aContainerView);
 
+  void HideWindow();
+
   /**
    * If aDoCreation is true, this creates the device context, creates a
    * prescontext if necessary, and calls MakeWindow.
@@ -660,6 +662,9 @@ DocumentViewerImpl::SyncParentSubDocMap()
   nsCOMPtr<nsIDocShellTreeItem> item(do_QueryReferent(mContainer));
   nsCOMPtr<nsPIDOMWindow> pwin(do_GetInterface(item));
   nsCOMPtr<nsIContent> content;
+
+  if (mDocument)
+    NS_StickLock(mDocument);
 
   if (mDocument && pwin) {
     content = do_QueryInterface(pwin->GetFrameElementInternal());
@@ -1124,6 +1129,10 @@ DocumentViewerImpl::PermitUnload(bool aCallerClosesWindow, bool *aPermitUnload)
 {
   *aPermitUnload = true;
 
+  if (mDocument && !NS_TryStickLock(mDocument)) {
+    return NS_ERROR_XPC_CANT_GET_LOCK;
+  }
+
   if (!mDocument || mInPermitUnload || mCallerIsClosingWindow) {
     return NS_OK;
   }
@@ -1137,7 +1146,7 @@ DocumentViewerImpl::PermitUnload(bool aCallerClosesWindow, bool *aPermitUnload)
     return NS_OK;
   }
 
-  NS_ASSERTION(nsContentUtils::IsSafeToRunScript(), "This is unsafe");
+  MOZ_ASSERT(nsContentUtils::IsSafeToRunScript());
 
   // Now, fire an BeforeUnload event to the document and see if it's ok
   // to unload...
@@ -1284,6 +1293,8 @@ DocumentViewerImpl::PageHide(bool aIsUnload)
   if (!mDocument) {
     return NS_ERROR_NULL_POINTER;
   }
+
+  NS_StickLock(mDocument);
 
   mDocument->OnPageHide(!aIsUnload, nsnull);
 
@@ -1650,6 +1661,7 @@ DocumentViewerImpl::Destroy()
   // The document was not put in the bfcache
 
   if (mDocument) {
+    NS_StickLock(mDocument);
     mDocument->Destroy();
     mDocument = nsnull;
   }
@@ -1701,6 +1713,9 @@ NS_IMETHODIMP
 DocumentViewerImpl::Stop(void)
 {
   NS_ASSERTION(mDocument, "Stop called too early or too late");
+
+  NS_StickLock(mDocument);
+
   if (mDocument) {
     mDocument->StopDocumentLoad();
   }
@@ -1723,6 +1738,7 @@ NS_IMETHODIMP
 DocumentViewerImpl::GetDOMDocument(nsIDOMDocument **aResult)
 {
   NS_ENSURE_TRUE(mDocument, NS_ERROR_NOT_AVAILABLE);
+  NS_StickLock(mDocument);
   return CallQueryInterface(mDocument, aResult);
 }
 
@@ -1837,6 +1853,11 @@ NS_IMETHODIMP
 DocumentViewerImpl::GetPresShell(nsIPresShell** aResult)
 {
   nsIPresShell* shell = GetPresShell();
+  if (shell && !NS_TryStickLock(shell)) {
+    *aResult = nsnull;
+    return NS_ERROR_XPC_CANT_GET_LOCK;
+  }
+
   NS_IF_ADDREF(*aResult = shell);
   return NS_OK;
 }
@@ -1845,6 +1866,11 @@ NS_IMETHODIMP
 DocumentViewerImpl::GetPresContext(nsPresContext** aResult)
 {
   nsPresContext* pc = GetPresContext();
+  if (pc && !NS_TryStickLock(pc)) {
+    *aResult = nsnull;
+    return NS_ERROR_XPC_CANT_GET_LOCK;
+  }
+
   NS_IF_ADDREF(*aResult = pc);
   return NS_OK;
 }
@@ -2072,11 +2098,22 @@ DocumentViewerImpl::Show(void)
   return NS_OK;
 }
 
+void
+DocumentViewerImpl::HideWindow()
+{
+  mWindow->Show(false);
+}
+
 NS_IMETHODIMP
 DocumentViewerImpl::Hide(void)
 {
   if (!mAttachedToParent && mWindow) {
-    mWindow->Show(false);
+    if (NS_CanLockNewContent()) {
+      HideWindow();
+    } else {
+      nsContentUtils::AddScriptRunner(
+        NS_NewRunnableMethod(this, &DocumentViewerImpl::HideWindow, mDocument->GetZone()));
+    }
   }
 
   if (!mPresShell)
@@ -2907,9 +2944,32 @@ DocumentViewerImpl::GetMinFontSize(PRInt32* aMinFontSize)
   return NS_OK;
 }
 
+class nsDocumentViewerSetFullZoomEvent : public nsRunnable
+{
+  nsCOMPtr<nsIMarkupDocumentViewer> mDocumentViewer;
+  float mFullZoom;
+
+public:
+  nsDocumentViewerSetFullZoomEvent(nsIMarkupDocumentViewer *aDocumentViewer, float aFullZoom)
+    : mDocumentViewer(aDocumentViewer), mFullZoom(aFullZoom)
+  {}
+
+  NS_IMETHOD Run()
+  {
+    return mDocumentViewer->SetFullZoom(mFullZoom);
+  }
+};
+
 NS_IMETHODIMP
 DocumentViewerImpl::SetFullZoom(float aFullZoom)
 {
+  if (!NS_TryStickLock(mDocument)) {
+    NS_DispatchToMainThread(new nsDocumentViewerSetFullZoomEvent(this, aFullZoom),
+                            NS_DISPATCH_NORMAL,
+                            mDocument->GetZone());
+    return NS_OK;
+  }
+
 #ifdef NS_PRINT_PREVIEW
   if (GetIsPrintPreview()) {
     nsPresContext* pc = GetPresContext();
@@ -4423,6 +4483,8 @@ nsBeforeFirstPaintDispatcher::Run()
 NS_IMETHODIMP
 nsDocumentShownDispatcher::Run()
 {
+  NS_StickLock(mDocument);
+
   nsCOMPtr<nsIObserverService> observerService =
     mozilla::services::GetObserverService();
   if (observerService) {

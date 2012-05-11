@@ -118,6 +118,8 @@ class nsObjectLoadingContent : public nsImageLoadingContent
     nsObjectLoadingContent();
     virtual ~nsObjectLoadingContent();
 
+    JSZoneId GetZone() { return mFinalListener ? mFinalListener->GetZone() : JS_ZONE_CHROME; }
+
     NS_DECL_NSIREQUESTOBSERVER
     NS_DECL_NSISTREAMLISTENER
     NS_DECL_NSIFRAMELOADEROWNER

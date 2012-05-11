@@ -466,8 +466,8 @@ JaegerStatusToSuccess(JaegerStatus status)
     return status == Jaeger_Returned;
 }
 
-/* Method JIT data associated with the JSRuntime. */
-class JaegerRuntime
+/* Method JIT data associated with a compartment. */
+class JaegerCompartment
 {
     Trampolines              trampolines;    // force-return trampolines
     VMFrame                  *activeFrame_;  // current active VMFrame
@@ -479,8 +479,8 @@ class JaegerRuntime
   public:
     bool init(JSContext *cx);
 
-    JaegerRuntime();
-    ~JaegerRuntime() { finish(); }
+    JaegerCompartment();
+    ~JaegerCompartment() { finish(); }
 
     VMFrame *activeFrame() {
         return activeFrame_;
@@ -493,9 +493,11 @@ class JaegerRuntime
         activeFrame_ = f;
     }
 
-    void popActiveFrame() {
-        JS_ASSERT(activeFrame_);
-        activeFrame_ = activeFrame_->previous;
+    void removeActiveFrame(VMFrame *f) {
+        VMFrame **pactive = &activeFrame_;
+        while (*pactive != f)
+            pactive = &(*pactive)->previous;
+        *pactive = (*pactive)->previous;
     }
 
     void setLastUnfinished(JaegerStatus status) {

@@ -49,6 +49,7 @@ public:
 
     NS_IMETHOD Run()
     {
+        NS_StickLock(mDoomed);
         mDoomed->Release();
         return NS_OK;
     }
@@ -91,4 +92,20 @@ NS_ProxyRelease(nsIEventTarget *target, nsISupports *doomed,
         // a result of deleting it on the wrong thread.
     }
     return rv;
+}
+
+nsresult
+NS_ReleaseReferenceRaw(void *doomed_)
+{
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
+  nsISupports *doomed = (nsISupports *) doomed_;
+  if (!NS_TryStickLock(doomed)) {
+    nsCOMPtr<nsIThread> thread;
+    NS_GetExecuteThread(doomed->GetZone(), getter_AddRefs(thread));
+    return NS_ProxyRelease(thread, doomed, true);
+  }
+
+  NS_RELEASE(doomed);
+  return NS_OK;
 }

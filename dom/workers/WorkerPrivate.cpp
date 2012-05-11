@@ -1625,7 +1625,7 @@ public:
 void
 mozilla::dom::workers::AssertIsOnMainThread()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Wrong thread!");
 }
 
 WorkerRunnable::WorkerRunnable(WorkerPrivate* aWorkerPrivate, Target aTarget,
@@ -4017,7 +4017,7 @@ template class WorkerPrivateParent<WorkerPrivate>;
 WorkerPrivate*
 GetWorkerPrivateFromContext(JSContext* aCx)
 {
-  NS_ASSERTION(!NS_IsMainThread(), "Wrong thread!");
+  NS_ASSERTION(!NS_IsChromeOwningThread(), "Wrong thread!");
   return static_cast<WorkerPrivate*>(JS_GetContextPrivate(aCx));
 }
 

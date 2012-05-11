@@ -86,6 +86,9 @@ Link::SetLinkState(nsLinkState aState)
   NS_ASSERTION(mLinkState != aState,
                "Setting state to the currently set state!");
 
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
+  MOZ_ASSERT(GetZone() == mElement->GetZone());
+
   // Set our current state as appropriate.
   mLinkState = aState;
 
@@ -177,6 +180,8 @@ Link::GetURI() const
 nsresult
 Link::SetProtocol(const nsAString &aProtocol)
 {
+  nsAutoLockChrome lock; // for nsIURI
+
   nsCOMPtr<nsIURI> uri(GetURIToMutate());
   if (!uri) {
     // Ignore failures to be compatible with NS4.
@@ -197,6 +202,8 @@ Link::SetProtocol(const nsAString &aProtocol)
 nsresult
 Link::SetHost(const nsAString &aHost)
 {
+  nsAutoLockChrome lock; // for nsIURI
+
   nsCOMPtr<nsIURI> uri(GetURIToMutate());
   if (!uri) {
     // Ignore failures to be compatible with NS4.
@@ -236,6 +243,8 @@ Link::SetHost(const nsAString &aHost)
 nsresult
 Link::SetHostname(const nsAString &aHostname)
 {
+  nsAutoLockChrome lock; // for nsIURI
+
   nsCOMPtr<nsIURI> uri(GetURIToMutate());
   if (!uri) {
     // Ignore failures to be compatible with NS4.
@@ -250,6 +259,8 @@ Link::SetHostname(const nsAString &aHostname)
 nsresult
 Link::SetPathname(const nsAString &aPathname)
 {
+  nsAutoLockChrome lock; // for nsIURI
+
   nsCOMPtr<nsIURI> uri(GetURIToMutate());
   nsCOMPtr<nsIURL> url(do_QueryInterface(uri));
   if (!url) {
@@ -265,6 +276,8 @@ Link::SetPathname(const nsAString &aPathname)
 nsresult
 Link::SetSearch(const nsAString &aSearch)
 {
+  nsAutoLockChrome lock; // for nsIURI
+
   nsCOMPtr<nsIURI> uri(GetURIToMutate());
   nsCOMPtr<nsIURL> url(do_QueryInterface(uri));
   if (!url) {
@@ -280,6 +293,8 @@ Link::SetSearch(const nsAString &aSearch)
 nsresult
 Link::SetPort(const nsAString &aPort)
 {
+  nsAutoLockChrome lock; // for nsIURI
+
   nsCOMPtr<nsIURI> uri(GetURIToMutate());
   if (!uri) {
     // Ignore failures to be compatible with NS4.
@@ -301,6 +316,8 @@ Link::SetPort(const nsAString &aPort)
 nsresult
 Link::SetHash(const nsAString &aHash)
 {
+  nsAutoLockChrome lock; // for nsIURI
+
   nsCOMPtr<nsIURI> uri(GetURIToMutate());
   if (!uri) {
     // Ignore failures to be compatible with NS4.
@@ -315,6 +332,8 @@ Link::SetHash(const nsAString &aHash)
 nsresult
 Link::GetProtocol(nsAString &_protocol)
 {
+  nsAutoLockChrome lock; // for nsIURI
+
   nsCOMPtr<nsIURI> uri(GetURI());
   if (!uri) {
     _protocol.AssignLiteral("http");
@@ -332,6 +351,8 @@ nsresult
 Link::GetHost(nsAString &_host)
 {
   _host.Truncate();
+
+  nsAutoLockChrome lock; // for nsIURI
 
   nsCOMPtr<nsIURI> uri(GetURI());
   if (!uri) {
@@ -351,6 +372,8 @@ nsresult
 Link::GetHostname(nsAString &_hostname)
 {
   _hostname.Truncate();
+
+  nsAutoLockChrome lock; // for nsIURI
 
   nsCOMPtr<nsIURI> uri(GetURI());
   if (!uri) {
@@ -373,6 +396,8 @@ Link::GetPathname(nsAString &_pathname)
 {
   _pathname.Truncate();
 
+  nsAutoLockChrome lock; // for nsIURI
+
   nsCOMPtr<nsIURI> uri(GetURI());
   nsCOMPtr<nsIURL> url(do_QueryInterface(uri));
   if (!url) {
@@ -392,6 +417,8 @@ nsresult
 Link::GetSearch(nsAString &_search)
 {
   _search.Truncate();
+
+  nsAutoLockChrome lock; // for nsIURI
 
   nsCOMPtr<nsIURI> uri(GetURI());
   nsCOMPtr<nsIURL> url(do_QueryInterface(uri));
@@ -413,6 +440,8 @@ nsresult
 Link::GetPort(nsAString &_port)
 {
   _port.Truncate();
+
+  nsAutoLockChrome lock; // for nsIURI
 
   nsCOMPtr<nsIURI> uri(GetURI());
   if (!uri) {
@@ -436,6 +465,8 @@ nsresult
 Link::GetHash(nsAString &_hash)
 {
   _hash.Truncate();
+
+  nsAutoLockChrome lock; // for nsIURI
 
   nsCOMPtr<nsIURI> uri(GetURI());
   if (!uri) {
@@ -461,6 +492,8 @@ Link::ResetLinkState(bool aNotify)
   if (mLinkState == defaultState) {
     return;
   }
+
+  nsAutoLockChrome lock; // for nsIURI
 
   Element *element = mElement;
 

@@ -161,6 +161,8 @@ nsLoadGroup::nsLoadGroup(nsISupports* outer)
     // consistent errors if someone fails to call ::Init() on an
     // nsLoadGroup.
     mRequests.ops = nsnull;
+
+    mZone = JS_ZONE_CHROME;
 }
 
 nsLoadGroup::~nsLoadGroup()
@@ -528,6 +530,11 @@ nsLoadGroup::SetDefaultLoadRequest(nsIRequest *aRequest)
 NS_IMETHODIMP
 nsLoadGroup::AddRequest(nsIRequest *request, nsISupports* ctxt)
 {
+    // XXX would be better to pin down the group's zone earlier.
+    MOZ_ASSERT_IF(mZone != JS_ZONE_CHROME, request->GetZone() == mZone);
+    if (mZone == JS_ZONE_CHROME)
+        mZone = request->GetZone();
+
     nsresult rv;
 
 #if defined(PR_LOGGING)

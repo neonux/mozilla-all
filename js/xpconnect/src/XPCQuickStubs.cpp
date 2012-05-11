@@ -683,6 +683,9 @@ getNative(nsISupports *idobj,
     *pThisRef = static_cast<nsISupports*>(*ppThis);
     if (NS_SUCCEEDED(rv))
         *vp = OBJECT_TO_JSVAL(obj);
+
+    MOZ_ASSERT_IF(*pThisRef, (*pThisRef)->GetZone() == idobj->GetZone());
+
     return rv;
 }
 
@@ -694,7 +697,12 @@ getNativeFromWrapper(JSContext *cx,
                      nsISupports **pThisRef,
                      jsval *vp)
 {
-    return getNative(wrapper->GetIdentityObject(), wrapper->GetOffsets(),
+    nsISupports *idobj = wrapper->GetIdentityObject();
+
+    if (!EnsureZoneStuck(cx, idobj->GetZone()))
+        return NS_ERROR_XPC_CANT_GET_LOCK;
+
+    return getNative(idobj, wrapper->GetOffsets(),
                      wrapper->GetFlatJSObject(), iid, ppThis, pThisRef, vp);
 }
 
@@ -769,6 +777,8 @@ castNative(JSContext *cx,
         if (lccx && NS_SUCCEEDED(rv))
             lccx->SetWrapper(wrapper, tearoff);
 
+        MOZ_ASSERT_IF(*pThisRef, js::IsZoneStuck(cx, (*pThisRef)->GetZone()));
+
         if (rv != NS_ERROR_NO_INTERFACE)
             return rv;
     } else if (cur) {
@@ -784,6 +794,9 @@ castNative(JSContext *cx,
             entries = nsnull;
         }
 
+        if (!EnsureZoneStuck(cx, native->GetZone()))
+            return NS_ERROR_XPC_CANT_GET_LOCK;
+
         if (NS_SUCCEEDED(getNative(native, entries, cur, iid, ppThis, pThisRef, vp))) {
             if (lccx) {
                 // This only matters for unwrapping of this objects, so we
@@ -793,6 +806,7 @@ castNative(JSContext *cx,
                 lccx->SetWrapper(cur);
             }
 
+            MOZ_ASSERT_IF(*pThisRef, js::IsZoneStuck(cx, (*pThisRef)->GetZone()));
             return NS_OK;
         }
     }
@@ -888,6 +902,9 @@ xpc_qsUnwrapArgImpl(JSContext *cx,
     // Try to unwrap a slim wrapper.
     nsISupports *iface;
     if (XPCConvert::GetISupportsFromJSObject(src, &iface)) {
+        if (iface && !EnsureZoneStuck(cx, iface->GetZone()))
+            return NS_ERROR_XPC_CANT_GET_LOCK;
+
         if (!iface || NS_FAILED(iface->QueryInterface(iid, ppArg))) {
             *ppArgRef = nsnull;
             return NS_ERROR_XPC_BAD_CONVERT_JS;
@@ -1049,6 +1066,8 @@ xpc_qsXPCOMObjectToJsval(XPCLazyCallContext &lccx, qsObjectHelper &aHelper,
                      "Why did we recreate this wrapper?");
 #endif
 
+    MOZ_ASSERT_IF(jsobj, js::ContextFriendFields::get(lccx.GetJSContext())->compartment == js::GetObjectCompartment(jsobj));
+
     return true;
 }
 
@@ -1082,7 +1101,7 @@ xpc_qsAssertContextOK(JSContext *cx)
     // This is what we're actually trying to assert here.
     NS_ASSERTION(cx == topJSContext, "wrong context on XPCJSContextStack!");
 
-    NS_ASSERTION(XPCPerThreadData::IsMainThread(cx),
+    NS_ASSERTION(NS_IsExecuteThread(),
                  "XPConnect quick stub called on non-main thread");
 }
 #endif

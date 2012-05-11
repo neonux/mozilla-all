@@ -1432,6 +1432,9 @@ struct PRLock {
     PRThreadPriority boostPriority; /* boosted priority of lock owner */
     _MDLock ilock;                  /* Internal Lock to protect user-level fields */
 #endif
+#if defined(DEBUG)
+    PRThread *prOwner;
+#endif
 };
 
 extern void _PR_InitLocks(void);

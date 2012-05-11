@@ -147,6 +147,8 @@ private:
   PRUint8               mType;
   bool                  mFiring;
 
+  // Zone to run the timer in.
+  JSZoneId              mCallbackZone;
 
   // Use a bool (int) here to isolate loads and stores of these two members
   // done on various threads under the protection of TimerThread::mLock, from

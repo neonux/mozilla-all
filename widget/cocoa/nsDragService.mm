@@ -308,6 +308,8 @@ nsDragService::InvokeDragSession(nsIDOMNode* aDOMNode, nsISupportsArray* aTransf
   mNativeDragView = [gLastDragView retain];
   mNativeDragEvent = [gLastDragMouseDownEvent retain];
 
+  nsAutoUnlockEverything unlock;
+
   gUserCancelledDrag = false;
   [mNativeDragView dragImage:image
                           at:localPoint

@@ -160,7 +160,7 @@ Vacuumer::Vacuumer(mozIStorageVacuumParticipant *aParticipant)
 bool
 Vacuumer::execute()
 {
-  MOZ_ASSERT(NS_IsMainThread(), "Must be running on the main thread!");
+  MOZ_ASSERT(NS_IsChromeOwningThread(), "Must be running on the main thread!");
 
   // Get the connection and check its validity.
   nsresult rv = mParticipant->GetDatabaseConnection(getter_AddRefs(mDBConn));

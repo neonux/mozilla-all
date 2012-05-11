@@ -62,6 +62,7 @@
 #include "imgIRequest.h"
 #include "imgStatusTracker.h"
 #include "nsIAsyncVerifyRedirectCallback.h"
+#include "nsThreadUtils.h"
 
 class imgCacheValidator;
 

@@ -80,6 +80,8 @@ interface nsIDocShellTreeItem : nsIDocShellTreeNode
 	*/
 	attribute long itemType;
 
+    [noscript] void setParentZone(in long zone);
+
 	/*
 	Parent DocShell.
 	*/

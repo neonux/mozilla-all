@@ -258,6 +258,8 @@ nsStyleLinkElement::DoUpdateStyleSheet(nsIDocument *aOldDocument,
     return NS_OK;
   }
 
+  nsAutoLockChrome lock; // for nsIURI
+
   bool isInline;
   nsCOMPtr<nsIURI> uri = GetStyleSheetURL(&isInline);
 

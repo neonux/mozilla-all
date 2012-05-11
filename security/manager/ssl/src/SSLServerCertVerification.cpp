@@ -282,7 +282,7 @@ CertErrorRunnable::CheckCertOverrides()
   PR_LOG(gPIPNSSLog, PR_LOG_DEBUG, ("[%p][%p] top of CheckCertOverrides\n",
                                     mFdForLogging, this));
 
-  if (!NS_IsMainThread()) {
+  if (!NS_IsChromeOwningThread()) {
     NS_ERROR("CertErrorRunnable::CheckCertOverrides called off main thread");
     return new SSLServerCertVerificationResult(mInfoObject,
                                                mDefaultErrorCodeToReport);
@@ -399,7 +399,7 @@ CertErrorRunnable::CheckCertOverrides()
 void 
 CertErrorRunnable::RunOnTargetThread()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   mResult = CheckCertOverrides();
   

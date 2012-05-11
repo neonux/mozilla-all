@@ -1560,6 +1560,7 @@ nsContentSink::NotifyDocElementCreated(nsIDocument* aDoc)
   nsCOMPtr<nsIObserverService> observerService =
     mozilla::services::GetObserverService();
   if (observerService) {
+    NS_StickLock(aDoc);
     nsCOMPtr<nsIDOMDocument> domDoc = do_QueryInterface(aDoc);
     observerService->
       NotifyObservers(domDoc, "document-element-inserted",

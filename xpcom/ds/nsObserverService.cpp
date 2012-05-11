@@ -109,10 +109,7 @@ nsObserverService::Create(nsISupports* outer, const nsIID& aIID, void* *aInstanc
 }
 
 #define NS_ENSURE_VALIDCALL \
-    if (!NS_IsMainThread()) {                                     \
-        NS_ERROR("Using observer service off the main thread!");  \
-        return NS_ERROR_UNEXPECTED;                               \
-    }                                                             \
+    MOZ_ASSERT(NS_IsChromeOwningThread());                        \
     if (mShuttingDown) {                                          \
         NS_ERROR("Using observer service after XPCOM shutdown!"); \
         return NS_ERROR_ILLEGAL_DURING_SHUTDOWN;                  \

@@ -497,6 +497,12 @@ NS_IMETHODIMP nsWebBrowser::SetItemType(PRInt32 aItemType)
     return NS_OK;
 }
 
+NS_IMETHODIMP nsWebBrowser::SetParentZone(PRInt32 aZone)
+{
+    MOZ_ASSERT(0);
+    return NS_OK;
+}
+
 NS_IMETHODIMP nsWebBrowser::GetParent(nsIDocShellTreeItem** aParent)
 {
    *aParent = nsnull;

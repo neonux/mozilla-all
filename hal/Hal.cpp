@@ -51,7 +51,7 @@ namespace {
 void
 AssertMainThread()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 }
 
 bool

@@ -183,7 +183,7 @@ nsStrictTransportSecurityService::RemoveStsState(nsIURI* aURI)
 {
   // Should be called on the main thread (or via proxy) since the permission
   // manager is used and it's not threadsafe.
-  NS_ENSURE_TRUE(NS_IsMainThread(), NS_ERROR_UNEXPECTED);
+  NS_ENSURE_TRUE(NS_IsChromeOwningThread(), NS_ERROR_UNEXPECTED);
 
   nsCAutoString hostname;
   nsresult rv = GetHost(aURI, hostname);
@@ -206,7 +206,7 @@ nsStrictTransportSecurityService::ProcessStsHeader(nsIURI* aSourceURI,
 {
   // Should be called on the main thread (or via proxy) since the permission
   // manager is used and it's not threadsafe.
-  NS_ENSURE_TRUE(NS_IsMainThread(), NS_ERROR_UNEXPECTED);
+  NS_ENSURE_TRUE(NS_IsChromeOwningThread(), NS_ERROR_UNEXPECTED);
 
   char * header = NS_strdup(aHeader);
   if (!header) return NS_ERROR_OUT_OF_MEMORY;
@@ -320,7 +320,7 @@ nsStrictTransportSecurityService::IsStsHost(const char* aHost, bool* aResult)
 {
   // Should be called on the main thread (or via proxy) since the permission
   // manager is used and it's not threadsafe.
-  NS_ENSURE_TRUE(NS_IsMainThread(), NS_ERROR_UNEXPECTED);
+  NS_ENSURE_TRUE(NS_IsChromeOwningThread(), NS_ERROR_UNEXPECTED);
 
   nsCOMPtr<nsIURI> uri;
   nsDependentCString hostString(aHost);
@@ -335,7 +335,7 @@ nsStrictTransportSecurityService::IsStsURI(nsIURI* aURI, bool* aResult)
 {
   // Should be called on the main thread (or via proxy) since the permission
   // manager is used and it's not threadsafe.
-  NS_ENSURE_TRUE(NS_IsMainThread(), NS_ERROR_UNEXPECTED);
+  NS_ENSURE_TRUE(NS_IsChromeOwningThread(), NS_ERROR_UNEXPECTED);
 
   nsresult rv;
   PRUint32 permExact, permGeneral;

@@ -156,25 +156,26 @@ public:
   }
 };
 
-class AsyncPaintWaitEvent : public nsRunnable
+class nsPluginInstanceOwner::AsyncPaintWaitEvent : public nsRunnable
 {
 public:
-  AsyncPaintWaitEvent(nsIContent* aContent, bool aFinished) :
-    mContent(aContent), mFinished(aFinished)
+  AsyncPaintWaitEvent(nsPluginInstanceOwner* aOwner, bool aFinished) :
+    mOwner(aOwner), mFinished(aFinished)
   {
   }
 
   NS_IMETHOD Run()
   {
-    nsContentUtils::DispatchTrustedEvent(mContent->OwnerDoc(), mContent,
+    NS_StickLock(mOwner->mContent);
+    nsContentUtils::DispatchTrustedEvent(mOwner->mContent->OwnerDoc(), mOwner->mContent,
         mFinished ? NS_LITERAL_STRING("MozPaintWaitFinished") : NS_LITERAL_STRING("MozPaintWait"),
         true, true);
     return NS_OK;
   }
 
 private:
-  nsCOMPtr<nsIContent> mContent;
-  bool                 mFinished;
+  nsRefPtr<nsPluginInstanceOwner> mOwner;
+  bool                            mFinished;
 };
 
 void
@@ -182,7 +183,7 @@ nsPluginInstanceOwner::NotifyPaintWaiter(nsDisplayListBuilder* aBuilder)
 {
   // This is notification for reftests about async plugin paint start
   if (!mWaitingForPaint && !IsUpToDate() && aBuilder->ShouldSyncDecodeImages()) {
-    nsCOMPtr<nsIRunnable> event = new AsyncPaintWaitEvent(mContent, false);
+    nsCOMPtr<nsIRunnable> event = new AsyncPaintWaitEvent(this, false);
     // Run this event as soon as it's safe to do so, since listeners need to
     // receive it immediately
     mWaitingForPaint = nsContentUtils::AddScriptRunner(event);
@@ -356,7 +357,7 @@ nsPluginInstanceOwner::~nsPluginInstanceOwner()
   if (mWaitingForPaint) {
     // We don't care when the event is dispatched as long as it's "soon",
     // since whoever needs it will be waiting for it.
-    nsCOMPtr<nsIRunnable> event = new AsyncPaintWaitEvent(mContent, true);
+    nsCOMPtr<nsIRunnable> event = new AsyncPaintWaitEvent(this, true);
     NS_DispatchToMainThread(event);
   }
 
@@ -453,17 +454,8 @@ NS_IMETHODIMP nsPluginInstanceOwner::GetWindow(NPWindow *&aWindow)
 
 NS_IMETHODIMP nsPluginInstanceOwner::GetMode(PRInt32 *aMode)
 {
-  nsCOMPtr<nsIDocument> doc;
-  nsresult rv = GetDocument(getter_AddRefs(doc));
-  nsCOMPtr<nsIPluginDocument> pDoc (do_QueryInterface(doc));
-
-  if (pDoc) {
-    *aMode = NP_FULL;
-  } else {
-    *aMode = NP_EMBED;
-  }
-
-  return rv;
+  *aMode = mMode;
+  return NS_OK;
 }
 
 NS_IMETHODIMP nsPluginInstanceOwner::GetAttributes(PRUint16& n,
@@ -502,6 +494,8 @@ NS_IMETHODIMP nsPluginInstanceOwner::GetAttribute(const char* name, const char* 
 
 NS_IMETHODIMP nsPluginInstanceOwner::GetDOMElement(nsIDOMElement* *result)
 {
+  if (mContent)
+    NS_StickLock(mContent);
   return CallQueryInterface(mContent, result);
 }
 
@@ -642,7 +636,7 @@ NS_IMETHODIMP nsPluginInstanceOwner::InvalidateRect(NPRect *invalidRect)
   if (mWaitingForPaint && (!mObjectFrame || IsUpToDate())) {
     // We don't care when the event is dispatched as long as it's "soon",
     // since whoever needs it will be waiting for it.
-    nsCOMPtr<nsIRunnable> event = new AsyncPaintWaitEvent(mContent, true);
+    nsCOMPtr<nsIRunnable> event = new AsyncPaintWaitEvent(this, true);
     NS_DispatchToMainThread(event);
     mWaitingForPaint = false;
   }
@@ -1160,12 +1154,15 @@ nsresult nsPluginInstanceOwner::EnsureCachedAttrParamArrays()
   // we can figure out what size to make our fixed char* array.
   nsCOMArray<nsIDOMElement> ourParams;
 
+  // Making DOM method calls can cause our frame to go away.
+  nsCOMPtr<nsIPluginInstanceOwner> kungFuDeathGrip(this);
+
+  if (!NS_TryStickLock(mContent))
+    return NS_ERROR_NO_INTERFACE;
+
   // Get all dependent PARAM tags, even if they are not direct children.
   nsCOMPtr<nsIDOMElement> mydomElement = do_QueryInterface(mContent);
   NS_ENSURE_TRUE(mydomElement, NS_ERROR_NO_INTERFACE);
-
-  // Making DOM method calls can cause our frame to go away.
-  nsCOMPtr<nsIPluginInstanceOwner> kungFuDeathGrip(this);
 
   nsCOMPtr<nsIDOMNodeList> allParams;
   NS_NAMED_LITERAL_STRING(xhtml_ns, "http://www.w3.org/1999/xhtml");
@@ -3245,6 +3242,17 @@ nsresult nsPluginInstanceOwner::Init(nsIContent* aContent)
 
   mContent = aContent;
 
+  {
+    nsCOMPtr<nsIDocument> doc = mContent->OwnerDoc();
+    nsCOMPtr<nsIPluginDocument> pDoc (do_QueryInterface(doc));
+
+    if (pDoc) {
+      mMode = NP_FULL;
+    } else {
+      mMode = NP_EMBED;
+    }
+  }
+
   // Get a frame, don't reflow. If a reflow was necessary it should have been
   // done at a higher level than this (content).
   nsIFrame* frame = aContent->GetPrimaryFrame();
@@ -3610,6 +3618,11 @@ void* nsPluginInstanceOwner::FixUpPluginWindow(PRInt32 inPaintState)
 void
 nsPluginInstanceOwner::HidePluginWindow()
 {
+  if (!NS_IsMainThread()) {
+    NS_DispatchToMainThread(NS_NewRunnableMethod(this, &nsPluginInstanceOwner::HidePluginWindow));
+    return;
+  }
+
   if (!mPluginWindow || !mInstance) {
     return;
   }

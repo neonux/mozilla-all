@@ -73,6 +73,7 @@ namespace XPCWrapper {
 inline nsIScriptSecurityManager *
 GetSecurityManager()
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   return nsXPConnect::gScriptSecurityManager;
 }
 

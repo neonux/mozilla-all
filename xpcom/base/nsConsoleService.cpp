@@ -130,7 +130,7 @@ private:
 NS_IMETHODIMP
 LogMessageRunnable::Run()
 {
-    MOZ_ASSERT(NS_IsMainThread());
+    MOZ_ASSERT(NS_IsChromeOwningThread());
 
     mService->SetIsDelivering();
 
@@ -160,7 +160,7 @@ nsConsoleService::LogMessage(nsIConsoleMessage *message)
     if (message == nsnull)
         return NS_ERROR_INVALID_ARG;
 
-    if (NS_IsMainThread() && mDeliveringMessage) {
+    if (NS_IsChromeOwningThread() && mDeliveringMessage) {
         NS_WARNING("Some console listener threw an error while inside itself. Discarding this message");
         return NS_ERROR_FAILURE;
     }
@@ -281,7 +281,7 @@ nsConsoleService::GetMessageArray(nsIConsoleMessage ***messages, PRUint32 *count
 NS_IMETHODIMP
 nsConsoleService::RegisterListener(nsIConsoleListener *listener)
 {
-    if (!NS_IsMainThread()) {
+    if (!NS_IsChromeOwningThread()) {
         NS_ERROR("nsConsoleService::RegisterListener is main thread only.");
         return NS_ERROR_NOT_SAME_THREAD;
     }
@@ -300,7 +300,7 @@ nsConsoleService::RegisterListener(nsIConsoleListener *listener)
 NS_IMETHODIMP
 nsConsoleService::UnregisterListener(nsIConsoleListener *listener)
 {
-    if (!NS_IsMainThread()) {
+    if (!NS_IsChromeOwningThread()) {
         NS_ERROR("nsConsoleService::UnregisterListener is main thread only.");
         return NS_ERROR_NOT_SAME_THREAD;
     }

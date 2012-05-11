@@ -374,6 +374,8 @@ nsXBLStreamListener::HandleEvent(nsIDOMEvent* aEvent)
   nsCOMPtr<nsIDocument> bindingDocument = do_QueryInterface(target);
   NS_ASSERTION(bindingDocument, "Event not targeted at document?!");
 
+  NS_StickLock(mBoundDocument);
+
   // See if we're still alive.
   nsCOMPtr<nsIDocument> doc(do_QueryReferent(mBoundDocument));
   if (!doc) {

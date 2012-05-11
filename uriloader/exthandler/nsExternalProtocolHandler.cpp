@@ -180,7 +180,7 @@ nsresult nsExtProtocolChannel::OpenURL()
 #endif
 
     nsCOMPtr<nsIInterfaceRequestor> aggCallbacks;
-    rv = NS_NewNotificationCallbacksAggregation(mCallbacks, mLoadGroup,
+    rv = NS_NewNotificationCallbacksAggregation(mCallbacks, mLoadGroup, JS_ZONE_CHROME,
                                                 getter_AddRefs(aggCallbacks));
     if (NS_FAILED(rv)) {
       goto finish;

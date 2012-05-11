@@ -162,6 +162,9 @@ nsGfxCheckboxControlFrame::BuildDisplayList(nsDisplayListBuilder*   aBuilder,
 bool
 nsGfxCheckboxControlFrame::IsChecked()
 {
+  if (!NS_TryStickLock(mContent))
+    return false;
+
   nsCOMPtr<nsIDOMHTMLInputElement> elem(do_QueryInterface(mContent));
   bool retval = false;
   elem->GetChecked(&retval);
@@ -171,6 +174,9 @@ nsGfxCheckboxControlFrame::IsChecked()
 bool
 nsGfxCheckboxControlFrame::IsIndeterminate()
 {
+  if (!NS_TryStickLock(mContent))
+    return false;
+
   nsCOMPtr<nsIDOMHTMLInputElement> elem(do_QueryInterface(mContent));
   bool retval = false;
   elem->GetIndeterminate(&retval);

@@ -82,6 +82,8 @@ public:
   nsMediaDecoder();
   virtual ~nsMediaDecoder();
 
+  JSZoneId GetZone();
+
   // Create a new decoder of the same type as this one.
   virtual nsMediaDecoder* Clone() = 0;
 

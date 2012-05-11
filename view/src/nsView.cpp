@@ -43,6 +43,7 @@
 #include "nsIComponentManager.h"
 #include "nsGfxCIID.h"
 #include "nsIInterfaceRequestor.h"
+#include "nsContentUtils.h"
 
 //mmptemp
 
@@ -149,15 +150,32 @@ static nsEventStatus HandleEvent(nsGUIEvent *aEvent)
 #if 0
   printf(" %d %d %d (%d,%d) \n", aEvent->widget, aEvent->message);
 #endif
+
+  nsView *view;
+  nsCOMPtr<nsIViewManager> vm;
+
+  PRInt32 deletedViewCount, deletedViewCount2;
+
+  do {
+    view = nsView::GetViewFor(aEvent->widget);
+
+    if (!view)
+      return nsEventStatus_eIgnore;
+
+    vm = view->GetViewManager();
+    vm->GetDeletedViewCount(&deletedViewCount);
+
+    if (NS_TryStickLock(vm->GetPresShell()))
+      vm->GetPresShell()->GetDocument()->TryLockSubDocuments();
+
+    vm->GetDeletedViewCount(&deletedViewCount2);
+
+  } while (deletedViewCount != deletedViewCount2);
+
+  // nsAutoCantLockNewContent cantLock;
+
   nsEventStatus result = nsEventStatus_eIgnore;
-  nsView *view = nsView::GetViewFor(aEvent->widget);
-
-  if (view)
-  {
-    nsCOMPtr<nsIViewManager> vm = view->GetViewManager();
-    vm->DispatchEvent(aEvent, view, &result);
-  }
-
+  vm->DispatchEvent(aEvent, view, &result);
   return result;
 }
 
@@ -234,7 +252,9 @@ nsView::~nsView()
   if (mViewManager)
   {
     DropMouseGrabbing();
-  
+
+    mViewManager->IncrementDeletedViewCount();
+
     nsView *rootView = mViewManager->GetRootViewImpl();
     
     if (rootView)
@@ -273,6 +293,15 @@ nsView::~nsView()
   }
 }
 
+class nsReleaseWindowEvent : public nsRunnable
+{
+  nsIWidget *window;
+
+public:
+  nsReleaseWindowEvent(nsIWidget *window) : window(window) {}
+  NS_IMETHOD Run() { NS_RELEASE(window); return NS_OK; }
+};
+
 void nsView::DestroyWidget()
 {
   if (mWindow)
@@ -296,7 +325,12 @@ void nsView::DestroyWidget()
       mWindow->Destroy();
     }
 
-    NS_RELEASE(mWindow);
+    if (NS_CanLockNewContent()) {
+      NS_RELEASE(mWindow);
+    } else {
+      // Window destructor may release held locks to avoid deadlocking.
+      NS_DispatchToMainThread(new nsReleaseWindowEvent(mWindow));
+    }
   }
 }
 
@@ -492,6 +526,16 @@ void nsView::SetDimensions(const nsRect& aRect, bool aPaint, bool aResizeWidget)
   }
 }
 
+void nsView::ShowWindow()
+{
+  mWindow->Show(true);
+}
+
+void nsView::HideWindow()
+{
+  mWindow->Show(false);
+}
+
 void nsView::NotifyEffectiveVisibilityChanged(bool aEffectivelyVisible)
 {
   if (!aEffectivelyVisible)
@@ -504,10 +548,18 @@ void nsView::NotifyEffectiveVisibilityChanged(bool aEffectivelyVisible)
     if (aEffectivelyVisible)
     {
       DoResetWidgetBounds(false, true);
-      mWindow->Show(true);
+      if (NS_CanLockNewContent())
+        ShowWindow();
+      else
+        nsContentUtils::AddScriptRunner(NS_NewNonOwningRunnableMethod(this, &nsView::ShowWindow));
     }
     else
-      mWindow->Show(false);
+    {
+      if (NS_CanLockNewContent())
+        HideWindow();
+      else
+        nsContentUtils::AddScriptRunner(NS_NewNonOwningRunnableMethod(this, &nsView::HideWindow));
+    }
   }
 
   for (nsView* child = mFirstChild; child; child = child->mNextSibling) {

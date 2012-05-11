@@ -445,6 +445,8 @@ nsXULElement::GetElementsByAttribute(const nsAString& aAttribute,
                                      const nsAString& aValue,
                                      nsIDOMNodeList** aReturn)
 {
+    nsAutoLockChrome lock; // for nsIAtom
+
     nsCOMPtr<nsIAtom> attrAtom(do_GetAtom(aAttribute));
     NS_ENSURE_TRUE(attrAtom, NS_ERROR_OUT_OF_MEMORY);
     void* attrValue = new nsString(aValue);
@@ -756,7 +758,7 @@ nsScriptEventHandlerOwnerTearoff::CompileEventHandler(
         NS_ENSURE_SUCCESS(rv, rv);
         NS_ENSURE_TRUE(globalOwner, NS_ERROR_UNEXPECTED);
 
-        nsIScriptGlobalObject* global = globalOwner->GetScriptGlobalObject();
+        nsIScriptGlobalObject* global = globalOwner->GetScriptGlobalObject(mElement->OwnerDoc()->GetZone());
         NS_ENSURE_TRUE(global, NS_ERROR_UNEXPECTED);
 
         context = global->GetScriptContext();
@@ -1965,6 +1967,8 @@ nsXULElement::LoadSrc()
         NS_ENSURE_TRUE(slots->mFrameLoader, NS_OK);
     }
 
+    slots->mFrameLoader->MarkAsChrome();
+
     return slots->mFrameLoader->LoadFrame();
 }
 
@@ -2037,6 +2041,8 @@ nsXULElement::GetParentTree(nsIDOMXULMultiSelectControlElement** aTreeElement)
 NS_IMETHODIMP
 nsXULElement::Focus()
 {
+    nsAutoLockChrome lock;
+
     nsIFocusManager* fm = nsFocusManager::GetFocusManager();
     nsCOMPtr<nsIDOMElement> elem = do_QueryObject(this);
     return fm ? fm->SetFocus(this, 0) : NS_OK;
@@ -2051,6 +2057,8 @@ nsXULElement::Blur()
     nsIDocument* doc = GetCurrentDoc();
     if (!doc)
       return NS_OK;
+
+    nsAutoLockChrome lock;
 
     nsIDOMWindow* win = doc->GetWindow();
     nsIFocusManager* fm = nsFocusManager::GetFocusManager();
@@ -2304,6 +2312,7 @@ nsresult nsXULElement::MakeHeavyweight()
 
         // XXX we might wanna have a SetAndTakeAttr that takes an nsAttrName
         if (protoattr->mName.IsAtom()) {
+            nsAutoLockChrome lock; // for nsIAtom
             rv = mAttrsAndChildren.SetAndTakeAttr(protoattr->mName.Atom(), attrValue);
         }
         else {
@@ -3085,7 +3094,7 @@ nsXULPrototypeScript::Compile(const PRUnichar* aText,
     nsIScriptContext *context;
 
     {
-        nsIScriptGlobalObject* global = aGlobalOwner->GetScriptGlobalObject();
+        nsIScriptGlobalObject* global = aGlobalOwner->GetScriptGlobalObject(aDocument->GetZone());
         NS_ASSERTION(global != nsnull, "prototype doc has no script global");
         if (! global)
             return NS_ERROR_UNEXPECTED;

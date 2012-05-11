@@ -69,6 +69,8 @@ public:
   // nsISupports
   NS_DECL_ISUPPORTS_INHERITED
 
+  JSZoneId GetZone() { return nsINode::GetZone(); }
+
   // nsIDOMNode
   NS_FORWARD_NSIDOMNODE(nsGenericHTMLElement::)
 
@@ -196,6 +198,8 @@ nsHTMLSharedObjectElement::nsHTMLSharedObjectElement(already_AddRefed<nsINodeInf
   : nsGenericHTMLElement(aNodeInfo),
     mIsDoneAddingChildren(mNodeInfo->Equals(nsGkAtoms::embed) || !aFromParser)
 {
+  NS_FIX_OWNINGTHREAD(GetZone());
+
   RegisterFreezableElement();
   SetIsNetworkCreated(aFromParser == FROM_PARSER_NETWORK);
 

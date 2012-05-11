@@ -600,7 +600,7 @@ fun_toStringHelper(JSContext *cx, JSObject *obj, unsigned indent)
         return NULL;
 
     if (!indent) {
-        if (JSString *str = cx->runtime->toSourceCache.lookup(fun))
+        if (JSString *str = cx->thread()->toSourceCache.lookup(fun))
             return str;
     }
 
@@ -609,7 +609,7 @@ fun_toStringHelper(JSContext *cx, JSObject *obj, unsigned indent)
         return NULL;
 
     if (!indent)
-        cx->runtime->toSourceCache.put(fun, str);
+        cx->thread()->toSourceCache.put(fun, str);
 
     return str;
 }

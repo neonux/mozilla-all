@@ -215,6 +215,7 @@ struct CalcLengthCalcOps : public css::BasicCoordCalcOps,
       mUseUserFontSet(aUseUserFontSet),
       mCanStoreInRuleTree(aCanStoreInRuleTree)
   {
+      MOZ_ASSERT(mPresContext);
   }
 
   result_type ComputeLeafValue(const nsCSSValue& aValue)
@@ -1906,6 +1907,7 @@ nsRuleNode::WalkRuleTree(const nsStyleStructID aSID,
     // node in the tree to the node that specified the data that tells nodes on that
     // branch that they never need to examine their rules for this particular struct type
     // ever again.
+    MOZ_ASSERT(startStruct);
     PropagateDependentBit(bit, ruleNode);
     return startStruct;
   }
@@ -1944,14 +1946,18 @@ nsRuleNode::WalkRuleTree(const nsStyleStructID aSID,
       // it never has to go back to the rule tree for data.  Instead the style context tree
       // should be walked to find the data.
       const void* parentStruct = parentContext->GetStyleData(aSID);
+      MOZ_ASSERT(parentStruct);
       aContext->AddStyleBit(bit); // makes const_cast OK.
       aContext->SetStyle(aSID, const_cast<void*>(parentStruct));
       return parentStruct;
     }
-    else
+    else {
       // We are the root.  In the case of fonts, the default values just
       // come from the pres context.
-      return SetDefaultOnRoot(aSID, aContext);
+      const void *res = SetDefaultOnRoot(aSID, aContext);
+      MOZ_ASSERT(res);
+      return res;
+    }
   }
 
   // We need to compute the data from the information that the rules specified.
@@ -1963,6 +1969,8 @@ nsRuleNode::WalkRuleTree(const nsStyleStructID aSID,
 #include "nsStyleStructList.h"
 #undef STYLE_STRUCT
 #undef STYLE_STRUCT_TEST
+
+  MOZ_ASSERT(res);
 
   // If we have a post-resolve callback, handle that now.
   if (ruleData.mPostResolveCallback && (NS_LIKELY(res != nsnull)))

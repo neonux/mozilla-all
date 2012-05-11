@@ -1491,6 +1491,8 @@ nsresult
 nsXMLContentSink::AddAttributes(const PRUnichar** aAtts,
                                 nsIContent* aContent)
 {
+  nsAutoLockChrome lock; // for atoms
+
   // Add tag attributes to the content attributes
   nsCOMPtr<nsIAtom> prefix, localName;
   while (*aAtts) {
@@ -1599,6 +1601,9 @@ nsXMLContentSink::FlushTags()
   mDeferredFlushTags = false;
   bool oldBeganUpdate = mBeganUpdate;
   PRUint32 oldUpdates = mUpdatesInNotification;
+
+  if (mDocument)
+    NS_StickLock(mDocument);
 
   mUpdatesInNotification = 0;
   ++mInNotification;

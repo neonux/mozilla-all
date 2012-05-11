@@ -131,7 +131,7 @@ nsCertOverrideService::~nsCertOverrideService()
 nsresult
 nsCertOverrideService::Init()
 {
-  if (!NS_IsMainThread()) {
+  if (!NS_IsChromeOwningThread()) {
     NS_NOTREACHED("nsCertOverrideService initialized off main thread");
     return NS_ERROR_NOT_SAME_THREAD;
   }

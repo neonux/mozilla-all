@@ -116,7 +116,7 @@ namespace {
 bool
 hasRecentCorruptDB()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   nsCOMPtr<nsIFile> profDir;
   NS_GetSpecialDirectory(NS_APP_USER_PROFILE_50_DIR, getter_AddRefs(profDir));
@@ -156,7 +156,7 @@ hasRecentCorruptDB()
 nsresult
 updateSQLiteStatistics(mozIStorageConnection* aDBConn)
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   nsCOMPtr<mozIStorageAsyncStatement> analyzePlacesStmt;
   aDBConn->CreateAsyncStatement(NS_LITERAL_CSTRING(
     "ANALYZE moz_places"
@@ -206,7 +206,7 @@ enum JournalMode
 SetJournalMode(nsCOMPtr<mozIStorageConnection>& aDBConn,
                              enum JournalMode aJournalMode)
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   nsCAutoString journalMode;
   switch (aJournalMode) {
     default:
@@ -283,11 +283,14 @@ BlockingConnectionCloseCallback::Complete()
 BlockingConnectionCloseCallback::BlockingConnectionCloseCallback()
   : mDone(false)
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 }
 
 void BlockingConnectionCloseCallback::Spin() {
   nsCOMPtr<nsIThread> thread = do_GetCurrentThread();
+
+  nsAutoUnlockEverything unlock;
+
   while (!mDone) {
     NS_ProcessNextEvent(thread);
   }
@@ -303,7 +306,7 @@ CreateRoot(nsCOMPtr<mozIStorageConnection>& aDBConn,
            const nsCString& aRootName,
            const nsXPIDLString& titleString)
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   // The position of the new item in its folder.
   static PRInt32 itemPosition = 0;
@@ -416,7 +419,7 @@ Database::Init()
   return NS_ERROR_NOT_IMPLEMENTED;
 #endif
 
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   nsCOMPtr<mozIStorageService> storage =
     do_GetService(MOZ_STORAGE_SERVICE_CONTRACTID);
@@ -494,7 +497,7 @@ nsresult
 Database::InitDatabaseFile(nsCOMPtr<mozIStorageService>& aStorage,
                            bool* aNewDatabaseCreated)
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   *aNewDatabaseCreated = false;
 
   nsCOMPtr<nsIFile> databaseFile;
@@ -531,7 +534,7 @@ Database::InitDatabaseFile(nsCOMPtr<mozIStorageService>& aStorage,
 nsresult
 Database::BackupAndReplaceDatabaseFile(nsCOMPtr<mozIStorageService>& aStorage)
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   nsCOMPtr<nsIFile> profDir;
   nsresult rv = NS_GetSpecialDirectory(NS_APP_USER_PROFILE_50_DIR,
                                        getter_AddRefs(profDir));
@@ -577,7 +580,7 @@ Database::BackupAndReplaceDatabaseFile(nsCOMPtr<mozIStorageService>& aStorage)
 nsresult
 Database::InitSchema(bool* aDatabaseMigrated)
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   *aDatabaseMigrated = false;
 
   // WARNING: any statement executed before setting the journal mode must be
@@ -879,7 +882,7 @@ Database::InitSchema(bool* aDatabaseMigrated)
 nsresult
 Database::CreateBookmarkRoots()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   nsCOMPtr<nsIStringBundleService> bundleService =
     services::GetStringBundleService();
@@ -951,7 +954,7 @@ Database::CreateBookmarkRoots()
 nsresult
 Database::InitFunctions()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   nsresult rv = GetUnreversedHostFunction::create(mMainConn);
   NS_ENSURE_SUCCESS(rv, rv);
@@ -970,7 +973,7 @@ Database::InitFunctions()
 nsresult
 Database::InitTempTriggers()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   nsresult rv = mMainConn->ExecuteSimpleSQL(CREATE_HISTORYVISITS_AFTERINSERT_TRIGGER);
   NS_ENSURE_SUCCESS(rv, rv);
@@ -993,7 +996,7 @@ Database::InitTempTriggers()
 nsresult
 Database::UpdateBookmarkRootTitles()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   nsCOMPtr<nsIStringBundleService> bundleService =
     services::GetStringBundleService();
@@ -1051,7 +1054,7 @@ Database::UpdateBookmarkRootTitles()
 nsresult
 Database::CheckAndUpdateGUIDs()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   // First, import any bookmark guids already set by Sync.
   nsCOMPtr<mozIStorageStatement> updateStmt;
@@ -1210,7 +1213,7 @@ Database::CheckAndUpdateGUIDs()
 nsresult
 Database::MigrateV7Up() 
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   // Some old v6 databases come from alpha versions that missed indices.
   // Just bail out and replace the database in such a case.
@@ -1411,7 +1414,7 @@ Database::MigrateV7Up()
 nsresult
 Database::MigrateV8Up()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   mozStorageTransaction transaction(mMainConn, false);
 
   nsresult rv = mMainConn->ExecuteSimpleSQL(NS_LITERAL_CSTRING(
@@ -1465,7 +1468,7 @@ Database::MigrateV8Up()
 nsresult
 Database::MigrateV9Up()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   mozStorageTransaction transaction(mMainConn, false);
   // Added in Bug 488966.  The last_visit_date column caches the last
   // visit date, this enhances SELECT performances when we
@@ -1505,7 +1508,7 @@ Database::MigrateV9Up()
 nsresult
 Database::MigrateV10Up()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   // LastModified is set to the same value as dateAdded on item creation.
   // This way we can use lastModified index to sort.
   nsresult rv = mMainConn->ExecuteSimpleSQL(NS_LITERAL_CSTRING(
@@ -1520,7 +1523,7 @@ Database::MigrateV10Up()
 nsresult
 Database::MigrateV11Up()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   // Temp tables are going away.
   // For triggers correctness, every time we pass through this migration
   // step, we must ensure correctness of visit_count values.
@@ -1577,7 +1580,7 @@ Database::MigrateV11Up()
 nsresult
 Database::MigrateV13Up()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   // Dynamic containers are no longer supported.
   nsCOMPtr<mozIStorageAsyncStatement> deleteDynContainersStmt;
@@ -1599,7 +1602,7 @@ Database::MigrateV13Up()
 nsresult
 Database::MigrateV14Up()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   // For existing profiles, we may not have a moz_favicons.guid column.
   // Add it here. We want it to be unique, but ALTER TABLE doesn't allow
@@ -1634,7 +1637,7 @@ Database::MigrateV14Up()
 nsresult
 Database::MigrateV15Up()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   // Drop moz_bookmarks_beforedelete_v1_trigger, since it's more expensive than
   // useful.
@@ -1660,7 +1663,7 @@ Database::MigrateV15Up()
 nsresult
 Database::MigrateV16Up()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   // Due to Bug 715268 downgraded and then upgraded profiles may lack favicons
   // guids, so fillup any missing ones.
@@ -1677,7 +1680,7 @@ Database::MigrateV16Up()
 nsresult
 Database::MigrateV17Up()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   bool tableExists = false;
 
@@ -1726,7 +1729,7 @@ Database::MigrateV17Up()
 nsresult
 Database::MigrateV18Up()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   // moz_hosts should distinguish on typed entries.
 
@@ -1770,7 +1773,7 @@ Database::MigrateV18Up()
 nsresult
 Database::MigrateV19Up()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
 
   // Livemarks children are no longer bookmarks.
 
@@ -1889,7 +1892,7 @@ Database::MigrateV20Up()
 void
 Database::Shutdown()
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
   MOZ_ASSERT(!mShuttingDown);
 
   mMainThreadStatements.FinalizeStatements();
@@ -1919,7 +1922,7 @@ Database::Observe(nsISupports *aSubject,
                   const char *aTopic,
                   const PRUnichar *aData)
 {
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(NS_IsChromeOwningThread());
  
   if (strcmp(aTopic, TOPIC_PROFILE_CHANGE_TEARDOWN) == 0) {
     // Tests simulating shutdown may cause multiple notifications.

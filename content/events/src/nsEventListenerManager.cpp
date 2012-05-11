@@ -456,6 +456,7 @@ nsEventListenerManager::AddEventListenerByType(nsIDOMEventListener *aListener,
                                                const nsAString& aType,
                                                PRInt32 aFlags)
 {
+  nsAutoLockChrome lock;
   nsCOMPtr<nsIAtom> atom = do_GetAtom(NS_LITERAL_STRING("on") + aType);
   PRUint32 type = nsContentUtils::GetEventId(atom);
   AddEventListener(aListener, type, atom, aFlags);
@@ -466,6 +467,7 @@ nsEventListenerManager::RemoveEventListenerByType(nsIDOMEventListener *aListener
                                                   const nsAString& aType,
                                                   PRInt32 aFlags)
 {
+  nsAutoLockChrome lock;
   nsCOMPtr<nsIAtom> atom = do_GetAtom(NS_LITERAL_STRING("on") + aType);
   PRUint32 type = nsContentUtils::GetEventId(atom);
   RemoveEventListener(aListener, type, atom, aFlags);
@@ -852,6 +854,17 @@ nsEventListenerManager::HandleEventInternal(nsPresContext* aPresContext,
                                             nsEventStatus* aEventStatus,
                                             nsCxPusher* aPusher)
 {
+  nsresult rv;
+  nsIScriptContext* scx =
+    aCurrentTarget->GetContextForEventHandlers(&rv);
+  if (NS_SUCCEEDED(rv)) {
+    JSObject *global = scx ? scx->GetNativeGlobal() : NULL;
+
+    JSZoneId zone = global ? JS_GetObjectZone(global) : JS_ZONE_CHROME;
+    if (zone >= JS_ZONE_CONTENT_START && !NS_TryStickContentLock(zone))
+      return;
+  }
+
   //Set the value of the internal PreventDefault flag properly based on aEventStatus
   if (*aEventStatus == nsEventStatus_eConsumeNoDefault) {
     aEvent->flags |= NS_EVENT_FLAG_NO_DEFAULT;
@@ -1064,6 +1077,9 @@ nsEventListenerManager::SetJSEventListenerToJsval(nsIAtom *aEventName,
   NS_ENSURE_TRUE(context, NS_ERROR_FAILURE);
 
   JSObject *scope = ::JS_GetGlobalForObject(cx, aScope);
+
+  nsAutoLockChrome lock;
+
   // Untrusted events are always permitted for non-chrome script
   // handlers.
   nsListenerStruct *ignored;

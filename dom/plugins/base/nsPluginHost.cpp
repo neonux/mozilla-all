@@ -1191,11 +1191,37 @@ nsresult nsPluginHost::SetUpPluginInstance(const char *aMimeType,
   return TrySetUpPluginInstance(aMimeType, aURL, aOwner);
 }
 
+class nsPluginHost::TrySetUpPluginInstanceEvent : public nsRunnable
+{
+  nsRefPtr<nsPluginHost> mHost;
+  char *mMimeType;
+  nsRefPtr<nsIURI> mURL;
+  nsRefPtr<nsIPluginInstanceOwner> mOwner;
+
+public:
+  TrySetUpPluginInstanceEvent(nsPluginHost *aHost,
+                              const char *aMimeType,
+                              nsIURI *aURL,
+                              nsIPluginInstanceOwner *aOwner)
+    : mHost(aHost), mMimeType(strdup(aMimeType)), mURL(aURL), mOwner(aOwner)
+  {}
+
+  NS_IMETHOD Run() {
+    nsresult rv = mHost->TrySetUpPluginInstance(mMimeType, mURL, mOwner);
+    free(mMimeType);
+    return rv;
+  }
+};
+
 nsresult
 nsPluginHost::TrySetUpPluginInstance(const char *aMimeType,
                                      nsIURI *aURL,
                                      nsIPluginInstanceOwner *aOwner)
 {
+  if (!NS_IsMainThread()) {
+    return NS_DispatchToMainThread(new TrySetUpPluginInstanceEvent(this, aMimeType, aURL, aOwner));
+  }
+
 #ifdef PLUGIN_LOGGING
   nsCAutoString urlSpec;
   if (aURL != nsnull) aURL->GetSpec(urlSpec);
@@ -3157,9 +3183,27 @@ nsPluginHost::AddHeadersToChannel(const char *aHeadersData,
   return rv;
 }
 
+class nsStopPluginInstanceEvent : public nsRunnable
+{
+  nsRefPtr<nsPluginHost> mHost;
+  nsRefPtr<nsNPAPIPluginInstance> mInstance;
+
+public:
+  nsStopPluginInstanceEvent(nsPluginHost *aHost, nsNPAPIPluginInstance *aInstance)
+    : mHost(aHost), mInstance(aInstance)
+  {}
+
+  NS_IMETHOD Run() {
+    return mHost->StopPluginInstance(mInstance);
+  }
+};
+
 nsresult
 nsPluginHost::StopPluginInstance(nsNPAPIPluginInstance* aInstance)
 {
+  if (!NS_IsMainThread())
+    return NS_DispatchToMainThread(new nsStopPluginInstanceEvent(this, aInstance));
+
   if (PluginDestructionGuard::DelayDestroy(aInstance)) {
     return NS_OK;
   }
@@ -4069,7 +4113,7 @@ PluginDestructionGuard::~PluginDestructionGuard()
 bool
 PluginDestructionGuard::DelayDestroy(nsNPAPIPluginInstance *aInstance)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on the main thread");
+  MOZ_ASSERT(NS_IsMainThread());
   NS_ASSERTION(aInstance, "Uh, I need an instance!");
 
   // Find the first guard on the stack and make it do a delayed

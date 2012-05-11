@@ -543,6 +543,7 @@ def writeStub(f, customMethodCalls, member, stubName, writeThisUnwrapping, write
     f.write(signature % (stubName, additionalArguments))
     f.write("{\n")
     f.write("    XPC_QS_ASSERT_CONTEXT_OK(cx);\n")
+    f.write("    nsAutoUnstickChrome unstick(cx);\n")
 
     # For methods, compute "this".
     if isMethod:

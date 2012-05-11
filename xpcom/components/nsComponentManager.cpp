@@ -693,6 +693,8 @@ nsComponentManagerImpl::ManifestCategory(ManifestProcessingContext& cx, int line
 void
 nsComponentManagerImpl::RereadChromeManifests(bool aChromeOnly)
 {
+    nsAutoLockChrome lock;
+
     for (PRUint32 i = 0; i < sModuleLocations->Length(); ++i) {
         ComponentLocation& l = sModuleLocations->ElementAt(i);
         RegisterManifest(l.type, l.location, aChromeOnly);

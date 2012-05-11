@@ -94,4 +94,29 @@ NS_COM_GLUE nsresult
 NS_ProxyRelease
     (nsIEventTarget *target, nsISupports *doomed, bool alwaysProxy=false);
 
+/* Release a reference on any nsISupports, with just the chrome lock held. */
+NS_COM_GLUE nsresult
+NS_ReleaseReferenceRaw
+    (/* nsISupports */ void *doomed);
+
+template <class T>
+inline NS_HIDDEN_(nsresult)
+NS_ReleaseReference
+    (nsCOMPtr<T> &doomed)
+{
+   T* raw = nsnull;
+   doomed.swap(raw);
+   return raw ? NS_ReleaseReferenceRaw(raw) : NS_OK;
+}
+
+template <class T>
+inline NS_HIDDEN_(nsresult)
+NS_ReleaseReference
+    (nsRefPtr<T> &doomed)
+{
+   T* raw = nsnull;
+   doomed.swap(raw);
+   return raw ? NS_ReleaseReferenceRaw(raw) : NS_OK;
+}
+
 #endif

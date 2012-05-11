@@ -88,6 +88,8 @@ class nsPIDOMWindow : public nsIDOMWindowInternal
 public:
   NS_DECLARE_STATIC_IID_ACCESSOR(NS_PIDOMWINDOW_IID)
 
+  JSZoneId GetZone() { return mZone; }
+
   virtual nsPIDOMWindow* GetPrivateRoot() = 0;
 
   virtual void ActivateOrDeactivate(bool aActivate) = 0;
@@ -611,7 +613,7 @@ protected:
   // be null if and only if the created window itself is an outer
   // window. In all other cases aOuterWindow should be the outer
   // window for the inner window that is being created.
-  nsPIDOMWindow(nsPIDOMWindow *aOuterWindow);
+  nsPIDOMWindow(nsPIDOMWindow *aOuterWindow, JSZoneId zone);
 
   ~nsPIDOMWindow();
 
@@ -665,6 +667,9 @@ protected:
   // And these are the references between inner and outer windows.
   nsPIDOMWindow         *mInnerWindow;
   nsCOMPtr<nsPIDOMWindow> mOuterWindow;
+
+  // Zone for this window.
+  JSZoneId mZone;
 
   // the element within the document that is currently focused when this
   // window is active

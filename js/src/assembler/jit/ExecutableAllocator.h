@@ -78,6 +78,8 @@ extern  "C" void sync_instruction_memory(caddr_t v, u_int len);
 
 //#define DEBUG_STRESS_JSC_ALLOCATOR
 
+extern void JS_RegisterCodeSegment(char *ptr, size_t n);
+
 namespace JSC {
 
   class ExecutableAllocator;
@@ -302,6 +304,8 @@ private:
 #endif
         if (!a.pages)
             return NULL;
+
+        JS_RegisterCodeSegment(a.pages, a.size);
 
         ExecutablePool *pool = js::OffTheBooks::new_<ExecutablePool>(this, a);
         if (!pool) {

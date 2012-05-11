@@ -215,9 +215,92 @@ PR_IMPLEMENT(void) PR_Lock(PRLock *lock)
     lock->owner = pthread_self();
     lock->locked = PR_TRUE;
 #if defined(DEBUG)
+    lock->prOwner = PR_GetCurrentThread();
     pt_debug.locks_acquired += 1;
 #endif
 }  /* PR_Lock */
+
+#define PT_MICROPERSECOND 1000000UL
+#define PT_NANOPERMICRO 1000UL
+#define PT_BILLION 1000000000UL
+
+/* Compute an absolute time as an offset from the current time by tmo. */
+static void AddTimeToNow(struct timespec *tmo)
+{
+    struct timeval now;
+    (void)GETTIMEOFDAY(&now);
+
+    /* that one's usecs, this one's nsecs - grrrr! */
+    tmo->tv_sec += now.tv_sec;
+    tmo->tv_nsec += (PT_NANOPERMICRO * now.tv_usec);
+    tmo->tv_sec += tmo->tv_nsec / PT_BILLION;
+    tmo->tv_nsec %= PT_BILLION;
+}
+
+#define PT_SLEEPINTERVAL 200
+
+PR_IMPLEMENT(PRBool) PR_TryLock(PRLock *lock, unsigned int timeout)
+{
+    PRIntn rv;
+    PR_ASSERT(lock != NULL);
+    if (timeout)
+    {
+#if 0  // No pthread_mutex_timedlock on OS X :(
+        struct timespec tmo;
+        tmo.tv_sec = (PRInt32)(timeout / PT_MICROPERSECOND);
+        timeout -= (tmo.tv_nsec * PT_MICROPERSECOND);
+        tmo.tv_nsec = timeout * PT_NANOPERMICRO;
+
+        AddTimeToNow(&tmo);
+        rv = pthread_mutex_timedlock(&lock->mutex, &tmo);
+        if (0 != rv)
+        {
+            PR_ASSERT(ETIMEDOUT == rv);
+            return PR_FALSE;
+        }
+#else
+        while (true) {
+            rv = pthread_mutex_trylock(&lock->mutex);
+            if (0 != rv)
+                PR_ASSERT(EBUSY == rv);
+            else
+                break;
+            if (timeout == 0)
+                return PR_FALSE;
+            unsigned int micros = (timeout < PT_SLEEPINTERVAL) ? timeout : PT_SLEEPINTERVAL;
+            struct timespec ts;
+            ts.tv_sec = 0;
+            ts.tv_nsec = micros * PT_NANOPERMICRO;
+            nanosleep(&ts, &ts);
+            timeout -= micros;
+        }
+#endif
+    }
+    else
+    {
+        rv = pthread_mutex_trylock(&lock->mutex);
+        if (0 != rv)
+        {
+            PR_ASSERT(EBUSY == rv);
+            return PR_FALSE;
+        }
+    }
+    PR_ASSERT(0 == rv);
+    PR_ASSERT(0 == lock->notified.length);
+    PR_ASSERT(NULL == lock->notified.link);
+    PR_ASSERT(PR_FALSE == lock->locked);
+    /* Nb: the order of the next two statements is not critical to
+     * the correctness of PR_AssertCurrentThreadOwnsLock(), but 
+     * this particular order makes the assertion more likely to
+     * catch errors. */
+    lock->owner = pthread_self();
+    lock->locked = PR_TRUE;
+#if defined(DEBUG)
+    lock->prOwner = PR_GetCurrentThread();
+    pt_debug.locks_acquired += 1;
+#endif
+    return PR_TRUE;
+} /* PR_TryLock */
 
 PR_IMPLEMENT(PRStatus) PR_Unlock(PRLock *lock)
 {
@@ -266,14 +349,11 @@ PR_IMPLEMENT(void) PR_AssertCurrentThreadOwnsLock(PRLock *lock)
  * It's moderately ugly, so it's defined here and called in a
  * couple of places.
  */
-#define PT_NANOPERMICRO 1000UL
-#define PT_BILLION 1000000000UL
 
 static PRIntn pt_TimedWait(
     pthread_cond_t *cv, pthread_mutex_t *ml, PRIntervalTime timeout)
 {
     int rv;
-    struct timeval now;
     struct timespec tmo;
     PRUint32 ticks = PR_TicksPerSecond();
 
@@ -281,13 +361,7 @@ static PRIntn pt_TimedWait(
     tmo.tv_nsec = (PRInt32)(timeout - (tmo.tv_sec * ticks));
     tmo.tv_nsec = (PRInt32)PR_IntervalToMicroseconds(PT_NANOPERMICRO * tmo.tv_nsec);
 
-    /* pthreads wants this in absolute time, off we go ... */
-    (void)GETTIMEOFDAY(&now);
-    /* that one's usecs, this one's nsecs - grrrr! */
-    tmo.tv_sec += now.tv_sec;
-    tmo.tv_nsec += (PT_NANOPERMICRO * now.tv_usec);
-    tmo.tv_sec += tmo.tv_nsec / PT_BILLION;
-    tmo.tv_nsec %= PT_BILLION;
+    AddTimeToNow(&tmo);
 
     rv = pthread_cond_timedwait(cv, ml, &tmo);
 
@@ -422,6 +496,10 @@ PR_IMPLEMENT(PRStatus) PR_WaitCondVar(PRCondVar *cvar, PRIntervalTime timeout)
     PR_ASSERT(PR_FALSE == cvar->lock->locked);
     cvar->lock->locked = PR_TRUE;
     cvar->lock->owner = pthread_self();
+
+#if defined(DEBUG)
+    cvar->lock->prOwner = PR_GetCurrentThread();
+#endif
 
     PR_ASSERT(0 == cvar->lock->notified.length);
     thred->waiting = NULL;  /* and now we're not */
@@ -1096,6 +1174,9 @@ PR_IMPLEMENT(PRStatus) PRP_TryLock(PRLock *lock)
         PR_ASSERT(PR_FALSE == lock->locked);
         lock->locked = PR_TRUE;
         lock->owner = pthread_self();
+#if defined(DEBUG)
+        lock->prOwner = PR_GetCurrentThread();
+#endif
     }
     /* XXX set error code? */
     return (PT_TRYLOCK_SUCCESS == rv) ? PR_SUCCESS : PR_FAILURE;

@@ -52,6 +52,8 @@ nsHtml5SVGLoadDispatcher::nsHtml5SVGLoadDispatcher(nsIContent* aElement)
 NS_IMETHODIMP
 nsHtml5SVGLoadDispatcher::Run()
 {
+  NS_StickLock(mElement);
+
   nsEvent event(true, NS_SVG_LOAD);
   event.eventStructType = NS_SVG_EVENT;
   event.flags |= NS_EVENT_FLAG_CANT_BUBBLE;

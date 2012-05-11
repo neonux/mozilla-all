@@ -834,7 +834,13 @@ struct ChildSheetListBuilder {
     }
   }
 };
-  
+
+JSZoneId
+nsCSSStyleSheet::GetZone()
+{
+  return mDocument ? mDocument->GetZone() : JS_ZONE_CHROME;
+}
+
 bool
 nsCSSStyleSheet::RebuildChildList(css::Rule* aRule, void* aBuilder)
 {
@@ -1064,6 +1070,8 @@ nsCSSStyleSheet::nsCSSStyleSheet(const nsCSSStyleSheet& aCopy,
     mInner(aCopy.mInner),
     mRuleProcessors(nsnull)
 {
+  if (aDocumentToUse)
+    NS_FIX_OWNINGTHREAD(mDocument->GetZone());
 
   mInner->AddSheet(this);
 
@@ -1255,6 +1263,13 @@ nsCSSStyleSheet::IsComplete() const
 /* virtual */ void
 nsCSSStyleSheet::SetComplete()
 {
+  if (!NS_TryStickLock(this)) {
+    // XXX not holding strong reference on 'this'.
+    NS_DispatchToMainThread(NS_NewRunnableMethod(this, &nsCSSStyleSheet::SetComplete),
+                            NS_DISPATCH_NORMAL, GetZone());
+    return;
+  }
+
   NS_ASSERTION(!mDirty, "Can't set a dirty sheet complete!");
   mInner->mComplete = true;
   if (mDocument && !mDisabled) {
@@ -1281,6 +1296,10 @@ nsCSSStyleSheet::GetOwningDocument() const
 nsCSSStyleSheet::SetOwningDocument(nsIDocument* aDocument)
 { // not ref counted
   mDocument = aDocument;
+
+  if (aDocument)
+    NS_FIX_OWNINGTHREAD(mDocument->GetZone());
+
   // Now set the same document on all our child sheets....
   // XXXbz this is a little bogus; see the XXX comment where we
   // declare mFirstChild.
@@ -1341,6 +1360,9 @@ nsCSSStyleSheet::AppendStyleSheet(nsCSSStyleSheet* aSheet)
     aSheet->mParent = this;
     aSheet->mDocument = mDocument;
     DidDirty();
+
+    if (mDocument)
+      NS_FIX_OWNINGTHREAD_OTHER(aSheet, mDocument->GetZone());
   }
 }
 
@@ -1363,6 +1385,9 @@ nsCSSStyleSheet::InsertStyleSheetAt(nsCSSStyleSheet* aSheet, PRInt32 aIndex)
     aSheet->mParent = this;
     aSheet->mDocument = mDocument;
     DidDirty();
+
+    if (mDocument)
+      NS_FIX_OWNINGTHREAD_OTHER(aSheet, mDocument->GetZone());
   }
 }
 

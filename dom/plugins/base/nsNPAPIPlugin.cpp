@@ -1290,6 +1290,8 @@ _getwindowobject(NPP npp)
   JSContext *cx = GetJSContextFromNPP(npp);
   NS_ENSURE_TRUE(cx, nsnull);
 
+  nsAutoUnstickChrome unstick(cx);
+
   // Using ::JS_GetGlobalObject(cx) is ok here since the window we
   // want to return here is the outer window, *not* the inner (since
   // we don't know what the plugin will do with it).
@@ -1316,6 +1318,8 @@ _getpluginelement(NPP npp)
 
   JSContext *cx = GetJSContextFromNPP(npp);
   NS_ENSURE_TRUE(cx, nsnull);
+
+  nsAutoUnstickChrome unstick(cx);
 
   nsCOMPtr<nsIXPConnect> xpc(do_GetService(nsIXPConnect::GetCID()));
   NS_ENSURE_TRUE(xpc, nsnull);
@@ -1587,6 +1591,8 @@ _evaluate(NPP npp, NPObject* npobj, NPString *script, NPVariant *result)
 
   JSContext *cx = GetJSContextFromDoc(doc);
   NS_ENSURE_TRUE(cx, false);
+
+  nsAutoUnstickChrome unstick(cx);
 
   nsCOMPtr<nsIScriptContext> scx = GetScriptContextFromJSContext(cx);
   NS_ENSURE_TRUE(scx, false);

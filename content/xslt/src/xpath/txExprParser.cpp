@@ -512,6 +512,8 @@ txExprParser::createLocationStep(txExprLexer& lexer, txIParseContext* aContext,
     switch (tok->mType) {
         case Token::AXIS_IDENTIFIER:
         {
+            nsAutoLockChrome lock; // for atoms
+
             //-- eat token
             lexer.nextToken();
             nsCOMPtr<nsIAtom> axis = do_GetAtom(tok->Value());
@@ -586,6 +588,8 @@ txExprParser::createLocationStep(txExprLexer& lexer, txIParseContext* aContext,
         tok = lexer.peek();
 
         if (tok->mType == Token::CNAME) {
+            nsAutoLockChrome lock; // for atoms
+
             lexer.nextToken();
             // resolve QName
             nsCOMPtr<nsIAtom> prefix, lName;

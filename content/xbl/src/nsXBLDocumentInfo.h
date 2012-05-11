@@ -80,7 +80,7 @@ public:
   bool IsChrome() { return mIsChrome; }
 
   // nsIScriptGlobalObjectOwner methods
-  virtual nsIScriptGlobalObject* GetScriptGlobalObject();
+  virtual nsIScriptGlobalObject* GetScriptGlobalObject(JSZoneId aZone);
 
   void MarkInCCGeneration(PRUint32 aGeneration);
 

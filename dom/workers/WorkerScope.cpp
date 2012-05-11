@@ -938,7 +938,7 @@ CreateDedicatedWorkerGlobalScope(JSContext* aCx)
 
   JSObject* global =
     JS_NewCompartmentAndGlobalObject(aCx, DedicatedWorkerGlobalScope::Class(),
-                                     GetWorkerPrincipal());
+                                     GetWorkerPrincipal(), JS_ZONE_CHROME);
   if (!global) {
     return NULL;
   }

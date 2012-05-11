@@ -68,6 +68,8 @@ public:
     NS_DECL_ISUPPORTS
     NS_DECL_NSIEXPATSINK
 
+    JSZoneId GetZone() { return mZone; }
+
     // nsIContentSink
     NS_IMETHOD WillParse(void) { return NS_OK; }
     NS_IMETHOD WillBuildModel(nsDTDMode aDTDMode);
@@ -171,6 +173,7 @@ protected:
 
     nsWeakPtr              mDocument;             // [OWNER]
     nsCOMPtr<nsIURI>       mDocumentURL;          // [OWNER]
+    JSZoneId               mZone;
 
     nsRefPtr<nsXULPrototypeDocument> mPrototype;  // [OWNER]
 

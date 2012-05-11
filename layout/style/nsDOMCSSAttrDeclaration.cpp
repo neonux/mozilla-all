@@ -125,6 +125,7 @@ nsDOMCSSAttributeDeclaration::DocToUpdate()
   // plan to modify the CSSDeclaration, so need to notify
   // AttributeWillChange if this is inline style.
   if (!mIsSMILOverride) {
+    nsAutoLockChrome lock;
     nsNodeUtils::AttributeWillChange(mElement, kNameSpaceID_None,
                                      nsGkAtoms::style,
                                      nsIDOMMutationEvent::MODIFICATION);

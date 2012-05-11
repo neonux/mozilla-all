@@ -49,6 +49,7 @@
 #include "nsComponentManagerUtils.h"
 #include "nsIObserver.h"
 #include "nsIObserverService.h"
+#include "nsThreadUtils.h"
 #include "mozilla/Services.h"
 #include "mozilla/Attributes.h"
 
@@ -323,12 +324,14 @@ template <class T, PRUint32 K> class nsExpirationTracker {
     public:
       void Init(nsExpirationTracker<T,K> *obj) {
         mOwner = obj;
+        nsAutoLockChrome lock;
         nsCOMPtr<nsIObserverService> obs = mozilla::services::GetObserverService();
         if (obs) {
           obs->AddObserver(this, "memory-pressure", false);
         }
       }
       void Destroy() {
+        nsAutoLockChrome lock;
         nsCOMPtr<nsIObserverService> obs = mozilla::services::GetObserverService();
         if (obs)
           obs->RemoveObserver(this, "memory-pressure");

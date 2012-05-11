@@ -194,7 +194,7 @@ PluginModuleParent::WriteExtraDataForMinidump(CrashReporter::AnnotationTable& no
 int
 PluginModuleParent::TimeoutChanged(const char* aPref, void* aModule)
 {
-    NS_ASSERTION(NS_IsMainThread(), "Wrong thead!");
+    NS_ASSERTION(NS_IsChromeOwningThread(), "Wrong thead!");
     if (!strcmp(aPref, kChildTimeoutPref)) {
       // The timeout value used by the parent for children
       PRInt32 timeoutSecs = Preferences::GetInt(kChildTimeoutPref, 0);

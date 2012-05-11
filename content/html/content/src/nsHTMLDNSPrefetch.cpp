@@ -304,6 +304,8 @@ void
 nsHTMLDNSPrefetch::nsDeferrals::Flush()
 {
   while (mHead != mTail) {
+    if (mEntries[mTail].mZone >= JS_ZONE_CONTENT_START)
+      NS_StickContentLock(mEntries[mTail].mZone);
     mEntries[mTail].mElement = nsnull;
     mTail = (mTail + 1) & sMaxDeferredMask;
   }
@@ -313,7 +315,7 @@ nsresult
 nsHTMLDNSPrefetch::nsDeferrals::Add(PRUint16 flags, Link *aElement)
 {
   // The FIFO has no lock, so it can only be accessed on main thread
-  NS_ASSERTION(NS_IsMainThread(), "nsDeferrals::Add must be on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "nsDeferrals::Add must be on main thread");
 
   aElement->OnDNSPrefetchDeferred();
 
@@ -322,6 +324,7 @@ nsHTMLDNSPrefetch::nsDeferrals::Add(PRUint16 flags, Link *aElement)
     
   mEntries[mHead].mFlags = flags;
   mEntries[mHead].mElement = do_GetWeakReference(aElement);
+  mEntries[mHead].mZone = aElement->GetZone();
   mHead = (mHead + 1) & sMaxDeferredMask;
 
   if (!mActiveLoaderCount && !mTimerArmed && mTimer) {
@@ -335,11 +338,13 @@ nsHTMLDNSPrefetch::nsDeferrals::Add(PRUint16 flags, Link *aElement)
 void
 nsHTMLDNSPrefetch::nsDeferrals::SubmitQueue()
 {
-  NS_ASSERTION(NS_IsMainThread(), "nsDeferrals::SubmitQueue must be on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "nsDeferrals::SubmitQueue must be on main thread");
   nsCString hostName;
   if (!sDNSService) return;
 
   while (mHead != mTail) {
+    if (mEntries[mTail].mZone >= JS_ZONE_CONTENT_START)
+      NS_StickContentLock(mEntries[mTail].mZone);
     nsCOMPtr<nsIContent> content = do_QueryReferent(mEntries[mTail].mElement);
     if (content) {
       nsCOMPtr<Link> link = do_QueryInterface(content);
@@ -402,7 +407,7 @@ nsHTMLDNSPrefetch::nsDeferrals::Tick(nsITimer *aTimer, void *aClosure)
 {
   nsHTMLDNSPrefetch::nsDeferrals *self = (nsHTMLDNSPrefetch::nsDeferrals *) aClosure;
 
-  NS_ASSERTION(NS_IsMainThread(), "nsDeferrals::Tick must be on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "nsDeferrals::Tick must be on main thread");
   NS_ASSERTION(self->mTimerArmed, "Timer is not armed");
   
   self->mTimerArmed = false;
@@ -423,7 +428,7 @@ nsHTMLDNSPrefetch::nsDeferrals::OnStateChange(nsIWebProgress* aWebProgress,
                                               nsresult aStatus)
 {
   // The FIFO has no lock, so it can only be accessed on main thread
-  NS_ASSERTION(NS_IsMainThread(), "nsDeferrals::OnStateChange must be on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "nsDeferrals::OnStateChange must be on main thread");
   
   if (progressStateFlags & STATE_IS_DOCUMENT) {
     if (progressStateFlags & STATE_STOP) {

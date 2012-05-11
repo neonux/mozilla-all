@@ -214,7 +214,6 @@ private:
   nsRefPtr<Connection> mConnection;
   mozStorageTransaction *mTransactionManager;
   mozIStorageStatementCallback *mCallback;
-  nsCOMPtr<nsIThread> mCallingThread;
   nsRefPtr<ResultSet> mResultSet;
 
   /**

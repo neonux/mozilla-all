@@ -351,6 +351,7 @@ private:
   bool                        mWidgetCreationComplete;
   nsCOMPtr<nsIWidget>         mWidget;
   nsRefPtr<nsPluginHost>      mPluginHost;
+  PRInt32                     mMode;
   
 #ifdef XP_MACOSX
   NP_CGContext                              mCGPluginPortCopy;
@@ -398,6 +399,8 @@ private:
   // returned true.
   bool mUseAsyncRendering;
 #endif
+
+  class AsyncPaintWaitEvent;
   
   // pointer to wrapper for nsIDOMContextMenuListener
   nsRefPtr<nsPluginDOMContextMenuListener> mCXMenuListener;

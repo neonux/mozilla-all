@@ -76,7 +76,7 @@ nsClientAuthRememberService::~nsClientAuthRememberService()
 nsresult
 nsClientAuthRememberService::Init()
 {
-  if (!NS_IsMainThread()) {
+  if (!NS_IsChromeOwningThread()) {
     NS_ERROR("nsClientAuthRememberService::Init called off the main thread");
     return NS_ERROR_NOT_SAME_THREAD;
   }

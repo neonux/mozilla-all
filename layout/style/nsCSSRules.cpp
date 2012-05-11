@@ -89,6 +89,12 @@ namespace css {
 NS_IMPL_ADDREF(Rule)
 NS_IMPL_RELEASE(Rule)
 
+JSZoneId
+Rule::GetZone()
+{
+  return mSheet ? mSheet->GetZone() : JS_ZONE_CHROME;
+}
+
 /* virtual */ void
 Rule::SetStyleSheet(nsCSSStyleSheet* aSheet)
 {

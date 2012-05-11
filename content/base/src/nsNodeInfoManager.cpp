@@ -118,6 +118,7 @@ nsNodeInfoManager::NodeInfoInnerKeyCompare(const void *key1, const void *key2)
 
 nsNodeInfoManager::nsNodeInfoManager()
   : mDocument(nsnull),
+    mZone(JS_ZONE_CHROME),
     mNonDocumentNodeInfos(0),
     mPrincipal(nsnull),
     mTextNodeInfo(nsnull),
@@ -199,6 +200,7 @@ nsNodeInfoManager::Init(nsIDocument *aDocument)
   mDefaultPrincipal = mPrincipal;
 
   mDocument = aDocument;
+  mZone = JS_ZONE_CHROME;
 
 #ifdef PR_LOGGING
   if (gNodeInfoManagerLeakPRLog)
@@ -282,6 +284,7 @@ nsNodeInfoManager::GetNodeInfo(const nsAString& aName, nsIAtom *aPrefix,
 {
 #ifdef DEBUG
   {
+    nsAutoLockChrome lock;
     nsCOMPtr<nsIAtom> nameAtom = do_GetAtom(aName);
     CHECK_VALID_NODEINFO(aNodeType, nameAtom, aNamespaceID, nsnull);
   }
@@ -299,6 +302,7 @@ nsNodeInfoManager::GetNodeInfo(const nsAString& aName, nsIAtom *aPrefix,
     return NS_OK;
   }
 
+  nsAutoLockChrome lock;
   
   nsCOMPtr<nsIAtom> nameAtom = do_GetAtom(aName);
   NS_ENSURE_TRUE(nameAtom, NS_ERROR_OUT_OF_MEMORY);

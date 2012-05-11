@@ -552,6 +552,7 @@ class CGClassConstructHook(CGAbstractStaticMethod):
 
     def generate_code(self):
         preamble = """
+  nsAutoLockChrome lock;
   JSObject* obj = JS_GetGlobalForObject(cx, JSVAL_TO_OBJECT(JS_CALLEE(cx, vp)));
 """
         preArgs = ""
@@ -2138,7 +2139,8 @@ class CGAbstractBindingMethod(CGAbstractStaticMethod):
 
     def getThis(self):
         return CGIndenter(
-            CGGeneric("JSObject* obj = JS_THIS_OBJECT(cx, vp);\n"
+            CGGeneric("nsAutoLockChrome lock;\n"
+                      "JSObject* obj = JS_THIS_OBJECT(cx, vp);\n"
                       "if (!obj) {\n"
                       "  return false;\n"
                       "}\n"

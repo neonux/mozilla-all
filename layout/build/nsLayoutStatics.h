@@ -54,8 +54,7 @@ public:
 
   static void AddRef()
   {
-    NS_ASSERTION(NS_IsMainThread(),
-                 "nsLayoutStatics reference counting must be on main thread");
+    MOZ_ASSERT(NS_IsChromeOwningThread());
 
     NS_ASSERTION(sLayoutStaticRefcnt,
                  "nsLayoutStatics already dropped to zero!");
@@ -66,8 +65,7 @@ public:
   }
   static void Release()
   {
-    NS_ASSERTION(NS_IsMainThread(),
-                 "nsLayoutStatics reference counting must be on main thread");
+    MOZ_ASSERT(NS_IsChromeOwningThread());
 
     --sLayoutStaticRefcnt;
     NS_LOG_RELEASE(&sLayoutStaticRefcnt, sLayoutStaticRefcnt,

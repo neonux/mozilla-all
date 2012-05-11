@@ -218,6 +218,7 @@ nsTimerImpl::nsTimerImpl() :
   mClosure(nsnull),
   mCallbackType(CALLBACK_TYPE_UNKNOWN),
   mFiring(false),
+  mCallbackZone(JS_ZONE_CHROME),
   mArmed(false),
   mCanceled(false),
   mGeneration(0),
@@ -355,6 +356,22 @@ NS_IMETHODIMP nsTimerImpl::Init(nsIObserver *aObserver,
   return InitCommon(aType, aDelay);
 }
 
+NS_IMETHODIMP nsTimerImpl::GetCallbackZone(PRInt32 *pZone)
+{
+  *pZone = mCallbackZone;
+  return NS_OK;
+}
+
+NS_IMETHODIMP nsTimerImpl::SetCallbackZone(PRInt32 aZone)
+{
+  nsCOMPtr<nsIThread> thread;
+  nsresult rv = NS_GetExecuteThread((JSZoneId) aZone, getter_AddRefs(thread));
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  mEventTarget = thread;
+  mCallbackZone = (JSZoneId) aZone;
+}
+
 NS_IMETHODIMP nsTimerImpl::Cancel()
 {
   mCanceled = true;
@@ -454,6 +471,9 @@ NS_IMETHODIMP nsTimerImpl::SetTarget(nsIEventTarget* aTarget)
 
 void nsTimerImpl::Fire()
 {
+  if (mCallbackZone >= JS_ZONE_CONTENT_START)
+    NS_StickContentLock(mCallbackZone);
+
   if (mCanceled)
     return;
 

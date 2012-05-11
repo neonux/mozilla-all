@@ -528,8 +528,9 @@ class nsCOMPtr MOZ_FINAL
         {
           if ( mRawPtr )
             {
-              nsCOMPtr<T> query_result( do_QueryInterface(mRawPtr) );
-              NS_ASSERTION(query_result.get() == mRawPtr, "QueryInterface needed");
+              // XXX querying interface may require a lock which we don't hold.
+              //nsCOMPtr<T> query_result( do_QueryInterface(mRawPtr) );
+              //NS_ASSERTION(query_result.get() == mRawPtr, "QueryInterface needed");
             }
         }
 

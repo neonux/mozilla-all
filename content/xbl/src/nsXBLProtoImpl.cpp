@@ -155,6 +155,8 @@ nsXBLProtoImpl::InitTargetObjects(nsXBLPrototypeBinding* aBinding,
                                   getter_AddRefs(wrapper));
   NS_ENSURE_SUCCESS(rv, rv);
 
+  nsAutoLockZone lock(JS_GetObjectZone(global));
+
   // All of the above code was just obtaining the bound element's script object and its immediate
   // concrete base class.  We need to alter the object so that our concrete class is interposed
   // between the object and its base class.  We become the new base class of the object, and the
@@ -180,7 +182,7 @@ nsXBLProtoImpl::CompilePrototypeMembers(nsXBLPrototypeBinding* aBinding)
   // context.
   nsCOMPtr<nsIScriptGlobalObjectOwner> globalOwner(
       do_QueryObject(aBinding->XBLDocumentInfo()));
-  nsIScriptGlobalObject* globalObject = globalOwner->GetScriptGlobalObject();
+  nsIScriptGlobalObject* globalObject = globalOwner->GetScriptGlobalObject(JS_ZONE_CHROME);
   NS_ENSURE_TRUE(globalObject, NS_ERROR_UNEXPECTED);
 
   nsIScriptContext *context = globalObject->GetContext();

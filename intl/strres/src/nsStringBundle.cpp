@@ -110,6 +110,8 @@ nsStringBundle::LoadProperties()
 
   nsresult rv;
 
+  nsAutoLockChrome lock; // for nsIURI
+
   // do it synchronously
   nsCOMPtr<nsIURI> uri;
   rv = NS_NewURI(getter_AddRefs(uri), mPropertiesURL);

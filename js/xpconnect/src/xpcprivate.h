@@ -1119,6 +1119,9 @@ public:
     XPCReadableJSStringWrapper *NewStringWrapper(const PRUnichar *str, PRUint32 len);
     void DeleteString(nsAString *string);
 
+    inline bool CheckObjectLock(nsISupports *object);
+    inline void CheckChromeLock();
+
 private:
 
     // no copy ctor or assignment allowed
@@ -2575,6 +2578,15 @@ public:
     JSBool
     IsValid() const {return nsnull != mFlatJSObject;}
 
+    JSBool
+    EnsureLockHeld(JSContext *cx) const
+    {
+        JSZoneId zone = JS_GetObjectZone(mFlatJSObject);
+        if (zone >= JS_ZONE_CONTENT_START && zone != JS_GetZone(cx))
+            return NS_TryStickContentLock(zone);
+        return true;
+    }
+
 #define XPC_SCOPE_WORD(s)   (intptr_t(s))
 #define XPC_SCOPE_MASK      (intptr_t(0x3))
 #define XPC_SCOPE_TAG       (intptr_t(0x1))
@@ -2681,6 +2693,7 @@ public:
 
     static nsresult
     WrapNewGlobal(XPCCallContext &ccx, xpcObjectHelper &nativeHelper,
+                  JSZoneId zone,
                   nsIPrincipal *principal, bool initStandardClasses,
                   XPCWrappedNative **wrappedGlobal);
 
@@ -2928,6 +2941,16 @@ public:
                                                                            XPCNativeScriptableCreateInfo& sciProto,
                                                                            XPCNativeScriptableCreateInfo& sciWrapper);
 
+#ifdef DEBUG
+    bool onCorrectThread() const {
+        return const_cast<XPCWrappedNative*>(this)->_mOwningThread.onCorrectThread();
+    }
+
+    void FixZone(JSZoneId zone) {
+        _mOwningThread.fixZone(zone);
+    }
+#endif
+
 private:
     union
     {
@@ -2939,12 +2962,6 @@ private:
     XPCNativeScriptableInfo*     mScriptableInfo;
     XPCWrappedNativeTearOffChunk mFirstChunk;
     intptr_t                     mWrapperWord;
-
-#ifdef XPC_CHECK_WRAPPER_THREADSAFETY
-public:
-    // Don't want to overload _mOwningThread
-    PRThread*                    mThread;
-#endif
 };
 
 /***************************************************************************
@@ -3090,6 +3107,12 @@ public:
                           const XPTMethodDescriptor *info,
                           nsXPTCMiniVariant* params);
 
+    JSZoneId GetZone()
+    {
+        nsISupports *native = GetAggregatedNativeObject();
+        return native ? native->GetZone() : JS_ZONE_CHROME;
+    }
+
     /*
     * This is rarely called directly. Instead one usually calls
     * XPCConvert::JSObject2NativeInterface which will handles cases where the
@@ -3144,7 +3167,7 @@ public:
     nsISupports* GetAggregatedNativeObject() const {return mRoot->mOuter;}
 
     void SetIsMainThreadOnly() {
-        MOZ_ASSERT(mMainThread);
+        JS_ASSERT(NS_IsChromeOwningThread());
         mMainThreadOnly = true;
     }
     bool IsMainThreadOnly() const {return mMainThreadOnly;}
@@ -3171,7 +3194,6 @@ private:
     nsXPCWrappedJS* mRoot;
     nsXPCWrappedJS* mNext;
     nsISupports* mOuter;    // only set in root
-    bool mMainThread;
     bool mMainThreadOnly;
 };
 
@@ -3275,9 +3297,10 @@ public:
         if (mXPCClassInfo)
           return mXPCClassInfo;
         if (!mClassInfo)
-            mClassInfo = do_QueryInterface(mObject);
+          mClassInfo = do_QueryInterface(mObject);
         return mClassInfo;
     }
+
     nsXPCClassInfo *GetXPCClassInfo()
     {
         if (!mXPCClassInfo) {
@@ -3789,19 +3812,8 @@ public:
     // Get the instance of this object for the current thread
     static inline XPCPerThreadData* GetData(JSContext *cx)
     {
-        // Do a release-mode assert that we're not doing anything significant in
-        // XPConnect off the main thread. If you're an extension developer hitting
-        // this, you need to change your code. See bug 716167.
-        if (!NS_LIKELY(NS_IsMainThread() || NS_IsCycleCollectorThread()))
-            MOZ_Assert("NS_IsMainThread()", __FILE__, __LINE__);
-
-        if (cx) {
-            if (js::GetOwnerThread(cx) == sMainJSThread)
-                return sMainThreadData;
-        } else if (sMainThreadData && sMainThreadData->mThread == PR_GetCurrentThread()) {
-            return sMainThreadData;
-        }
-
+        // XXX restore cache
+        //MOZ_ASSERT(cx->thread()->id == PR_GetCurrentThread());
         return GetDataImpl(cx);
     }
 
@@ -3895,11 +3907,14 @@ public:
         {mWrappedNativeThreadsafetyReportDepth = 0;}
 #endif
 
-    static void ShutDown()
-        {sMainJSThread = nsnull; sMainThreadData = nsnull;}
+    static void ShutDown() {
+    }
 
-    static bool IsMainThread(JSContext *cx)
-        { return js::GetOwnerThread(cx) == sMainJSThread; }
+    static bool IsExecuteThread(JSContext *cx) {
+        // XXX restore cache
+        //MOZ_ASSERT(cx->thread()->id == PR_GetCurrentThread());
+        return NS_IsExecuteThread();
+    }
 
 private:
     XPCPerThreadData();
@@ -3925,13 +3940,6 @@ private:
     static Mutex*            gLock;
     static XPCPerThreadData* gThreads;
     static PRUintn           gTLSIndex;
-
-    // Cached value of cx->thread on the main thread.
-    static void *sMainJSThread;
-
-    // Cached per thread data for the main thread. Only safe to access
-    // if cx->thread == sMainJSThread.
-    static XPCPerThreadData *sMainThreadData;
 };
 
 /***************************************************************************/

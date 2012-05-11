@@ -57,6 +57,7 @@
 #include "nsIXULRuntime.h"
 #include "nsIGfxInfo.h"
 #include "npapi.h"
+#include "nsContentUtils.h"
 #include "base/thread.h"
 
 #ifdef DEBUG
@@ -1006,13 +1007,55 @@ NS_METHOD nsBaseWidget::SetWindowClass(const nsAString& xulWinType)
   return NS_ERROR_NOT_IMPLEMENTED;
 }
 
+class nsMoveWidgetEvent : public nsRunnable
+{
+  nsBaseWidget *mWidget;
+  PRInt32 mX, mY;
+
+public:
+  nsMoveWidgetEvent(nsBaseWidget *aWidget,
+                    PRInt32 aX, PRInt32 aY)
+    : mWidget(aWidget), mX(aX), mY(aY)
+  {}
+
+  NS_IMETHOD Run()
+  {
+    return mWidget->Move(mX, mY);
+  }
+};
+
 NS_METHOD nsBaseWidget::MoveClient(PRInt32 aX, PRInt32 aY)
 {
   nsIntPoint clientOffset(GetClientOffset());
   aX -= clientOffset.x;
   aY -= clientOffset.y;
-  return Move(aX, aY);
+
+  if (NS_CanLockNewContent()) {
+    return Move(aX, aY);
+  } else {
+    return nsContentUtils::AddScriptRunner(
+      new nsMoveWidgetEvent(this, aX, aY));
+  }
 }
+
+class nsResizeWidgetEvent : public nsRunnable
+{
+  nsBaseWidget *mWidget;
+  PRInt32 mWidth, mHeight;
+  bool mRepaint;
+
+public:
+  nsResizeWidgetEvent(nsBaseWidget *aWidget,
+                      PRInt32 aWidth, PRInt32 aHeight,
+                      bool aRepaint)
+    : mWidget(aWidget), mWidth(aWidth), mHeight(aHeight), mRepaint(aRepaint)
+  {}
+
+  NS_IMETHOD Run()
+  {
+    return mWidget->Resize(mWidth, mHeight, mRepaint);
+  }
+};
 
 NS_METHOD nsBaseWidget::ResizeClient(PRInt32 aWidth,
                                      PRInt32 aHeight,
@@ -1026,8 +1069,32 @@ NS_METHOD nsBaseWidget::ResizeClient(PRInt32 aWidth,
   aWidth = mBounds.width + (aWidth - clientBounds.width);
   aHeight = mBounds.height + (aHeight - clientBounds.height);
 
-  return Resize(aWidth, aHeight, aRepaint);
+  if (NS_CanLockNewContent()) {
+    return Resize(aWidth, aHeight, aRepaint);
+  } else {
+    return nsContentUtils::AddScriptRunner(
+      new nsResizeWidgetEvent(this, aWidth, aHeight, aRepaint));
+  }
 }
+
+class nsResizeRepositionWidgetEvent : public nsRunnable
+{
+  nsBaseWidget *mWidget;
+  PRInt32 mX, mY, mWidth, mHeight;
+  bool mRepaint;
+
+public:
+  nsResizeRepositionWidgetEvent(nsBaseWidget *aWidget,
+                                PRInt32 aX, PRInt32 aY, PRInt32 aWidth, PRInt32 aHeight,
+                                bool aRepaint)
+    : mWidget(aWidget), mX(aX), mY(aY), mWidth(aWidth), mHeight(aHeight), mRepaint(aRepaint)
+  {}
+
+  NS_IMETHOD Run()
+  {
+    return mWidget->Resize(mX, mY, mWidth, mHeight, mRepaint);
+  }
+};
 
 NS_METHOD nsBaseWidget::ResizeClient(PRInt32 aX,
                                      PRInt32 aY,
@@ -1047,7 +1114,12 @@ NS_METHOD nsBaseWidget::ResizeClient(PRInt32 aX,
   aX -= clientOffset.x;
   aY -= clientOffset.y;
 
-  return Resize(aX, aY, aWidth, aHeight, aRepaint);
+  if (NS_CanLockNewContent()) {
+    return Resize(aX, aY, aWidth, aHeight, aRepaint);
+  } else {
+    nsContentUtils::AddScriptRunner(
+      new nsResizeRepositionWidgetEvent(this, aX, aY, aWidth, aHeight, aRepaint));
+  }
 }
 
 //-------------------------------------------------------------------------

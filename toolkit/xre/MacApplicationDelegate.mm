@@ -65,6 +65,7 @@
 #include "nsILocalFileMac.h"
 #include "nsString.h"
 #include "nsCommandLineServiceMac.h"
+#include "nsThreadUtils.h"
 
 class AutoAutoreleasePool {
 public:
@@ -208,6 +209,7 @@ ProcessPendingGetURLAppleEvents()
 // miniaturized, so we can't skip nsCocoaNativeReOpen() if 'flag' is 'true'.
 - (BOOL)applicationShouldHandleReopen:(NSApplication*)theApp hasVisibleWindows:(BOOL)flag
 {
+  nsAutoLockChrome lock;
   nsCOMPtr<nsINativeAppSupport> nas = do_CreateInstance(NS_NATIVEAPPSUPPORT_CONTRACTID);
   NS_ENSURE_TRUE(nas, NO);
 

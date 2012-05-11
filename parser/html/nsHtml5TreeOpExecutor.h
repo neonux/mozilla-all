@@ -275,7 +275,7 @@ class nsHtml5TreeOpExecutor : public nsContentSink,
      * value if broken.
      */
     inline nsresult IsBroken() {
-      NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
+      NS_ASSERTION(NS_IsChromeOwningThread(), "Wrong thread!");
       return mBroken;
     }
 

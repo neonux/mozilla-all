@@ -957,7 +957,7 @@ mjit::CanMethodJIT(JSContext *cx, JSScript *script, jsbytecode *pc,
         return Compile_Skipped;
     }
 
-    if (!cx->runtime->getJaegerRuntime(cx))
+    if (!cx->compartment->getJaegerCompartment(cx))
         return Compile_Error;
 
     // Ensure that constructors have at least one slot.
@@ -1320,7 +1320,7 @@ mjit::Compiler::finishThisUp()
     if (!chunkJumps.reserve(jumpTableEdges.length()))
         return Compile_Error;
 
-    JSC::ExecutableAllocator &execAlloc = cx->runtime->execAlloc();
+    JSC::ExecutableAllocator &execAlloc = cx->compartment->execAlloc();
     JSC::ExecutablePool *execPool;
     uint8_t *result = (uint8_t *)execAlloc.alloc(codeSize, &execPool, JSC::METHOD_CODE);
     if (!result) {
@@ -5921,7 +5921,7 @@ mjit::Compiler::iter(unsigned flags)
     frame.unpinReg(reg);
 
     /* Fetch the most recent iterator. */
-    masm.loadPtr(&cx->runtime->nativeIterCache.last, ioreg);
+    masm.loadPtr(&cx->compartment->nativeIterCache.last, ioreg);
 
     /* Test for NULL. */
     Jump nullIterator = masm.branchTest32(Assembler::Zero, ioreg, ioreg);

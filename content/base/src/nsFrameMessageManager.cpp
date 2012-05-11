@@ -377,10 +377,8 @@ nsFrameMessageManager::ReceiveMessage(nsISupports* aTarget,
                                       InfallibleTArray<nsString>* aJSONRetVal,
                                       JSContext* aContext)
 {
-  JSContext* ctx = mContext ? mContext : aContext;
-  if (!ctx) {
-    ctx = nsContentUtils::ThreadJSContextStack()->GetSafeJSContext();
-  }
+  JSContext* ctx = nsContentUtils::ThreadJSContextStack()->GetSafeJSContext();
+
   if (mListeners.Length()) {
     nsCOMPtr<nsIAtom> name = do_GetAtom(aMessage);
     MMListenerRemover lr(this);
@@ -674,10 +672,49 @@ nsDataHashtable<nsStringHashKey, nsFrameJSScriptExecutorHolder*>*
   nsFrameScriptExecutor::sCachedScripts = nsnull;
 nsRefPtr<nsScriptCacheCleaner> nsFrameScriptExecutor::sScriptCacheCleaner;
 
+JSContext *
+nsFrameScriptExecutor::GetJSContext()
+{
+  JSContext *canonical = mContext.canonicalContext();
+  JSContext *cx = mContext.getContext(PR_GetCurrentThread());
+
+  if (cx) {
+    if (canonical && JS_GetGlobalObject(cx) != JS_GetGlobalObject(canonical)) {
+      JSAutoRequest ar(cx);
+      JS_SetGlobalObject(cx, JS_GetGlobalObject(canonical));
+    }
+    return cx;
+  }
+
+  nsCOMPtr<nsIJSRuntimeService> runtimeSvc = 
+    do_GetService("@mozilla.org/js/xpc/RuntimeService;1");
+  NS_ENSURE_TRUE(runtimeSvc, false);
+
+  JSRuntime* rt = nsnull;
+  runtimeSvc->GetRuntime(&rt);
+
+  cx = JS_NewContext(rt, 8192);
+
+  JS_SetOptions(cx, JS_GetOptions(cx) | JSOPTION_PRIVATE_IS_NSISUPPORTS);
+  JS_SetVersion(cx, JSVERSION_LATEST);
+  JS_SetErrorReporter(cx, ContentScriptErrorReporter);
+
+  xpc_LocalizeContext(cx);
+
+  if (canonical) {
+    JSAutoRequest ar(cx);
+    JS_SetGlobalObject(cx, JS_GetGlobalObject(canonical));
+    JS_SetContextPrivate(cx, JS_GetContextPrivate(canonical));
+  }
+
+  mContext.addContext(cx);
+  return cx;
+}
+
 void
 nsFrameScriptExecutor::DidCreateCx()
 {
-  NS_ASSERTION(mCx, "Should have mCx!");
+  // NS_ASSERTION(mCx, "Should have mCx!");
   if (!sCachedScripts) {
     sCachedScripts =
       new nsDataHashtable<nsStringHashKey, nsFrameJSScriptExecutorHolder*>;
@@ -695,15 +732,17 @@ nsFrameScriptExecutor::DestroyCx()
     return;
   }
   mDelayedCxDestroy = false;
-  if (mCx) {
-    nsIXPConnect* xpc = nsContentUtils::XPConnect();
-    if (xpc) {
-      xpc->ReleaseJSContext(mCx, true);
-    } else {
-      JS_DestroyContext(mCx);
+  for (size_t i = 0; i < mContext.getContextCount(); i++) {
+    JSContext *cx = mContext.getAndRemoveContext(i);
+    if (cx) {
+      nsIXPConnect* xpc = nsContentUtils::XPConnect();
+      if (xpc) {
+        xpc->ReleaseJSContext(cx, true);
+      } else {
+        JS_DestroyContext(cx);
+      }
     }
   }
-  mCx = nsnull;
   mGlobal = nsnull;
 }
 
@@ -745,21 +784,23 @@ nsFrameScriptExecutor::Shutdown()
 void
 nsFrameScriptExecutor::LoadFrameScriptInternal(const nsAString& aURL)
 {
-  if (!mGlobal || !mCx || !sCachedScripts) {
+  if (!mGlobal || !sCachedScripts) {
     return;
   }
 
+  JSContext *cx = GetJSContext();
+
   nsFrameJSScriptExecutorHolder* holder = sCachedScripts->Get(aURL);
   if (holder) {
-    nsContentUtils::ThreadJSContextStack()->Push(mCx);
+    nsContentUtils::ThreadJSContextStack()->Push(cx);
     {
       // Need to scope JSAutoRequest to happen after Push but before Pop,
       // at least for now. See bug 584673.
-      JSAutoRequest ar(mCx);
+      JSAutoRequest ar(cx);
       JSObject* global = nsnull;
       mGlobal->GetJSObject(&global);
       if (global) {
-        (void) JS_ExecuteScript(mCx, global, holder->mScript, nsnull);
+        (void) JS_ExecuteScript(cx, global, holder->mScript, nsnull);
       }
     }
     JSContext* unused;
@@ -803,26 +844,26 @@ nsFrameScriptExecutor::LoadFrameScriptInternal(const nsAString& aURL)
   }
 
   if (!dataString.IsEmpty()) {
-    nsContentUtils::ThreadJSContextStack()->Push(mCx);
+    nsContentUtils::ThreadJSContextStack()->Push(cx);
     {
       // Need to scope JSAutoRequest to happen after Push but before Pop,
       // at least for now. See bug 584673.
-      JSAutoRequest ar(mCx);
+      JSAutoRequest ar(cx);
       JSObject* global = nsnull;
       mGlobal->GetJSObject(&global);
       JSAutoEnterCompartment ac;
-      if (global && ac.enter(mCx, global)) {
-        uint32 oldopts = JS_GetOptions(mCx);
-        JS_SetOptions(mCx, oldopts | JSOPTION_NO_SCRIPT_RVAL);
+      if (global && ac.enter(cx, global)) {
+        uint32 oldopts = JS_GetOptions(cx);
+        JS_SetOptions(cx, oldopts | JSOPTION_NO_SCRIPT_RVAL);
 
         JSScript* script =
-          JS_CompileUCScriptForPrincipals(mCx, nsnull,
+          JS_CompileUCScriptForPrincipals(cx, nsnull,
                                           nsJSPrincipals::get(mPrincipal),
                                           static_cast<const jschar*>(dataString.get()),
                                           dataString.Length(),
                                           url.get(), 1);
 
-        JS_SetOptions(mCx, oldopts);
+        JS_SetOptions(cx, oldopts);
 
         if (script) {
           nsCAutoString scheme;
@@ -832,11 +873,11 @@ nsFrameScriptExecutor::LoadFrameScriptInternal(const nsAString& aURL)
             nsFrameJSScriptExecutorHolder* holder =
               new nsFrameJSScriptExecutorHolder(script);
             // Root the object also for caching.
-            JS_AddNamedScriptRoot(mCx, &(holder->mScript),
+            JS_AddNamedScriptRoot(cx, &(holder->mScript),
                                   "Cached message manager script");
             sCachedScripts->Put(aURL, holder);
           }
-          (void) JS_ExecuteScript(mCx, global, script, nsnull);
+          (void) JS_ExecuteScript(cx, global, script, nsnull);
         }
       }
     } 
@@ -848,38 +889,18 @@ nsFrameScriptExecutor::LoadFrameScriptInternal(const nsAString& aURL)
 bool
 nsFrameScriptExecutor::InitTabChildGlobalInternal(nsISupports* aScope)
 {
-  
-  nsCOMPtr<nsIJSRuntimeService> runtimeSvc = 
-    do_GetService("@mozilla.org/js/xpc/RuntimeService;1");
-  NS_ENSURE_TRUE(runtimeSvc, false);
-
-  JSRuntime* rt = nsnull;
-  runtimeSvc->GetRuntime(&rt);
-  NS_ENSURE_TRUE(rt, false);
-
-  JSContext* cx = JS_NewContext(rt, 8192);
-  NS_ENSURE_TRUE(cx, false);
-
-  mCx = cx;
-
   nsContentUtils::GetSecurityManager()->GetSystemPrincipal(getter_AddRefs(mPrincipal));
 
-  JS_SetOptions(cx, JS_GetOptions(cx) | JSOPTION_PRIVATE_IS_NSISUPPORTS);
-  JS_SetVersion(cx, JSVERSION_LATEST);
-  JS_SetErrorReporter(cx, ContentScriptErrorReporter);
-
-  xpc_LocalizeContext(cx);
+  JSContext *cx = GetJSContext();
+  JS_SetContextPrivate(cx, aScope);
 
   JSAutoRequest ar(cx);
   nsIXPConnect* xpc = nsContentUtils::XPConnect();
   const PRUint32 flags = nsIXPConnect::INIT_JS_STANDARD_CLASSES |
                          nsIXPConnect::FLAG_SYSTEM_GLOBAL_OBJECT;
 
-  
-  JS_SetContextPrivate(cx, aScope);
-
   nsresult rv =
-    xpc->InitClassesWithNewWrappedGlobal(cx, aScope, mPrincipal,
+    xpc->InitClassesWithNewWrappedGlobal(cx, aScope, JS_ZONE_CHROME, mPrincipal,
                                          flags, getter_AddRefs(mGlobal));
   NS_ENSURE_SUCCESS(rv, false);
 
@@ -899,8 +920,9 @@ nsFrameScriptExecutor::Traverse(nsFrameScriptExecutor *tmp,
                                 nsCycleCollectionTraversalCallback &cb)
 {
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mGlobal)
-  NS_CYCLE_COLLECTION_NOTE_EDGE_NAME(cb, "mCx");
-  nsContentUtils::XPConnect()->NoteJSContext(tmp->mCx, cb);
+  NS_CYCLE_COLLECTION_NOTE_EDGE_NAME(cb, "cx");
+  for (size_t i = 0; i < tmp->mContext.getContextCount(); i++)
+    nsContentUtils::XPConnect()->NoteJSContext(tmp->mContext.getContext(i), cb);
 }
 
 NS_IMPL_ISUPPORTS1(nsScriptCacheCleaner, nsIObserver)

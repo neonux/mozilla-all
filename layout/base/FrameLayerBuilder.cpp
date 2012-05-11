@@ -2504,7 +2504,7 @@ FrameLayerBuilder::CheckDOMModified()
   // Painting is not going to complete properly. There's not much
   // we can do here though. Invalidating the window to get another repaint
   // is likely to lead to an infinite repaint loop.
-  NS_WARNING("Detected DOM modification during paint, bailing out!");
+  MOZ_ASSERT(!"Detected DOM modification during paint, bailing out!");
   return true;
 }
 

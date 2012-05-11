@@ -82,6 +82,7 @@
 #include "nsAutoPtr.h"
 #include "nsIXPCSecurityManager.h"
 #include "nsJSPrincipals.h"
+#include "nsThreadUtils.h"
 #include "xpcpublic.h"
 #ifdef XP_MACOSX
 #include "xpcshellMacUtils.h"
@@ -164,6 +165,8 @@ nsAutoString *gWorkingDirectory = nsnull;
 static JSBool
 GetLocationProperty(JSContext *cx, JSObject *obj, jsid id, jsval *vp)
 {
+    nsAutoUnstickChrome unstick(cx);
+
 #if !defined(XP_WIN) && !defined(XP_UNIX)
     //XXX: your platform should really implement this
     return false;
@@ -1797,6 +1800,8 @@ main(int argc, char **argv, char **envp)
         argv += 2;
     }
 
+    Maybe<nsAutoLockChrome> lock;
+
     {
         if (argc > 1 && !strcmp(argv[1], "--greomni")) {
             nsCOMPtr<nsILocalFile> greOmni;
@@ -1821,6 +1826,8 @@ main(int argc, char **argv, char **envp)
             printf("NS_InitXPCOM2 failed!\n");
             return 1;
         }
+
+        lock.construct();
 
         nsCOMPtr<nsIJSRuntimeService> rtsvc = do_GetService("@mozilla.org/js/xpc/RuntimeService;1");
         // get the JSRuntime from the runtime svc
@@ -1912,6 +1919,7 @@ main(int argc, char **argv, char **envp)
 
         nsCOMPtr<nsIXPConnectJSObjectHolder> holder;
         rv = xpc->InitClassesWithNewWrappedGlobal(cx, backstagePass,
+                                                  JS_ZONE_CHROME,
                                                   systemprincipal,
                                                   nsIXPConnect::
                                                   FLAG_SYSTEM_GLOBAL_OBJECT,

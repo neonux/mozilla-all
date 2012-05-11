@@ -1959,6 +1959,8 @@ void nsGfxScrollFrameInner::ScrollVisual(nsPoint aOldScrolledFramePos)
       displayport : mScrollPort;
   }
 
+  nsAutoLockChrome lock; // for nsIFrame
+
   mOuter->InvalidateWithFlags(invalidateRect, flags);
 
   if (flags & nsIFrame::INVALIDATE_NO_THEBES_LAYERS) {
@@ -2544,6 +2546,8 @@ nsGfxScrollFrameInner::FireScrollPortEvent()
 {
   mAsyncScrollPortEvent.Forget();
 
+  NS_StickLock(mOuter->PresContext());
+
   // Keep this in sync with PostOverflowEvent().
   nsSize scrollportSize = mScrollPort.Size();
   nsSize childSize = GetScrolledRect().Size();
@@ -2892,6 +2896,7 @@ nsGfxScrollFrameInner::FireScrollEvent()
   nsScrollbarEvent event(true, NS_SCROLL_EVENT, nsnull);
   nsEventStatus status = nsEventStatus_eIgnore;
   nsIContent* content = mOuter->GetContent();
+  NS_StickLock(content);
   nsPresContext* prescontext = mOuter->PresContext();
   // Fire viewport scroll events at the document (where they
   // will bubble to the window)
@@ -2924,10 +2929,17 @@ nsGfxScrollFrameInner::PostScrollEvent()
 NS_IMETHODIMP
 nsGfxScrollFrameInner::AsyncScrollPortEvent::Run()
 {
-  if (mInner) {
-    mInner->mOuter->PresContext()->GetPresShell()->
-      FlushPendingNotifications(Flush_InterruptibleLayout);
-  }
+  if (!mInner)
+    return NS_OK;
+
+  NS_StickLock(mInner->mOuter->PresContext());
+
+  if (!mInner)
+    return NS_OK;
+
+  mInner->mOuter->PresContext()->GetPresShell()->
+    FlushPendingNotifications(Flush_InterruptibleLayout);
+
   return mInner ? mInner->FireScrollPortEvent() : NS_OK;
 }
 
@@ -3132,7 +3144,7 @@ void nsGfxScrollFrameInner::PostOverflowEvent()
   }
 
   nsRefPtr<AsyncScrollPortEvent> ev = new AsyncScrollPortEvent(this);
-  if (NS_SUCCEEDED(NS_DispatchToCurrentThread(ev)))
+  if (NS_SUCCEEDED(NS_DispatchToMainThread(ev, NS_DISPATCH_NORMAL, mOuter->PresContext()->GetZone())))
     mAsyncScrollPortEvent = ev;
 }
 
@@ -3147,20 +3159,23 @@ nsGfxScrollFrameInner::IsLTR() const
     // If we're the root scrollframe, we need the root element's style data.
     nsPresContext *presContext = mOuter->PresContext();
     nsIDocument *document = presContext->Document();
-    Element *root = document->GetRootElement();
 
-    // But for HTML and XHTML we want the body element.
-    nsCOMPtr<nsIHTMLDocument> htmlDoc = do_QueryInterface(document);
-    if (htmlDoc) {
-      Element *bodyElement = document->GetBodyElement();
-      if (bodyElement)
-        root = bodyElement; // we can trust the document to hold on to it
-    }
+    if (NS_TryStickLock(document)) {
+      Element *root = document->GetRootElement();
 
-    if (root) {
-      nsIFrame *rootsFrame = root->GetPrimaryFrame();
-      if (rootsFrame)
-        frame = rootsFrame;
+      // But for HTML and XHTML we want the body element.
+      nsCOMPtr<nsIHTMLDocument> htmlDoc = do_QueryInterface(document);
+      if (htmlDoc) {
+        Element *bodyElement = document->GetBodyElement();
+        if (bodyElement)
+          root = bodyElement; // we can trust the document to hold on to it
+      }
+
+      if (root) {
+        nsIFrame *rootsFrame = root->GetPrimaryFrame();
+        if (rootsFrame)
+          frame = rootsFrame;
+      }
     }
   }
 
@@ -3962,7 +3977,7 @@ nsGfxScrollFrameInner::FireScrolledAreaEvent()
   event.mArea = mScrolledFrame->GetScrollableOverflowRectRelativeToParent();
 
   nsIDocument *doc = content->GetCurrentDoc();
-  if (doc) {
+  if (doc && !NS_TryStickLock(doc)) {
     nsEventDispatcher::Dispatch(doc, prescontext, &event, nsnull);
   }
 }

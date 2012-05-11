@@ -45,7 +45,7 @@ BEGIN_TEST(testChromeBuffer)
     JSFunction *fun;
     JSObject *o;
 
-    CHECK(o = JS_NewCompartmentAndGlobalObject(cx, &global_class, &system_principals));
+    CHECK(o = JS_NewCompartmentAndGlobalObject(cx, &global_class, &system_principals, JS_ZONE_CHROME));
     trusted_glob.set(o);
 
     /*

@@ -59,6 +59,8 @@ public:
   // nsISupports
   NS_DECL_ISUPPORTS_INHERITED
 
+  JSZoneId GetZone() { return nsINode::GetZone(); }
+
   // nsIDOMNode
   NS_IMETHOD SetNodeValue(const nsAString& aData);
 

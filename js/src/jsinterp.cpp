@@ -451,6 +451,8 @@ js::RunScript(JSContext *cx, JSScript *script, StackFrame *fp)
         }
     }
 
+    // JS_ASSERT_IF(GetContextZone(cx) >= JS_ZONE_CONTENT_START, cx->runtime->zoneCheck(GetContextZone(cx)));
+
 #ifdef DEBUG
     struct CheckStackBalance {
         JSContext *cx;
@@ -465,6 +467,10 @@ js::RunScript(JSContext *cx, JSScript *script, StackFrame *fp)
         }
     } check(cx);
 #endif
+
+    mozilla::Maybe<AutoUnlockChrome> unlock;
+    if (GetContextZone(cx) >= JS_ZONE_CONTENT_START && cx->runtime->canUnlockChrome())
+        unlock.construct(cx->runtime);
 
 #ifdef JS_METHODJIT
     mjit::CompileStatus status;
@@ -1199,13 +1205,13 @@ inline InterpreterFrames::InterpreterFrames(JSContext *cx, FrameRegs *regs,
                                             const InterruptEnablerBase &enabler)
   : context(cx), regs(regs), enabler(enabler)
 {
-    older = cx->runtime->interpreterFrames;
-    cx->runtime->interpreterFrames = this;
+    older = cx->thread()->interpreterFrames;
+    cx->thread()->interpreterFrames = this;
 }
  
 inline InterpreterFrames::~InterpreterFrames()
 {
-    context->runtime->interpreterFrames = older;
+    context->thread()->interpreterFrames = older;
 }
 
 #if defined(DEBUG) && !defined(JS_THREADSAFE) && !defined(JSGC_ROOT_ANALYSIS)

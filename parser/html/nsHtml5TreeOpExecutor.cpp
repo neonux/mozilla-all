@@ -325,7 +325,7 @@ void
 nsHtml5TreeOpExecutor::ContinueInterruptedParsingAsync()
 {
   nsCOMPtr<nsIRunnable> flusher = new nsHtml5ExecutorReflusher(this);  
-  if (NS_FAILED(NS_DispatchToMainThread(flusher))) {
+  if (NS_FAILED(NS_DispatchToMainThread(flusher, NS_DISPATCH_NORMAL, GetDocument()->GetZone()))) {
     NS_WARNING("failed to dispatch executor flush event");
   }          
 }
@@ -388,6 +388,8 @@ nsHtml5TreeOpExecutor::UpdateStyleSheet(nsIContent* aElement)
 void
 nsHtml5TreeOpExecutor::FlushSpeculativeLoads()
 {
+  NS_StickLock(mNodeInfoManager);
+
   nsTArray<nsHtml5SpeculativeLoad> speculativeLoadQueue;
   mStage.MoveSpeculativeLoadsTo(speculativeLoadQueue);
   const nsHtml5SpeculativeLoad* start = speculativeLoadQueue.Elements();
@@ -444,6 +446,9 @@ void
 nsHtml5TreeOpExecutor::RunFlushLoop()
 {
   SAMPLE_LABEL("html5", "RunFlushLoop");
+
+  NS_StickLock(mNodeInfoManager);
+
   if (mRunFlushLoopOnStack) {
     // There's already a RunFlushLoop() on the call stack.
     return;
@@ -528,7 +533,7 @@ nsHtml5TreeOpExecutor::RunFlushLoop()
     mFlushState = eInFlush;
 
     nsIContent* scriptElement = nsnull;
-    
+
     BeginDocUpdate();
 
     PRUint32 numberOfOpsToFlush = mOpQueue.Length();
@@ -678,7 +683,7 @@ nsHtml5TreeOpExecutor::IsScriptEnabled()
   if (!globalObject) {
     nsCOMPtr<nsIScriptGlobalObjectOwner> owner = do_GetInterface(mDocShell);
     NS_ENSURE_TRUE(owner, true);
-    globalObject = owner->GetScriptGlobalObject();
+    globalObject = owner->GetScriptGlobalObject(mDocument->GetZone());
     NS_ENSURE_TRUE(globalObject, true);
   }
   nsIScriptContext *scriptContext = globalObject->GetContext();
@@ -706,6 +711,7 @@ nsHtml5TreeOpExecutor::SetDocumentMode(nsHtml5DocumentMode m)
       mode = eCompatibility_NavQuirks;
       break;
   }
+
   nsCOMPtr<nsIHTMLDocument> htmlDocument = do_QueryInterface(mDocument);
   NS_ASSERTION(htmlDocument, "Document didn't QI into HTML document.");
   htmlDocument->SetCompatibilityMode(mode);

@@ -547,7 +547,7 @@ nsMediaCacheStream::BlockList::NotifyBlockSwapped(PRInt32 aBlockIndex1,
 nsresult
 nsMediaCache::Init()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Only call on main thread");
   NS_ASSERTION(!mFileCache, "Cache file already open?");
 
   // In single process Gecko, store the media cache in the profile directory
@@ -614,7 +614,7 @@ nsMediaCache::Init()
 void
 nsMediaCache::Flush()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Only call on main thread");
 
   if (!gMediaCache)
     return;
@@ -644,7 +644,7 @@ nsMediaCache::FlushInternal()
 void
 nsMediaCache::MaybeShutdown()
 {
-  NS_ASSERTION(NS_IsMainThread(),
+  NS_ASSERTION(NS_IsChromeOwningThread(),
                "nsMediaCache::MaybeShutdown called on non-main thread");
   if (!gMediaCache->mStreams.IsEmpty()) {
     // Don't shut down yet, streams are still alive
@@ -1059,7 +1059,7 @@ enum StreamAction { NONE, SEEK, SEEK_AND_RESUME, RESUME, SUSPEND };
 void
 nsMediaCache::Update()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Only call on main thread");
 
   // The action to use for each stream. We store these so we can make
   // decisions while holding the cache lock but implement those decisions
@@ -1533,7 +1533,7 @@ nsMediaCache::AllocateAndWriteBlock(nsMediaCacheStream* aStream, const void* aDa
 void
 nsMediaCache::OpenStream(nsMediaCacheStream* aStream)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Only call on main thread");
 
   ReentrantMonitorAutoEnter mon(mReentrantMonitor);
   LOG(PR_LOG_DEBUG, ("Stream %p opened", aStream));
@@ -1547,7 +1547,7 @@ nsMediaCache::OpenStream(nsMediaCacheStream* aStream)
 void
 nsMediaCache::ReleaseStream(nsMediaCacheStream* aStream)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Only call on main thread");
 
   ReentrantMonitorAutoEnter mon(mReentrantMonitor);
   LOG(PR_LOG_DEBUG, ("Stream %p closed", aStream));
@@ -1683,7 +1683,7 @@ nsMediaCache::NoteSeek(nsMediaCacheStream* aStream, PRInt64 aOldOffset)
 void
 nsMediaCacheStream::NotifyDataLength(PRInt64 aLength)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Only call on main thread");
 
   ReentrantMonitorAutoEnter mon(gMediaCache->GetReentrantMonitor());
   mStreamLength = aLength;
@@ -1692,7 +1692,7 @@ nsMediaCacheStream::NotifyDataLength(PRInt64 aLength)
 void
 nsMediaCacheStream::NotifyDataStarted(PRInt64 aOffset)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Only call on main thread");
 
   ReentrantMonitorAutoEnter mon(gMediaCache->GetReentrantMonitor());
   NS_WARN_IF_FALSE(aOffset == mChannelOffset,
@@ -1715,7 +1715,7 @@ void
 nsMediaCacheStream::NotifyDataReceived(PRInt64 aSize, const char* aData,
     nsIPrincipal* aPrincipal)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Only call on main thread");
 
   // Update principals before putting the data in the cache. This is important,
   // we want to make sure all principals are updated before any consumer
@@ -1797,7 +1797,7 @@ nsMediaCacheStream::NotifyDataReceived(PRInt64 aSize, const char* aData,
 void
 nsMediaCacheStream::NotifyDataEnded(nsresult aStatus)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Only call on main thread");
 
   ReentrantMonitorAutoEnter mon(gMediaCache->GetReentrantMonitor());
 
@@ -1839,7 +1839,7 @@ nsMediaCacheStream::NotifyDataEnded(nsresult aStatus)
 
 nsMediaCacheStream::~nsMediaCacheStream()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Only call on main thread");
   NS_ASSERTION(!mPinCount, "Unbalanced Pin");
 
   if (gMediaCache) {
@@ -1890,7 +1890,7 @@ nsMediaCacheStream::AreAllStreamsForResourceSuspended(MediaResource** aActiveStr
 void
 nsMediaCacheStream::Close()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Only call on main thread");
 
   ReentrantMonitorAutoEnter mon(gMediaCache->GetReentrantMonitor());
   CloseInternal(mon);
@@ -1911,7 +1911,7 @@ nsMediaCacheStream::EnsureCacheUpdate()
 void
 nsMediaCacheStream::CloseInternal(ReentrantMonitorAutoEnter& aReentrantMonitor)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Only call on main thread");
 
   if (mClosed)
     return;
@@ -2066,7 +2066,7 @@ nsMediaCacheStream::SetPlaybackRate(PRUint32 aBytesPerSecond)
 nsresult
 nsMediaCacheStream::Seek(PRInt32 aWhence, PRInt64 aOffset)
 {
-  NS_ASSERTION(!NS_IsMainThread(), "Don't call on main thread");
+  NS_ASSERTION(!NS_IsChromeOwningThread(), "Don't call on main thread");
 
   ReentrantMonitorAutoEnter mon(gMediaCache->GetReentrantMonitor());
   if (mClosed)
@@ -2100,7 +2100,7 @@ nsMediaCacheStream::Seek(PRInt32 aWhence, PRInt64 aOffset)
 PRInt64
 nsMediaCacheStream::Tell()
 {
-  NS_ASSERTION(!NS_IsMainThread(), "Don't call on main thread");
+  NS_ASSERTION(!NS_IsChromeOwningThread(), "Don't call on main thread");
 
   ReentrantMonitorAutoEnter mon(gMediaCache->GetReentrantMonitor());
   return mStreamOffset;
@@ -2109,7 +2109,7 @@ nsMediaCacheStream::Tell()
 nsresult
 nsMediaCacheStream::Read(char* aBuffer, PRUint32 aCount, PRUint32* aBytes)
 {
-  NS_ASSERTION(!NS_IsMainThread(), "Don't call on main thread");
+  NS_ASSERTION(!NS_IsChromeOwningThread(), "Don't call on main thread");
 
   ReentrantMonitorAutoEnter mon(gMediaCache->GetReentrantMonitor());
   if (mClosed)
@@ -2271,7 +2271,7 @@ nsMediaCacheStream::ReadFromCache(char* aBuffer,
 nsresult
 nsMediaCacheStream::Init()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Only call on main thread");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Only call on main thread");
 
   if (mInitialized)
     return NS_OK;

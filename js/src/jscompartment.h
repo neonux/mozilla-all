@@ -112,9 +112,10 @@ namespace JS {
 struct TypeInferenceSizes;
 }
 
-struct JSCompartment
+namespace js { namespace mjit { class JaegerCompartment; } }
+
+struct JSCompartment : public js::CompartmentFriendFields
 {
-    JSRuntime                    *rt;
     JSPrincipals                 *principals;
 
     js::gc::ArenaLists           arenas;
@@ -253,6 +254,44 @@ struct JSCompartment
 
     js::types::TypeObject *getLazyType(JSContext *cx, JSObject *proto);
 
+  private:
+    /* Allocators for JIT and compiled RegExps in the compartment. */
+    JSC::ExecutableAllocator *execAlloc_;
+    WTF::BumpPointerAllocator *bumpAlloc_;
+
+    JSC::ExecutableAllocator *createExecutableAllocator(JSContext *cx);
+    WTF::BumpPointerAllocator *createBumpPointerAllocator(JSContext *cx);
+
+  public:
+    JSC::ExecutableAllocator *getExecAlloc(JSContext *cx) {
+        return execAlloc_ ? execAlloc_ : createExecutableAllocator(cx);
+    }
+    JSC::ExecutableAllocator &execAlloc() {
+        JS_ASSERT(execAlloc_);
+        return *execAlloc_;
+    }
+    WTF::BumpPointerAllocator *getBumpPointerAllocator(JSContext *cx) {
+        return bumpAlloc_ ? bumpAlloc_ : createBumpPointerAllocator(cx);
+    }
+
+#ifdef JS_METHODJIT
+  private:
+    js::mjit::JaegerCompartment *jaegerCompartment_;
+    js::mjit::JaegerCompartment *createJaegerCompartment(JSContext *cx);
+
+  public:
+    js::mjit::JaegerCompartment *getJaegerCompartment(JSContext *cx) {
+        return jaegerCompartment_ ? jaegerCompartment_ : createJaegerCompartment(cx);
+    }
+    bool hasJaegerCompartment() const {
+        return jaegerCompartment_;
+    }
+    js::mjit::JaegerCompartment &jaegerCompartment() {
+        JS_ASSERT(hasJaegerCompartment());
+        return *jaegerCompartment_;
+    }
+#endif
+
     /*
      * Keeps track of the total number of malloc bytes connected to a
      * compartment's GC things. This counter should be used in preference to
@@ -276,7 +315,8 @@ struct JSCompartment
     unsigned                     debugModeBits;  // see debugMode() below
 
   public:
-    JSCompartment(JSRuntime *rt);
+
+    JSCompartment(JSRuntime *rt, JSZoneId zone);
     ~JSCompartment();
 
     bool init(JSContext *cx);
@@ -330,6 +370,7 @@ struct JSCompartment
     }
 
     js::DtoaCache dtoaCache;
+    js::NativeIterCache nativeIterCache;
 
   private:
     /*
@@ -381,13 +422,52 @@ struct JSCompartment
     js::DebugScriptMap *debugScriptMap;
 };
 
+struct AutoUnlockChrome
+{
+    JSRuntime *runtime;
+    size_t depth;
+
+    AutoUnlockChrome(JSRuntime *runtime JS_GUARD_OBJECT_NOTIFIER_PARAM)
+        : runtime(runtime), depth(0)
+    {
+        JS_GUARD_OBJECT_NOTIFIER_INIT;
+
+        depth = runtime->lockDepth(JS_ZONE_CHROME);
+        for (size_t i = 0; i < depth; i++)
+            runtime->unlockOp(JS_ZONE_CHROME);
+    }
+
+    ~AutoUnlockChrome()
+    {
+        for (size_t i = 0; i < depth; i++)
+            runtime->lockOp(JS_ZONE_CHROME);
+    }
+
+    JS_DECL_USE_GUARD_OBJECT_NOTIFIER
+};
+
 #define JS_PROPERTY_TREE(cx)    ((cx)->compartment->propertyTree)
 
 inline void
 JSContext::setCompartment(JSCompartment *compartment)
 {
+    if (compartment)
+        setCompartment(compartment, compartment->zone, compartment->types.inferenceEnabled);
+    else
+        setCompartment(compartment, JS_ZONE_NONE, false);
+}
+
+inline void
+JSContext::setCompartment(JSCompartment *compartment, JSZoneId zone, bool inferenceEnabled)
+{
     this->compartment = compartment;
-    this->inferenceEnabled = compartment ? compartment->types.inferenceEnabled : false;
+    this->inferenceEnabled = inferenceEnabled;
+}
+
+inline void
+JSContext::assertConsistency()
+{
+    JS_ASSERT(inferenceEnabled == (compartment && compartment->types.inferenceEnabled));
 }
 
 #ifdef _MSC_VER
@@ -401,19 +481,20 @@ class PreserveCompartment {
     JSContext *cx;
   private:
     JSCompartment *oldCompartment;
+    JSZoneId oldZone;
     bool oldInferenceEnabled;
     JS_DECL_USE_GUARD_OBJECT_NOTIFIER
   public:
      PreserveCompartment(JSContext *cx JS_GUARD_OBJECT_NOTIFIER_PARAM) : cx(cx) {
         JS_GUARD_OBJECT_NOTIFIER_INIT;
         oldCompartment = cx->compartment;
+        oldZone = GetContextZone(cx);
         oldInferenceEnabled = cx->inferenceEnabled;
     }
 
     ~PreserveCompartment() {
         /* The old compartment may have been destroyed, so we can't use cx->setCompartment. */
-        cx->compartment = oldCompartment;
-        cx->inferenceEnabled = oldInferenceEnabled;
+        cx->setCompartment(oldCompartment, oldZone, oldInferenceEnabled);
     }
 };
 

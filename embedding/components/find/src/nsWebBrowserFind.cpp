@@ -73,6 +73,7 @@
 #include "nsFind.h"
 #include "nsDOMError.h"
 #include "nsFocusManager.h"
+#include "nsProxyRelease.h"
 #include "mozilla/Services.h"
 
 #if DEBUG
@@ -102,6 +103,9 @@ nsWebBrowserFind::nsWebBrowserFind() :
 
 nsWebBrowserFind::~nsWebBrowserFind()
 {
+    NS_ReleaseReference(mCurrentSearchFrame);
+    NS_ReleaseReference(mRootSearchFrame);
+    NS_ReleaseReference(mLastFocusedWindow);
 }
 
 NS_IMPL_ISUPPORTS2(nsWebBrowserFind, nsIWebBrowserFind, nsIWebBrowserFindInFrames)
@@ -650,6 +654,9 @@ NS_IMETHODIMP nsWebBrowserFind::GetCurrentSearchFrame(nsIDOMWindow * *aCurrentSe
 
 NS_IMETHODIMP nsWebBrowserFind::SetCurrentSearchFrame(nsIDOMWindow * aCurrentSearchFrame)
 {
+    if (mCurrentSearchFrame)
+        NS_ReleaseReference(mCurrentSearchFrame);
+
     // is it ever valid to set this to null?
     NS_ENSURE_ARG(aCurrentSearchFrame);
     mCurrentSearchFrame = do_GetWeakReference(aCurrentSearchFrame);

@@ -258,6 +258,8 @@ public:
    */
   NS_IMETHOD  GetDeviceContext(nsDeviceContext *&aContext) = 0;
 
+  NS_IMETHOD GetDeletedViewCount(PRInt32 *pres) = 0;
+
   /**
    * A stack class for disallowing changes that would enter painting. For
    * example, popup widgets shouldn't be resized during reflow, since doing so

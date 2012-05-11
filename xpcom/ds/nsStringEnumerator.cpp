@@ -71,6 +71,9 @@ public:
     {}
 
     NS_DECL_ISUPPORTS
+
+    JSZoneId GetZone() { return mOwner->GetZone(); }
+
     NS_DECL_NSIUTF8STRINGENUMERATOR
 
     // have to declare nsIStringEnumerator manually, because of

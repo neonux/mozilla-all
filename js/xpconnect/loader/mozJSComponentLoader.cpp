@@ -318,6 +318,7 @@ private:
     JSContext* mContext;
     nsIThreadJSContextStack* mContextStack;
     char*      mBuf;
+    nsAutoUnstickChrome mUnstick;
 
     // prevent copying and assignment
     JSCLContextHelper(const JSCLContextHelper &) MOZ_DELETE;
@@ -380,7 +381,6 @@ ReportOnCaller(JSCLContextHelper &helper,
 
 mozJSComponentLoader::mozJSComponentLoader()
     : mRuntime(nsnull),
-      mContext(nsnull),
       mInitialized(false)
 {
     NS_ASSERTION(!sSelf, "mozJSComponentLoader should be a singleton");
@@ -412,6 +412,30 @@ NS_IMPL_ISUPPORTS3(mozJSComponentLoader,
                    xpcIJSModuleLoader,
                    nsIObserver)
 
+JSContext *
+mozJSComponentLoader::GetContext()
+{
+    JSContext *cx = mContext.getContext(PR_GetCurrentThread());
+
+    if (cx)
+        return cx;
+
+    cx = JS_NewContext(mRuntime, 256); // XXX handle OOM?
+
+    uint32_t options = JS_GetOptions(cx);
+    JS_SetOptions(cx, options | JSOPTION_XML);
+
+    // Always use the latest js version
+    JS_SetVersion(cx, JSVERSION_LATEST);
+
+    // Set up localized comparison and string conversion
+    xpc_LocalizeContext(cx);
+
+    mContext.addContext(cx);
+
+    return cx;
+}
+
 nsresult
 mozJSComponentLoader::ReallyInit()
 {
@@ -433,17 +457,6 @@ mozJSComponentLoader::ReallyInit()
     mContextStack = do_GetService("@mozilla.org/js/xpc/ContextStack;1", &rv);
     if (NS_FAILED(rv))
         return rv;
-
-    // Create our compilation context.
-    mContext = JS_NewContext(mRuntime, 256);
-    if (!mContext)
-        return NS_ERROR_OUT_OF_MEMORY;
-
-    uint32_t options = JS_GetOptions(mContext);
-    JS_SetOptions(mContext, options | JSOPTION_XML);
-
-    // Always use the latest js version
-    JS_SetVersion(mContext, JSVERSION_LATEST);
 
     nsCOMPtr<nsIScriptSecurityManager> secman =
         do_GetService(NS_SCRIPTSECURITYMANAGER_CONTRACTID);
@@ -467,9 +480,6 @@ mozJSComponentLoader::ReallyInit()
 
     rv = obsSvc->AddObserver(this, "xpcom-shutdown-loaders", false);
     NS_ENSURE_SUCCESS(rv, rv);
-
-    // Set up localized comparison and string conversion
-    xpc_LocalizeContext(mContext);
 
 #ifdef DEBUG_shaver_off
     fprintf(stderr, "mJCL: ReallyInit success!\n");
@@ -531,6 +541,7 @@ mozJSComponentLoader::LoadModule(FileLocation &aFile)
         return NULL;
 
     JSCLContextHelper cx(this);
+
     JSAutoEnterCompartment ac;
     if (!ac.enter(cx, entry->global))
         return NULL;
@@ -655,8 +666,6 @@ mozJSComponentLoader::GlobalForLocation(nsILocalFile *aComponentFile,
 
     JSCLContextHelper cx(this);
 
-    JS_AbortIfWrongThread(JS_GetRuntime(cx));
-
     nsCOMPtr<nsIXPCScriptable> backstagePass;
     rv = mRuntimeService->GetBackstagePass(getter_AddRefs(backstagePass));
     NS_ENSURE_SUCCESS(rv, rv);
@@ -668,7 +677,7 @@ mozJSComponentLoader::GlobalForLocation(nsILocalFile *aComponentFile,
     NS_ENSURE_SUCCESS(rv, rv);
 
     nsCOMPtr<nsIXPConnectJSObjectHolder> holder;
-    rv = xpc->InitClassesWithNewWrappedGlobal(cx, backstagePass,
+    rv = xpc->InitClassesWithNewWrappedGlobal(cx, backstagePass, JS_ZONE_CHROME,
                                               mSystemPrincipal,
                                               nsIXPConnect::
                                               FLAG_SYSTEM_GLOBAL_OBJECT,
@@ -987,8 +996,10 @@ mozJSComponentLoader::UnloadModules()
     mModules.Enumerate(ClearModules, NULL);
 
     // Destroying our context will force a GC.
-    JS_DestroyContext(mContext);
-    mContext = nsnull;
+    for (size_t i = 0; i < mContext.getContextCount(); i++) {
+        if (JSContext *cx = mContext.getAndRemoveContext(i))
+            JS_DestroyContext(cx);
+    }
 
     mRuntimeService = nsnull;
     mContextStack = nsnull;
@@ -1175,11 +1186,13 @@ mozJSComponentLoader::ImportInto(const nsACString & aLocation,
     if (targetObj) {
         JSCLContextHelper cxhelper(this);
 
+        JSContext *cx = GetContext();
+
         JSAutoEnterCompartment ac;
-        if (!ac.enter(mContext, mod->global))
+        if (!ac.enter(cx, mod->global))
             return NS_ERROR_FAILURE;
 
-        if (!JS_GetProperty(mContext, mod->global,
+        if (!JS_GetProperty(cx, mod->global,
                             "EXPORTED_SYMBOLS", &symbols)) {
             return ReportOnCaller(cxhelper, ERROR_NOT_PRESENT,
                                   PromiseFlatCString(aLocation).get());
@@ -1188,7 +1201,7 @@ mozJSComponentLoader::ImportInto(const nsACString & aLocation,
         JSObject *symbolsObj = nsnull;
         if (!JSVAL_IS_OBJECT(symbols) ||
             !(symbolsObj = JSVAL_TO_OBJECT(symbols)) ||
-            !JS_IsArrayObject(mContext, symbolsObj)) {
+            !JS_IsArrayObject(cx, symbolsObj)) {
             return ReportOnCaller(cxhelper, ERROR_NOT_AN_ARRAY,
                                   PromiseFlatCString(aLocation).get());
         }
@@ -1196,7 +1209,7 @@ mozJSComponentLoader::ImportInto(const nsACString & aLocation,
         // Iterate over symbols array, installing symbols on targetObj:
 
         uint32_t symbolCount = 0;
-        if (!JS_GetArrayLength(mContext, symbolsObj, &symbolCount)) {
+        if (!JS_GetArrayLength(cx, symbolsObj, &symbolCount)) {
             return ReportOnCaller(cxhelper, ERROR_GETTING_ARRAY_LENGTH,
                                   PromiseFlatCString(aLocation).get());
         }
@@ -1209,15 +1222,15 @@ mozJSComponentLoader::ImportInto(const nsACString & aLocation,
             jsval val;
             jsid symbolId;
 
-            if (!JS_GetElement(mContext, symbolsObj, i, &val) ||
+            if (!JS_GetElement(cx, symbolsObj, i, &val) ||
                 !JSVAL_IS_STRING(val) ||
-                !JS_ValueToId(mContext, val, &symbolId)) {
+                !JS_ValueToId(cx, val, &symbolId)) {
                 return ReportOnCaller(cxhelper, ERROR_ARRAY_ELEMENT,
                                       PromiseFlatCString(aLocation).get(), i);
             }
 
-            if (!JS_GetPropertyById(mContext, mod->global, symbolId, &val)) {
-                JSAutoByteString bytes(mContext, JSID_TO_STRING(symbolId));
+            if (!JS_GetPropertyById(cx, mod->global, symbolId, &val)) {
+                JSAutoByteString bytes(cx, JSID_TO_STRING(symbolId));
                 if (!bytes)
                     return NS_ERROR_FAILURE;
                 return ReportOnCaller(cxhelper, ERROR_GETTING_SYMBOL,
@@ -1227,10 +1240,10 @@ mozJSComponentLoader::ImportInto(const nsACString & aLocation,
 
             JSAutoEnterCompartment target_ac;
 
-            if (!target_ac.enter(mContext, targetObj) ||
-                !JS_WrapValue(mContext, &val) ||
-                !JS_SetPropertyById(mContext, targetObj, symbolId, &val)) {
-                JSAutoByteString bytes(mContext, JSID_TO_STRING(symbolId));
+            if (!target_ac.enter(cx, targetObj) ||
+                !JS_WrapValue(cx, &val) ||
+                !JS_SetPropertyById(cx, targetObj, symbolId, &val)) {
+                JSAutoByteString bytes(cx, JSID_TO_STRING(symbolId));
                 if (!bytes)
                     return NS_ERROR_FAILURE;
                 return ReportOnCaller(cxhelper, ERROR_SETTING_SYMBOL,
@@ -1241,7 +1254,7 @@ mozJSComponentLoader::ImportInto(const nsACString & aLocation,
             if (i == 0) {
                 logBuffer.AssignLiteral("Installing symbols [ ");
             }
-            JSAutoByteString bytes(mContext, JSID_TO_STRING(symbolId));
+            JSAutoByteString bytes(cx, JSID_TO_STRING(symbolId));
             if (!!bytes)
                 logBuffer.Append(bytes.ptr());
             logBuffer.AppendLiteral(" ");
@@ -1332,10 +1345,12 @@ mozJSComponentLoader::ModuleEntry::GetFactory(const mozilla::Module& module,
 //----------------------------------------------------------------------
 
 JSCLContextHelper::JSCLContextHelper(mozJSComponentLoader *loader)
-    : mContext(loader->mContext),
+    : mContext(loader->GetContext()),
       mContextStack(loader->mContextStack),
-      mBuf(nsnull)
+      mBuf(nsnull),
+      mUnstick(mContext)
 {
+    //mContext->assertCorrectThread();
     mContextStack->Push(mContext);
     JS_BeginRequest(mContext);
 }

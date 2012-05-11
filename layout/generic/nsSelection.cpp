@@ -192,6 +192,8 @@ public:
   NS_DECL_NSISELECTION
   NS_DECL_NSISELECTIONPRIVATE
 
+  JSZoneId GetZone() { return mFrameSelection ? mFrameSelection->GetZone() : JS_ZONE_CHROME; }
+
   // utility methods for scrolling the selection into view
   nsresult      GetPresContext(nsPresContext **aPresContext);
   nsresult      GetPresShell(nsIPresShell **aPresShell);
@@ -712,7 +714,8 @@ nsFrameSelection::nsFrameSelection()
   mNotifyFrames = true;
   mLimiter = nsnull; //no default limiter.
   mAncestorLimiter = nsnull;
-  
+  mZone = JS_ZONE_CHROME;
+
   mMouseDoubleDownState = false;
   
   mHint = HINTLEFT;
@@ -1078,6 +1081,10 @@ GetCellParent(nsINode *aDomNode)
 void
 nsFrameSelection::Init(nsIPresShell *aShell, nsIContent *aLimiter)
 {
+  MOZ_ASSERT(mZone == JS_ZONE_CHROME);
+  if (aShell)
+    mZone = aShell->GetZone();
+
   mShell = aShell;
   mMouseDownState = false;
   mDesiredXSet = false;
@@ -3520,6 +3527,9 @@ nsTypedSelection::GetFocusNode()
   if (!mAnchorFocusRange)
     return nsnull;
 
+  if (!NS_TryStickLock(mAnchorFocusRange->GetStartParent()))
+    return nsnull;
+
   if (GetDirection() == eDirNext){
     return mAnchorFocusRange->GetEndParent();
   }
@@ -4711,6 +4721,9 @@ nsTypedSelection::RemoveAllRanges()
 {
   if (!mFrameSelection)
     return NS_OK;//nothing to do
+
+  nsAutoLockChrome lock; // for nsPresContext
+
   nsRefPtr<nsPresContext>  presContext;
   GetPresContext(getter_AddRefs(presContext));
 
@@ -4757,6 +4770,8 @@ nsTypedSelection::AddRange(nsIDOMRange* aDOMRange)
   // Make sure the caret appears on the next line, if at a newline
   if (mType == nsISelectionController::SELECTION_NORMAL)
     SetInterlinePosition(true);
+
+  nsAutoLockChrome lock; // for nsPresContext
 
   nsRefPtr<nsPresContext>  presContext;
   GetPresContext(getter_AddRefs(presContext));
@@ -4813,6 +4828,8 @@ nsTypedSelection::RemoveRange(nsIDOMRange* aDOMRange)
     beginOffset = range->StartOffset();
     endOffset = range->EndOffset();
   }
+
+  nsAutoLockChrome lock; // for nsPresContext
 
   // clear the selected bit from the removed range's frames
   nsRefPtr<nsPresContext>  presContext;
@@ -4879,6 +4896,9 @@ nsTypedSelection::Collapse(nsINode* aParentNode, PRInt32 aOffset)
   if (!IsValidSelectionPoint(mFrameSelection, aParentNode))
     return NS_ERROR_FAILURE;
   nsresult result;
+
+  nsAutoLockChrome lock; // for nsPresContext
+
   // Delete all of the current ranges
   nsRefPtr<nsPresContext>  presContext;
   GetPresContext(getter_AddRefs(presContext));
@@ -5031,6 +5051,8 @@ nsTypedSelection::SetAnchorFocusToRange(nsRange *aRange)
 void
 nsTypedSelection::ReplaceAnchorFocusRange(nsRange *aRange)
 {
+  nsAutoLockChrome lock; // for nsPresContext
+
   nsRefPtr<nsPresContext> presContext;
   GetPresContext(getter_AddRefs(presContext));
   if (presContext) {
@@ -5130,6 +5152,8 @@ nsTypedSelection::Extend(nsINode* aParentNode, PRInt32 aOffset)
   PRInt32 result3 = nsContentUtils::ComparePoints(anchorNode, anchorOffset,
                                                   aParentNode, aOffset,
                                                   &disconnected);
+
+  nsAutoLockChrome lock; // for nsPresContext
 
   nsRefPtr<nsPresContext>  presContext;
   GetPresContext(getter_AddRefs(presContext));
@@ -5536,6 +5560,11 @@ nsTypedSelection::ScrollSelectionIntoViewEvent::Run()
   if (!mTypedSelection)
     return NS_OK;  // event revoked
 
+  NS_StickLock(mTypedSelection);
+
+  if (!mTypedSelection)
+    return NS_OK;
+
   PRInt32 flags = nsTypedSelection::SCROLL_DO_FLUSH |
                   nsTypedSelection::SCROLL_SYNCHRONOUS;
   if (mFirstAncestorOnly) {
@@ -5564,7 +5593,7 @@ nsTypedSelection::PostScrollSelectionIntoViewEvent(
   nsRefPtr<ScrollSelectionIntoViewEvent> ev =
       new ScrollSelectionIntoViewEvent(this, aRegion, aVertical, aHorizontal,
                                        aFirstAncestorOnly);
-  nsresult rv = NS_DispatchToCurrentThread(ev);
+  nsresult rv = NS_DispatchToMainThread(ev, NS_DISPATCH_NORMAL, GetZone());
   NS_ENSURE_SUCCESS(rv, rv);
 
   mScrollEvent = ev;
@@ -5872,6 +5901,9 @@ nsTypedSelection::SelectionLanguageChange(bool aLangRTL)
   focusFrame->GetOffsets(frameStart, frameEnd);
   nsRefPtr<nsPresContext> context;
   PRUint8 levelBefore, levelAfter;
+
+  nsAutoLockChrome lock; // for nsPresContext
+
   result = GetPresContext(getter_AddRefs(context));
   if (NS_FAILED(result) || !context)
     return result?result:NS_ERROR_FAILURE;

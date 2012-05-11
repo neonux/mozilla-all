@@ -332,7 +332,7 @@ public:
 
   NS_IMETHOD Run()
   {
-    NS_PRECONDITION(NS_IsMainThread(), "Must be running on the main thread!");
+    NS_PRECONDITION(NS_IsChromeOwningThread(), "Must be running on the main thread!");
 
     // NOTE:  All code that can only run on the main thread and needs to be run
     //        during initialization should be placed here.  During the off-
@@ -430,7 +430,7 @@ nsIXPConnect *Service::sXPConnect = nsnull;
 already_AddRefed<nsIXPConnect>
 Service::getXPConnect()
 {
-  NS_PRECONDITION(NS_IsMainThread(),
+  NS_PRECONDITION(NS_IsChromeOwningThread(),
                   "Must only get XPConnect on the main thread!");
   NS_PRECONDITION(gService,
                   "Can not get XPConnect without an instance of our service!");
@@ -642,7 +642,7 @@ Service::initialize()
   // Run the things that need to run on the main thread there.
   nsCOMPtr<nsIRunnable> event =
     new ServiceMainThreadInitializer(this, this, &sXPConnect, &sSynchronousPref);
-  if (event && ::NS_IsMainThread()) {
+  if (event && ::NS_IsChromeOwningThread()) {
     (void)event->Run();
   }
   else {

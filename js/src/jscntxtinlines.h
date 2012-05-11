@@ -189,6 +189,8 @@ GetGlobalForScopeChain(JSContext *cx)
 {
     if (cx->hasfp())
         return &cx->fp()->global();
+    if (!cx->globalObject)
+        return NULL;
 
     JSObject *scope = JS_ObjectToInnerObject(cx, cx->globalObject);
     if (!scope)
@@ -199,7 +201,7 @@ GetGlobalForScopeChain(JSContext *cx)
 inline GSNCache *
 GetGSNCache(JSContext *cx)
 {
-    return &cx->runtime->gsnCache;
+    return &cx->thread()->gsnCache;
 }
 
 class AutoNamespaceArray : protected AutoGCRooter {
@@ -268,6 +270,11 @@ class CompartmentChecker
         JS_NOT_REACHED("compartment mismatched");
     }
 
+    static void lockFail(JSCompartment *c) {
+        printf("*** Compartment not locked %p zone %d\n", (void *) c, (int) c->zone);
+        JS_NOT_REACHED("compartment not locked");
+    }
+
     /* Note: should only be used when neither c1 nor c2 may be the default compartment. */
     static void check(JSCompartment *c1, JSCompartment *c2) {
         JS_ASSERT(c1 != c1->rt->atomsCompartment);
@@ -278,9 +285,9 @@ class CompartmentChecker
 
     void check(JSCompartment *c) {
         if (c && c != context->runtime->atomsCompartment) {
-            if (!compartment)
-                compartment = c;
-            else if (c != compartment)
+            if (!context->runtime->lockCheck(compartment->zone))
+                lockFail(compartment);
+            if (c != compartment)
                 fail(compartment, c);
         }
     }

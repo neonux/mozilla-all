@@ -541,7 +541,7 @@ public:
   NS_DECL_ISUPPORTS
   NS_IMETHOD Observe(nsISupports* aSubject, const char* aTopic, const PRUnichar* aData)
   {
-    if (!mWindow)
+    if (!mWindow || !NS_TryStickLock(mWindow))
       return NS_OK;
     return mWindow->Observe(aSubject, aTopic, aData);
   }
@@ -591,7 +591,7 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 NS_IMPL_CYCLE_COLLECTION_ROOT_NATIVE(nsTimeout, AddRef)
 NS_IMPL_CYCLE_COLLECTION_UNROOT_NATIVE(nsTimeout, Release)
 
-nsPIDOMWindow::nsPIDOMWindow(nsPIDOMWindow *aOuterWindow)
+nsPIDOMWindow::nsPIDOMWindow(nsPIDOMWindow *aOuterWindow, JSZoneId zone)
 : mFrameElement(nsnull), mDocShell(nsnull), mModalStateDepth(0),
   mRunningTimeout(nsnull), mMutationBits(0), mIsDocumentLoaded(false),
   mIsHandlingResizeEvent(false), mIsInnerWindow(aOuterWindow != nsnull),
@@ -599,7 +599,7 @@ nsPIDOMWindow::nsPIDOMWindow(nsPIDOMWindow *aOuterWindow)
   mMayHaveMouseEnterLeaveEventListener(false),
   mIsModalContentWindow(false),
   mIsActive(false), mIsBackground(false),
-  mInnerWindow(nsnull), mOuterWindow(aOuterWindow),
+  mInnerWindow(nsnull), mOuterWindow(aOuterWindow), mZone(zone),
   // Make sure no actual window ends up with mWindowID == 0
   mWindowID(++gNextWindowID), mHasNotifiedGlobalCreated(false)
  {}
@@ -666,8 +666,8 @@ NewOuterWindowProxy(JSContext *cx, JSObject *parent)
 //***    nsGlobalWindow: Object Management
 //*****************************************************************************
 
-nsGlobalWindow::nsGlobalWindow(nsGlobalWindow *aOuterWindow)
-  : nsPIDOMWindow(aOuterWindow),
+nsGlobalWindow::nsGlobalWindow(nsGlobalWindow *aOuterWindow, JSZoneId zone)
+  : nsPIDOMWindow(aOuterWindow, zone),
     mIsFrozen(false),
     mFullScreen(false),
     mIsClosed(false), 
@@ -707,6 +707,9 @@ nsGlobalWindow::nsGlobalWindow(nsGlobalWindow *aOuterWindow)
     mDialogAbuseCount(0),
     mDialogDisabled(false)
 {
+  if (zone >= JS_ZONE_CONTENT_START)
+    NS_FIX_OWNINGTHREAD(zone);
+
   nsLayoutStatics::AddRef();
 
   // Initialize the PRCList (this).
@@ -1038,7 +1041,7 @@ nsGlobalWindow::CleanUp(bool aIgnoreModalDialog)
 
   ClearControllers();
 
-  mOpener = nsnull;             // Forces Release
+  NS_ReleaseReference(mOpener);   // Forces Release
   if (mContext) {
 #ifdef DEBUG
     nsCycleCollector_DEBUG_shouldBeFreed(mContext);
@@ -1217,7 +1220,6 @@ NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(nsGlobalWindow)
     NS_WRAPPERCACHE_INTERFACE_MAP_ENTRY
   END_OUTER_WINDOW_ONLY
 NS_INTERFACE_MAP_END
-
 
 NS_IMPL_CYCLE_COLLECTING_ADDREF(nsGlobalWindow)
 NS_IMPL_CYCLE_COLLECTING_RELEASE(nsGlobalWindow)
@@ -1778,7 +1780,7 @@ nsGlobalWindow::SetNewDocument(nsIDocument* aDocument,
      under normal circumstances, but bug 49615 describes a case.) */
 
   nsContentUtils::AddScriptRunner(
-    NS_NewRunnableMethod(this, &nsGlobalWindow::ClearStatus));
+    NS_NewRunnableMethod(this, &nsGlobalWindow::ClearStatus, GetZone()));
 
   bool reUseInnerWindow = aForceReuseInnerWindow || wouldReuseInnerWindow;
 
@@ -1803,12 +1805,15 @@ nsGlobalWindow::SetNewDocument(nsIDocument* aDocument,
 
   bool thisChrome = IsChromeWindow();
 
-  bool isChrome = false;
+  PRInt32 zone_ = GetZone();
+  JSZoneId zone = (JSZoneId) zone_;
 
   nsCxPusher cxPusher;
   if (!cxPusher.Push(cx)) {
     return NS_ERROR_FAILURE;
   }
+
+  nsAutoUnstickChrome unstick(cx);
 
   XPCAutoRequest ar(cx);
 
@@ -1840,14 +1845,16 @@ nsGlobalWindow::SetNewDocument(nsIDocument* aDocument,
       newInnerWindow = wsh->GetInnerWindow();
       mInnerWindowHolder = wsh->GetInnerWindowHolder();
 
+      MOZ_ASSERT(!thisChrome);
+
       NS_ASSERTION(newInnerWindow, "Got a state without inner window");
     } else if (thisChrome) {
-      newInnerWindow = new nsGlobalChromeWindow(this);
-      isChrome = true;
+      MOZ_ASSERT(zone == JS_ZONE_CHROME);
+      newInnerWindow = new nsGlobalChromeWindow(this, zone);
     } else if (mIsModalContentWindow) {
-      newInnerWindow = new nsGlobalModalWindow(this);
+      newInnerWindow = new nsGlobalModalWindow(this, zone);
     } else {
-      newInnerWindow = new nsGlobalWindow(this);
+      newInnerWindow = new nsGlobalWindow(this, zone);
     }
 
     if (!aState) {
@@ -1872,7 +1879,7 @@ nsGlobalWindow::SetNewDocument(nsIDocument* aDocument,
       // Every script context we are initialized with must create a
       // new global.
       nsCOMPtr<nsIXPConnectJSObjectHolder> &holder = mInnerWindowHolder;
-      rv = mContext->CreateNativeGlobalForInner(sgo, isChrome,
+      rv = mContext->CreateNativeGlobalForInner(sgo, zone,
                                                 aDocument->NodePrincipal(),
                                                 &newInnerWindow->mJSObject,
                                                 getter_AddRefs(holder));
@@ -2125,6 +2132,8 @@ nsGlobalWindow::DispatchDOMWindowCreated()
   if (!mDoc || !mDocument) {
     return;
   }
+
+  NS_StickLock(this);
 
   // Fire DOMWindowCreated at chrome event listeners
   nsContentUtils::DispatchChromeEvent(mDoc, mDocument, NS_LITERAL_STRING("DOMWindowCreated"),
@@ -3431,6 +3440,8 @@ nsGlobalWindow::GetInnerWidth(PRInt32* aInnerWidth)
 
   NS_ENSURE_STATE(mDocShell);
 
+  nsAutoLockChrome lock;
+
   EnsureSizeUpToDate();
 
   nsRefPtr<nsPresContext> presContext;
@@ -3464,6 +3475,7 @@ nsGlobalWindow::SetInnerWidth(PRInt32 aInnerWidth)
   NS_ENSURE_SUCCESS(CheckSecurityWidthAndHeight(&aInnerWidth, nsnull),
                     NS_ERROR_FAILURE);
 
+  nsAutoLockChrome lock;
 
   nsRefPtr<nsIPresShell> presShell;
   mDocShell->GetPresShell(getter_AddRefs(presShell));
@@ -3500,6 +3512,8 @@ nsGlobalWindow::GetInnerHeight(PRInt32* aInnerHeight)
 
   NS_ENSURE_STATE(mDocShell);
 
+  nsAutoLockChrome lock;
+
   EnsureSizeUpToDate();
 
   nsRefPtr<nsPresContext> presContext;
@@ -3531,6 +3545,8 @@ nsGlobalWindow::SetInnerHeight(PRInt32 aInnerHeight)
 
   NS_ENSURE_SUCCESS(CheckSecurityWidthAndHeight(nsnull, &aInnerHeight),
                     NS_ERROR_FAILURE);
+
+  nsAutoLockChrome lock;
 
   nsRefPtr<nsIPresShell> presShell;
   mDocShell->GetPresShell(getter_AddRefs(presShell));
@@ -4073,6 +4089,9 @@ nsGlobalWindow::GetScrollMaxXY(PRInt32* aScrollMaxX, PRInt32* aScrollMaxY)
                    NS_ERROR_NOT_INITIALIZED);
 
   FlushPendingNotifications(Flush_Layout);
+
+  nsAutoLockChrome lock;
+
   nsIScrollableFrame *sf = GetScrollFrame();
   if (!sf)
     return NS_OK;
@@ -4111,6 +4130,8 @@ nsGlobalWindow::GetScrollXY(PRInt32* aScrollX, PRInt32* aScrollY,
 {
   FORWARD_TO_OUTER(GetScrollXY, (aScrollX, aScrollY, aDoFlush),
                    NS_ERROR_NOT_INITIALIZED);
+
+  nsAutoLockChrome lock;
 
   if (aDoFlush) {
     FlushPendingNotifications(Flush_Layout);
@@ -5312,6 +5333,9 @@ NS_IMETHODIMP
 nsGlobalWindow::ScrollTo(PRInt32 aXScroll, PRInt32 aYScroll)
 {
   FlushPendingNotifications(Flush_Layout);
+
+  nsAutoLockChrome lock;
+
   nsIScrollableFrame *sf = GetScrollFrame();
 
   if (sf) {
@@ -5341,6 +5365,9 @@ NS_IMETHODIMP
 nsGlobalWindow::ScrollBy(PRInt32 aXScrollDif, PRInt32 aYScrollDif)
 {
   FlushPendingNotifications(Flush_Layout);
+
+  nsAutoLockChrome lock;
+
   nsIScrollableFrame *sf = GetScrollFrame();
 
   if (sf) {
@@ -5359,6 +5386,9 @@ NS_IMETHODIMP
 nsGlobalWindow::ScrollByLines(PRInt32 numLines)
 {
   FlushPendingNotifications(Flush_Layout);
+
+  nsAutoLockChrome lock;
+
   nsIScrollableFrame *sf = GetScrollFrame();
   if (sf) {
     // It seems like it would make more sense for ScrollByLines to use
@@ -5375,6 +5405,9 @@ NS_IMETHODIMP
 nsGlobalWindow::ScrollByPages(PRInt32 numPages)
 {
   FlushPendingNotifications(Flush_Layout);
+
+  nsAutoLockChrome lock;
+
   nsIScrollableFrame *sf = GetScrollFrame();
   if (sf) {
     // It seems like it would make more sense for ScrollByPages to use
@@ -5971,6 +6004,8 @@ PostMessageEvent::Run()
   NS_ABORT_IF_FALSE(!mSource || mSource->IsOuterWindow(),
                     "should have been passed an outer window!");
 
+  NS_StickLock(mTargetWindow);
+
   // Get the JSContext for the target window
   JSContext* cx = nsnull;
   nsIScriptContext* scriptContext = mTargetWindow->GetContext();
@@ -6144,6 +6179,8 @@ nsGlobalWindow::PostMessageMoz(const jsval& aMessage,
   if (!callerPrin)
     return NS_OK;
 
+  nsAutoLockChrome lock; // for URI
+  
   nsCOMPtr<nsIURI> callerOuterURI;
   if (NS_FAILED(callerPrin->GetURI(getter_AddRefs(callerOuterURI))))
     return NS_OK;
@@ -6566,6 +6603,8 @@ public:
 
   NS_IMETHOD Run()
   {
+    NS_StickLock(mWindow);
+
     nsGlobalWindow::RunPendingTimeoutsRecursive(mWindow, mWindow);
 
     return NS_OK;
@@ -6589,7 +6628,7 @@ nsGlobalWindow::LeaveModalState(nsIDOMWindow *aCallerWin)
 
   if (topWin->mModalStateDepth == 0) {
     nsCOMPtr<nsIRunnable> runner = new nsPendingTimeoutRunner(topWin);
-    if (NS_FAILED(NS_DispatchToCurrentThread(runner)))
+    if (NS_FAILED(NS_DispatchToMainThread(runner, NS_DISPATCH_NORMAL, GetZone())))
       NS_WARNING("failed to dispatch pending timeout runnable");
 
     if (mSuspendedDoc) {
@@ -6655,6 +6694,8 @@ public:
 
   NS_IMETHOD Run()
   {
+    NS_StickLock(mWindow);
+
     nsCOMPtr<nsIObserverService> observerService =
       do_GetService("@mozilla.org/observer-service;1");
     if (observerService) {
@@ -6699,7 +6740,7 @@ void
 nsGlobalWindow::NotifyWindowIDDestroyed(const char* aTopic)
 {
   nsRefPtr<nsIRunnable> runnable = new WindowDestroyedEvent(this, mWindowID, aTopic);
-  nsresult rv = NS_DispatchToCurrentThread(runnable);
+  nsresult rv = NS_DispatchToMainThread(runnable, NS_DISPATCH_NORMAL, GetZone());
   if (NS_SUCCEEDED(rv)) {
     mNotifiedIDDestroyed = true;
   }
@@ -7073,6 +7114,8 @@ nsGlobalWindow::GetSelection(nsISelection** aSelection)
   if (!mDocShell)
     return NS_OK;
 
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIPresShell> presShell;
   mDocShell->GetPresShell(getter_AddRefs(presShell));
 
@@ -7381,6 +7424,7 @@ nsGlobalWindow::GetLocation(nsIDOMLocation ** aLocation)
 
   nsIDocShell *docShell = GetDocShell();
   if (!mLocation && docShell) {
+    nsAutoLockChrome lock; // for docShell weak ref
     mLocation = new nsLocation(docShell);
     if (!mLocation) {
       return NS_ERROR_OUT_OF_MEMORY;
@@ -7440,6 +7484,8 @@ NotifyDocumentTree(nsIDocument* aDocument, void* aData)
 void
 nsGlobalWindow::SetActive(bool aActive)
 {
+  mDoc->TryLockSubDocuments();
+
   nsPIDOMWindow::SetActive(aActive);
   NotifyDocumentTree(mDoc, nsnull);
 }
@@ -7722,7 +7768,7 @@ public:
 
   NS_IMETHOD Run()
   {
-    NS_PRECONDITION(NS_IsMainThread(), "Should be called on the main thread.");
+    NS_StickLock(mWindow);
     return mWindow->FireHashchange(mOldURL, mNewURL);
   }
 
@@ -7958,6 +8004,8 @@ nsGlobalWindow::GetComputedStyle(nsIDOMElement* aElt,
     return NS_OK;
   }
 
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIPresShell> presShell;
   mDocShell->GetPresShell(getter_AddRefs(presShell));
 
@@ -7979,6 +8027,9 @@ NS_IMETHODIMP
 nsGlobalWindow::GetSessionStorage(nsIDOMStorage ** aSessionStorage)
 {
   FORWARD_TO_INNER(GetSessionStorage, (aSessionStorage), NS_ERROR_UNEXPECTED);
+
+  // nsIDOMStorage are protected by the chrome lock.
+  nsAutoLockChrome lock;
 
   nsIPrincipal *principal = GetPrincipal();
   nsIDocShell* docShell = GetDocShell();
@@ -8051,6 +8102,8 @@ nsGlobalWindow::GetLocalStorage(nsIDOMStorage ** aLocalStorage)
 {
   FORWARD_TO_INNER(GetLocalStorage, (aLocalStorage), NS_ERROR_UNEXPECTED);
 
+  nsAutoLockChrome lock;
+
   NS_ENSURE_ARG(aLocalStorage);
 
   if (!Preferences::GetBool(kStorageEnabled)) {
@@ -8066,6 +8119,8 @@ nsGlobalWindow::GetLocalStorage(nsIDOMStorage ** aLocalStorage)
     bool unused;
     if (!nsDOMStorage::CanUseStorage(&unused))
       return NS_ERROR_DOM_SECURITY_ERR;
+
+    nsAutoLockChrome lock;
 
     nsIPrincipal *principal = GetPrincipal();
     if (!principal)
@@ -8716,6 +8771,8 @@ nsGlobalWindow::SetTimeoutOrInterval(nsIScriptTimeoutHandler *aHandler,
   // principal. Otherwise, use our principal to avoid running script in
   // elevated principals.
 
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIPrincipal> subjectPrincipal;
   nsresult rv;
   rv = nsContentUtils::GetSecurityManager()->
@@ -8969,6 +9026,9 @@ nsGlobalWindow::RunTimeout(nsTimeout *aTimeout)
 
     // The timeout is on the list to run at this depth, go ahead and
     // process it.
+
+    if (!timeout->mScriptHandler)
+      continue;
 
     // Get the script context (a strong ref to prevent it going away)
     // for this timeout and ensure the script language is enabled.
@@ -9437,6 +9497,8 @@ nsGlobalWindow::TimerCallback(nsITimer *aTimer, void *aClosure)
 {
   nsRefPtr<nsTimeout> timeout = (nsTimeout *)aClosure;
 
+  NS_StickLock(timeout->mWindow);
+
   timeout->mWindow->RunTimeout(timeout);
 }
 
@@ -9501,6 +9563,9 @@ nsGlobalWindow::GetWebBrowserChrome(nsIWebBrowserChrome **aBrowserChrome)
 nsIScrollableFrame *
 nsGlobalWindow::GetScrollFrame()
 {
+  // nsIScrollableFrame are protected by the chrome lock.
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   FORWARD_TO_OUTER(GetScrollFrame, (), nsnull);
 
   if (!mDocShell) {
@@ -9613,6 +9678,8 @@ nsGlobalWindow::FlushPendingNotifications(mozFlushType aType)
 void
 nsGlobalWindow::EnsureSizeUpToDate()
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   // If we're a subframe, make sure our size is up to date.  It's OK that this
   // crosses the content/chrome boundary, since chrome can have pending reflows
   // too.

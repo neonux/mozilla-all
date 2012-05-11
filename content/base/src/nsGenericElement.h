@@ -162,7 +162,7 @@ class nsNodeWeakReference : public nsIWeakReference
 {
 public:
   nsNodeWeakReference(nsINode* aNode)
-    : mNode(aNode)
+    : mNode(aNode), mZone(aNode ? aNode->GetZone() : JS_ZONE_CHROME)
   {
   }
 
@@ -170,6 +170,8 @@ public:
 
   // nsISupports
   NS_DECL_ISUPPORTS
+
+  JSZoneId GetZone() { return mZone; }
 
   // nsIWeakReference
   NS_DECL_NSIWEAKREFERENCE
@@ -181,6 +183,7 @@ public:
 
 private:
   nsINode* mNode;
+  JSZoneId mZone;
 };
 
 /**

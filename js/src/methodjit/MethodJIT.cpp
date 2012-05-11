@@ -145,7 +145,7 @@ PushActiveVMFrame(VMFrame &f)
 {
     f.oldregs = &f.cx->stack.regs();
     f.cx->stack.repointRegs(&f.regs);
-    f.cx->jaegerRuntime().pushActiveFrame(&f);
+    f.cx->compartment->jaegerCompartment().pushActiveFrame(&f);
     f.entryfp->setNativeReturnAddress(JS_FUNC_TO_DATA_PTR(void*, JaegerTrampolineReturn));
     f.regs.clearInlined();
 }
@@ -154,7 +154,7 @@ PushActiveVMFrame(VMFrame &f)
 extern "C" void JS_FASTCALL
 PopActiveVMFrame(VMFrame &f)
 {
-    f.cx->jaegerRuntime().popActiveFrame();
+    f.cx->compartment->jaegerCompartment().removeActiveFrame(&f);
     f.cx->stack.repointRegs(f.oldregs);
 }
 
@@ -983,14 +983,14 @@ JS_STATIC_ASSERT(JSVAL_PAYLOAD_MASK == 0x00007FFFFFFFFFFFLL);
 
 #endif                   /* _WIN64 */
 
-JaegerRuntime::JaegerRuntime()
+JaegerCompartment::JaegerCompartment()
     : orphanedNativeFrames(SystemAllocPolicy()), orphanedNativePools(SystemAllocPolicy())
 {}
 
 bool
-JaegerRuntime::init(JSContext *cx)
+JaegerCompartment::init(JSContext *cx)
 {
-    JSC::ExecutableAllocator *execAlloc = cx->runtime->getExecAlloc(cx);
+    JSC::ExecutableAllocator *execAlloc = cx->compartment->getExecAlloc(cx);
     if (!execAlloc)
         return false;
 
@@ -1010,7 +1010,7 @@ JaegerRuntime::init(JSContext *cx)
 }
 
 void
-JaegerRuntime::finish()
+JaegerCompartment::finish()
 {
     TrampolineCompiler::release(&trampolines);
 #ifdef JS_METHODJIT_PROFILE_STUBS
@@ -1052,7 +1052,7 @@ mjit::EnterMethodJIT(JSContext *cx, StackFrame *fp, void *code, Value *stackLimi
     JaegerSpew(JSpew_Prof, "script run took %d ms\n", prof.time_ms());
 #endif
 
-    JaegerStatus status = cx->jaegerRuntime().lastUnfinished();
+    JaegerStatus status = cx->compartment->jaegerCompartment().lastUnfinished();
     if (status) {
         if (partial) {
             /*

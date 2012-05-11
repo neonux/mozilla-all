@@ -49,6 +49,7 @@
 #include "nsIDOMNode.h"
 #include "prmon.h"
 #include "nsStubMutationObserver.h"
+#include "nsThreadUtils.h"
 
 class nsRange : public nsIDOMRange,
                 public nsStubMutationObserver
@@ -64,6 +65,8 @@ public:
     , mInSelection(false)
   {}
   virtual ~nsRange();
+
+  JSZoneId GetZone() { return mRoot ? mRoot->GetZone() : JS_ZONE_CHROME; }
 
   static nsresult CreateRange(nsIDOMNode* aStartParent, PRInt32 aStartOffset,
                               nsIDOMNode* aEndParent, PRInt32 aEndOffset,
@@ -244,6 +247,7 @@ protected:
     }
     ~AutoInvalidateSelection();
     nsRange* mRange;
+    nsAutoLockChrome mLock;
     nsRefPtr<nsINode> mCommonAncestor;
 #ifdef DEBUG
     bool mWasInSelection;

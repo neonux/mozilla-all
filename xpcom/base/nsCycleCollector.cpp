@@ -761,6 +761,8 @@ public:
     Block mFirstBlock;
     nsPurpleBufferEntry *mFreeList;
 
+    PRLock *mLock;
+
     // For objects compiled against Gecko 1.9 and 1.9.1.
     PointerSet mCompatObjects;
 #ifdef DEBUG_CC
@@ -797,6 +799,7 @@ public:
         mNumBlocksAlloced = 0;
         mCount = 0;
         mFreeList = nsnull;
+        mLock = PR_NewLock();
         StartBlock(&mFirstBlock);
     }
 
@@ -894,8 +897,11 @@ public:
 
     nsPurpleBufferEntry* Put(nsISupports *p)
     {
+        PR_Lock(mLock);
+
         nsPurpleBufferEntry *e = NewEntry();
         if (!e) {
+            PR_Unlock(mLock);
             return nsnull;
         }
 
@@ -907,12 +913,16 @@ public:
         mNormalObjects.PutEntry(p);
 #endif
 
+        PR_Unlock(mLock);
+
         // Caller is responsible for filling in result's mRefCnt.
         return e;
     }
 
     void Remove(nsPurpleBufferEntry *e)
     {
+        PR_Lock(mLock);
+
         NS_ASSERTION(mCount != 0, "must have entries");
 
 #ifdef DEBUG_CC
@@ -924,6 +934,8 @@ public:
         mFreeList = e;
 
         --mCount;
+
+        PR_Unlock(mLock);
     }
 
     bool PutCompatObject(nsISupports *p)

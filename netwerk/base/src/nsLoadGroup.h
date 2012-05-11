@@ -60,7 +60,9 @@ class nsLoadGroup : public nsILoadGroup,
 {
 public:
     NS_DECL_AGGREGATED
-    
+
+    JSZoneId GetZone() { return mZone; }
+
     ////////////////////////////////////////////////////////////////////////////
     // nsIRequest methods:
     NS_DECL_NSIREQUEST
@@ -99,6 +101,8 @@ protected:
 
     nsCOMPtr<nsIRequest>            mDefaultLoadRequest;
     PLDHashTable                    mRequests;
+
+    JSZoneId                        mZone;
 
     nsWeakPtr                       mObserver;
     

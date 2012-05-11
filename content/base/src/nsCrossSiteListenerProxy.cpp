@@ -751,6 +751,8 @@ nsCORSListenerProxy::OnRedirectVerifyCallback(nsresult result)
 nsresult
 nsCORSListenerProxy::UpdateChannel(nsIChannel* aChannel, bool aAllowDataURI)
 {
+  nsAutoLockChrome lock; // for nsIURI
+
   nsCOMPtr<nsIURI> uri, originalURI;
   nsresult rv = NS_GetFinalChannelURI(aChannel, getter_AddRefs(uri));
   NS_ENSURE_SUCCESS(rv, rv);

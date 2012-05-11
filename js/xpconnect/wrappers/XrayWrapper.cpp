@@ -429,6 +429,13 @@ XPCWrappedNativeXrayTraits::resolveNativeProperty(JSContext *cx, JSObject *wrapp
     JSObject *wnObject = GetWrappedNativeObjectFromHolder(holder);
     XPCWrappedNative *wn = GetWrappedNative(wnObject);
 
+    nsAutoUnstickChrome unstick(cx);
+
+    if (!EnsureZoneStuck(cx, wn->GetIdentityObject()->GetZone())) {
+        JS_ReportError(cx, "Could not acquire object lock.");
+        return false;
+    }
+
     // This will do verification and the method lookup for us.
     XPCCallContext ccx(JS_CALLER, cx, wnObject, nsnull, id);
 
@@ -622,6 +629,8 @@ nodePrincipal_getter(JSContext *cx, JSObject *wrapper, jsid id, jsval *vp)
 static bool
 IsPrivilegedScript()
 {
+    nsAutoLockChrome lock;
+
     // Redirect access straight to the wrapper if UniversalXPConnect is enabled.
     nsIScriptSecurityManager *ssm = XPCWrapper::GetSecurityManager();
     if (ssm) {
@@ -706,6 +715,11 @@ XPCWrappedNativeXrayTraits::resolveOwnProperty(JSContext *cx, js::Wrapper &jsWra
     }
     if (!hasProp) {
         XPCWrappedNative *wn = GetWrappedNativeFromHolder(holder);
+
+        if (!EnsureZoneStuck(cx, wn->GetIdentityObject()->GetZone())) {
+            JS_ReportError(cx, "Could not acquire object lock.");
+            return false;
+        }
 
         // Run the resolve hook of the wrapped native.
         if (!NATIVE_HAS_FLAG(wn, WantNewResolve)) {
@@ -1065,6 +1079,8 @@ bool
 XrayWrapper<Base, Traits>::getPropertyDescriptor(JSContext *cx, JSObject *wrapper, jsid id,
                                                  bool set, js::PropertyDescriptor *desc)
 {
+    nsAutoUnstickChrome unstick(cx);
+
     JSObject *holder = Traits::getHolderObject(cx, wrapper);
     if (Traits::isResolving(cx, holder, id)) {
         desc->obj = NULL;

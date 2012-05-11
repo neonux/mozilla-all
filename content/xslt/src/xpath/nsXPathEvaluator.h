@@ -62,6 +62,8 @@ public:
     // nsISupports interface (support aggregation)
     NS_DECL_AGGREGATED
 
+    JSZoneId GetZone() { return fOuter->GetZone(); }
+
     // nsIDOMXPathEvaluator interface
     NS_DECL_NSIDOMXPATHEVALUATOR
 

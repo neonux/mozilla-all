@@ -111,6 +111,7 @@ Wrap(JSContext *cx, JSObject *scope, T *p, nsWrapperCache *cache, jsval *vp)
 {
     if (xpc_FastGetCachedWrapper(cache, scope, vp))
         return true;
+    nsAutoUnstickChrome unstick(cx);
     qsObjectHelper helper(p, cache);
     return XPCOMObjectToJsval(cx, scope, helper, NULL, true, vp);
 }

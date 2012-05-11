@@ -397,6 +397,7 @@ PlacesEvent::PlacesEvent(const char* aTopic)
 NS_IMETHODIMP
 PlacesEvent::Run()
 {
+  nsAutoLockChrome lock;
   Notify();
   return NS_OK;
 }
@@ -404,7 +405,7 @@ PlacesEvent::Run()
 void
 PlacesEvent::Notify()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Must only be used on the main thread!");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Must only be used on the main thread!");
   nsCOMPtr<nsIObserverService> obs = mozilla::services::GetObserverService();
   if (obs) {
     (void)obs->NotifyObservers(nsnull, mTopic, nsnull);

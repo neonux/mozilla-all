@@ -105,6 +105,20 @@ NSPR_API(void) PR_DestroyLock(PRLock *lock);
 NSPR_API(void) PR_Lock(PRLock *lock);
 
 /***********************************************************************
+** FUNCTION:    PR_TryLock
+** DESCRIPTION:
+**  Lock a lock, unless a specified timeout expires.
+** INPUTS:      PRLock *lock
+**              Lock to locked.
+**              unsigned int timeout
+**              Maximum number of microseconds to wait for the lock.
+** OUTPUTS:     void
+** RETURN:      PRBool
+**   Whether the lock was successfully acquired.
+***********************************************************************/
+NSPR_API(PRBool) PR_TryLock(PRLock *lock, unsigned int timeout);
+
+/***********************************************************************
 ** FUNCTION:    PR_Unlock
 ** DESCRIPTION:
 **  Unlock a lock.  Unlocking an unlocked lock has undefined results.

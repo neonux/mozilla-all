@@ -336,6 +336,8 @@ nsComputedDOMStyle::GetStyleContextForElement(Element* aElement,
                                               nsIAtom* aPseudo,
                                               nsIPresShell* aPresShell)
 {
+  nsAutoLockChrome lock;
+
   // If the content has a pres shell, we must use it.  Otherwise we'd
   // potentially mix rule trees by using the wrong pres shell's style
   // set.  Using the pres shell from the content also means that any
@@ -464,6 +466,8 @@ nsComputedDOMStyle::GetPropertyCSSValue(const nsAString& aPropertyName,
   NS_ASSERTION(!mStyleContextHolder, "bad state");
 
   *aReturn = nsnull;
+
+  nsAutoLockChrome lock;
 
   nsCOMPtr<nsIDocument> document = do_QueryReferent(mDocumentWeak);
   NS_ENSURE_TRUE(document, NS_ERROR_NOT_AVAILABLE);

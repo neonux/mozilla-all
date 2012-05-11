@@ -847,10 +847,13 @@ JSScript::initScriptCounts(JSContext *cx)
 
     JS_ASSERT(size_t(cursor - base) == bytes);
 
+    JS_ASSERT(false);
+#if 0
     /* Enable interrupts in any interpreter frames running on this script. */
     InterpreterFrames *frames;
     for (frames = cx->runtime->interpreterFrames; frames; frames = frames->older)
         frames->enableInterruptsIfRunning(this);
+#endif
 
     return true;
 }
@@ -1952,6 +1955,8 @@ JSScript::ensureHasDebugScript(JSContext *cx)
     if (!debug)
         return false;
 
+    JS_ASSERT(false);
+#if 0
     /* Create compartment's debugScriptMap if necessary. */
     DebugScriptMap *map = compartment()->debugScriptMap;
     if (!map) {
@@ -1979,6 +1984,7 @@ JSScript::ensureHasDebugScript(JSContext *cx)
     InterpreterFrames *frames;
     for (frames = cx->runtime->interpreterFrames; frames; frames = frames->older)
         frames->enableInterruptsIfRunning(this);
+#endif
 
     return true;
 }

@@ -61,23 +61,73 @@
 #include "nsCycleCollector.h"
 #include "nsCycleCollectorUtils.h"
 
+#include "jspubtd.h"
+
 ////////////////////////////////////////////////////////////////////////////////
 // Macros to help detect thread-safety:
 
 #if defined(NS_DEBUG) && !defined(XPCOM_GLUE_AVOID_NSPR)
 
+extern void
+NS_FindThreadBitmask(PRThread **pthread, bool *pchrome, PRUint64 *pcontentMask);
+
+extern JSBool
+NS_IsOwningThread(JSZoneId zone);
+
 class nsAutoOwningThread {
 public:
-    nsAutoOwningThread() { mThread = PR_GetCurrentThread(); }
-    void *GetThread() const { return mThread; }
+    nsAutoOwningThread()
+    {
+      NS_FindThreadBitmask(&mThread, &mChrome, &mContent);
+    }
+
+    bool onCorrectThread() {
+      PRThread *thread, *newThread = mThread;
+      bool chrome, newChrome = mChrome;
+      PRUint64 content, newContent = mContent;
+      NS_FindThreadBitmask(&thread, &chrome, &content);
+      if (newThread != thread)
+        newThread = NULL;
+      if (newChrome != chrome)
+        newChrome = false;
+      newContent &= content;
+      if (newThread != mThread || newChrome != mChrome || newContent != mContent) {
+        bool dead = !newThread && !newChrome && !newContent;
+        if (dead)
+          *(int*)0 = 0;
+        mThread = newThread;
+        mChrome = newChrome;
+        mContent = newContent;
+      }
+      return true;
+    }
+
+    void fixZone(JSZoneId zone) {
+      mThread = NULL;
+      if (zone == JS_ZONE_CHROME) {
+        if (!mChrome)
+          *(int*)0 = 0;
+        mContent = 0;
+      } else {
+        int bit = (zone < 64) ? zone : 63;
+        if (!(mContent & (1 << bit)))
+          *(int*)0 = 0;
+        mChrome = false;
+        mContent = 1 << bit;
+      }
+    }
 
 private:
-    void *mThread;
+    PRThread *mThread;
+    bool mChrome;
+    PRUint64 mContent;
 };
 
-#define NS_DECL_OWNINGTHREAD            nsAutoOwningThread _mOwningThread;
+#define NS_DECL_OWNINGTHREAD            public: nsAutoOwningThread _mOwningThread;
 #define NS_ASSERT_OWNINGTHREAD(_class) \
-  NS_CheckThreadSafe(_mOwningThread.GetThread(), #_class " not thread-safe")
+  NS_ASSERTION(_mOwningThread.onCorrectThread(), #_class " not thread-safe")
+#define NS_FIX_OWNINGTHREAD_OTHER(other, zone)   \
+  other->_mOwningThread.fixZone(zone)
 #define NS_ASSERT_OWNINGTHREAD_AND_NOT_CCTHREAD(_class) \
   do { \
     if (NS_IsCycleCollectorThread()) { \
@@ -93,9 +143,12 @@ private:
 
 #define NS_DECL_OWNINGTHREAD            /* nothing */
 #define NS_ASSERT_OWNINGTHREAD(_class)  ((void)0)
+#define NS_FIX_OWNINGTHREAD_OTHER(other, zone)  ((void)0)
 #define NS_ASSERT_OWNINGTHREAD_AND_NOT_CCTHREAD(_class)  ((void)0)
 
 #endif // NS_DEBUG
+
+#define NS_FIX_OWNINGTHREAD(zone) NS_FIX_OWNINGTHREAD_OTHER(this, zone)
 
 #define NS_CCAR_REFCNT_BIT 1
 #define NS_CCAR_REFCNT_TO_TAGGED(rc_) \

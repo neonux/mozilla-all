@@ -122,6 +122,8 @@ namespace
       nsUIEvent event(true, mMsg, mDetail);
       event.eventStructType = NS_SMIL_TIME_EVENT;
 
+      NS_StickLock(mTarget);
+
       nsPresContext* context = nsnull;
       nsIDocument* doc = mTarget->GetCurrentDoc();
       if (doc) {
@@ -2252,7 +2254,7 @@ nsSMILTimedElement::FireTimeEventAsync(PRUint32 aMsg, PRInt32 aDetail)
 
   nsCOMPtr<nsIRunnable> event =
     new AsyncTimeEventRunner(&mAnimationElement->AsElement(), aMsg, aDetail);
-  NS_DispatchToMainThread(event, NS_DISPATCH_NORMAL);
+  NS_DispatchToMainThread(event, NS_DISPATCH_NORMAL, mAnimationElement->AsElement().GetZone());
 }
 
 const nsSMILInstanceTime*

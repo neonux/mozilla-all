@@ -689,6 +689,9 @@ nsHTMLDocument::StartDocumentLoad(const char* aCommand,
     rv = parent->GetContentViewer(getter_AddRefs(parentContentViewer));
     NS_ENSURE_SUCCESS(rv, rv);
     if (parentContentViewer) {
+      nsIDocument *doc = parentContentViewer->GetDocument();
+      if (doc && !NS_TryStickLock(doc))
+        return NS_ERROR_FAILURE;
       parentDocument = parentContentViewer->GetDocument();
     }
   }
@@ -960,6 +963,8 @@ nsHTMLDocument::GetDomainURI(nsIURI **aURI)
 NS_IMETHODIMP
 nsHTMLDocument::GetDomain(nsAString& aDomain)
 {
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIURI> uri;
   GetDomainURI(getter_AddRefs(uri));
 
@@ -985,6 +990,8 @@ nsHTMLDocument::SetDomain(const nsAString& aDomain)
 {
   if (aDomain.IsEmpty())
     return NS_ERROR_DOM_BAD_DOCUMENT_DOMAIN;
+
+  nsAutoLockChrome lock;
 
   // Create new URI
   nsCOMPtr<nsIURI> uri;
@@ -1254,9 +1261,13 @@ nsHTMLDocument::GetCookie(nsAString& aCookie)
     return NS_OK;
   }
 
+  nsAutoLockChrome lock;
+
   // not having a cookie service isn't an error
   nsCOMPtr<nsICookieService> service = do_GetService(NS_COOKIESERVICE_CONTRACTID);
   if (service) {
+    nsAutoLockChrome lock; // for nsIURI
+
     // Get a URI from the document principal. We use the original
     // codebase in case the codebase was changed by SetDomain
     nsCOMPtr<nsIURI> codebaseURI;
@@ -1283,6 +1294,8 @@ nsHTMLDocument::SetCookie(const nsAString& aCookie)
   if (mDisableCookieAccess) {
     return NS_OK;
   }
+
+  nsAutoLockChrome lock;
 
   // not having a cookie service isn't an error
   nsCOMPtr<nsICookieService> service = do_GetService(NS_COOKIESERVICE_CONTRACTID);
@@ -1749,12 +1762,14 @@ nsHTMLDocument::WriteCommon(JSContext *cx,
 NS_IMETHODIMP
 nsHTMLDocument::Write(const nsAString& aText, JSContext *cx)
 {
+  nsAutoLockChrome lock;
   return WriteCommon(cx, aText, false);
 }
 
 NS_IMETHODIMP
 nsHTMLDocument::Writeln(const nsAString& aText, JSContext *cx)
 {
+  nsAutoLockChrome lock;
   return WriteCommon(cx, aText, true);
 }
 
@@ -2263,6 +2278,7 @@ nsHTMLDocument::MaybeEditingStateChanged()
     if (nsContentUtils::IsSafeToRunScript()) {
       EditingStateChanged();
     } else if (!mInDestructor) {
+      nsAutoLockChrome lock;
       nsContentUtils::AddScriptRunner(
         NS_NewRunnableMethod(this, &nsHTMLDocument::MaybeEditingStateChanged));
     }
@@ -2310,6 +2326,7 @@ nsHTMLDocument::ChangeContentEditableCount(nsIContent *aElement,
 
   mContentEditableCount += aChange;
 
+  nsAutoLockChrome lock;
   nsContentUtils::AddScriptRunner(
     new DeferredContentEditableCountChangeEvent(this, aElement));
 
@@ -2517,6 +2534,8 @@ nsHTMLDocument::TurnEditingOff()
 
 static bool HasPresShell(nsPIDOMWindow *aWindow)
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   nsIDocShell *docShell = aWindow->GetDocShell();
   if (!docShell)
     return false;
@@ -2543,6 +2562,8 @@ nsHTMLDocument::EditingStateChanged()
     // XXX We shouldn't recurse.
     return NS_OK;
   }
+
+  nsAutoLockChrome lock;
 
   bool designMode = HasFlag(NODE_IS_EDITABLE);
   EditingState newState = designMode ? eDesignMode :
@@ -2739,6 +2760,8 @@ nsHTMLDocument::SetDesignMode(const nsAString & aDesignMode)
   nsresult rv = NS_OK;
 
   if (!nsContentUtils::IsCallerTrustedForWrite()) {
+    nsAutoLockChrome lock; // for security manager
+
     nsCOMPtr<nsIPrincipal> subject;
     nsIScriptSecurityManager *secMan = nsContentUtils::GetSecurityManager();
     rv = secMan->GetSubjectPrincipal(getter_AddRefs(subject));

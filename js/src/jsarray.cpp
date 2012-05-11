@@ -3792,7 +3792,7 @@ NewArray(JSContext *cx, uint32_t length, JSObject *proto)
 
     GlobalObject *parent = GetCurrentGlobal(cx);
 
-    NewObjectCache &cache = cx->runtime->newObjectCache;
+    NewObjectCache &cache = cx->thread()->newObjectCache;
 
     NewObjectCache::EntryIndex entry = -1;
     if (cache.lookupGlobal(&ArrayClass, parent, kind, &entry)) {

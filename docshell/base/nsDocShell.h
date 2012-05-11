@@ -252,7 +252,7 @@ public:
     PRUint32 ConvertDocShellLoadInfoToLoadType(nsDocShellInfoLoadType aDocShellLoadType);
 
     // nsIScriptGlobalObjectOwner methods
-    virtual nsIScriptGlobalObject* GetScriptGlobalObject();
+    virtual nsIScriptGlobalObject* GetScriptGlobalObject(JSZoneId aZone);
 
     // Restores a cached presentation from history (mLSHE).
     // This method swaps out the content viewer and simulates loads for
@@ -683,6 +683,8 @@ protected:
 
     nsresult MaybeInitTiming();
 
+    void MaybeFreeWindowZone();
+
     // Event type dispatched by RestorePresentation
     class RestorePresentationEvent : public nsRunnable {
     public:
@@ -718,6 +720,8 @@ protected:
     nsCOMPtr<nsIURI>           mCurrentURI;
     nsCOMPtr<nsIURI>           mReferrerURI;
     nsCOMPtr<nsIScriptGlobalObject> mScriptGlobal;
+    JSZoneId                   mWindowZone;
+    bool                       mOwnsWindowZone;
     nsCOMPtr<nsISHistory>      mSessionHistory;
     nsCOMPtr<nsIGlobalHistory2> mGlobalHistory;
     nsCOMPtr<nsIWebBrowserFind> mFind;

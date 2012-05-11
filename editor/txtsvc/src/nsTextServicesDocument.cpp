@@ -61,6 +61,7 @@
 
 #include "nsIWordBreaker.h"
 #include "nsIServiceManager.h"
+#include "nsProxyRelease.h"
 
 #define LOCK_DOC(doc)
 #define UNLOCK_DOC(doc)
@@ -117,6 +118,8 @@ nsTextServicesDocument::nsTextServicesDocument()
 nsTextServicesDocument::~nsTextServicesDocument()
 {
   ClearOffsetTable(&mOffsetTable);
+
+  NS_ReleaseReference(mIterator);
 }
 
 #define TS_ATOM(name_, value_) NS_STATIC_ATOM_BUFFER(name_##_buffer, value_)

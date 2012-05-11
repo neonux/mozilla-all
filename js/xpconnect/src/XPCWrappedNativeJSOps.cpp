@@ -72,6 +72,8 @@ static JSBool Throw(unsigned errNum, JSContext* cx)
         return Throw(NS_ERROR_XPC_BAD_OP_ON_WN_PROTO, cx);                    \
     if (!wrapper->IsValid())                                                  \
         return Throw(NS_ERROR_XPC_HAS_BEEN_SHUTDOWN, cx);                     \
+    if (!wrapper->EnsureLockHeld(cx))                                         \
+        return Throw(NS_ERROR_XPC_CANT_GET_LOCK, cx);                         \
     PR_END_MACRO
 
 /***************************************************************************/
@@ -201,6 +203,8 @@ XPC_WN_DoubleWrappedGetter(JSContext *cx, unsigned argc, jsval *vp)
     JSObject *obj = JS_THIS_OBJECT(cx, vp);
     if (!obj)
         return false;
+
+    nsAutoUnstickChrome unstick(cx);
 
     MORPH_SLIM_WRAPPER(cx, obj);
     XPCCallContext ccx(JS_CALLER, cx, obj);
@@ -521,6 +525,8 @@ XPC_WN_Shared_Convert(JSContext *cx, JSObject *obj, JSType type, jsval *vp)
         return true;
     }
 
+    nsAutoUnstickChrome unstick(cx);
+
     MORPH_SLIM_WRAPPER(cx, obj);
     XPCCallContext ccx(JS_CALLER, cx, obj);
     XPCWrappedNative* wrapper = ccx.GetWrapper();
@@ -713,6 +719,9 @@ static JSBool
 XPC_WN_NoHelper_Resolve(JSContext *cx, JSObject *obj, jsid id)
 {
     MORPH_SLIM_WRAPPER(cx, obj);
+
+    nsAutoUnstickChrome unstick(cx);
+
     XPCCallContext ccx(JS_CALLER, cx, obj, nsnull, id);
     XPCWrappedNative* wrapper = ccx.GetWrapper();
     THROW_AND_RETURN_IF_BAD_WRAPPER(cx, wrapper);
@@ -747,6 +756,8 @@ XPC_WN_Equality(JSContext *cx, JSObject *obj, const jsval *valp, JSBool *bp)
 {
     jsval v = *valp;
     *bp = false;
+
+    nsAutoUnstickChrome unstick(cx);
 
     JSObject *obj2;
     XPCWrappedNative *wrapper =
@@ -917,6 +928,7 @@ XPC_WN_MaybeResolvingStrictPropertyStub(JSContext *cx, JSObject *obj, jsid id, J
     nsresult rv = wrapper->GetScriptableCallback()->
 
 #define PRE_HELPER_STUB                                                       \
+    nsAutoUnstickChrome unstick(cx);                                          \
     XPCWrappedNative* wrapper;                                                \
     nsIXPCScriptable* si;                                                     \
     if (IS_SLIM_WRAPPER(obj)) {                                               \
@@ -972,6 +984,8 @@ XPC_WN_Helper_SetProperty(JSContext *cx, JSObject *obj, jsid id, JSBool strict, 
 static JSBool
 XPC_WN_Helper_Convert(JSContext *cx, JSObject *obj, JSType type, jsval *vp)
 {
+    nsAutoUnstickChrome unstick(cx);
+
     SLIM_LOG_WILL_MORPH(cx, obj);
     PRE_HELPER_STUB_NO_SLIM
     Convert(wrapper, cx, obj, type, vp, &retval);
@@ -990,6 +1004,8 @@ XPC_WN_Helper_CheckAccess(JSContext *cx, JSObject *obj, jsid id,
 static JSBool
 XPC_WN_Helper_Call(JSContext *cx, unsigned argc, jsval *vp)
 {
+    nsAutoUnstickChrome unstick(cx);
+
     // N.B. we want obj to be the callee, not JS_THIS(cx, vp)
     JSObject *obj = JSVAL_TO_OBJECT(JS_CALLEE(cx, vp));
 
@@ -1009,6 +1025,8 @@ XPC_WN_Helper_Call(JSContext *cx, unsigned argc, jsval *vp)
 static JSBool
 XPC_WN_Helper_Construct(JSContext *cx, unsigned argc, jsval *vp)
 {
+    nsAutoUnstickChrome unstick(cx);
+
     JSObject *obj = JSVAL_TO_OBJECT(JS_CALLEE(cx, vp));
     if (!obj)
         return false;
@@ -1029,6 +1047,8 @@ XPC_WN_Helper_Construct(JSContext *cx, unsigned argc, jsval *vp)
 static JSBool
 XPC_WN_Helper_HasInstance(JSContext *cx, JSObject *obj, const jsval *valp, JSBool *bp)
 {
+    nsAutoUnstickChrome unstick(cx);
+
     SLIM_LOG_WILL_MORPH(cx, obj);
     bool retval2;
     PRE_HELPER_STUB_NO_SLIM
@@ -1091,6 +1111,8 @@ XPC_WN_Helper_NewResolve(JSContext *cx, JSObject *obj, jsid id, unsigned flags,
 
         return retval;
     }
+
+    nsAutoUnstickChrome unstick(cx);
 
     XPCCallContext ccx(JS_CALLER, cx, obj);
     XPCWrappedNative* wrapper = ccx.GetWrapper();
@@ -1206,6 +1228,8 @@ JSBool
 XPC_WN_JSOp_Enumerate(JSContext *cx, JSObject *obj, JSIterateOp enum_op,
                       jsval *statep, jsid *idp)
 {
+    nsAutoUnstickChrome unstick(cx);
+
     js::Class *clazz = js::GetObjectClass(obj);
     if (!IS_WRAPPER_CLASS(clazz) || clazz == &XPC_WN_NoHelper_JSClass.base) {
         // obj must be a prototype object or a wrapper w/o a
@@ -1340,7 +1364,7 @@ XPC_WN_JSOp_ThisObject(JSContext *cx, JSObject *obj)
 {
     // None of the wrappers we could potentially hand out are threadsafe so
     // just hand out the given object.
-    if (!XPCPerThreadData::IsMainThread(cx))
+    if (!XPCPerThreadData::IsExecuteThread(cx))
         return obj;
 
     return JS_ObjectToOuterObject(cx, obj);
@@ -1516,6 +1540,8 @@ XPC_WN_CallMethod(JSContext *cx, unsigned argc, jsval *vp)
     if (!obj)
         return false;
 
+    nsAutoUnstickChrome unstick(cx);
+
 #ifdef DEBUG_slimwrappers
     {
         JSFunction* fun = funobj->getFunctionPrivate();
@@ -1546,6 +1572,8 @@ XPC_WN_GetterSetter(JSContext *cx, unsigned argc, jsval *vp)
 {
     NS_ASSERTION(JS_TypeOfValue(cx, JS_CALLEE(cx, vp)) == JSTYPE_FUNCTION, "bad function");
     JSObject* funobj = JSVAL_TO_OBJECT(JS_CALLEE(cx, vp));
+
+    nsAutoUnstickChrome unstick(cx);
 
     JSObject* obj = JS_THIS_OBJECT(cx, vp);
     if (!obj)

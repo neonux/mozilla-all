@@ -64,6 +64,8 @@ public:
   // nsISupports
   NS_DECL_ISUPPORTS_INHERITED
 
+  JSZoneId GetZone() { return nsINode::GetZone(); }
+
   // nsIDOMNode
   NS_FORWARD_NSIDOMNODE(nsGenericHTMLFrameElement::)
 
@@ -100,6 +102,7 @@ nsHTMLIFrameElement::nsHTMLIFrameElement(already_AddRefed<nsINodeInfo> aNodeInfo
                                          FromParser aFromParser)
   : nsGenericHTMLFrameElement(aNodeInfo, aFromParser)
 {
+  NS_FIX_OWNINGTHREAD(nsINode::GetZone());
 }
 
 nsHTMLIFrameElement::~nsHTMLIFrameElement()

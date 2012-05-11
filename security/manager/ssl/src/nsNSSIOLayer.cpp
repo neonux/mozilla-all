@@ -185,7 +185,7 @@ getSecureBrowserUI(nsIInterfaceRequestor * callbacks,
   NS_ASSERTION(result != nsnull, "result parameter to getSecureBrowserUI is null");
   *result = nsnull;
 
-  NS_ASSERTION(NS_IsMainThread(),
+  NS_ASSERTION(NS_IsChromeOwningThread(),
                "getSecureBrowserUI called off the main thread");
 
   if (!callbacks)
@@ -536,7 +536,7 @@ void nsSSLIOLayerHelpers::Cleanup()
 static void
 nsHandleSSLError(nsNSSSocketInfo *socketInfo, PRErrorCode err)
 {
-  if (!NS_IsMainThread()) {
+  if (!NS_IsChromeOwningThread()) {
     NS_ERROR("nsHandleSSLError called off the main thread");
     return;
   }

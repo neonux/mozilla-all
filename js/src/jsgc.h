@@ -1100,7 +1100,7 @@ namespace js {
 namespace gc {
 
 JSCompartment *
-NewCompartment(JSContext *cx, JSPrincipals *principals);
+NewCompartment(JSContext *cx, JSZoneId zone, JSPrincipals *principals);
 
 /* Tries to run a GC no matter what (used for GC zeal). */
 void

@@ -84,6 +84,8 @@
 #include "DiscardTracker.h"
 #include "nsAsyncRedirectVerifyHelper.h"
 
+#include "nsProxyRelease.h"
+
 #define SVG_MIMETYPE "image/svg+xml"
 
 using namespace mozilla;
@@ -856,6 +858,7 @@ NS_IMETHODIMP imgRequest::OnStopRequest(nsIRequest *aRequest, nsISupports *ctxt,
 
   // stop holding a ref to the channel, since we don't need it anymore
   if (mChannel) {
+    NS_ReleaseReference(mPrevChannelSink);
     mChannel->SetNotificationCallbacks(mPrevChannelSink);
     mPrevChannelSink = nsnull;
     mChannel = nsnull;

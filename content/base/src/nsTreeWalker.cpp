@@ -134,6 +134,7 @@ nsTreeWalker::GetExpandEntityReferences(bool *aExpandEntityReferences)
 NS_IMETHODIMP nsTreeWalker::GetCurrentNode(nsIDOMNode * *aCurrentNode)
 {
     if (mCurrentNode) {
+        NS_StickLock(mCurrentNode);
         return CallQueryInterface(mCurrentNode, aCurrentNode);
     }
 

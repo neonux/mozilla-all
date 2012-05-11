@@ -625,13 +625,27 @@ StackSpace::sizeOfCommitted()
 
 ContextStack::ContextStack(JSContext *cx)
   : seg_(NULL),
-    space_(&cx->runtime->stackSpace),
     cx_(cx)
-{}
+{
+    threadReset();
+}
 
 ContextStack::~ContextStack()
 {
     JS_ASSERT(!seg_);
+}
+
+void
+ContextStack::threadReset()
+{
+#ifdef JS_THREADSAFE
+    if (cx_->thread())
+        space_ = &cx_->thread()->stackSpace;
+    else
+        space_ = NULL;
+#else
+    space_ = &cx->thread()->stackSpace;
+#endif
 }
 
 bool

@@ -55,6 +55,8 @@ public:
     nsStreamListenerTee() { }
     virtual ~nsStreamListenerTee() { }
 
+    JSZoneId GetZone() { return mListener ? mListener->GetZone() : JS_ZONE_CHROME; }
+
 private:
     nsCOMPtr<nsIInputStreamTee>  mInputTee;
     nsCOMPtr<nsIOutputStream>    mSink;

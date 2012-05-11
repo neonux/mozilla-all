@@ -297,7 +297,7 @@ public:
    */
   virtual nsresult CreateNativeGlobalForInner(
                                       nsIScriptGlobalObject *aNewInner,
-                                      bool aIsChrome,
+                                      JSZoneId aZone,
                                       nsIPrincipal *aPrincipal,
                                       JSObject** aNativeGlobal,
                                       nsISupports **aHolder) = 0;

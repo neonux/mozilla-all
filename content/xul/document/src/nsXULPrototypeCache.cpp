@@ -112,6 +112,8 @@ NS_IMPL_THREADSAFE_ISUPPORTS1(nsXULPrototypeCache, nsIObserver)
 /* static */ nsXULPrototypeCache*
 nsXULPrototypeCache::GetInstance()
 {
+    MOZ_ASSERT(NS_IsChromeOwningThread());
+
     if (!sInstance) {
         NS_ADDREF(sInstance = new nsXULPrototypeCache());
 
@@ -217,6 +219,8 @@ nsXULPrototypeCache::PutPrototype(nsXULPrototypeDocument* aDocument)
 nsresult
 nsXULPrototypeCache::PutStyleSheet(nsCSSStyleSheet* aStyleSheet)
 {
+    MOZ_ASSERT(aStyleSheet->GetZone() == JS_ZONE_CHROME);
+
     nsIURI* uri = aStyleSheet->GetSheetURI();
 
     NS_ENSURE_TRUE(mStyleSheetTable.Put(uri, aStyleSheet),

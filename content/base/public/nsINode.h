@@ -406,6 +406,8 @@ public:
    */
   mozilla::dom::Element* AsElement();
 
+  virtual JSZoneId GetZone();
+
   virtual nsIDOMNode* AsDOMNode() = 0;
 
   /**

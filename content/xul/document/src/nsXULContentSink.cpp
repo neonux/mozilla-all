@@ -189,6 +189,7 @@ XULContentSinkImpl::XULContentSinkImpl()
       mTextSize(0),
       mConstrainSize(true),
       mState(eInProlog),
+      mZone(JS_ZONE_CHROME),
       mParser(nsnull)
 {
 
@@ -307,6 +308,7 @@ XULContentSinkImpl::Init(nsIDocument* aDocument,
     mPrototype   = aPrototype;
 
     mDocumentURL = mPrototype->GetURI();
+    mZone        = mDocument->GetZone();
 
     // XXX this presumes HTTP header info is already set in document
     // XXX if it isn't we need to set it here...

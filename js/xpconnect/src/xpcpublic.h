@@ -64,13 +64,13 @@ class nsScriptNameSpaceManager;
 #endif
 
 nsresult
-xpc_CreateGlobalObject(JSContext *cx, JSClass *clasp,
+xpc_CreateGlobalObject(JSContext *cx, JSClass *clasp, JSZoneId zone,
                        nsIPrincipal *principal, nsISupports *ptr,
                        bool wantXrays, JSObject **global,
                        JSCompartment **compartment);
 
 nsresult
-xpc_CreateMTGlobalObject(JSContext *cx, JSClass *clasp,
+xpc_CreateMTGlobalObject(JSContext *cx, JSClass *clasp, JSZoneId zone,
                          nsISupports *ptr, JSObject **global,
                          JSCompartment **compartment);
 
@@ -204,9 +204,9 @@ xpc_UnmarkGrayContext(JSContext *cx)
     if (cx) {
         JSObject *global = JS_GetGlobalObject(cx);
         xpc_UnmarkGrayObject(global);
-        if (JS_IsInRequest(JS_GetRuntime(cx))) {
+        if (JS_IsInRequest(cx)) {
             JSObject *scope = JS_GetGlobalForScopeChain(cx);
-            if (scope != global)
+            if (scope && scope != global)
                 xpc_UnmarkGrayObject(scope);
         }
     }
@@ -358,5 +358,59 @@ DefineConstructor(JSContext *cx, JSObject *obj, DefineInterface aDefine,
 } // namespace binding
 } // namespace dom
 } // namespace mozilla
+
+class JSContextMUX
+{
+    nsTArray<JSContext *> mContexts;
+    size_t mCanonical;
+
+  public:
+
+    JSContextMUX()
+      : mCanonical(0)
+    {}
+
+    JSContext *canonicalContext() {
+        return mContexts.Length() == 0 ? NULL : mContexts[mCanonical];
+    }
+
+    JSContext *getContext(PRThread *thread) {
+        for (size_t i = 0; i < mContexts.Length(); i++) {
+            if (mContexts[i] && (PRThread *) JS_GetContextThread(mContexts[i]) == thread) {
+                mCanonical = i;
+                return mContexts[i];
+            }
+        }
+        return NULL;
+    }
+
+    size_t getContextCount() {
+        return mContexts.Length();
+    }
+
+    JSContext *getContext(size_t i) {
+        return mContexts[i];
+    }
+
+    JSContext *getAndRemoveContext(size_t i) {
+        JSContext *cx = mContexts[i];
+        mContexts[i] = NULL;
+        return cx;
+    }
+
+    void addContext(JSContext *cx) {
+#ifdef NS_DEBUG
+        for (size_t i = 0; i < mContexts.Length(); i++)
+            MOZ_ASSERT(JS_GetContextThread(cx) != JS_GetContextThread(mContexts[i]));
+#endif
+        for (size_t i = 0; i < mContexts.Length(); i++) {
+            if (!mContexts[i]) {
+                mContexts[i] = cx;
+                return;
+            }
+        }
+        mContexts.AppendElement(cx);
+    }
+};
 
 #endif

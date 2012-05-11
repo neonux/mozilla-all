@@ -70,17 +70,15 @@ nsHtml5AtomTable::~nsHtml5AtomTable()
 nsIAtom*
 nsHtml5AtomTable::GetAtom(const nsAString& aKey)
 {
-#ifdef DEBUG
-  {
-    nsCOMPtr<nsIThread> currentThread;
-    NS_GetCurrentThread(getter_AddRefs(currentThread));
-    NS_ASSERTION(mPermittedLookupThread == currentThread, "Wrong thread!");
-  }
-#endif
+  // XXX this code runs on the (non-execute) parser thread, how is thread
+  // safety maintained there?
+  MOZ_ASSERT_IF(NS_IsExecuteThread(), NS_IsChromeOwningThread());
+
   nsIAtom* atom = NS_GetStaticAtom(aKey);
   if (atom) {
     return atom;
   }
+
   nsHtml5AtomEntry* entry = mTable.PutEntry(aKey);
   if (!entry) {
     return nsnull;

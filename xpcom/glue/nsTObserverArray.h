@@ -80,7 +80,7 @@ class NS_COM_GLUE nsTObserverArray_base {
     }
 
     ~nsTObserverArray_base() {
-      NS_ASSERTION(mIterators == nsnull, "iterators outlasting array");
+      MOZ_ASSERT(mIterators == nsnull);
     }
 
     /**
@@ -266,10 +266,7 @@ class nsAutoTObserverArray : protected nsTObserverArray_base {
         }
 
         ~Iterator() {
-          NS_ASSERTION(mArray.mIterators == this,
-                       "Iterators must currently be destroyed in opposite order "
-                       "from the construction order. It is suggested that you "
-                       "simply put them on the stack");
+          MOZ_ASSERT(mArray.mIterators == this);
           mArray.mIterators = mNext;
         }
 

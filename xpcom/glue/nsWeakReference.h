@@ -81,6 +81,7 @@ class NS_COM_GLUE nsSupportsWeakReference : public nsISupportsWeakReference
 
 			void ClearWeakReferences();
 			bool HasWeakReferences() const {return mProxy != 0;}
+      void UpdateWeakReferencesZone();
   };
 
 #undef  IMETHOD_VISIBILITY

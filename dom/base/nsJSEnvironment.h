@@ -49,6 +49,7 @@
 #include "nsCycleCollectionParticipant.h"
 #include "nsIXPConnect.h"
 #include "nsIArray.h"
+#include "xpcpublic.h"
 
 class nsIXPConnectJSObjectHolder;
 class nsRootedJSValueArray;
@@ -141,7 +142,7 @@ public:
   virtual JSObject* GetNativeGlobal();
   virtual nsresult CreateNativeGlobalForInner(
                                       nsIScriptGlobalObject *aGlobal,
-                                      bool aIsChrome,
+                                      JSZoneId aZone,
                                       nsIPrincipal *aPrincipal,
                                       JSObject** aNativeGlobal,
                                       nsISupports **aHolder);
@@ -211,7 +212,7 @@ public:
   {
     // Verify that we have a global so that this
     // does always return a null when GetGlobalObject() is null.
-    JSObject* global = JS_GetGlobalObject(mContext);
+    JSObject* global = JS_GetGlobalObject(GetNativeContext());
     return global ? mGlobalObjectRef.get() : nsnull;
   }
 protected:
@@ -237,10 +238,11 @@ protected:
   void ReportPendingException();
 private:
   void DestroyJSContext();
+  bool HasOutstandingRequests();
 
   nsrefcnt GetCCRefcnt();
 
-  JSContext *mContext;
+  JSContextMUX mContext;
   bool mActive;
 
 protected:
@@ -310,8 +312,12 @@ private:
   PRTime mModalStateTime;
   PRUint32 mModalStateDepth;
 
+  JSRuntime *mRuntime;
+
   nsJSContext *mNext;
   nsJSContext **mPrev;
+
+  JSZoneId mZone;
 
   // mGlobalObjectRef ensures that the outer window stays alive as long as the
   // context does. It is eventually collected by the cycle collector.

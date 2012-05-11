@@ -68,6 +68,7 @@
 #include "jsiter.h"
 #include "jslock.h"
 #include "jsmath.h"
+#include "jsnativestack.h"
 #include "jsnum.h"
 #include "jsobj.h"
 #include "jsopcode.h"
@@ -98,6 +99,7 @@ JSRuntime::sizeOfExcludingThis(JSMallocSizeOfFun mallocSizeOf, size_t *normal, s
                                size_t *mjitCode, size_t *regexpCode, size_t *unusedCodeMemory,
                                size_t *stackCommitted, size_t *gcMarkerSize)
 {
+#if 0
     if (normal)
         *normal = mallocSizeOf(dtoaState);
 
@@ -111,6 +113,7 @@ JSRuntime::sizeOfExcludingThis(JSMallocSizeOfFun mallocSizeOf, size_t *normal, s
 
     if (stackCommitted)
         *stackCommitted = stackSpace.sizeOfCommitted();
+#endif
 
     if (gcMarkerSize)
         *gcMarkerSize = gcMarker.sizeOfExcludingThis(mallocSizeOf);
@@ -130,43 +133,45 @@ void
 JSRuntime::setJitHardening(bool enabled)
 {
     jitHardening = enabled;
+    /*
     if (execAlloc_)
         execAlloc_->setRandomize(enabled);
+    */
 }
 
 JSC::ExecutableAllocator *
-JSRuntime::createExecutableAllocator(JSContext *cx)
+JSCompartment::createExecutableAllocator(JSContext *cx)
 {
+    JS_ASSERT(cx->compartment == this);
     JS_ASSERT(!execAlloc_);
-    JS_ASSERT(cx->runtime == this);
 
     JSC::AllocationBehavior randomize =
-        jitHardening ? JSC::AllocationCanRandomize : JSC::AllocationDeterministic;
-    execAlloc_ = new_<JSC::ExecutableAllocator>(randomize);
+        rt->jitHardening ? JSC::AllocationCanRandomize : JSC::AllocationDeterministic;
+    execAlloc_ = rt->new_<JSC::ExecutableAllocator>(randomize);
     if (!execAlloc_)
         js_ReportOutOfMemory(cx);
     return execAlloc_;
 }
 
 WTF::BumpPointerAllocator *
-JSRuntime::createBumpPointerAllocator(JSContext *cx)
+JSCompartment::createBumpPointerAllocator(JSContext *cx)
 {
+    JS_ASSERT(cx->compartment == this);
     JS_ASSERT(!bumpAlloc_);
-    JS_ASSERT(cx->runtime == this);
 
-    bumpAlloc_ = new_<WTF::BumpPointerAllocator>();
+    bumpAlloc_ = rt->new_<WTF::BumpPointerAllocator>();
     if (!bumpAlloc_)
         js_ReportOutOfMemory(cx);
     return bumpAlloc_;
 }
 
 MathCache *
-JSRuntime::createMathCache(JSContext *cx)
+Thread::createMathCache(JSContext *cx)
 {
     JS_ASSERT(!mathCache_);
-    JS_ASSERT(cx->runtime == this);
+    JS_ASSERT(cx->thread() == this);
 
-    MathCache *newMathCache = new_<MathCache>();
+    MathCache *newMathCache = runtime->new_<MathCache>();
     if (!newMathCache) {
         js_ReportOutOfMemory(cx);
         return NULL;
@@ -177,21 +182,21 @@ JSRuntime::createMathCache(JSContext *cx)
 }
 
 #ifdef JS_METHODJIT
-mjit::JaegerRuntime *
-JSRuntime::createJaegerRuntime(JSContext *cx)
+mjit::JaegerCompartment *
+JSCompartment::createJaegerCompartment(JSContext *cx)
 {
-    JS_ASSERT(!jaegerRuntime_);
-    JS_ASSERT(cx->runtime == this);
+    JS_ASSERT(!jaegerCompartment_);
+    JS_ASSERT(cx->compartment == this);
 
-    mjit::JaegerRuntime *jr = new_<mjit::JaegerRuntime>();
-    if (!jr || !jr->init(cx)) {
+    mjit::JaegerCompartment *jc = rt->new_<mjit::JaegerCompartment>();
+    if (!jc || !jc->init(cx)) {
         js_ReportOutOfMemory(cx);
-        delete_(jr);
+        rt->delete_(jc);
         return NULL;
     }
 
-    jaegerRuntime_ = jr;
-    return jaegerRuntime_;
+    jaegerCompartment_ = jc;
+    return jaegerCompartment_;
 }
 #endif
 
@@ -201,11 +206,106 @@ js_GetCurrentScript(JSContext *cx)
     return cx->hasfp() ? cx->fp()->maybeScript() : NULL;
 }
 
+#ifdef JS_THREADSAFE
+
+Thread *
+js_CurrentThreadAndLockGC(JSRuntime *rt)
+{
+    uintptr_t id = CurrentThreadId();
+    LockGC(rt);
+
+    Thread *thread;
+    Thread::Map::AddPtr p = rt->threads.lookupForAdd(id);
+    if (p) {
+        thread = p->value;
+
+        /*
+         * If thread has no contexts, it might be left over from a previous
+         * thread with the same id but a different stack address.
+         */
+        if (JS_CLIST_IS_EMPTY(&thread->contextList)) {
+            thread->nativeStackBase = GetNativeStackBase();
+
+#if JS_STACK_GROWTH_DIRECTION > 0
+            if (rt->nativeStackQuota == 0) {
+                thread->nativeStackLimit = UINTPTR_MAX;
+            } else {
+                JS_ASSERT(thread->nativeStackBase <= size_t(-1) - rt->nativeStackQuota);
+                thread->nativeStackLimit = thread->nativeStackBase + rt->nativeStackQuota - 1;
+            }
+#else
+            if (rt->nativeStackQuota == 0) {
+                thread->nativeStackLimit = 0;
+            } else {
+                JS_ASSERT(thread->nativeStackBase >= rt->nativeStackQuota);
+                thread->nativeStackLimit = thread->nativeStackBase - (rt->nativeStackQuota - 1);
+            }
+#endif
+        }
+    } else {
+        UnlockGC(rt);
+
+        thread = OffTheBooks::new_<Thread>(rt, id);
+        if (!thread || !thread->init()) {
+            Foreground::delete_(thread);
+            return NULL;
+        }
+        LockGC(rt);
+        if (!rt->threads.relookupOrAdd(p, id, thread)) {
+            UnlockGC(rt);
+            Foreground::delete_(thread);
+            return NULL;
+        }
+
+        /* Another thread cannot add an entry for the current thread id. */
+        JS_ASSERT(p->value == thread);
+    }
+    JS_ASSERT(thread->id == id);
+
+    /*
+     * We skip the assert under glibc due to an apparent bug there, see
+     * bug 608526.
+     */
+#ifndef __GLIBC__
+    JS_ASSERT(GetNativeStackBase() == thread->nativeStackBase);
+#endif
+
+    return thread;
+}
+
+JSBool
+js_InitContextThreadAndLockGC(JSContext *cx)
+{
+    Thread *thread = js_CurrentThreadAndLockGC(cx->runtime);
+    if (!thread)
+        return false;
+
+    JS_APPEND_LINK(&cx->threadLink, &thread->contextList);
+    cx->setThread(thread);
+    return true;
+}
+
+void
+JSContext::setThread(Thread *thread)
+{
+    thread_ = thread;
+    stack.threadReset();
+}
+
+void
+js_ClearContextThread(JSContext *cx)
+{
+    JS_ASSERT(cx->runtime->IsGCLocked());
+    JS_ASSERT(cx->onCorrectThread());
+    JS_REMOVE_AND_INIT_LINK(&cx->threadLink);
+    cx->setThread(NULL);
+}
+
+#endif /* JS_THREADSAFE */
+
 JSContext *
 js::NewContext(JSRuntime *rt, size_t stackChunkSize)
 {
-    JS_AbortIfWrongThread(rt);
-
     JSContext *cx = OffTheBooks::new_<JSContext>(rt);
     if (!cx)
         return NULL;
@@ -217,12 +317,21 @@ js::NewContext(JSRuntime *rt, size_t stackChunkSize)
         return NULL;
     }
 
+#ifdef JS_THREADSAFE
+    if (!js_InitContextThreadAndLockGC(cx)) {
+        Foreground::delete_(cx);
+        return NULL;
+    }
+#endif
+
     /*
      * Here the GC lock is still held after js_InitContextThreadAndLockGC took it and
      * the GC is not running on another thread.
      */
     bool first = JS_CLIST_IS_EMPTY(&rt->contextList);
-    JS_APPEND_LINK(&cx->link, &rt->contextList);
+    JS_APPEND_LINK(&cx->runtimeLink, &rt->contextList);
+
+    UnlockGC(rt);
 
     js_InitRandom(cx);
 
@@ -264,7 +373,7 @@ void
 js::DestroyContext(JSContext *cx, DestroyContextMode mode)
 {
     JSRuntime *rt = cx->runtime;
-    JS_AbortIfWrongThread(rt);
+    AutoLockGC lock(rt);
 
     JS_ASSERT(!cx->enumerators);
 
@@ -282,11 +391,19 @@ js::DestroyContext(JSContext *cx, DestroyContextMode mode)
         }
     }
 
-    JS_REMOVE_LINK(&cx->link);
+    if (!JS_CLIST_IS_EMPTY(&cx->threadLink))
+        JS_REMOVE_AND_INIT_LINK(&cx->threadLink);
+
+    JS_REMOVE_AND_INIT_LINK(&cx->runtimeLink);
+
     bool last = !rt->hasContexts();
     if (last) {
         JS_ASSERT(!rt->gcRunning);
 
+#ifdef JS_THREADSAFE
+        rt->gcHelperThread.waitBackgroundSweepEnd();
+#endif
+        
         /*
          * Dump remaining type inference results first. This printing
          * depends on atoms still existing.
@@ -302,13 +419,20 @@ js::DestroyContext(JSContext *cx, DestroyContextMode mode)
             c->clearTraps(rt->defaultFreeOp());
         JS_ClearAllWatchPoints(cx);
 
+        AutoUnlockGC unlock(rt);
         PrepareForFullGC(rt);
         GC(rt, GC_NORMAL, gcreason::LAST_CONTEXT);
     } else if (mode == DCM_FORCE_GC) {
         JS_ASSERT(!rt->gcRunning);
+        AutoUnlockGC unlock(rt);
         PrepareForFullGC(rt);
         GC(rt, GC_NORMAL, gcreason::DESTROY_CONTEXT);
     }
+
+#ifdef JS_THREADSAFE
+    rt->gcHelperThread.waitBackgroundSweepEnd();
+#endif
+
     Foreground::delete_(cx);
 }
 
@@ -889,7 +1013,7 @@ js_InvokeOperationCallback(JSContext *cx)
     JS_ASSERT_REQUEST_DEPTH(cx);
 
     JSRuntime *rt = cx->runtime;
-    JS_ASSERT(rt->interrupt != 0);
+    // JS_ASSERT(rt->interrupt != 0);
 
     /*
      * Reset the callback counter first, then run GC and yield. If another
@@ -963,7 +1087,6 @@ JSContext::JSContext(JSRuntime *rt)
     localeCallbacks(NULL),
     resolvingList(NULL),
     generatingError(false),
-    compartment(NULL),
     stack(thisDuringConstruction()),  /* depends on cx->thread_ */
     parseMapPool_(NULL),
     globalObject(NULL),
@@ -993,7 +1116,8 @@ JSContext::JSContext(JSRuntime *rt)
     , stackIterAssertionEnabled(true)
 #endif
 {
-    PodZero(&link);
+    JS_INIT_CLIST(&threadLink);
+    JS_INIT_CLIST(&runtimeLink);
 #ifdef JSGC_ROOT_ANALYSIS
     PodArrayZero(thingGCRooters);
 #ifdef DEBUG
@@ -1004,6 +1128,10 @@ JSContext::JSContext(JSRuntime *rt)
 
 JSContext::~JSContext()
 {
+    JS_ASSERT(runtime->IsGCLocked());
+    JS_ASSERT(JS_CLIST_IS_EMPTY(&runtimeLink));
+    JS_ASSERT(JS_CLIST_IS_EMPTY(&threadLink));
+
     /* Free the stuff hanging off of cx. */
     if (parseMapPool_)
         Foreground::delete_<ParseMapPool>(parseMapPool_);
@@ -1020,6 +1148,8 @@ JSContext::~JSContext()
     }
 
     JS_ASSERT(!resolvingList);
+
+    setCompartment(NULL);
 }
 
 void
@@ -1042,8 +1172,7 @@ JSContext::resetCompartment()
             goto error;
     }
 
-    compartment = scopeobj->compartment();
-    inferenceEnabled = compartment->types.inferenceEnabled;
+    setCompartment(scopeobj->compartment());
 
     if (isExceptionPending())
         wrapPendingException();
@@ -1056,7 +1185,7 @@ error:
      * If we try to use the context without a selected compartment,
      * we will crash.
      */
-    compartment = NULL;
+    setCompartment(NULL);
 }
 
 /*
@@ -1261,15 +1390,16 @@ namespace JS {
 AutoCheckRequestDepth::AutoCheckRequestDepth(JSContext *cx)
     : cx(cx)
 {
-    JS_ASSERT(cx->runtime->requestDepth || cx->runtime->gcRunning);
-    JS_ASSERT(cx->runtime->onOwnerThread());
-    cx->runtime->checkRequestDepth++;
+    JS_ASSERT(cx->thread()->requestDepth);
+    JS_ASSERT_IF(!cx->runtime->isEverythingLocked(), cx->onCorrectThread());
+    JS_ASSERT_IF(cx->runtime->lockCheck, cx->runtime->lockCheck(GetContextZone(cx)));
+    cx->thread()->checkRequestDepth++;
 }
 
 AutoCheckRequestDepth::~AutoCheckRequestDepth()
 {
-    JS_ASSERT(cx->runtime->checkRequestDepth != 0);
-    cx->runtime->checkRequestDepth--;
+    JS_ASSERT(cx->thread()->checkRequestDepth != 0);
+    cx->thread()->checkRequestDepth--;
 }
 
 #endif

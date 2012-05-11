@@ -61,6 +61,8 @@ public:
   // nsISupports
   NS_DECL_ISUPPORTS_INHERITED
 
+  JSZoneId GetZone() { return nsINode::GetZone(); }
+
   // DOM memory reporter participant
   NS_DECL_SIZEOF_EXCLUDING_THIS
 

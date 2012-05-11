@@ -52,6 +52,7 @@
 #include "nsMenuUtilsX.h"
 #include "nsToolkit.h"
 #include "nsGUIEvent.h"
+#include "nsThread.h"
 
 using namespace mozilla::widget;
 
@@ -475,5 +476,19 @@ nsCocoaUtils::InitInputEvent(nsInputEvent &aInputEvent,
   // Be aware, NSFunctionKeyMask is included when arrow keys, home key or some
   // other keys are pressed. We cannot check whether 'fn' key is pressed or
   // not by the flag.
+}
 
+ScopedNSAutoreleasePool::ScopedNSAutoreleasePool()
+    : autorelease_pool_([[NSAutoreleasePool alloc] init]) {
+}
+
+ScopedNSAutoreleasePool::~ScopedNSAutoreleasePool() {
+  [autorelease_pool_ drain];
+}
+
+// Cycle the internal pool, allowing everything there to get cleaned up and
+// start anew.
+void ScopedNSAutoreleasePool::Recycle() {
+  [autorelease_pool_ drain];
+  autorelease_pool_ = [[NSAutoreleasePool alloc] init];
 }

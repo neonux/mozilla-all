@@ -277,6 +277,8 @@ protected:
        flushing. */
     bool mIsFlushingLayout;
 
+    JSZoneId mListenerZone;
+
 private:
     // A list of kids that are in the middle of their onload calls and will let
     // us know once they're done.  We don't want to fire onload for "normal"

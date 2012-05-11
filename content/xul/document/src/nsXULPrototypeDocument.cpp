@@ -78,10 +78,12 @@ class nsXULPDGlobalObject : public nsIScriptGlobalObject,
                             public nsIScriptObjectPrincipal
 {
 public:
-    nsXULPDGlobalObject(nsXULPrototypeDocument* owner);
+    nsXULPDGlobalObject(nsXULPrototypeDocument* owner, JSZoneId zone);
 
     // nsISupports interface
     NS_DECL_CYCLE_COLLECTING_ISUPPORTS
+
+    JSZoneId GetZone() { return mZone; }
 
     // nsIScriptGlobalObject methods
     virtual void OnFinalize(JSObject* aObject);
@@ -104,6 +106,7 @@ protected:
     virtual ~nsXULPDGlobalObject();
 
     nsXULPrototypeDocument* mGlobalObjectOwner; // weak reference
+    JSZoneId mZone;
 
     nsCOMPtr<nsIScriptContext> mContext;
     JSObject* mJSObject;
@@ -250,22 +253,22 @@ NS_NewXULPrototypeDocument(nsXULPrototypeDocument** aResult)
 // nsIScriptContexts in apps that load many XUL documents via chrome: URLs.
 
 nsXULPDGlobalObject *
-nsXULPrototypeDocument::NewXULPDGlobalObject()
+nsXULPrototypeDocument::NewXULPDGlobalObject(JSZoneId aZone)
 {
     // Now compare DocumentPrincipal() to gSystemPrincipal, in order to create
     // gSystemGlobal if the two pointers are equal.  Thus, gSystemGlobal
     // implies gSystemPrincipal.
     nsXULPDGlobalObject *global;
-    if (DocumentPrincipal() == gSystemPrincipal) {
+    if (DocumentPrincipal() == gSystemPrincipal && aZone == JS_ZONE_CHROME) {
         if (!gSystemGlobal) {
-            gSystemGlobal = new nsXULPDGlobalObject(nsnull);
+          gSystemGlobal = new nsXULPDGlobalObject(nsnull, aZone);
             if (! gSystemGlobal)
                 return nsnull;
             NS_ADDREF(gSystemGlobal);
         }
         global = gSystemGlobal;
     } else {
-        global = new nsXULPDGlobalObject(this); // does not refcount
+        global = new nsXULPDGlobalObject(this, aZone); // does not refcount
         if (! global)
             return nsnull;
     }
@@ -305,7 +308,7 @@ nsXULPrototypeDocument::Read(nsIObjectInputStream* aStream)
 
 
     // nsIScriptGlobalObject mGlobalObject
-    mGlobalObject = NewXULPDGlobalObject();
+    mGlobalObject = NewXULPDGlobalObject(JS_ZONE_CHROME);
     if (! mGlobalObject)
         return NS_ERROR_OUT_OF_MEMORY;
 
@@ -474,7 +477,7 @@ nsXULPrototypeDocument::Write(nsIObjectOutputStream* aStream)
     }
 
     // Now serialize the document contents
-    nsIScriptGlobalObject* globalObject = GetScriptGlobalObject();
+    nsIScriptGlobalObject* globalObject = GetScriptGlobalObject(JS_ZONE_CHROME);
     NS_ENSURE_TRUE(globalObject, NS_ERROR_UNEXPECTED);
 
     count = mProcessingInstructions.Length();
@@ -641,10 +644,13 @@ nsXULPrototypeDocument::NotifyLoadDone()
 //
 
 nsIScriptGlobalObject*
-nsXULPrototypeDocument::GetScriptGlobalObject()
+nsXULPrototypeDocument::GetScriptGlobalObject(JSZoneId aZone)
 {
-    if (!mGlobalObject)
-        mGlobalObject = NewXULPDGlobalObject();
+    if (aZone == JS_ZONE_CHROME)
+        aZone = mGlobalObject ? mGlobalObject->GetZone() : JS_ZONE_CHROME;
+
+    if (!mGlobalObject || mGlobalObject->GetZone() != aZone)
+        mGlobalObject = NewXULPDGlobalObject(aZone);
 
     return mGlobalObject;
 }
@@ -654,8 +660,9 @@ nsXULPrototypeDocument::GetScriptGlobalObject()
 // nsXULPDGlobalObject
 //
 
-nsXULPDGlobalObject::nsXULPDGlobalObject(nsXULPrototypeDocument* owner)
+nsXULPDGlobalObject::nsXULPDGlobalObject(nsXULPrototypeDocument* owner, JSZoneId zone)
   : mGlobalObjectOwner(owner)
+  , mZone(zone)
   , mJSObject(NULL)
 {
 }
@@ -711,7 +718,7 @@ nsXULPDGlobalObject::EnsureScriptEnvironment()
     JSObject *newGlob;
     JSCompartment *compartment;
 
-    rv = xpc_CreateGlobalObject(cx, &gSharedGlobalClass, principal, nsnull,
+    rv = xpc_CreateGlobalObject(cx, &gSharedGlobalClass, mZone, principal, nsnull,
                                 false, &newGlob, &compartment);
     NS_ENSURE_SUCCESS(rv, NS_OK);
 

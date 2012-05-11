@@ -101,6 +101,7 @@ nsHTMLTitleElement::nsHTMLTitleElement(already_AddRefed<nsINodeInfo> aNodeInfo)
   : nsGenericHTMLElement(aNodeInfo)
 {
   AddMutationObserver(this);
+  NS_FIX_OWNINGTHREAD(nsINode::GetZone());
 }
 
 nsHTMLTitleElement::~nsHTMLTitleElement()

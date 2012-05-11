@@ -996,9 +996,12 @@ nsBindingManager::AddToAttachedQueue(nsXBLBinding* aBinding)
 void
 nsBindingManager::PostProcessAttachedQueueEvent()
 {
+  JSZoneId zone = mDocument ? mDocument->GetZone() : JS_ZONE_CHROME;
+
   mProcessAttachedQueueEvent =
     NS_NewRunnableMethod(this, &nsBindingManager::DoProcessAttachedQueue);
-  nsresult rv = NS_DispatchToCurrentThread(mProcessAttachedQueueEvent);
+  nsresult rv = NS_DispatchToMainThread(mProcessAttachedQueueEvent,
+                                        NS_DISPATCH_NORMAL, zone);
   if (NS_SUCCEEDED(rv) && mDocument) {
     mDocument->BlockOnload();
   }
@@ -1025,6 +1028,7 @@ nsBindingManager::DoProcessAttachedQueue()
   if (mDocument) {
     // Hold a strong reference while calling UnblockOnload since that might
     // run script.
+    NS_StickLock(mDocument);
     nsCOMPtr<nsIDocument> doc = mDocument;
     doc->UnblockOnload(true);
   }
@@ -1278,6 +1282,8 @@ nsBindingManager::GetBindingImplementation(nsIContent* aContent, REFNSIID aIID,
 
       wrapper->GetJSObject(&jsobj);
       NS_ENSURE_TRUE(jsobj, NS_NOINTERFACE);
+
+      nsAutoUnstickChrome unstick(jscontext);
 
       nsresult rv = xpConnect->WrapJSAggregatedToNative(aContent, jscontext,
                                                         jsobj, aIID, aResult);

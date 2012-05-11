@@ -950,6 +950,11 @@ NS_IMPL_ISUPPORTS2(nsExternalResourceMap::PendingLoad,
                    nsIStreamListener,
                    nsIRequestObserver)
 
+JSZoneId nsExternalResourceMap::PendingLoad::GetZone()
+{
+  return mDisplayDocument->GetZone();
+}
+
 NS_IMETHODIMP
 nsExternalResourceMap::PendingLoad::OnStartRequest(nsIRequest *aRequest,
                                                    nsISupports *aContext)
@@ -1578,6 +1583,11 @@ ClearAllBoxObjects(nsIContent* aKey, nsPIBoxObject* aBoxObject, void* aUserArg)
 
 nsDocument::~nsDocument()
 {
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
+
+  // Chrome thread needed for revoking events and subdocuments hash.
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
 #ifdef PR_LOGGING
   if (gDocumentLeakPRLog)
     PR_LOG(gDocumentLeakPRLog, PR_LOG_DEBUG,
@@ -2123,6 +2133,9 @@ void
 nsDocument::ResetToURI(nsIURI *aURI, nsILoadGroup *aLoadGroup,
                        nsIPrincipal* aPrincipal)
 {
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   NS_PRECONDITION(aURI, "Null URI passed to ResetToURI");
 
 #ifdef PR_LOGGING
@@ -3300,6 +3313,7 @@ SubDocClearEntry(PLDHashTable *table, PLDHashEntryHdr *entry)
 
   NS_RELEASE(e->mKey);
   if (e->mSubDocument) {
+    NS_StickLock(e->mSubDocument);
     e->mSubDocument->SetParentDocument(nsnull);
     NS_RELEASE(e->mSubDocument);
   }
@@ -3322,6 +3336,9 @@ SubDocInitEntry(PLDHashTable *table, PLDHashEntryHdr *entry, const void *key)
 nsresult
 nsDocument::SetSubDocumentFor(Element* aElement, nsIDocument* aSubDoc)
 {
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   NS_ENSURE_TRUE(aElement, NS_ERROR_UNEXPECTED);
 
   if (!aSubDoc) {
@@ -3389,6 +3406,8 @@ nsDocument::SetSubDocumentFor(Element* aElement, nsIDocument* aSubDoc)
 nsIDocument*
 nsDocument::GetSubDocumentFor(nsIContent *aContent) const
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   if (mSubDocuments && aContent->IsElement()) {
     SubDocMapEntry *entry =
       static_cast<SubDocMapEntry*>
@@ -3422,6 +3441,8 @@ FindContentEnumerator(PLDHashTable *table, PLDHashEntryHdr *hdr,
 Element*
 nsDocument::FindContentForSubDocument(nsIDocument *aDocument) const
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   NS_ENSURE_TRUE(aDocument, nsnull);
 
   if (!mSubDocuments) {
@@ -3685,7 +3706,8 @@ nsDocument::SetStyleSheetApplicableState(nsIStyleSheet* aSheet,
 
   // We have to always notify, since this will be called for sheets
   // that are children of sheets in our style set, as well as some
-  // sheets for nsHTMLEditor.
+  // sheets for nsHTMLEditor.723
+
 
   NS_DOCUMENT_NOTIFY_OBSERVERS(StyleSheetApplicableStateChanged,
                                (this, aSheet, aApplicable));
@@ -3740,6 +3762,8 @@ nsDocument::EnsureCatalogStyleSheet(const char *aStyleSheetURI)
           return;
       }
     }
+
+    nsAutoLockChrome lock;
 
     nsCOMPtr<nsIURI> uri;
     NS_NewURI(getter_AddRefs(uri), aStyleSheetURI);
@@ -3899,6 +3923,14 @@ nsDocument::SetScriptGlobalObject(nsIScriptGlobalObject *aScriptGlobalObject)
   nsCOMPtr<nsPIDOMWindow> window = do_QueryInterface(mScriptGlobalObject);
   mWindow = window;
 
+  if (window) {
+    JSZoneId zone = window->GetZone();
+    if (zone >= JS_ZONE_CONTENT_START)
+      NS_FIX_OWNINGTHREAD(zone);
+    mNodeInfoManager->SetZone(zone);
+    UpdateWeakReferencesZone();
+  }
+
   // Set our visibility state, but do not fire the event.  This is correct
   // because either we're coming out of bfcache (in which case IsVisible() will
   // still test false at this point and no state change will happen) or we're
@@ -3988,6 +4020,7 @@ nsDocument::InternalAllowXULXBL()
 void
 nsDocument::AddObserver(nsIDocumentObserver* aObserver)
 {
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   NS_ASSERTION(mObservers.IndexOf(aObserver) == nsTArray<int>::NoIndex,
                "Observer already in the list");
   mObservers.AppendElement(aObserver);
@@ -3997,6 +4030,8 @@ nsDocument::AddObserver(nsIDocumentObserver* aObserver)
 bool
 nsDocument::RemoveObserver(nsIDocumentObserver* aObserver)
 {
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
+
   // If we're in the process of destroying the document (and we're
   // informing the observers of the destruction), don't remove the
   // observers from the list. This is not a big deal, since we
@@ -4020,7 +4055,7 @@ nsDocument::MaybeEndOutermostXBLUpdate()
       BindingManager()->EndOutermostUpdate();
     } else if (!mInDestructor) {
       nsContentUtils::AddScriptRunner(
-        NS_NewRunnableMethod(this, &nsDocument::MaybeEndOutermostXBLUpdate));
+        NS_NewRunnableMethod(this, &nsDocument::MaybeEndOutermostXBLUpdate, GetZone()));
     }
   }
 }
@@ -4291,7 +4326,7 @@ nsDocument::EndLoad()
   
   if (!mSynchronousDOMContentLoaded) {
     nsRefPtr<nsIRunnable> ev =
-      NS_NewRunnableMethod(this, &nsDocument::DispatchContentLoadedEvents);
+      NS_NewRunnableMethod(this, &nsDocument::DispatchContentLoadedEvents, GetZone());
     NS_DispatchToCurrentThread(ev);
   } else {
     DispatchContentLoadedEvents();
@@ -4307,9 +4342,65 @@ nsDocument::ContentStateChanged(nsIContent* aContent, nsEventStates aStateMask)
                                (this, aContent, aStateMask));
 }
 
+typedef nsTArray<JSZoneId> ZoneArray;
+
+static bool GetSubDocumentZones(nsIDocument *aDocument, void *aData)
+{
+  ZoneArray &pzones = * (ZoneArray *) aData;
+
+  JSZoneId zone = aDocument->GetZone();
+
+  if (zone == JS_ZONE_CHROME)
+    return true;
+
+  for (size_t i = 0; i < pzones.Length(); i++) {
+    if (zone == pzones[i])
+      return true;
+  }
+
+  pzones.AppendElement(zone);
+  return true;
+}
+
+void
+nsDocument::TryLockSubDocuments()
+{
+  ZoneArray zoneArray;
+  EnumerateSubDocuments(GetSubDocumentZones, &zoneArray);
+  for (size_t i = 0; i < zoneArray.Length(); i++)
+    NS_TryStickContentLock(zoneArray[i]);
+}
+
+class nsDocumentStatesChangedEvent : public nsRunnable
+{
+  // XXX need to make this a strong reference somehow. add a chrome-owned refcount to nsDocument?
+  nsDocument *mDocument;
+  nsEventStates mStateMask;
+
+public:
+  nsDocumentStatesChangedEvent(nsDocument *aDocument, nsEventStates aStateMask)
+    : mDocument(aDocument), mStateMask(aStateMask)
+  {}
+
+  NS_IMETHOD Run()
+  {
+    mDocument->DocumentStatesChanged(mStateMask);
+    return NS_OK;
+  }
+};
+
 void
 nsDocument::DocumentStatesChanged(nsEventStates aStateMask)
 {
+  // Don't try to acquire the document's lock in case we are unable to release
+  // the chrome lock (e.g. we are under a subdocument enumeration).
+  if (!NS_IsOwningThread(GetZone())) {
+    NS_DispatchToMainThread(new nsDocumentStatesChangedEvent(this, aStateMask),
+                            NS_DISPATCH_NORMAL,
+                            GetZone());
+    return;
+  }
+
   // Invalidate our cached state.
   mGotDocumentState &= ~aStateMask;
   mDocumentState &= ~aStateMask;
@@ -5301,8 +5392,8 @@ nsDocument::NotifyPossibleTitleChange(bool aBoundTitleElement)
 
   nsRefPtr<nsRunnableMethod<nsDocument, void, false> > event =
     NS_NewNonOwningRunnableMethod(this,
-      &nsDocument::DoNotifyPossibleTitleChange);
-  nsresult rv = NS_DispatchToCurrentThread(event);
+      &nsDocument::DoNotifyPossibleTitleChange, GetZone());
+  nsresult rv = NS_DispatchToMainThread(event, NS_DISPATCH_NORMAL, GetZone());
   if (NS_SUCCEEDED(rv)) {
     mPendingTitleChangeEvent = event;
   }
@@ -5312,6 +5403,26 @@ void
 nsDocument::DoNotifyPossibleTitleChange()
 {
   mPendingTitleChangeEvent.Forget();
+
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
+  if (!NS_IsOwningThread(GetZone())) {
+    /*
+     * NotifyPossibleTitleChange may happen before the document has been
+     * attached to a window and knows its proper zone. In this case reschedule
+     * the event on the appropriate thread. This won't race with destruction
+     * of the document as that requires the chrome lock to be held.
+     */
+    nsRefPtr<nsRunnableMethod<nsDocument, void, false> > event =
+      NS_NewNonOwningRunnableMethod(this,
+        &nsDocument::DoNotifyPossibleTitleChange, GetZone());
+    nsresult rv = NS_DispatchToMainThread(event, NS_DISPATCH_NORMAL, GetZone());
+    if (NS_SUCCEEDED(rv)) {
+      mPendingTitleChangeEvent = event;
+    }
+    return;
+  }
+
   mHaveFiredTitleChange = true;
 
   nsAutoString title;
@@ -6123,6 +6234,7 @@ nsDocument::AdoptNode(nsIDOMNode *aAdoptedNode, nsIDOMNode **aResult)
     }
   }
 
+  nsAutoLockChrome lockChrome;
   nsAutoScriptBlocker scriptBlocker;
 
   switch (adoptedNode->NodeType()) {
@@ -6301,6 +6413,8 @@ nsDocument::CreateEvent(const nsAString& aEventType, nsIDOMEvent** aReturn)
 
   // Obtain a presentation shell
 
+  nsAutoLockChrome lock;
+
   nsIPresShell *shell = GetShell();
 
   nsPresContext *presContext = nsnull;
@@ -6328,6 +6442,7 @@ nsDocument::FlushPendingNotifications(mozFlushType aType)
        (aType > Flush_ContentAndNotify && mPresShell &&
         !mPresShell->DidInitialReflow())) &&
       (mParser || mWeakSink)) {
+    nsAutoLockChrome lock;
     nsCOMPtr<nsIContentSink> sink;
     if (mParser) {
       sink = mParser->GetContentSink();
@@ -6377,6 +6492,7 @@ nsDocument::FlushPendingNotifications(mozFlushType aType)
       (mNeedLayoutFlush && aType >= Flush_InterruptibleLayout) ||
       aType >= Flush_Display ||
       mInFlush) {
+    nsAutoLockChrome lock;
     nsCOMPtr<nsIPresShell> shell = GetShell();
     if (shell) {
       mNeedStyleFlush = false;
@@ -6938,6 +7054,8 @@ SubDocHashEnum(PLDHashTable *table, PLDHashEntryHdr *hdr,
 void
 nsDocument::EnumerateSubDocuments(nsSubDocEnumFunc aCallback, void *aData)
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   if (mSubDocuments) {
     SubDocEnumArgs args = { aCallback, aData };
     PL_DHashTableEnumerate(mSubDocuments, SubDocHashEnum, &args);
@@ -6970,6 +7088,8 @@ CanCacheSubDocument(PLDHashTable *table, PLDHashEntryHdr *hdr,
 bool
 nsDocument::CanSavePresentation(nsIRequest *aNewRequest)
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   if (EventHandlingSuppressed()) {
     return false;
   }
@@ -7220,7 +7340,7 @@ void
 nsDocument::PostUnblockOnloadEvent()
 {
   nsCOMPtr<nsIRunnable> evt = new nsUnblockOnloadEvent(this);
-  nsresult rv = NS_DispatchToCurrentThread(evt);
+  nsresult rv = NS_DispatchToMainThread(evt, NS_DISPATCH_NORMAL, GetZone());
   if (NS_SUCCEEDED(rv)) {
     // Stabilize block count so we don't post more events while this one is up
     ++mOnloadBlockCount;
@@ -7232,6 +7352,8 @@ nsDocument::PostUnblockOnloadEvent()
 void
 nsDocument::DoUnblockOnload()
 {
+  NS_StickLock(this);
+
   NS_PRECONDITION(!mDisplayDocument,
                   "Shouldn't get here for resource document");
   NS_PRECONDITION(mOnloadBlockCount != 0,
@@ -7510,6 +7632,8 @@ nsDocument::MutationEventDispatched(nsINode* aTarget)
     }
 
     mSubtreeModifiedTargets.Clear();
+
+    nsAutoLockChrome lock;
 
     PRInt32 realTargetCount = realTargets.Count();
     for (PRInt32 k = 0; k < realTargetCount; ++k) {
@@ -7845,7 +7969,8 @@ nsDocument::LoadChromeSheetSync(nsIURI* uri, bool isAgentSheet,
 class nsDelayedEventDispatcher : public nsRunnable
 {
 public:
-  nsDelayedEventDispatcher(nsTArray<nsCOMPtr<nsIDocument> >& aDocuments)
+  nsDelayedEventDispatcher(nsTArray<nsCOMPtr<nsIDocument> >& aDocuments, JSZoneId aZone)
+    : mZone(aZone)
   {
     mDocuments.SwapElements(aDocuments);
   }
@@ -7853,12 +7978,15 @@ public:
 
   NS_IMETHOD Run()
   {
+    if (mZone >= JS_ZONE_CONTENT_START)
+      NS_StickContentLock(mZone);
     FireOrClearDelayedEvents(mDocuments, true);
     return NS_OK;
   }
 
 private:
   nsTArray<nsCOMPtr<nsIDocument> > mDocuments;
+  JSZoneId mZone;
 };
 
 static bool
@@ -7882,7 +8010,7 @@ nsDocument::UnsuppressEventHandlingAndFireEvents(bool aFireEvents)
   GetAndUnsuppressSubDocuments(this, &documents);
 
   if (aFireEvents) {
-    NS_DispatchToCurrentThread(new nsDelayedEventDispatcher(documents));
+    NS_DispatchToCurrentThread(new nsDelayedEventDispatcher(documents, GetZone()));
   } else {
     FireOrClearDelayedEvents(documents, false);
   }
@@ -8074,7 +8202,9 @@ nsIDocument::FlushPendingLinkUpdates()
 {
   if (!mHasLinksToUpdate)
     return;
-    
+
+  nsAutoLockChrome lockChrome;
+
   nsAutoScriptBlocker scriptBlocker;
   mLinksToUpdate.EnumerateEntries(EnumeratePendingLinkUpdates, nsnull);
   mLinksToUpdate.Clear();
@@ -9608,6 +9738,8 @@ nsDocument::GetMozPointerLockElement(nsIDOMElement** aPointerLockedElement)
 void
 nsDocument::UpdateVisibilityState()
 {
+  NS_StickLock(this);
+
   VisibilityState oldState = mVisibilityState;
   mVisibilityState = GetVisibilityState();
   if (oldState != mVisibilityState) {
@@ -9640,7 +9772,7 @@ nsDocument::PostVisibilityUpdateEvent()
 {
   nsCOMPtr<nsIRunnable> event =
     NS_NewRunnableMethod(this, &nsDocument::UpdateVisibilityState);
-  NS_DispatchToMainThread(event);
+  NS_DispatchToMainThread(event, NS_DISPATCH_NORMAL, GetZone());
 }
 
 NS_IMETHODIMP

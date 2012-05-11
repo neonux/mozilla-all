@@ -56,6 +56,8 @@ static JSBool
 Canvas2D_SetStyleHelper(JSContext *cx, JSObject *obj, jsid id, jsval *vp,
                         CanvasStyleSetterType setfunc)
 {
+    nsAutoUnstickChrome unstick(cx);
+
     XPC_QS_ASSERT_CONTEXT_OK(cx);
     nsIDOMCanvasRenderingContext2D *self;
     xpc_qsSelfRef selfref;
@@ -94,6 +96,8 @@ static JSBool
 Canvas2D_GetStyleHelper(JSContext *cx, JSObject *obj, jsid id, jsval *vp,
                         CanvasStyleGetterType getfunc)
 {
+    nsAutoUnstickChrome unstick(cx);
+
     XPC_QS_ASSERT_CONTEXT_OK(cx);
     nsIDOMCanvasRenderingContext2D *self;
     xpc_qsSelfRef selfref;
@@ -194,6 +198,8 @@ nsIDOMCanvasRenderingContext2D_CreateImageData(JSContext *cx, unsigned argc, jsv
 {
     XPC_QS_ASSERT_CONTEXT_OK(cx);
 
+    nsAutoUnstickChrome unstick(cx);
+
     JSObject* obj = JS_THIS_OBJECT(cx, vp);
     if (!obj) {
         return false;
@@ -237,6 +243,8 @@ static JSBool
 nsIDOMCanvasRenderingContext2D_PutImageData(JSContext *cx, unsigned argc, jsval *vp)
 {
     XPC_QS_ASSERT_CONTEXT_OK(cx);
+
+    nsAutoUnstickChrome unstick(cx);
 
     JSObject *obj = JS_THIS_OBJECT(cx, vp);
     if (!obj)

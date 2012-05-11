@@ -282,7 +282,7 @@ NS_IMETHODIMP imgRequestProxy::Cancel(nsresult status)
   mCanceled = true;
 
   nsCOMPtr<nsIRunnable> ev = new imgCancelRunnable(this, status);
-  return NS_DispatchToCurrentThread(ev);
+  return NS_DispatchToMainThread(ev, NS_DISPATCH_NORMAL, GetObserverZone());
 }
 
 void
@@ -616,10 +616,29 @@ NS_IMETHODIMP imgRequestProxy::GetHasTransferredData(bool* hasData)
 
 /** imgIContainerObserver methods **/
 
+class imgRequestProxy::FrameChangedEvent : public nsRunnable
+{
+  nsRefPtr<imgRequestProxy> proxy;
+  nsCOMPtr<imgIContainer> container;
+  nsIntRect dirtyRect;
+
+public:
+  FrameChangedEvent(imgRequestProxy *proxy, imgIContainer *container, const nsIntRect *dirtyRect)
+    : proxy(proxy), container(container), dirtyRect(*dirtyRect)
+  {}
+  NS_IMETHOD Run() { proxy->FrameChanged(container, &dirtyRect); return NS_OK; }
+};
+
 void imgRequestProxy::FrameChanged(imgIContainer *container,
                                    const nsIntRect *dirtyRect)
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::FrameChanged");
+
+  if (mListener && !NS_TryStickLock(mListener)) {
+    NS_DispatchToMainThread(new FrameChangedEvent(this, container, dirtyRect),
+                            NS_DISPATCH_NORMAL, mListener->GetZone());
+    return;
+  }
 
   if (mListener && !mCanceled) {
     // Hold a ref to the listener while we call it, just in case.
@@ -634,6 +653,12 @@ void imgRequestProxy::OnStartDecode()
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::OnStartDecode");
 
+  if (mListener && !NS_TryStickLock(mListener)) {
+    NS_DispatchToMainThread(NS_NewRunnableMethod(this, &imgRequestProxy::OnStartDecode),
+                            NS_DISPATCH_NORMAL, mListener->GetZone());
+    return;
+  }
+
   if (mListener && !mCanceled) {
     // Hold a ref to the listener while we call it, just in case.
     nsCOMPtr<imgIDecoderObserver> kungFuDeathGrip(mListener);
@@ -641,9 +666,27 @@ void imgRequestProxy::OnStartDecode()
   }
 }
 
+class imgRequestProxy::OnStartContainerEvent : public nsRunnable
+{
+  nsRefPtr<imgRequestProxy> proxy;
+  nsCOMPtr<imgIContainer> image;
+
+public:
+  OnStartContainerEvent(imgRequestProxy *proxy, imgIContainer *image) : proxy(proxy), image(image) {}
+  NS_IMETHOD Run() { proxy->OnStartContainer(image); return NS_OK; }
+};
+
 void imgRequestProxy::OnStartContainer(imgIContainer *image)
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::OnStartContainer");
+
+  MOZ_ASSERT(image->GetZone() == JS_ZONE_CHROME);
+
+  if (mListener && !NS_TryStickLock(mListener)) {
+    NS_DispatchToMainThread(new OnStartContainerEvent(this, image),
+                            NS_DISPATCH_NORMAL, mListener->GetZone());
+    return;
+  }
 
   if (mListener && !mCanceled && !mSentStartContainer) {
     // Hold a ref to the listener while we call it, just in case.
@@ -653,9 +696,25 @@ void imgRequestProxy::OnStartContainer(imgIContainer *image)
   }
 }
 
+class imgRequestProxy::OnStartFrameEvent : public nsRunnable
+{
+  nsRefPtr<imgRequestProxy> proxy;
+  PRUint32 frame;
+
+public:
+  OnStartFrameEvent(imgRequestProxy *proxy, PRUint32 frame) : proxy(proxy), frame(frame) {}
+  NS_IMETHOD Run() { proxy->OnStartFrame(frame); return NS_OK; }
+};
+
 void imgRequestProxy::OnStartFrame(PRUint32 frame)
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::OnStartFrame");
+
+  if (mListener && !NS_TryStickLock(mListener)) {
+    NS_DispatchToMainThread(new OnStartFrameEvent(this, frame),
+                            NS_DISPATCH_NORMAL, mListener->GetZone());
+    return;
+  }
 
   if (mListener && !mCanceled) {
     // Hold a ref to the listener while we call it, just in case.
@@ -664,9 +723,28 @@ void imgRequestProxy::OnStartFrame(PRUint32 frame)
   }
 }
 
+class imgRequestProxy::OnDataAvailableEvent : public nsRunnable
+{
+  nsRefPtr<imgRequestProxy> proxy;
+  bool currentFrame;
+  nsIntRect rect;
+
+public:
+  OnDataAvailableEvent(imgRequestProxy *proxy, bool currentFrame, const nsIntRect *rect)
+    : proxy(proxy), currentFrame(currentFrame), rect(*rect)
+  {}
+  NS_IMETHOD Run() { proxy->OnDataAvailable(currentFrame, &rect); return NS_OK; }
+};
+
 void imgRequestProxy::OnDataAvailable(bool aCurrentFrame, const nsIntRect * rect)
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::OnDataAvailable");
+
+  if (mListener && !NS_TryStickLock(mListener)) {
+    NS_DispatchToMainThread(new OnDataAvailableEvent(this, aCurrentFrame, rect),
+                            NS_DISPATCH_NORMAL, mListener->GetZone());
+    return;
+  }
 
   if (mListener && !mCanceled) {
     // Hold a ref to the listener while we call it, just in case.
@@ -675,9 +753,25 @@ void imgRequestProxy::OnDataAvailable(bool aCurrentFrame, const nsIntRect * rect
   }
 }
 
+class imgRequestProxy::OnStopFrameEvent : public nsRunnable
+{
+  nsRefPtr<imgRequestProxy> proxy;
+  PRUint32 frame;
+
+public:
+  OnStopFrameEvent(imgRequestProxy *proxy, PRUint32 frame) : proxy(proxy), frame(frame) {}
+  NS_IMETHOD Run() { proxy->OnStopFrame(frame); return NS_OK; }
+};
+
 void imgRequestProxy::OnStopFrame(PRUint32 frame)
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::OnStopFrame");
+
+  if (mListener && !NS_TryStickLock(mListener)) {
+    NS_DispatchToMainThread(new OnStopFrameEvent(this, frame),
+                            NS_DISPATCH_NORMAL, mListener->GetZone());
+    return;
+  }
 
   if (mListener && !mCanceled) {
     // Hold a ref to the listener while we call it, just in case.
@@ -686,9 +780,27 @@ void imgRequestProxy::OnStopFrame(PRUint32 frame)
   }
 }
 
+class imgRequestProxy::OnStopContainerEvent : public nsRunnable
+{
+  nsRefPtr<imgRequestProxy> proxy;
+  nsCOMPtr<imgIContainer> image;
+
+public:
+  OnStopContainerEvent(imgRequestProxy *proxy, imgIContainer *image) : proxy(proxy), image(image) {}
+  NS_IMETHOD Run() { proxy->OnStopContainer(image); return NS_OK; }
+};
+
 void imgRequestProxy::OnStopContainer(imgIContainer *image)
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::OnStopContainer");
+
+  MOZ_ASSERT(image->GetZone() == JS_ZONE_CHROME);
+
+  if (mListener && !NS_TryStickLock(mListener)) {
+    NS_DispatchToMainThread(new OnStopContainerEvent(this, image),
+                            NS_DISPATCH_NORMAL, mListener->GetZone());
+    return;
+  }
 
   if (mListener && !mCanceled) {
     // Hold a ref to the listener while we call it, just in case.
@@ -697,9 +809,25 @@ void imgRequestProxy::OnStopContainer(imgIContainer *image)
   }
 }
 
+class imgRequestProxy::OnStopDecodeEvent : public nsRunnable
+{
+  nsRefPtr<imgRequestProxy> proxy;
+  nsresult status; /* XXX clone statusArg? */
+
+public:
+  OnStopDecodeEvent(imgRequestProxy *proxy, nsresult status) : proxy(proxy), status(status) {}
+  NS_IMETHOD Run() { proxy->OnStopDecode(status, NULL); return NS_OK; }
+};
+
 void imgRequestProxy::OnStopDecode(nsresult status, const PRUnichar *statusArg)
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::OnStopDecode");
+
+  if (mListener && !NS_TryStickLock(mListener)) {
+    NS_DispatchToMainThread(new OnStopDecodeEvent(this, status),
+                            NS_DISPATCH_NORMAL, mListener->GetZone());
+    return;
+  }
 
   if (mListener && !mCanceled) {
     // Hold a ref to the listener while we call it, just in case.
@@ -712,6 +840,12 @@ void imgRequestProxy::OnDiscard()
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::OnDiscard");
 
+  if (mListener && !NS_TryStickLock(mListener)) {
+    NS_DispatchToMainThread(NS_NewRunnableMethod(this, &imgRequestProxy::OnDiscard),
+                            NS_DISPATCH_NORMAL, mListener->GetZone());
+    return;
+  }
+
   if (mListener && !mCanceled) {
     // Hold a ref to the listener while we call it, just in case.
     nsCOMPtr<imgIDecoderObserver> kungFuDeathGrip(mListener);
@@ -722,6 +856,13 @@ void imgRequestProxy::OnDiscard()
 void imgRequestProxy::OnImageIsAnimated()
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::OnImageIsAnimated");
+
+  if (mListener && !NS_TryStickLock(mListener)) {
+    NS_DispatchToMainThread(NS_NewRunnableMethod(this, &imgRequestProxy::OnImageIsAnimated),
+                            NS_DISPATCH_NORMAL, mListener->GetZone());
+    return;
+  }
+
   if (mListener && !mCanceled) {
     // Hold a ref to the listener while we call it, just in case.
     nsCOMPtr<imgIDecoderObserver> kungFuDeathGrip(mListener);
@@ -737,6 +878,12 @@ void imgRequestProxy::OnStartRequest()
   LOG_FUNC_WITH_PARAM(gImgLog, "imgRequestProxy::OnStartRequest", "name", name.get());
 #endif
 
+  if (mListener && !NS_TryStickLock(mListener)) {
+    NS_DispatchToMainThread(NS_NewRunnableMethod(this, &imgRequestProxy::OnStartRequest),
+                            NS_DISPATCH_NORMAL, mListener->GetZone());
+    return;
+  }
+
   // Notify even if mCanceled, since OnStartRequest is guaranteed by the
   // nsIStreamListener contract so it makes sense to do the same here.
   if (mListener) {
@@ -746,6 +893,16 @@ void imgRequestProxy::OnStartRequest()
   }
 }
 
+class imgRequestProxy::OnStopRequestEvent : public nsRunnable
+{
+  nsRefPtr<imgRequestProxy> proxy;
+  bool lastPart;
+
+public:
+  OnStopRequestEvent(imgRequestProxy *proxy, bool lastPart) : proxy(proxy), lastPart(lastPart) {}
+  NS_IMETHOD Run() { proxy->OnStopRequest(lastPart); return NS_OK; }
+};
+
 void imgRequestProxy::OnStopRequest(bool lastPart)
 {
 #ifdef PR_LOGGING
@@ -753,6 +910,13 @@ void imgRequestProxy::OnStopRequest(bool lastPart)
   GetName(name);
   LOG_FUNC_WITH_PARAM(gImgLog, "imgRequestProxy::OnStopRequest", "name", name.get());
 #endif
+
+  if (mListener && !NS_TryStickLock(mListener)) {
+    NS_DispatchToMainThread(new OnStopRequestEvent(this, lastPart),
+                            NS_DISPATCH_NORMAL, mListener->GetZone());
+    return;
+  }
+
   // There's all sorts of stuff here that could kill us (the OnStopRequest call
   // on the listener, the removal from the loadgroup, the release of the
   // listener, etc).  Don't let them do it.

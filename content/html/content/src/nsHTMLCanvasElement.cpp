@@ -728,6 +728,8 @@ nsHTMLCanvasElement::InvalidateCanvas()
   if (!frame)
     return;
 
+  nsAutoLockChrome lock;
+
   frame->Invalidate(frame->GetContentRect() - frame->GetPosition());
 }
 

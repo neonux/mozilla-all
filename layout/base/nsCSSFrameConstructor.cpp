@@ -6430,6 +6430,9 @@ nsCSSFrameConstructor::ContentAppended(nsIContent*     aContainer,
                                        nsIContent*     aFirstNewContent,
                                        bool            aAllowLazyConstruction)
 {
+  if (!NS_TryStickLock(aContainer))
+    return NS_OK;
+
   AUTO_LAYOUT_PHASE_ENTRY_POINT(mPresShell->GetPresContext(), FrameC);
   NS_PRECONDITION(mUpdateCount != 0,
                   "Should be in an update while creating frames");
@@ -11575,6 +11578,9 @@ nsCSSFrameConstructor::RebuildAllStyleData(nsChangeHint aExtraHint)
   mRebuildAllStyleData = false;
   NS_UpdateHint(aExtraHint, mRebuildAllExtraHint);
   mRebuildAllExtraHint = nsChangeHint(0);
+
+  if (!mPresShell || !NS_TryStickLock(mPresShell))
+    return;
 
   if (!mPresShell || !mPresShell->GetRootFrame())
     return;

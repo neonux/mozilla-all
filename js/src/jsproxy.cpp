@@ -86,7 +86,7 @@ GetFunctionProxyConstruct(JSObject *proxy)
 static bool
 OperationInProgress(JSContext *cx, JSObject *proxy)
 {
-    PendingProxyOperation *op = cx->runtime->pendingProxyOperation;
+    PendingProxyOperation *op = cx->thread()->pendingProxyOperation;
     while (op) {
         if (op->object == proxy)
             return true;
@@ -750,19 +750,19 @@ ScriptedProxyHandler::iterate(JSContext *cx, JSObject *proxy_, unsigned flags, V
 ScriptedProxyHandler ScriptedProxyHandler::singleton;
 
 class AutoPendingProxyOperation {
-    JSRuntime               *rt;
+    Thread                  *t;
     PendingProxyOperation   op;
   public:
     AutoPendingProxyOperation(JSContext *cx, JSObject *proxy)
-        : rt(cx->runtime), op(cx, proxy)
+        : t(cx->thread()), op(cx, proxy)
     {
-        op.next = rt->pendingProxyOperation;
-        rt->pendingProxyOperation = &op;
+        op.next = t->pendingProxyOperation;
+        t->pendingProxyOperation = &op;
     }
 
     ~AutoPendingProxyOperation() {
-        JS_ASSERT(rt->pendingProxyOperation == &op);
-        rt->pendingProxyOperation = op.next;
+        JS_ASSERT(t->pendingProxyOperation == &op);
+        t->pendingProxyOperation = op.next;
     }
 };
 

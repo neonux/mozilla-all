@@ -88,6 +88,8 @@ interface nsIEditor  : nsISupports
                        in nsISelectionController aSelCon,
                        in unsigned long aFlags);
 
+  [noscript] void initZone(in long aZone);
+
   void setAttributeOrEquivalent(in nsIDOMElement element,
                                 in AString sourceAttrName,
                                 in AString sourceAttrValue,

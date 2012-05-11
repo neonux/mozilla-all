@@ -279,6 +279,8 @@ public:
   // nsISupports
   NS_DECL_CYCLE_COLLECTING_ISUPPORTS
 
+  JSZoneId GetZone() { return nsPIDOMWindow::GetZone(); }
+
   // nsWrapperCache
   JSObject *WrapObject(JSContext *cx, JSObject *scope, bool *triedToWrap)
   {
@@ -349,6 +351,7 @@ public:
   virtual NS_HIDDEN_(nsresult) FireDelayedDOMEvents();
   virtual NS_HIDDEN_(bool) IsFrozen() const
   {
+    MOZ_ASSERT(NS_IsOwningThread(mZone));
     return mIsFrozen;
   }
 
@@ -381,7 +384,7 @@ public:
   NS_DECL_NSIINTERFACEREQUESTOR
 
   // Object Management
-  nsGlobalWindow(nsGlobalWindow *aOuterWindow);
+  nsGlobalWindow(nsGlobalWindow *aOuterWindow, JSZoneId zone);
 
   static nsGlobalWindow *FromSupports(nsISupports *supports)
   {
@@ -740,6 +743,7 @@ protected:
 
   void Freeze()
   {
+    MOZ_ASSERT(NS_IsOwningThread(GetZone()));
     NS_ASSERTION(!IsFrozen(), "Double-freezing?");
     mIsFrozen = true;
     NotifyDOMWindowFrozen(this);
@@ -747,6 +751,7 @@ protected:
 
   void Thaw()
   {
+    MOZ_ASSERT(NS_IsOwningThread(GetZone()));
     mIsFrozen = false;
     NotifyDOMWindowThawed(this);
   }
@@ -995,8 +1000,8 @@ public:
   // nsIDOMChromeWindow interface
   NS_DECL_NSIDOMCHROMEWINDOW
 
-  nsGlobalChromeWindow(nsGlobalWindow *aOuterWindow)
-    : nsGlobalWindow(aOuterWindow)
+  nsGlobalChromeWindow(nsGlobalWindow *aOuterWindow, JSZoneId zone)
+    : nsGlobalWindow(aOuterWindow, zone)
   {
     mIsChrome = true;
     mCleanMessageManager = true;
@@ -1030,8 +1035,8 @@ class nsGlobalModalWindow : public nsGlobalWindow,
                             public nsIDOMModalContentWindow
 {
 public:
-  nsGlobalModalWindow(nsGlobalWindow *aOuterWindow)
-    : nsGlobalWindow(aOuterWindow)
+  nsGlobalModalWindow(nsGlobalWindow *aOuterWindow, JSZoneId zone)
+    : nsGlobalWindow(aOuterWindow, zone)
   {
     mIsModalContentWindow = true;
   }
@@ -1051,16 +1056,16 @@ protected:
 
 /* factory function */
 inline already_AddRefed<nsGlobalWindow>
-NS_NewScriptGlobalObject(bool aIsChrome, bool aIsModalContentWindow)
+NS_NewScriptGlobalObject(JSZoneId aZone, bool aIsModalContentWindow)
 {
   nsRefPtr<nsGlobalWindow> global;
 
-  if (aIsChrome) {
-    global = new nsGlobalChromeWindow(nsnull);
+  if (aZone == JS_ZONE_CHROME) {
+    global = new nsGlobalChromeWindow(nsnull, aZone);
   } else if (aIsModalContentWindow) {
-    global = new nsGlobalModalWindow(nsnull);
+    global = new nsGlobalModalWindow(nsnull, aZone);
   } else {
-    global = new nsGlobalWindow(nsnull);
+    global = new nsGlobalWindow(nsnull, aZone);
   }
 
   return global.forget();

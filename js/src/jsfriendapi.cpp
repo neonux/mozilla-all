@@ -251,7 +251,8 @@ JS_DefineFunctionsWithHelp(JSContext *cx, JSObject *obj, const JSFunctionSpecWit
 
 AutoSwitchCompartment::AutoSwitchCompartment(JSContext *cx, JSCompartment *newCompartment
                                              JS_GUARD_OBJECT_NOTIFIER_PARAM_NO_INIT)
-  : cx(cx), oldCompartment(cx->compartment)
+  : cx(cx), oldCompartment(cx->compartment), oldZone(GetContextZone(cx)),
+    oldInferenceEnabled(cx->inferenceEnabled)
 {
     JS_GUARD_OBJECT_NOTIFIER_INIT;
     cx->setCompartment(newCompartment);
@@ -259,7 +260,8 @@ AutoSwitchCompartment::AutoSwitchCompartment(JSContext *cx, JSCompartment *newCo
 
 AutoSwitchCompartment::AutoSwitchCompartment(JSContext *cx, JSObject *target
                                              JS_GUARD_OBJECT_NOTIFIER_PARAM_NO_INIT)
-  : cx(cx), oldCompartment(cx->compartment)
+  : cx(cx), oldCompartment(cx->compartment), oldZone(GetContextZone(cx)),
+    oldInferenceEnabled(cx->inferenceEnabled)
 {
     JS_GUARD_OBJECT_NOTIFIER_INIT;
     cx->setCompartment(target->compartment());
@@ -268,7 +270,7 @@ AutoSwitchCompartment::AutoSwitchCompartment(JSContext *cx, JSObject *target
 AutoSwitchCompartment::~AutoSwitchCompartment()
 {
     /* The old compartment may have been destroyed, so we can't use cx->setCompartment. */
-    cx->compartment = oldCompartment;
+    cx->setCompartment(oldCompartment, oldZone, oldInferenceEnabled);
 }
 
 JS_FRIEND_API(bool)
@@ -655,12 +657,6 @@ CallContextDebugHandler(JSContext *cx, JSScript *script, jsbytecode *bc, Value *
 }
 
 #ifdef JS_THREADSAFE
-void *
-GetOwnerThread(const JSContext *cx)
-{
-    return cx->runtime->ownerThread();
-}
-
 JS_FRIEND_API(unsigned)
 GetContextOutstandingRequests(const JSContext *cx)
 {

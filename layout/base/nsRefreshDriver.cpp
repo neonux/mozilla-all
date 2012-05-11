@@ -116,6 +116,7 @@ nsRefreshDriver::GetRefreshTimerType() const
 
 nsRefreshDriver::nsRefreshDriver(nsPresContext *aPresContext)
   : mPresContext(aPresContext),
+    mZone(aPresContext ? aPresContext->GetZone() : JS_ZONE_CHROME),
     mFrozen(false),
     mThrottled(false),
     mTestControllingRefreshes(false),
@@ -123,6 +124,7 @@ nsRefreshDriver::nsRefreshDriver(nsPresContext *aPresContext)
     mViewManagerFlushIsPending(false),
     mLastTimerInterval(0)
 {
+  NS_FIX_OWNINGTHREAD(GetZone());
   mRequests.Init();
 }
 
@@ -245,6 +247,7 @@ nsRefreshDriver::EnsureTimerStarted(bool aAdjustingTimer)
   PRInt32 timerType = GetRefreshTimerType();
   mTimerIsPrecise = (timerType == nsITimer::TYPE_REPEATING_PRECISE_CAN_SKIP);
 
+  mTimer->SetCallbackZone(GetZone());
   nsresult rv = mTimer->InitWithCallback(this,
                                          GetRefreshTimerInterval(),
                                          timerType);
@@ -327,13 +330,22 @@ NS_IMPL_ISUPPORTS1(nsRefreshDriver, nsITimerCallback)
  * nsITimerCallback implementation
  */
 
+typedef nsTArray< nsCOMPtr<imgIContainer> > imgIContainerArray;
+
 NS_IMETHODIMP
 nsRefreshDriver::Notify(nsITimer *aTimer)
 {
   NS_PRECONDITION(!mFrozen, "Why are we notified while frozen?");
   NS_PRECONDITION(mPresContext, "Why are we notified after disconnection?");
-  NS_PRECONDITION(!nsContentUtils::GetCurrentJSContext(),
-                  "Shouldn't have a JSContext on the stack");
+
+  // XXX busted in case of nested event loops
+  //NS_PRECONDITION(!nsContentUtils::GetCurrentJSContext(),
+  //                "Shouldn't have a JSContext on the stack");
+
+  if (!NS_IsOwningThread(mPresContext->GetZone())) {
+    mTimer->SetCallbackZone(mPresContext->GetZone());
+    return NS_OK;
+  }
 
   if (mTestControllingRefreshes && aTimer) {
     // Ignore real refreshes from our timer (but honor the others).
@@ -436,9 +448,12 @@ nsRefreshDriver::Notify(nsITimer *aTimer)
    * for refresh events.
    */
 
-  ImageRequestParameters parms = {mMostRecentRefresh};
   if (mRequests.Count()) {
-    mRequests.EnumerateEntries(nsRefreshDriver::ImageRequestEnumerator, &parms);
+    imgIContainerArray containers;
+    mRequests.EnumerateEntries(nsRefreshDriver::ImageRequestEnumerator, &containers);
+    for (int i = 0; i < containers.Length(); i++) {
+      containers[i]->RequestRefresh(mMostRecentRefresh);
+    }
     EnsureTimerStarted(false);
   }
 
@@ -471,16 +486,15 @@ PLDHashOperator
 nsRefreshDriver::ImageRequestEnumerator(nsISupportsHashKey* aEntry,
                                         void* aUserArg)
 {
-  ImageRequestParameters* parms =
-    static_cast<ImageRequestParameters*> (aUserArg);
-  mozilla::TimeStamp mostRecentRefresh = parms->ts;
+  imgIContainerArray *containers = static_cast<imgIContainerArray*> (aUserArg);
+
   imgIRequest* req = static_cast<imgIRequest*>(aEntry->GetKey());
   NS_ABORT_IF_FALSE(req, "Unable to retrieve the image request");
   nsCOMPtr<imgIContainer> image;
   req->GetImage(getter_AddRefs(image));
-  if (image) {
-    image->RequestRefresh(mostRecentRefresh);
-  }
+
+  if (image)
+    containers->AppendElement(image);
 
   return PL_DHASH_NEXT;
 }

@@ -44,6 +44,7 @@
 #include "nsIRunnable.h"
 #include "nsISafeOutputStream.h"
 #include "nsString.h"
+#include "nsThreadUtils.h"
 
 using namespace mozilla;
 
@@ -110,6 +111,7 @@ public:
     NS_IMETHOD Run()
     {
         if (mCallback) {
+            NS_StickLock(mCallback);
             if (mStream)
                 mCallback->OnInputStreamReady(mStream);
             mCallback = nsnull;

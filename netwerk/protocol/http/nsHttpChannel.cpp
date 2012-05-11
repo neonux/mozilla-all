@@ -381,7 +381,7 @@ nsHttpChannel::SpeculativeConnect()
         return;
     
     nsCOMPtr<nsIInterfaceRequestor> callbacks;
-    NS_NewNotificationCallbacksAggregation(mCallbacks, mLoadGroup,
+    NS_NewNotificationCallbacksAggregation(mCallbacks, mLoadGroup, mZone,
                                            getter_AddRefs(callbacks));
     if (!callbacks)
         return;
@@ -660,9 +660,15 @@ nsHttpChannel::SetupTransaction()
         }
     }
 
+    JSZoneId callbacksZone = JS_ZONE_CHROME;
+    if (mCallbacks) {
+        NS_StickLock(mCallbacks);
+        callbacksZone = mCallbacks->GetZone();
+    }
+
     // create wrapper for this channel's notification callbacks
     nsCOMPtr<nsIInterfaceRequestor> callbacks;
-    NS_NewNotificationCallbacksAggregation(mCallbacks, mLoadGroup,
+    NS_NewNotificationCallbacksAggregation(mCallbacks, mLoadGroup, callbacksZone,
                                            getter_AddRefs(callbacks));
     if (!callbacks)
         return NS_ERROR_OUT_OF_MEMORY;
@@ -731,6 +737,8 @@ CallTypeSniffers(void *aClosure, const PRUint8 *aData, PRUint32 aCount)
 nsresult
 nsHttpChannel::CallOnStartRequest()
 {
+    MOZ_ASSERT(NS_IsOwningThread(GetZone()));
+
     mTracingEnabled = false;
 
     if (mResponseHead && mResponseHead->ContentType().IsEmpty()) {
@@ -758,6 +766,7 @@ nsHttpChannel::CallOnStartRequest()
                                             mListenerContext,
                                             getter_AddRefs(converter));
                 if (NS_SUCCEEDED(rv)) {
+                    MOZ_ASSERT(converter->GetZone() == mZone);
                     mListener = converter;
                 }
             }
@@ -3419,7 +3428,10 @@ nsHttpChannel::InstallCacheListener(PRUint32 offset)
     }
 
     if (NS_FAILED(rv)) return rv;
+
+    MOZ_ASSERT(tee->GetZone() == mZone);
     mListener = tee;
+
     return NS_OK;
 }
 
@@ -3445,6 +3457,7 @@ nsHttpChannel::InstallOfflineCacheListener()
     rv = tee->Init(mListener, out, nsnull);
     if (NS_FAILED(rv)) return rv;
 
+    MOZ_ASSERT(tee->GetZone() == mZone);
     mListener = tee;
 
     return NS_OK;
@@ -3948,6 +3961,8 @@ nsHttpChannel::AsyncOpen(nsIStreamListener *listener, nsISupports *context)
     
     mIsPending = true;
     mWasOpened = true;
+
+    mZone = listener->GetZone();
 
     mListener = listener;
     mListenerContext = context;

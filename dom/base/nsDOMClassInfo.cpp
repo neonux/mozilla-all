@@ -1901,6 +1901,8 @@ WrapNative(JSContext *cx, JSObject *scope, nsISupports *native,
     return NS_OK;
   }
 
+  nsAutoUnstickChrome unstick(cx);
+
   return nsDOMClassInfo::XPConnect()->WrapNativeToJSVal(cx, scope, native,
                                                         cache, aIID,
                                                         aAllowWrapping, vp,
@@ -2140,6 +2142,7 @@ nsDOMClassInfo::ObjectIsNativeWrapper(JSContext* cx, JSObject* obj)
 
 nsDOMClassInfo::nsDOMClassInfo(nsDOMClassInfoData* aData) : mData(aData)
 {
+  NS_FIX_OWNINGTHREAD(JS_ZONE_CHROME);
 }
 
 nsDOMClassInfo::~nsDOMClassInfo()
@@ -4842,6 +4845,8 @@ nsDOMClassInfo::CheckAccess(nsIXPConnectWrappedNative *wrapper, JSContext *cx,
       real_obj = obj;
     }
 
+    EnsureZoneStuck(cx, JS_ZONE_CHROME);
+
     rv =
       sSecMan->CheckPropertyAccess(cx, real_obj, mData->mName, id,
                                    nsIXPCSecurityManager::ACCESS_GET_PROPERTY);
@@ -5229,6 +5234,8 @@ JSBool
 nsWindowSH::GlobalScopePolluterGetProperty(JSContext *cx, JSObject *obj,
                                            jsid id, jsval *vp)
 {
+  nsAutoLockChrome lock;
+
   // Someone is accessing a element by referencing its name/id in the
   // global scope, do a security check to make sure that's ok.
 
@@ -5258,6 +5265,8 @@ nsWindowSH::SecurityCheckOnAddDelProp(JSContext *cx, JSObject *obj, jsid id,
 {
   // Someone is accessing a element by referencing its name/id in the
   // global scope, do a security check to make sure that's ok.
+
+  nsAutoLockChrome lock;
 
   nsresult rv =
     sSecMan->CheckPropertyAccess(cx, ::JS_GetGlobalForObject(cx, obj),
@@ -6318,6 +6327,8 @@ GetXPCProto(nsIXPConnect *aXPConnect, JSContext *cx, nsGlobalWindow *aWin,
                aNameStruct->mType == nsGlobalNameStruct::eTypeExternalClassInfo,
                "Wrong type!");
 
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIClassInfo> ci;
   if (aNameStruct->mType == nsGlobalNameStruct::eTypeClassConstructor) {
     PRInt32 id = aNameStruct->mDOMClassInfoID;
@@ -6780,6 +6791,8 @@ nsWindowSH::GlobalResolve(nsGlobalWindow *aWin, JSContext *cx,
   if (name_struct->mType == nsGlobalNameStruct::eTypeProperty) {
     if (name_struct->mChromeOnly && !nsContentUtils::IsCallerChrome())
       return NS_OK;
+
+    nsAutoLockChrome lock;
 
     nsCOMPtr<nsISupports> native(do_CreateInstance(name_struct->mCID, &rv));
     NS_ENSURE_SUCCESS(rv, rv);
@@ -7456,6 +7469,8 @@ nsLocationSH::PreCreate(nsISupports *nativeObj, JSContext *cx,
   // Thing.
   *parentObj = globalObj;
 
+  nsAutoLockChrome lock;
+
   nsCOMPtr<nsIDOMLocation> safeLoc(do_QueryInterface(nativeObj));
   if (!safeLoc) {
     // Oops, this wasn't really a location object. This can happen if someone
@@ -7670,7 +7685,9 @@ nsNodeSH::PreCreate(nsISupports *nativeObj, JSContext *cx, JSObject *globalObj,
                     JSObject **parentObj)
 {
   nsINode *node = static_cast<nsINode*>(nativeObj);
-  
+
+  NS_StickLock(node);
+
 #ifdef DEBUG
   {
     nsCOMPtr<nsINode> node_qi(do_QueryInterface(nativeObj));
@@ -9558,6 +9575,8 @@ nsHTMLPluginObjElementSH::GetPluginInstanceIfSafe(nsIXPConnectWrappedNative *wra
 
   nsCOMPtr<nsIObjectLoadingContent> objlc(do_QueryInterface(content));
   NS_ASSERTION(objlc, "Object nodes must implement nsIObjectLoadingContent");
+
+  nsAutoLockChrome lock;
 
   nsresult rv = objlc->GetPluginInstance(_result);
   if (NS_SUCCEEDED(rv) && *_result) {

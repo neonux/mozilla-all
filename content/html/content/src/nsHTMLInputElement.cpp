@@ -1700,6 +1700,8 @@ nsHTMLInputElement::Select()
     return NS_OK;
   }
 
+  nsAutoLockChrome lock;
+
   nsIFocusManager* fm = nsFocusManager::GetFocusManager();
 
   nsRefPtr<nsPresContext> presContext = GetPresContext();
@@ -3768,6 +3770,7 @@ nsHTMLInputElement::UpdateValueMissingValidityStateForRadio(bool aIgnoreSelf)
     SetValidityState(VALIDITY_STATE_VALUE_MISSING, valueMissing);
 
     // nsRadioSetValueMissingState will call ContentStateChanged while visiting.
+    nsAutoLockChrome lock;
     nsAutoScriptBlocker scriptBlocker;
     nsCOMPtr<nsIRadioVisitor> visitor =
       new nsRadioSetValueMissingState(this, valueMissing, notify);

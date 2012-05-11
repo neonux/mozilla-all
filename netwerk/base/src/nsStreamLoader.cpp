@@ -40,6 +40,7 @@
 #include "nsIChannel.h"
 #include "nsNetError.h"
 #include "sampler.h"
+#include "nsThreadUtils.h"
 
 nsStreamLoader::nsStreamLoader()
   : mData(nsnull),
@@ -121,6 +122,8 @@ nsStreamLoader::OnStopRequest(nsIRequest* request, nsISupports *ctxt,
 {
   SAMPLE_LABEL("network", "nsStreamLoader::OnStopRequest");
   if (mObserver) {
+    NS_StickLock(mObserver);
+
     // provide nsIStreamLoader::request during call to OnStreamComplete
     mRequest = request;
     nsresult rv = mObserver->OnStreamComplete(this, mContext, aStatus,

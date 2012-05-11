@@ -96,10 +96,6 @@ struct JSSharpObjectMap {
 
 namespace js {
 
-namespace mjit {
-class JaegerRuntime;
-}
-
 class MathCache;
 class WeakMapBase;
 class InterpreterFrames;
@@ -138,7 +134,7 @@ typedef Vector<ScriptAndCounts, 0, SystemAllocPolicy> ScriptAndCountsVector;
 struct ConservativeGCData
 {
     /*
-     * The GC scans conservatively between ThreadData::nativeStackBase and
+     * The GC scans conservatively between Thread::nativeStackBase and
      * nativeStackTop unless the latter is NULL.
      */
     uintptr_t           *nativeStackTop;
@@ -374,30 +370,24 @@ class FreeOp : public JSFreeOp {
     }
 };
 
-} /* namespace js */
-
-struct JSRuntime : js::RuntimeFriendFields
+struct Thread : ThreadFriendFields
 {
-    /* Default compartment. */
-    JSCompartment       *atomsCompartment;
+    typedef js::HashMap<uintptr_t,
+                        Thread *,
+                        js::DefaultHasher<uintptr_t>,
+                        js::SystemAllocPolicy> Map;
 
-    /* List of compartments (protected by the GC lock). */
-    js::CompartmentVector compartments;
+    Thread(JSRuntime *runtime, uintptr_t id);
+    ~Thread();
 
-    /* See comment for JS_AbortIfWrongThread in jsapi.h. */
-#ifdef JS_THREADSAFE
-  public:
-    void *ownerThread() const { return ownerThread_; }
-    void clearOwnerThread();
-    void setOwnerThread();
-    JS_FRIEND_API(bool) onOwnerThread() const;
-  private:
-    void                *ownerThread_;
-  public:
-#else
-  public:
-    bool onOwnerThread() const { return true; }
-#endif
+    bool init();
+
+    JSRuntime *runtime;
+
+    uintptr_t id;
+
+    /* Linked list of all contexts in use on this thread. */
+    JSCList contextList;
 
     /* Keeper of the contiguous stack used by all contexts in this thread. */
     js::StackSpace stackSpace;
@@ -406,65 +396,11 @@ struct JSRuntime : js::RuntimeFriendFields
     static const size_t TEMP_LIFO_ALLOC_PRIMARY_CHUNK_SIZE = 1 << 12;
     js::LifoAlloc tempLifoAlloc;
 
-  private:
-    /*
-     * Both of these allocators are used for regular expression code which is shared at the
-     * thread-data level.
-     */
-    JSC::ExecutableAllocator *execAlloc_;
-    WTF::BumpPointerAllocator *bumpAlloc_;
-#ifdef JS_METHODJIT
-    js::mjit::JaegerRuntime *jaegerRuntime_;
-#endif
-
-    JSC::ExecutableAllocator *createExecutableAllocator(JSContext *cx);
-    WTF::BumpPointerAllocator *createBumpPointerAllocator(JSContext *cx);
-    js::mjit::JaegerRuntime *createJaegerRuntime(JSContext *cx);
-
-  public:
-    JSC::ExecutableAllocator *getExecAlloc(JSContext *cx) {
-        return execAlloc_ ? execAlloc_ : createExecutableAllocator(cx);
-    }
-    JSC::ExecutableAllocator &execAlloc() {
-        JS_ASSERT(execAlloc_);
-        return *execAlloc_;
-    }
-    WTF::BumpPointerAllocator *getBumpPointerAllocator(JSContext *cx) {
-        return bumpAlloc_ ? bumpAlloc_ : createBumpPointerAllocator(cx);
-    }
-#ifdef JS_METHODJIT
-    js::mjit::JaegerRuntime *getJaegerRuntime(JSContext *cx) {
-        return jaegerRuntime_ ? jaegerRuntime_ : createJaegerRuntime(cx);
-    }
-    bool hasJaegerRuntime() const {
-        return jaegerRuntime_;
-    }
-    js::mjit::JaegerRuntime &jaegerRuntime() {
-        JS_ASSERT(hasJaegerRuntime());
-        return *jaegerRuntime_;
-    }
-#endif
-
-    /* Base address of the native stack for the current thread. */
-    uintptr_t           nativeStackBase;
-
-    /* The native stack size limit that runtime should not exceed. */
-    size_t              nativeStackQuota;
-
     /*
      * Frames currently running in js::Interpret. See InterpreterFrames for
      * details.
      */
     js::InterpreterFrames *interpreterFrames;
-
-    /* Context create/destroy callback. */
-    JSContextCallback   cxCallback;
-
-    /* Compartment destroy callback. */
-    JSDestroyCompartmentCallback destroyCompartmentCallback;
-
-    js::ActivityCallback  activityCallback;
-    void                 *activityCallbackArg;
 
 #ifdef JS_THREADSAFE
     /* Number of JS_SuspendRequest calls withot JS_ResumeRequest. */
@@ -477,6 +413,72 @@ struct JSRuntime : js::RuntimeFriendFields
     unsigned            checkRequestDepth;
 # endif
 #endif
+
+  private:
+    js::MathCache *mathCache_;
+    js::MathCache *createMathCache(JSContext *cx);
+  public:
+    js::MathCache *getMathCache(JSContext *cx) {
+        return mathCache_ ? mathCache_ : createMathCache(cx);
+    }
+
+    js::NewObjectCache  newObjectCache;
+    js::ToSourceCache   toSourceCache;
+    js::EvalCache       evalCache;
+
+    /*
+     * The GSN cache is per thread since even multi-cx-per-thread embeddings
+     * do not interleave js_GetSrcNote calls.
+     */
+    js::GSNCache        gsnCache;
+
+    /* Property cache for faster call/get/set invocation. */
+    js::PropertyCache   propertyCache;
+
+    /* State used by jsdtoa.cpp. */
+    DtoaState           *dtoaState;
+
+    /* List of currently pending operations on proxies. */
+    js::PendingProxyOperation *pendingProxyOperation;
+
+    js::ConservativeGCData conservativeGC;
+
+    /* Stack of thread-stack-allocated GC roots. */
+    js::AutoGCRooter   *autoGCRooters;
+};
+
+} /* namespace js */
+
+struct JSRuntime : js::RuntimeFriendFields
+{
+    /* The native stack size limit that runtime should not exceed. */
+    size_t              nativeStackQuota;
+
+    /* Default compartment. */
+    JSCompartment       *atomsCompartment;
+
+    /* List of compartments (protected by the GC lock). */
+    js::CompartmentVector compartments;
+
+    /* Context create/destroy callback. */
+    JSContextCallback   cxCallback;
+
+    /* Compartment destroy callback. */
+    JSDestroyCompartmentCallback destroyCompartmentCallback;
+
+    ThreadLockCheckOp  lockCheck, zoneCheck;
+    ThreadLockDepthOp  lockDepth;
+    ThreadLockChangeOp lockOp, unlockOp;
+    ThreadLockCheckOp  tryLockOp;
+
+    LockEverythingOp lockEverything, isEverythingLocked;
+    UnlockEverythingOp unlockEverything;
+
+    NativeStackTopOp nativeStackTop;
+    CanUnlockChromeOp canUnlockChrome;
+
+    js::ActivityCallback  activityCallback;
+    void                 *activityCallbackArg;
 
     /* Garbage collector state, used by jsgc.c. */
 
@@ -656,9 +658,6 @@ struct JSRuntime : js::RuntimeFriendFields
     JSTraceDataOp       gcGrayRootsTraceOp;
     void                *gcGrayRootsData;
 
-    /* Stack of thread-stack-allocated GC roots. */
-    js::AutoGCRooter   *autoGCRooters;
-
     /* Strong references on scripts held for PCCount profiling API. */
     js::ScriptAndCountsVector *scriptAndCountsVector;
 
@@ -701,11 +700,23 @@ struct JSRuntime : js::RuntimeFriendFields
     void                *data;
 
 #ifdef JS_THREADSAFE
-    /* These combine to interlock the GC and new requests. */
     PRLock              *gcLock;
+
+#ifdef DEBUG
+    uintptr_t           gcLockOwner;
+    bool IsGCLocked() { return gcLockOwner == js::CurrentThreadId(); }
+#endif
 
     js::GCHelperThread  gcHelperThread;
 #endif /* JS_THREADSAFE */
+
+    /*
+     * Mapping from NSPR thread identifiers to JSThreads.
+     *
+     * This map can be accessed by the GC thread; or by the thread that holds
+     * gcLock, if GC is not running.
+     */
+    js::Thread::Map     threads;
 
   private:
     js::FreeOp          defaultFreeOp_;
@@ -743,29 +754,6 @@ struct JSRuntime : js::RuntimeFriendFields
      * because we want allocations to be infallible (except when we hit OOM).
      */
     bool                waiveGCQuota;
-
-  private:
-    js::MathCache *mathCache_;
-    js::MathCache *createMathCache(JSContext *cx);
-  public:
-    js::MathCache *getMathCache(JSContext *cx) {
-        return mathCache_ ? mathCache_ : createMathCache(cx);
-    }
-
-    js::GSNCache        gsnCache;
-    js::PropertyCache   propertyCache;
-    js::NewObjectCache  newObjectCache;
-    js::NativeIterCache nativeIterCache;
-    js::ToSourceCache   toSourceCache;
-    js::EvalCache       evalCache;
-
-    /* State used by jsdtoa.cpp. */
-    DtoaState           *dtoaState;
-
-    /* List of currently pending operations on proxies. */
-    js::PendingProxyOperation *pendingProxyOperation;
-
-    js::ConservativeGCData conservativeGC;
 
   private:
     JSPrincipals        *trustedPrincipals_;
@@ -887,7 +875,7 @@ struct JSRuntime : js::RuntimeFriendFields
 };
 
 /* Common macros to access thread-local caches in JSRuntime. */
-#define JS_PROPERTY_CACHE(cx)   (cx->runtime->propertyCache)
+#define JS_PROPERTY_CACHE(cx)   (cx->thread()->propertyCache)
 
 #define JS_KEEP_ATOMS(rt)   (rt)->gcKeepAtoms++;
 #define JS_UNKEEP_ATOMS(rt) (rt)->gcKeepAtoms--;
@@ -1018,7 +1006,7 @@ struct JSContext : js::ContextFriendFields
     ~JSContext();
 
     /* JSRuntime contextList linkage. */
-    JSCList             link;
+    JSCList             runtimeLink;
 
   private:
     /* See JSContext::findVersion. */
@@ -1044,10 +1032,20 @@ struct JSContext : js::ContextFriendFields
     /* True if generating an error, to prevent runaway recursion. */
     bool                generatingError;
 
-    /* GC heap compartment. */
-    JSCompartment       *compartment;
-
     inline void setCompartment(JSCompartment *compartment);
+    inline void setCompartment(JSCompartment *compartment, JSZoneId zone, bool inferenceEnabled);
+
+    inline void assertConsistency();
+
+#ifdef JS_THREADSAFE
+    js::Thread *thread() const {
+        return thread_;
+    }
+    bool onCorrectThread() { return thread()->id == js::CurrentThreadId(); }
+
+    void setThread(js::Thread *thread);
+    static const size_t threadOffset() { return offsetof(JSContext, thread_); }
+#endif
 
     /* Current execution stack. */
     js::ContextStack    stack;
@@ -1175,13 +1173,14 @@ struct JSContext : js::ContextFriendFields
     bool hasWErrorOption() const { return hasRunOption(JSOPTION_WERROR); }
     bool hasAtLineOption() const { return hasRunOption(JSOPTION_ATLINE); }
 
-    js::LifoAlloc &tempLifoAlloc() { return runtime->tempLifoAlloc; }
+    js::LifoAlloc &tempLifoAlloc() { return thread()->tempLifoAlloc; }
     inline js::LifoAlloc &typeLifoAlloc();
 
 #ifdef JS_THREADSAFE
     unsigned            outstandingRequests;/* number of JS_BeginRequest calls
                                                without the corresponding
                                                JS_EndRequest. */
+    JSCList             threadLink;         /* JSThread contextList linkage */
 #endif
 
     /* Stored here to avoid passing it around as a parameter. */
@@ -1195,8 +1194,6 @@ struct JSContext : js::ContextFriendFields
 
 #ifdef JS_METHODJIT
     bool                 methodJitEnabled;
-
-    js::mjit::JaegerRuntime &jaegerRuntime() { return runtime->jaegerRuntime(); }
 #endif
 
     bool                 inferenceEnabled;
@@ -1324,7 +1321,7 @@ struct JSContext : js::ContextFriendFields
 
     static inline JSContext *fromLinkField(JSCList *link) {
         JS_ASSERT(link);
-        return reinterpret_cast<JSContext *>(uintptr_t(link) - offsetof(JSContext, link));
+        return reinterpret_cast<JSContext *>(uintptr_t(link) - offsetof(JSContext, runtimeLink));
     }
 
     void mark(JSTracer *trc);
@@ -1396,12 +1393,49 @@ class AutoXMLRooter : private AutoGCRooter {
 };
 #endif /* JS_HAS_XML_SUPPORT */
 
+#if defined(JS_THREADSAFE) && defined(DEBUG)
+inline void
+SetGCLockOwner(JSRuntime *rt, uintptr_t old, uintptr_t owner)
+{
+    JS_ASSERT(old == rt->gcLockOwner);
+    rt->gcLockOwner = owner;
+}
+#endif
+
+inline void
+LockGC(JSRuntime *rt)
+{
 #ifdef JS_THREADSAFE
-# define JS_LOCK_GC(rt)    PR_Lock((rt)->gcLock)
-# define JS_UNLOCK_GC(rt)  PR_Unlock((rt)->gcLock)
-#else
-# define JS_LOCK_GC(rt)
-# define JS_UNLOCK_GC(rt)
+    PR_Lock(rt->gcLock);
+#ifdef DEBUG
+    SetGCLockOwner(rt, 0, CurrentThreadId());
+#endif
+#endif
+}
+
+inline void
+UnlockGC(JSRuntime *rt)
+{
+#ifdef JS_THREADSAFE
+#ifdef DEBUG
+    SetGCLockOwner(rt, CurrentThreadId(), 0);
+#endif
+    PR_Unlock(rt->gcLock);
+#endif
+}
+
+#ifdef JS_THREADSAFE
+inline void
+WaitGCCondVar(JSRuntime *rt, PRCondVar *cvar)
+{
+#ifdef DEBUG
+            SetGCLockOwner(rt, CurrentThreadId(), 0);
+#endif
+            PR_WaitCondVar(cvar, PR_INTERVAL_NO_TIMEOUT);
+#ifdef DEBUG
+            SetGCLockOwner(rt, 0, CurrentThreadId());
+#endif
+}
 #endif
 
 class AutoLockGC
@@ -1415,7 +1449,7 @@ class AutoLockGC
         // Avoid MSVC warning C4390 for non-threadsafe builds.
 #ifdef JS_THREADSAFE
         if (rt)
-            JS_LOCK_GC(rt);
+            LockGC(rt);
 #endif
     }
 
@@ -1423,7 +1457,7 @@ class AutoLockGC
     {
 #ifdef JS_THREADSAFE
         if (runtime)
-            JS_UNLOCK_GC(runtime);
+            UnlockGC(runtime);
 #endif
     }
 
@@ -1435,7 +1469,7 @@ class AutoLockGC
         JS_ASSERT(rt);
         JS_ASSERT(!runtime);
         runtime = rt;
-        JS_LOCK_GC(rt);
+        LockGC(rt);
     }
 
   private:
@@ -1454,9 +1488,9 @@ class AutoUnlockGC {
       : rt(rt)
     {
         JS_GUARD_OBJECT_NOTIFIER_INIT;
-        JS_UNLOCK_GC(rt);
+        UnlockGC(rt);
     }
-    ~AutoUnlockGC() { JS_LOCK_GC(rt); }
+    ~AutoUnlockGC() { LockGC(rt); }
 };
 
 class AutoKeepAtoms {
@@ -1550,6 +1584,7 @@ class ContextIter {
 
 public:
     explicit ContextIter(JSRuntime *rt) {
+        JS_ASSERT(rt->IsGCLocked());
         end = &rt->contextList;
         begin = end->next;
     }
@@ -1611,6 +1646,9 @@ js_ExpandErrorArguments(JSContext *cx, JSErrorCallback callback,
                         bool charArgs, va_list ap);
 #endif
 
+JSBool
+js_InitContextThreadAndLockGC(JSContext *cx);
+
 namespace js {
 
 /* |callee| requires a usage string provided by JS_DefineFunctionsWithHelp. */
@@ -1670,7 +1708,7 @@ js_ReportValueErrorFlags(JSContext *cx, unsigned flags, const unsigned errorNumb
 extern JSErrorFormatString js_ErrorFormatString[JSErr_Limit];
 
 #ifdef JS_THREADSAFE
-# define JS_ASSERT_REQUEST_DEPTH(cx)  JS_ASSERT((cx)->runtime->requestDepth >= 1)
+# define JS_ASSERT_REQUEST_DEPTH(cx)  JS_ASSERT((cx)->thread()->requestDepth >= 1)
 #else
 # define JS_ASSERT_REQUEST_DEPTH(cx)  ((void) 0)
 #endif

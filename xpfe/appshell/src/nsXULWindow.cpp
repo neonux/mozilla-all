@@ -416,9 +416,12 @@ NS_IMETHODIMP nsXULWindow::ShowModal()
   nsCOMPtr<nsIJSContextStack> stack(do_GetService("@mozilla.org/js/xpc/ContextStack;1"));
   if (stack && NS_SUCCEEDED(stack->Push(nsnull))) {
     nsIThread *thread = NS_GetCurrentThread();
-    while (mContinueModalLoop) {
-      if (!NS_ProcessNextEvent(thread))
-        break;
+    {
+      nsAutoUnlockEverything unlock;
+      while (mContinueModalLoop) {
+        if (!NS_ProcessNextEvent(thread))
+          break;
+      }
     }
     JSContext* cx;
     stack->Pop(&cx);
@@ -1797,6 +1800,8 @@ NS_IMETHODIMP nsXULWindow::CreateNewContentWindow(PRInt32 aChromeFlags,
   // Push nsnull onto the JSContext stack before we dispatch a native event.
   nsCOMPtr<nsIJSContextStack> stack(do_GetService("@mozilla.org/js/xpc/ContextStack;1"));
   if (stack && NS_SUCCEEDED(stack->Push(nsnull))) {
+    nsAutoUnlockEverything unlock;
+
     nsIThread *thread = NS_GetCurrentThread();
     while (xulWin->IsLocked()) {
       if (!NS_ProcessNextEvent(thread))

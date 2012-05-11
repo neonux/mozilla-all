@@ -324,7 +324,7 @@ FinishCreate(XPCCallContext& ccx,
 // JS object, which are the very things we need to create here. So we special-
 // case the logic and do some things in a different order.
 nsresult
-XPCWrappedNative::WrapNewGlobal(XPCCallContext &ccx, xpcObjectHelper &nativeHelper,
+XPCWrappedNative::WrapNewGlobal(XPCCallContext &ccx, xpcObjectHelper &nativeHelper, JSZoneId zone,
                                 nsIPrincipal *principal, bool initStandardClasses,
                                 XPCWrappedNative **wrappedGlobal)
 {
@@ -359,7 +359,7 @@ XPCWrappedNative::WrapNewGlobal(XPCCallContext &ccx, xpcObjectHelper &nativeHelp
     // Create the global.
     JSObject *global;
     JSCompartment *compartment;
-    rv = xpc_CreateGlobalObject(ccx, clasp, principal, nsnull, false,
+    rv = xpc_CreateGlobalObject(ccx, clasp, zone, principal, nsnull, false,
                                 &global, &compartment);
     NS_ENSURE_SUCCESS(rv, rv);
 
@@ -479,6 +479,9 @@ XPCWrappedNative::GetNewOrUsed(XPCCallContext& ccx,
     NS_ASSERTION(!Scope->GetRuntime()->GetThreadRunningGC(),
                  "XPCWrappedNative::GetNewOrUsed called during GC");
 
+    if (!ccx.CheckObjectLock(helper.Object()))
+        return NS_ERROR_XPC_CANT_GET_LOCK;
+
     nsISupports *identity = helper.GetCanonical();
 
     if (!identity) {
@@ -492,6 +495,8 @@ XPCWrappedNative::GetNewOrUsed(XPCCallContext& ccx,
 
     Native2WrappedNativeMap* map = Scope->GetWrappedNativeMap();
     if (!cache) {
+        EnsureZoneStuck(ccx, JS_ZONE_CHROME);
+
         {   // scoped lock
             XPCAutoLock lock(mapLock);
             wrapper = map->Find(identity);
@@ -532,6 +537,9 @@ XPCWrappedNative::GetNewOrUsed(XPCCallContext& ccx,
     JSBool isClassInfo = Interface &&
                          Interface->GetIID()->Equals(NS_GET_IID(nsIClassInfo));
 
+    // for nsIClassInfo --- make per-zone?
+    ccx.CheckChromeLock();
+
     nsIClassInfo *info = helper.GetClassInfo();
 
     XPCNativeScriptableCreateInfo sciProto;
@@ -549,6 +557,8 @@ XPCWrappedNative::GetNewOrUsed(XPCCallContext& ccx,
         GatherScriptableCreateInfo(identity, info, sciProto, sci);
 
     JSObject* parent = Scope->GetGlobalJSObject();
+
+    mozilla::Maybe<nsAutoTryLockZone> lockContent;
 
     jsval newParentVal = JSVAL_NULL;
     XPCMarkableJSVal newParentVal_markable(&newParentVal);
@@ -571,6 +581,17 @@ XPCWrappedNative::GetNewOrUsed(XPCCallContext& ccx,
 
         NS_ASSERTION(!xpc::WrapperFactory::IsXrayWrapper(parent),
                      "Xray wrapper being used to parent XPCWrappedNative?");
+
+        JSZoneId zone = JS_GetObjectZone(parent);
+        if (zone >= JS_ZONE_CONTENT_START) {
+            lockContent.construct(zone);
+            if (!lockContent.ref().succeeded) {
+                if (!NS_CanBlockOnContent()) {
+                    JS_ReportError(ccx, "Attempt to block content on main thread");
+                    return NS_ERROR_FAILURE;
+                }
+            }
+        }
 
         if (!ac.enter(ccx, parent))
             return NS_ERROR_FAILURE;
@@ -615,6 +636,17 @@ XPCWrappedNative::GetNewOrUsed(XPCCallContext& ccx,
             return NS_OK;
         }
     } else {
+        JSZoneId zone = JS_GetObjectZone(parent);
+        if (zone >= JS_ZONE_CONTENT_START) {
+            lockContent.construct(zone);
+            if (!lockContent.ref().succeeded) {
+                if (!NS_CanBlockOnContent()) {
+                    JS_ReportError(ccx, "Attempt to block content on main thread");
+                    return NS_ERROR_FAILURE;
+                }
+            }
+        }
+
         if (!ac.enter(ccx, parent))
             return NS_ERROR_FAILURE;
 
@@ -665,6 +697,10 @@ XPCWrappedNative::GetNewOrUsed(XPCCallContext& ccx,
 
         DEBUG_ReportShadowedMembers(set, wrapper, nsnull);
     }
+
+#ifdef DEBUG
+    wrapper->FixZone(identity->GetZone());
+#endif
 
     // The strong reference was taken over by the wrapper, so make the nsCOMPtr
     // forget about it.
@@ -721,6 +757,7 @@ FinishCreate(XPCCallContext& ccx,
 
     nsRefPtr<XPCWrappedNative> wrapper;
     {   // scoped lock
+        EnsureZoneStuck(ccx, JS_ZONE_CHROME);
 
         // Deal with the case where the wrapper got created as a side effect
         // of one of our calls out of this code (or on another thread). Add()
@@ -795,6 +832,10 @@ XPCWrappedNative::Morph(XPCCallContext& ccx,
 
     nsISupports *identity =
         static_cast<nsISupports*>(xpc_GetJSPrivate(existingJSObject));
+
+    if (!EnsureZoneStuck(ccx, identity->GetZone()))
+        return NS_ERROR_XPC_CANT_GET_LOCK;
+
     XPCWrappedNativeProto *proto = GetSlimWrapperProto(existingJSObject);
 
 #if DEBUG
@@ -820,6 +861,10 @@ XPCWrappedNative::Morph(XPCCallContext& ccx,
     nsRefPtr<XPCWrappedNative> wrapper = new XPCWrappedNative(dont_AddRef(identity), proto);
     if (!wrapper)
         return NS_ERROR_FAILURE;
+
+#ifdef DEBUG
+    wrapper->FixZone(identity->GetZone());
+#endif
 
     NS_ASSERTION(!xpc::WrapperFactory::IsXrayWrapper(js::GetObjectParent(existingJSObject)),
                  "Xray wrapper being used to parent XPCWrappedNative?");
@@ -914,9 +959,6 @@ XPCWrappedNative::XPCWrappedNative(already_AddRefed<nsISupports> aIdentity,
       mFlatJSObject(INVALID_OBJECT), // non-null to pass IsValid() test
       mScriptableInfo(nsnull),
       mWrapperWord(0)
-#ifdef XPC_CHECK_WRAPPER_THREADSAFETY
-    , mThread(PR_GetCurrentThread())
-#endif
 {
     mIdentity = aIdentity.get();
 
@@ -936,9 +978,6 @@ XPCWrappedNative::XPCWrappedNative(already_AddRefed<nsISupports> aIdentity,
       mFlatJSObject(INVALID_OBJECT), // non-null to pass IsValid() test
       mScriptableInfo(nsnull),
       mWrapperWord(0)
-#ifdef XPC_CHECK_WRAPPER_THREADSAFETY
-    , mThread(PR_GetCurrentThread())
-#endif
 {
     mIdentity = aIdentity.get();
 
@@ -1255,15 +1294,15 @@ XPCWrappedNative::FinishInit(XPCCallContext &ccx)
         return false;
     }
 
+    /*
 #ifdef XPC_CHECK_WRAPPER_THREADSAFETY
-    NS_ASSERTION(mThread, "Should have been set at construction time!");
-
-    if (HasProto() && GetProto()->ClassIsMainThreadOnly() && !NS_IsMainThread()) {
+    if (HasProto() && GetProto()->ClassIsMainThreadOnly() && !NS_IsChromeOwningThread()) {
         DEBUG_ReportWrapperThreadSafetyError(ccx,
                                              "MainThread only wrapper created on the wrong thread", this);
         return false;
     }
 #endif
+    */
 
     // A hack for bug 517665, increase the probability for GC.
     JS_updateMallocCounter(ccx.GetJSContext(), 2 * sizeof(XPCWrappedNative));
@@ -1569,12 +1608,16 @@ XPCWrappedNative::ReparentWrapperIfFound(XPCCallContext& ccx,
     // ReparentWrapperIfFound is really only meant to be called from DOM code
     // which must happen only on the main thread. Bail if we're on some other
     // thread or have a non-main-thread-only wrapper.
-    if (!XPCPerThreadData::IsMainThread(ccx) ||
+    /*
+    if (!XPCPerThreadData::IsExecuteThread(ccx) ||
         (wrapper &&
          wrapper->GetProto() &&
          !wrapper->GetProto()->ClassIsMainThreadOnly())) {
         return NS_ERROR_FAILURE;
     }
+    */
+    if (!XPCPerThreadData::IsExecuteThread(ccx))
+        return NS_ERROR_FAILURE;
 
     JSAutoEnterCompartment ac;
     if (!ac.enter(ccx, aNewScope->GetGlobalJSObject()))
@@ -1846,6 +1889,11 @@ return_wrapper:
             }
             if (pobj2)
                 *pobj2 = isWN ? nsnull : cur;
+            if (cx && wrapper) {
+                JSZoneId zone = wrapper->GetIdentityObject()->GetZone();
+                if (!EnsureZoneStuck(cx, zone))
+                    return nsnull;
+            }
             return wrapper;
         }
 
@@ -1865,6 +1913,11 @@ return_tearoff:
                 return nsnull;
             if (pTearOff)
                 *pTearOff = to;
+            if (cx) {
+                JSZoneId zone = wrapper->GetIdentityObject()->GetZone();
+                if (!EnsureZoneStuck(cx, zone))
+                    return nsnull;
+            }
             return wrapper;
         }
 
@@ -2385,6 +2438,8 @@ XPCWrappedNative::CallMethod(XPCCallContext& ccx,
             return false;
     }
 
+    ccx.CheckChromeLock();
+
     nsIXPCSecurityManager* sm =
         xpcc->GetAppropriateSecurityManager(secFlag);
     if (sm && NS_FAILED(sm->CanAccess(secAction, &ccx, ccx,
@@ -2681,7 +2736,7 @@ CallMethodHelper::QueryInterfaceFastPath() const
 
     nsresult invokeResult;
     nsISupports* qiresult = nsnull;
-    if (XPCPerThreadData::IsMainThread(mCallContext)) {
+    if (XPCPerThreadData::IsExecuteThread(mCallContext)) {
         invokeResult = mCallee->QueryInterface(*iid, (void**) &qiresult);
     } else {
         JSAutoSuspendRequest suspended(mCallContext);
@@ -3099,7 +3154,7 @@ CallMethodHelper::Invoke()
     PRUint32 argc = mDispatchParams.Length();
     nsXPTCVariant* argv = mDispatchParams.Elements();
 
-    if (XPCPerThreadData::IsMainThread(mCallContext))
+    if (XPCPerThreadData::IsExecuteThread(mCallContext))
         return NS_InvokeByIndex(mCallee, mVTableIndex, argc, argv);
 
     JSAutoSuspendRequest suspended(mCallContext);
@@ -3138,6 +3193,7 @@ nsIPrincipal*
 XPCWrappedNative::GetObjectPrincipal() const
 {
     nsIPrincipal* principal = GetScope()->GetPrincipal();
+    /*
 #ifdef DEBUG
     // Because of inner window reuse, we can have objects with one principal
     // living in a scope with a different (but same-origin) principal. So
@@ -3152,6 +3208,7 @@ XPCWrappedNative::GetObjectPrincipal() const
         NS_ASSERTION(equal, "Principal mismatch.  Expect bad things to happen");
     }
 #endif
+    */
     return principal;
 }
 
@@ -3725,21 +3782,25 @@ void DEBUG_CheckWrapperThreadSafety(const XPCWrappedNative* wrapper)
     if (proto && proto->ClassIsThreadSafe())
         return;
 
+    MOZ_ASSERT(wrapper->onCorrectThread());
+
+    /*
     if (proto && proto->ClassIsMainThreadOnly()) {
-        // NS_IsMainThread is safe to call even after we've started shutting
+        // NS_IsChromeOwningThread is safe to call even after we've started shutting
         // down.
-        if (!NS_IsMainThread()) {
+        if (!NS_IsChromeOwningThread()) {
             XPCCallContext ccx(NATIVE_CALLER);
             DEBUG_ReportWrapperThreadSafetyError(ccx,
                                                  "Main Thread Only wrapper accessed on another thread", wrapper);
         }
-    } else if (PR_GetCurrentThread() != wrapper->mThread) {
+    } else if (!wrapper->onCorrectThread()) {
         XPCCallContext ccx(NATIVE_CALLER);
         DEBUG_ReportWrapperThreadSafetyError(ccx,
                                              "XPConnect WrappedNative is being accessed on multiple threads but "
                                              "the underlying native xpcom object does not have a "
                                              "nsIClassInfo with the 'THREADSAFE' flag set", wrapper);
     }
+    */
 }
 #endif
 
@@ -3819,6 +3880,8 @@ ConstructSlimWrapper(XPCCallContext &ccx,
                      xpcObjectHelper &aHelper,
                      XPCWrappedNativeScope* xpcScope, jsval *rval)
 {
+    ccx.CheckChromeLock();
+
     nsISupports *identityObj = aHelper.GetCanonical();
     nsXPCClassInfo *classInfoHelper = aHelper.GetXPCClassInfo();
 

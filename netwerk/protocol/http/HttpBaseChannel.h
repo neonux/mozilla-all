@@ -95,6 +95,8 @@ public:
 
   virtual nsresult Init(nsIURI *aURI, PRUint8 aCaps, nsProxyInfo *aProxyInfo);
 
+  JSZoneId GetZone() { return mZone; }
+
   // nsIRequest
   NS_IMETHOD GetName(nsACString& aName);
   NS_IMETHOD IsPending(bool *aIsPending);
@@ -244,6 +246,8 @@ protected:
                                   NS_GET_TEMPLATE_IID(T),
                                   getter_AddRefs(aResult));
   }
+
+  JSZoneId                          mZone;
 
   nsCOMPtr<nsIURI>                  mURI;
   nsCOMPtr<nsIURI>                  mOriginalURI;

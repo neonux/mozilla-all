@@ -70,8 +70,8 @@ using namespace mozilla;
 using namespace js;
 using namespace js::gc;
 
-JSCompartment::JSCompartment(JSRuntime *rt)
-  : rt(rt),
+JSCompartment::JSCompartment(JSRuntime *rt, JSZoneId zone)
+  : CompartmentFriendFields(rt, zone),
     principals(NULL),
     needsBarrier_(false),
     gcState(NoGCScheduled),
@@ -87,6 +87,9 @@ JSCompartment::JSCompartment(JSRuntime *rt)
     regExps(rt),
     propertyTree(thisForCtor()),
     emptyTypeObject(NULL),
+    execAlloc_(NULL),
+    bumpAlloc_(NULL),
+    jaegerCompartment_(NULL),
     gcMallocAndFreeBytes(0),
     gcTriggerMallocAndFreeBytes(0),
     gcMallocBytes(0),
@@ -105,11 +108,19 @@ JSCompartment::~JSCompartment()
     Foreground::delete_(scriptCountsMap);
     Foreground::delete_(sourceMapMap);
     Foreground::delete_(debugScriptMap);
+#ifdef JS_METHODJIT
+    Foreground::delete_(jaegerCompartment_);
+#endif
+
+    rt->delete_<JSC::ExecutableAllocator>(execAlloc_);
+    rt->delete_<WTF::BumpPointerAllocator>(bumpAlloc_);
 }
 
 bool
 JSCompartment::init(JSContext *cx)
 {
+    JS_ASSERT(rt->IsGCLocked());
+
     activeAnalysis = activeInference = false;
     types.init(cx);
 
@@ -223,9 +234,14 @@ JSCompartment::wrap(JSContext *cx, Value *vp)
 #endif
     }
 
+    LockGC(cx->runtime);
+
     /* If we already have a wrapper for this value, use it. */
     if (WrapperMap::Ptr p = crossCompartmentWrappers.lookup(*vp)) {
         *vp = p->value;
+
+        UnlockGC(cx->runtime);
+
         if (vp->isObject()) {
             RootedVarObject obj(cx, &vp->toObject());
             JS_ASSERT(obj->isCrossCompartmentWrapper());
@@ -240,6 +256,8 @@ JSCompartment::wrap(JSContext *cx, Value *vp)
         return true;
     }
 
+    UnlockGC(cx->runtime);
+
     if (vp->isString()) {
         RootedVarValue orig(cx, *vp);
         JSString *str = vp->toString();
@@ -250,6 +268,8 @@ JSCompartment::wrap(JSContext *cx, Value *vp)
         if (!wrapped)
             return false;
         vp->setString(wrapped);
+
+        AutoLockGC lock(cx->runtime);
         return crossCompartmentWrappers.put(orig, *vp);
     }
 
@@ -283,8 +303,11 @@ JSCompartment::wrap(JSContext *cx, Value *vp)
     if (wrapper->getProto() != proto && !SetProto(cx, wrapper, proto, false))
         return false;
 
-    if (!crossCompartmentWrappers.put(GetProxyPrivate(wrapper), *vp))
-        return false;
+    {
+        AutoLockGC lock(cx->runtime);
+        if (!crossCompartmentWrappers.put(GetProxyPrivate(wrapper), *vp))
+            return false;
+    }
 
     if (!JSObject::setParent(cx, wrapper, global))
         return false;
@@ -383,6 +406,7 @@ JSCompartment::wrap(JSContext *cx, AutoIdVector &props)
 void
 JSCompartment::markCrossCompartmentWrappers(JSTracer *trc)
 {
+    JS_ASSERT(rt->IsGCLocked());
     JS_ASSERT(!isCollecting());
 
     for (WrapperMap::Enum e(crossCompartmentWrappers); !e.empty(); e.popFront()) {
@@ -473,6 +497,8 @@ JSCompartment::discardJitCode(FreeOp *fop)
 void
 JSCompartment::sweep(FreeOp *fop, bool releaseTypes)
 {
+    JS_ASSERT(rt->IsGCLocked());
+
     /* Remove dead wrappers from the table. */
     for (WrapperMap::Enum e(crossCompartmentWrappers); !e.empty(); e.popFront()) {
         JS_ASSERT_IF(IsAboutToBeFinalized(e.front().key) &&
@@ -564,6 +590,7 @@ void
 JSCompartment::purge()
 {
     dtoaCache.purge();
+    nativeIterCache.purge();
 }
 
 void
@@ -589,11 +616,14 @@ JSCompartment::onTooMuchMalloc()
 bool
 JSCompartment::hasScriptsOnStack()
 {
+    JS_ASSERT(false);
+    /*
     for (AllFramesIter i(rt->stackSpace); !i.done(); ++i) {
         JSScript *script = i.fp()->maybeScript();
         if (script && script->compartment() == this)
             return true;
     }
+    */
     return false;
 }
 

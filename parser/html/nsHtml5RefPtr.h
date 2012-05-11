@@ -48,13 +48,19 @@ class nsHtml5RefPtrReleaser : public nsRunnable
   {
     private:
       T* mPtr;
+      JSZoneId mZone;
     public:
-      nsHtml5RefPtrReleaser(T* aPtr)
-          : mPtr(aPtr)
+      nsHtml5RefPtrReleaser(T* aPtr, JSZoneId aZone)
+          : mPtr(aPtr), mZone(aZone)
         {}
       NS_IMETHODIMP Run()
         {
-          mPtr->Release();
+          if (mZone >= JS_ZONE_CONTENT_START) {
+            nsAutoLockZone lock(mZone);
+            mPtr->Release();
+          } else {
+            mPtr->Release();
+          }
           return NS_OK;
         }
   };
@@ -97,8 +103,8 @@ class nsHtml5RefPtr
       void
       release( T* aPtr )
         {
-          nsCOMPtr<nsIRunnable> releaser = new nsHtml5RefPtrReleaser<T>(aPtr);
-          if (NS_FAILED(NS_DispatchToMainThread(releaser))) 
+          nsCOMPtr<nsIRunnable> releaser = new nsHtml5RefPtrReleaser<T>(aPtr, mZone);
+          if (NS_FAILED(NS_DispatchToMainThread(releaser, NS_DISPATCH_NORMAL, mZone))) 
             {
               NS_WARNING("Failed to dispatch releaser event.");
             }
@@ -106,6 +112,7 @@ class nsHtml5RefPtr
 
     private:
       T* mRawPtr;
+      JSZoneId mZone;
 
     public:
       typedef T element_type;
@@ -145,6 +152,8 @@ class nsHtml5RefPtr
           // construct from |dont_AddRef(expr)|
         {
         }
+
+      void setZone(JSZoneId aZone) { mZone = aZone; }
 
         // Assignment operators
 

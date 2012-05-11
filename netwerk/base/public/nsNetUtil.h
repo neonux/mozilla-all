@@ -110,6 +110,7 @@
 #include "nsIRedirectChannelRegistrar.h"
 #include "nsIMIMEHeaderParam.h"
 #include "mozilla/Services.h"
+#include "nsThreadUtils.h"
 
 #ifdef MOZILLA_INTERNAL_API
 
@@ -169,6 +170,7 @@ NS_NewURI(nsIURI **result,
           nsIURI *baseURI = nsnull,
           nsIIOService *ioService = nsnull)     // pass in nsIIOService to optimize callers
 {
+    nsAutoLockChrome lock;
     nsresult rv;
     nsCOMPtr<nsIIOService> grip;
     rv = net_EnsureIOService(&ioService, grip);
@@ -1417,12 +1419,13 @@ NS_QueryNotificationCallbacks(const nsCOMPtr<nsIChannel> &aChannel,
 inline nsresult
 NS_NewNotificationCallbacksAggregation(nsIInterfaceRequestor  *callbacks,
                                        nsILoadGroup           *loadGroup,
+                                       JSZoneId                zone,
                                        nsIInterfaceRequestor **result)
 {
     nsCOMPtr<nsIInterfaceRequestor> cbs;
     if (loadGroup)
         loadGroup->GetNotificationCallbacks(getter_AddRefs(cbs));
-    return NS_NewInterfaceRequestorAggregation(callbacks, cbs, result);
+    return NS_NewInterfaceRequestorAggregation(callbacks, cbs, zone, result);
 }
 
 /**

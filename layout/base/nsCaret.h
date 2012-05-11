@@ -68,6 +68,8 @@ class nsCaret : public nsISelectionListener
 
     NS_DECL_ISUPPORTS
 
+    JSZoneId GetZone() { return mZone; }
+
     nsresult    Init(nsIPresShell *inPresShell);
     void    Terminate();
 
@@ -259,10 +261,17 @@ protected:
     // 3. The caret selection is empty.
     bool IsMenuPopupHidingCaret();
 
+    void StickLastContent()
+    {
+      if (mLastContent)
+        NS_StickLock(mLastContent);
+    }
+
 protected:
 
     nsWeakPtr             mPresShell;
     nsWeakPtr             mDomSelectionWeak;
+    JSZoneId              mZone;
 
     nsCOMPtr<nsITimer>    mBlinkTimer;
 

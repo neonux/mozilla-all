@@ -186,27 +186,28 @@ NS_IMPL_URI_ATTR(nsHTMLVideoElement, Poster, poster)
 
 NS_IMETHODIMP nsHTMLVideoElement::GetMozParsedFrames(PRUint32 *aMozParsedFrames)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Should be on main thread.");
   *aMozParsedFrames = mDecoder ? mDecoder->GetFrameStatistics().GetParsedFrames() : 0;
   return NS_OK;
 }
 
 NS_IMETHODIMP nsHTMLVideoElement::GetMozDecodedFrames(PRUint32 *aMozDecodedFrames)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Should be on main thread.");
   *aMozDecodedFrames = mDecoder ? mDecoder->GetFrameStatistics().GetDecodedFrames() : 0;
   return NS_OK;
 }
 
 NS_IMETHODIMP nsHTMLVideoElement::GetMozPresentedFrames(PRUint32 *aMozPresentedFrames)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Should be on main thread.");
   *aMozPresentedFrames = mDecoder ? mDecoder->GetFrameStatistics().GetPresentedFrames() : 0;
   return NS_OK;
 }
 
 NS_IMETHODIMP nsHTMLVideoElement::GetMozPaintedFrames(PRUint32 *aMozPaintedFrames)
 {
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Should be on main thread.");
   NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
   ImageContainer* container = GetImageContainer();
   *aMozPaintedFrames = container ? container->GetPaintCount() : 0;
@@ -214,7 +215,7 @@ NS_IMETHODIMP nsHTMLVideoElement::GetMozPaintedFrames(PRUint32 *aMozPaintedFrame
 }
 
 NS_IMETHODIMP nsHTMLVideoElement::GetMozFrameDelay(double *aMozFrameDelay) {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  NS_ASSERTION(NS_IsChromeOwningThread(), "Should be on main thread.");
   VideoFrameContainer* container = GetVideoFrameContainer();
   *aMozFrameDelay = container ?  container->GetFrameDelay() : 0;
   return NS_OK;

@@ -125,6 +125,10 @@ public:
 
   NS_IMETHOD  GetDeviceContext(nsDeviceContext *&aContext);
 
+  NS_IMETHOD GetDeletedViewCount(PRInt32 *pres);
+
+  void IncrementDeletedViewCount() { mDeletedViewCount++; }
+
   virtual nsIViewManager* IncrementDisableRefreshCount();
   virtual void DecrementDisableRefreshCount();
 
@@ -234,6 +238,8 @@ private:
   bool              mHasPendingUpdates;
   bool              mHasPendingWidgetGeometryChanges;
   bool              mInScroll;
+
+  PRInt32           mDeletedViewCount;
 
   //from here to public should be static and locked... MMP
   static PRInt32           mVMCount;        //number of viewmanagers

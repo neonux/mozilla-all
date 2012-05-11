@@ -1373,7 +1373,10 @@ IsScriptEnabled(nsIDocument *aDoc, nsIDocShell *aContainer)
     nsCOMPtr<nsIScriptGlobalObjectOwner> owner = do_GetInterface(aContainer);
     NS_ENSURE_TRUE(owner, true);
 
-    globalObject = owner->GetScriptGlobalObject();
+    PRInt32 zone;
+    aContainer->GetWindowZone(&zone);
+
+    globalObject = owner->GetScriptGlobalObject((JSZoneId) zone);
     NS_ENSURE_TRUE(globalObject, true);
   }
 

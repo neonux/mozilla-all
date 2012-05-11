@@ -55,6 +55,7 @@
 #include "nsDataHashtable.h"
 #include "nsIPrincipal.h"
 #include "mozilla/scache/StartupCache.h"
+#include "xpcpublic.h"
 
 #include "xpcIJSGetFactory.h"
 
@@ -103,7 +104,9 @@ class mozJSComponentLoader : public mozilla::ModuleLoader,
     nsCOMPtr<nsIThreadJSContextStack> mContextStack;
     nsCOMPtr<nsIPrincipal> mSystemPrincipal;
     JSRuntime *mRuntime;
-    JSContext *mContext;
+    JSContextMUX mContext;
+
+    JSContext *GetContext();
 
     class ModuleEntry : public mozilla::Module
     {
@@ -129,13 +132,15 @@ class mozJSComponentLoader : public mozilla::ModuleLoader,
             getfactoryobj = NULL;
 
             if (global) {
-                JSAutoRequest ar(sSelf->mContext);
+                JSContext *cx = sSelf->GetContext();
+
+                JSAutoRequest ar(cx);
 
                 JSAutoEnterCompartment ac;
-                ac.enterAndIgnoreErrors(sSelf->mContext, global);
+                ac.enterAndIgnoreErrors(cx, global);
 
-                JS_ClearScope(sSelf->mContext, global);
-                JS_RemoveObjectRoot(sSelf->mContext, &global);
+                JS_ClearScope(cx, global);
+                JS_RemoveObjectRoot(cx, &global);
             }
 
             if (location)

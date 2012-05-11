@@ -923,11 +923,27 @@ private:
   PluginLibrary* mLibrary;
 };
 
+class AsyncSetWindowEvent : public nsRunnable
+{
+  nsRefPtr<nsNPAPIPluginInstance> mInstance;
+  NPWindow *mWindow; // XXX need to make sure this window hasn't been deleted.
+
+public:
+  AsyncSetWindowEvent(nsNPAPIPluginInstance *aInstance, NPWindow *aWindow)
+    : mInstance(aInstance), mWindow(aWindow)
+  {}
+
+  NS_IMETHOD Run() { return mInstance->AsyncSetWindow(mWindow); }
+};
+
 nsresult
 nsNPAPIPluginInstance::AsyncSetWindow(NPWindow* window)
 {
   if (RUNNING != mRunning)
     return NS_OK;
+
+  if (!NS_IsMainThread())
+    return NS_DispatchToMainThread(new AsyncSetWindowEvent(this, window));
 
   AutoPluginLibraryCall library(this);
   if (!library)

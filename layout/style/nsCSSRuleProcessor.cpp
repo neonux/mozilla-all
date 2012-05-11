@@ -959,6 +959,8 @@ struct RuleCascadeData {
       mNext(nsnull),
       mQuirksMode(aQuirksMode)
   {
+    MOZ_ASSERT(NS_IsChromeOwningThread());
+
     // mAttributeSelectors is matching on the attribute _name_, not the value,
     // and we case-fold names at parse-time, so this is a case-sensitive match.
     PL_DHashTableInit(&mAttributeSelectors, &AtomSelector_CSOps, nsnull,
@@ -982,6 +984,8 @@ struct RuleCascadeData {
 
   ~RuleCascadeData()
   {
+    MOZ_ASSERT(NS_IsChromeOwningThread());
+
     PL_DHashTableFinish(&mAttributeSelectors);
     PL_DHashTableFinish(&mAnonBoxRules);
     PL_DHashTableFinish(&mIdSelectors);
@@ -1034,6 +1038,8 @@ SizeOfSelectorsEntry(PLDHashEntryHdr* aHdr, nsMallocSizeOfFun aMallocSizeOf, voi
 size_t
 RuleCascadeData::SizeOfIncludingThis(nsMallocSizeOfFun aMallocSizeOf) const
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   size_t n = aMallocSizeOf(this);
 
   n += mRuleHash.SizeOfExcludingThis(aMallocSizeOf);
@@ -1070,6 +1076,8 @@ RuleCascadeData::SizeOfIncludingThis(nsMallocSizeOfFun aMallocSizeOf) const
 nsTArray<nsCSSSelector*>*
 RuleCascadeData::AttributeListFor(nsIAtom* aAttribute)
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   AtomSelectorEntry *entry =
     static_cast<AtomSelectorEntry*>
                (PL_DHashTableOperate(&mAttributeSelectors, aAttribute,
@@ -2480,6 +2488,8 @@ AttributeEnumFunc(nsCSSSelector* aSelector, AttributeEnumData* aData)
 nsRestyleHint
 nsCSSRuleProcessor::HasAttributeDependentStyle(AttributeRuleProcessorData* aData)
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   //  We could try making use of aData->mModType, but :not rules make it a bit
   //  of a pain to do so...  So just ignore it for now.
 
@@ -2695,6 +2705,8 @@ AddSelector(RuleCascadeData* aCascade,
             // The part we should look through (might be in :not or :-moz-any())
             nsCSSSelector* aSelectorPart)
 {
+  MOZ_ASSERT(NS_IsChromeOwningThread());
+
   // It's worth noting that this loop over negations isn't quite
   // optimal for two reasons.  One, we could add something to one of
   // these lists twice, which means we'll check it twice, but I don't

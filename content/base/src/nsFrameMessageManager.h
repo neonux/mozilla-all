@@ -52,6 +52,7 @@
 #include "mozilla/Services.h"
 #include "nsIObserverService.h"
 #include "nsThreadUtils.h"
+#include "xpcpublic.h"
 
 namespace mozilla {
 namespace dom {
@@ -226,22 +227,23 @@ class nsFrameScriptExecutor
 {
 public:
   static void Shutdown();
+  JSContext *GetJSContext();
 protected:
   friend class nsFrameScriptCx;
-  nsFrameScriptExecutor() : mCx(nsnull), mCxStackRefCnt(0),
+  nsFrameScriptExecutor() : mCxStackRefCnt(0),
                             mDelayedCxDestroy(false)
   { MOZ_COUNT_CTOR(nsFrameScriptExecutor); }
   ~nsFrameScriptExecutor()
   { MOZ_COUNT_DTOR(nsFrameScriptExecutor); }
   void DidCreateCx();
-  // Call this when you want to destroy mCx.
+  // Call this when you want to destroy mContext.
   void DestroyCx();
   void LoadFrameScriptInternal(const nsAString& aURL);
   bool InitTabChildGlobalInternal(nsISupports* aScope);
   static void Traverse(nsFrameScriptExecutor *tmp,
                        nsCycleCollectionTraversalCallback &cb);
   nsCOMPtr<nsIXPConnectJSObjectHolder> mGlobal;
-  JSContext* mCx;
+  JSContextMUX mContext;
   PRUint32 mCxStackRefCnt;
   bool mDelayedCxDestroy;
   nsCOMPtr<nsIPrincipal> mPrincipal;

@@ -56,6 +56,8 @@ void nsMenuUtilsX::DispatchCommandTo(nsIContent* aTargetContent)
 {
   NS_PRECONDITION(aTargetContent, "null ptr");
 
+  nsAutoLockChrome lock;
+
   nsIDocument* doc = aTargetContent->OwnerDoc();
   nsCOMPtr<nsIDOMDocument> domDoc = do_QueryInterface(doc);
   nsCOMPtr<nsIDOMEventTarget> target = do_QueryInterface(aTargetContent);

@@ -63,7 +63,7 @@ NS_IMPL_THREADSAFE_ISUPPORTS1(nsBuiltinDecoder, nsIObserver)
 
 void nsBuiltinDecoder::Pause() 
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   ReentrantMonitorAutoEnter mon(mReentrantMonitor);
   if (mPlayState == PLAY_STATE_SEEKING || mPlayState == PLAY_STATE_ENDED) {
     mNextState = PLAY_STATE_PAUSED;
@@ -75,7 +75,7 @@ void nsBuiltinDecoder::Pause()
 
 void nsBuiltinDecoder::SetVolume(double aVolume)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   mInitialVolume = aVolume;
   if (mDecoderStateMachine) {
     mDecoderStateMachine->SetVolume(aVolume);
@@ -113,7 +113,7 @@ void nsBuiltinDecoder::AddOutputStream(SourceMediaStream* aStream, bool aFinishW
 
 double nsBuiltinDecoder::GetDuration()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   if (mInfiniteStream) {
     return std::numeric_limits<double>::infinity();
   }
@@ -125,13 +125,13 @@ double nsBuiltinDecoder::GetDuration()
 
 void nsBuiltinDecoder::SetInfinite(bool aInfinite)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   mInfiniteStream = aInfinite;
 }
 
 bool nsBuiltinDecoder::IsInfinite()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   return mInfiniteStream;
 }
 
@@ -151,7 +151,7 @@ nsBuiltinDecoder::nsBuiltinDecoder() :
   mInfiniteStream(false)
 {
   MOZ_COUNT_CTOR(nsBuiltinDecoder);
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
 #ifdef PR_LOGGING
   if (!gBuiltinDecoderLog) {
     gBuiltinDecoderLog = PR_NewLogModule("nsBuiltinDecoder");
@@ -161,7 +161,7 @@ nsBuiltinDecoder::nsBuiltinDecoder() :
 
 bool nsBuiltinDecoder::Init(nsHTMLMediaElement* aElement)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   if (!nsMediaDecoder::Init(aElement))
     return false;
 
@@ -171,7 +171,7 @@ bool nsBuiltinDecoder::Init(nsHTMLMediaElement* aElement)
 
 void nsBuiltinDecoder::Shutdown()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   
   if (mShuttingDown)
     return;
@@ -199,7 +199,7 @@ void nsBuiltinDecoder::Shutdown()
 
 nsBuiltinDecoder::~nsBuiltinDecoder()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   UnpinForSeek();
   MOZ_COUNT_DTOR(nsBuiltinDecoder);
 }
@@ -208,7 +208,7 @@ nsresult nsBuiltinDecoder::Load(MediaResource* aResource,
                                 nsIStreamListener** aStreamListener,
                                 nsMediaDecoder* aCloneDonor)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   if (aStreamListener) {
     *aStreamListener = nsnull;
   }
@@ -273,7 +273,7 @@ nsresult nsBuiltinDecoder::RequestFrameBufferLength(PRUint32 aLength)
 
 nsresult nsBuiltinDecoder::ScheduleStateMachineThread()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   NS_ASSERTION(mDecoderStateMachine,
                "Must have state machine to start state machine thread");
   NS_ENSURE_STATE(mDecoderStateMachine);
@@ -288,7 +288,7 @@ nsresult nsBuiltinDecoder::ScheduleStateMachineThread()
 
 nsresult nsBuiltinDecoder::Play()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   ReentrantMonitorAutoEnter mon(mReentrantMonitor);
   NS_ASSERTION(mDecoderStateMachine != nsnull, "Should have state machine.");
   nsresult res = ScheduleStateMachineThread();
@@ -333,7 +333,7 @@ static bool IsInRanges(nsTimeRanges& aRanges, double aValue, PRInt32& aIntervalI
 
 nsresult nsBuiltinDecoder::Seek(double aTime)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   ReentrantMonitorAutoEnter mon(mReentrantMonitor);
 
   NS_ABORT_IF_FALSE(aTime >= 0.0, "Cannot seek to a negative value.");
@@ -406,19 +406,19 @@ nsresult nsBuiltinDecoder::Seek(double aTime)
 
 nsresult nsBuiltinDecoder::PlaybackRateChanged()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 double nsBuiltinDecoder::GetCurrentTime()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   return mCurrentTime;
 }
 
 already_AddRefed<nsIPrincipal> nsBuiltinDecoder::GetCurrentPrincipal()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   return mResource ? mResource->GetCurrentPrincipal() : nsnull;
 }
 
@@ -430,7 +430,7 @@ void nsBuiltinDecoder::AudioAvailable(float* aFrameBuffer,
   // here, this ensures we free the memory. Otherwise, we pass off ownership
   // to HTMLMediaElement::NotifyAudioAvailable().
   nsAutoArrayPtr<float> frameBuffer(aFrameBuffer);
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   if (mShuttingDown || !mElement) {
     return;
   }
@@ -441,7 +441,8 @@ void nsBuiltinDecoder::MetadataLoaded(PRUint32 aChannels,
                                       PRUint32 aRate,
                                       bool aHasAudio)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
+
   if (mShuttingDown) {
     return;
   }
@@ -513,7 +514,7 @@ void nsBuiltinDecoder::MetadataLoaded(PRUint32 aChannels,
 
 void nsBuiltinDecoder::ResourceLoaded()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
 
   // Don't handle ResourceLoaded if we are shutting down, or if
   // we need to ignore progress data due to seeking (in the case
@@ -543,7 +544,7 @@ void nsBuiltinDecoder::ResourceLoaded()
 
 void nsBuiltinDecoder::NetworkError()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   if (mShuttingDown)
     return;
 
@@ -555,7 +556,7 @@ void nsBuiltinDecoder::NetworkError()
 
 void nsBuiltinDecoder::DecodeError()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   if (mShuttingDown)
     return;
 
@@ -599,7 +600,7 @@ NS_IMETHODIMP nsBuiltinDecoder::Observe(nsISupports *aSubjet,
                                         const char *aTopic,
                                         const PRUnichar *someData)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   if (strcmp(aTopic, NS_XPCOM_SHUTDOWN_OBSERVER_ID) == 0) {
     Shutdown();
   }
@@ -610,7 +611,7 @@ NS_IMETHODIMP nsBuiltinDecoder::Observe(nsISupports *aSubjet,
 nsMediaDecoder::Statistics
 nsBuiltinDecoder::GetStatistics()
 {
-  NS_ASSERTION(NS_IsMainThread() || OnStateMachineThread(),
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()) || OnStateMachineThread(),
                "Should be on main or state machine thread.");
   Statistics result;
 
@@ -642,7 +643,7 @@ nsBuiltinDecoder::GetStatistics()
 double nsBuiltinDecoder::ComputePlaybackRate(bool* aReliable)
 {
   GetReentrantMonitor().AssertCurrentThreadIn();
-  NS_ASSERTION(NS_IsMainThread() || OnStateMachineThread(),
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()) || OnStateMachineThread(),
                "Should be on main or state machine thread.");
 
   PRInt64 length = mResource ? mResource->GetLength() : -1;
@@ -655,7 +656,7 @@ double nsBuiltinDecoder::ComputePlaybackRate(bool* aReliable)
 
 void nsBuiltinDecoder::UpdatePlaybackRate()
 {
-  NS_ASSERTION(NS_IsMainThread() || OnStateMachineThread(),
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()) || OnStateMachineThread(),
                "Should be on main or state machine thread.");
   GetReentrantMonitor().AssertCurrentThreadIn();
   if (!mResource)
@@ -676,7 +677,7 @@ void nsBuiltinDecoder::UpdatePlaybackRate()
 
 void nsBuiltinDecoder::NotifySuspendedStatusChanged()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  NS_StickLock(this);
   if (!mResource)
     return;
   MediaResource* activeStream;
@@ -691,14 +692,14 @@ void nsBuiltinDecoder::NotifySuspendedStatusChanged()
 
 void nsBuiltinDecoder::NotifyBytesDownloaded()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  NS_StickLock(this);
   UpdateReadyStateForData();
   Progress(false);
 }
 
 void nsBuiltinDecoder::NotifyDownloadEnded(nsresult aStatus)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
 
   if (aStatus == NS_BINDING_ABORTED) {
     // Download has been cancelled by user.
@@ -742,7 +743,8 @@ void nsBuiltinDecoder::NotifyBytesConsumed(PRInt64 aBytes)
 
 void nsBuiltinDecoder::NextFrameUnavailableBuffering()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be called on main thread");
+  NS_StickLock(this);
+
   if (!mElement || mShuttingDown || !mDecoderStateMachine)
     return;
 
@@ -751,7 +753,8 @@ void nsBuiltinDecoder::NextFrameUnavailableBuffering()
 
 void nsBuiltinDecoder::NextFrameAvailable()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be called on main thread");
+  NS_StickLock(this);
+
   if (!mElement || mShuttingDown || !mDecoderStateMachine)
     return;
 
@@ -760,7 +763,8 @@ void nsBuiltinDecoder::NextFrameAvailable()
 
 void nsBuiltinDecoder::NextFrameUnavailable()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be called on main thread");
+  NS_StickLock(this);
+
   if (!mElement || mShuttingDown || !mDecoderStateMachine)
     return;
   mElement->UpdateReadyStateForData(nsHTMLMediaElement::NEXT_FRAME_UNAVAILABLE);
@@ -768,7 +772,7 @@ void nsBuiltinDecoder::NextFrameUnavailable()
 
 void nsBuiltinDecoder::UpdateReadyStateForData()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be called on main thread");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()), "Should be called on main thread");
   if (!mElement || mShuttingDown || !mDecoderStateMachine)
     return;
   nsHTMLMediaElement::NextFrameStatus frameStatus =
@@ -778,7 +782,7 @@ void nsBuiltinDecoder::UpdateReadyStateForData()
 
 void nsBuiltinDecoder::SeekingStopped()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  NS_StickLock(this);
 
   if (mShuttingDown)
     return;
@@ -810,7 +814,7 @@ void nsBuiltinDecoder::SeekingStopped()
 // media.
 void nsBuiltinDecoder::SeekingStoppedAtEnd()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  NS_StickLock(this);
 
   if (mShuttingDown)
     return;
@@ -845,7 +849,8 @@ void nsBuiltinDecoder::SeekingStoppedAtEnd()
 
 void nsBuiltinDecoder::SeekingStarted()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  NS_StickLock(this);
+
   if (mShuttingDown)
     return;
 
@@ -857,7 +862,7 @@ void nsBuiltinDecoder::SeekingStarted()
 
 void nsBuiltinDecoder::ChangeState(PlayState aState)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");   
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));   
   ReentrantMonitorAutoEnter mon(mReentrantMonitor);
 
   if (mNextState == aState) {
@@ -889,7 +894,7 @@ void nsBuiltinDecoder::ChangeState(PlayState aState)
 
 void nsBuiltinDecoder::PlaybackPositionChanged()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  NS_StickLock(this);
   if (mShuttingDown)
     return;
 
@@ -927,7 +932,7 @@ void nsBuiltinDecoder::PlaybackPositionChanged()
 
 void nsBuiltinDecoder::DurationChanged()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  NS_StickLock(this);
   ReentrantMonitorAutoEnter mon(mReentrantMonitor);
   PRInt64 oldDuration = mDuration;
   mDuration = mDecoderStateMachine ? mDecoderStateMachine->GetDuration() : -1;
@@ -942,7 +947,7 @@ void nsBuiltinDecoder::DurationChanged()
 
 void nsBuiltinDecoder::SetDuration(double aDuration)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   mDuration = static_cast<PRInt64>(NS_round(aDuration * static_cast<double>(USECS_PER_S)));
 
   ReentrantMonitorAutoEnter mon(mReentrantMonitor);
@@ -956,7 +961,7 @@ void nsBuiltinDecoder::SetDuration(double aDuration)
 
 void nsBuiltinDecoder::SetSeekable(bool aSeekable)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   mSeekable = aSeekable;
   if (mDecoderStateMachine) {
     ReentrantMonitorAutoEnter mon(mReentrantMonitor);
@@ -966,7 +971,7 @@ void nsBuiltinDecoder::SetSeekable(bool aSeekable)
 
 bool nsBuiltinDecoder::IsSeekable()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   return mSeekable;
 }
 
@@ -987,7 +992,7 @@ nsresult nsBuiltinDecoder::GetSeekable(nsTimeRanges* aSeekable)
 
 void nsBuiltinDecoder::SetEndTime(double aTime)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   if (mDecoderStateMachine) {
     ReentrantMonitorAutoEnter mon(mReentrantMonitor);
     mDecoderStateMachine->SetFragmentEndTime(static_cast<PRInt64>(aTime * USECS_PER_S));
@@ -996,7 +1001,7 @@ void nsBuiltinDecoder::SetEndTime(double aTime)
 
 void nsBuiltinDecoder::Suspend()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   if (mResource) {
     mResource->Suspend(true);
   }
@@ -1004,7 +1009,7 @@ void nsBuiltinDecoder::Suspend()
 
 void nsBuiltinDecoder::Resume(bool aForceBuffering)
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   if (mResource) {
     mResource->Resume();
   }
@@ -1041,7 +1046,7 @@ void nsBuiltinDecoder::StartProgressUpdates()
 
 void nsBuiltinDecoder::MoveLoadsToBackground()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   if (mResource) {
     mResource->MoveLoadsToBackground();
   }
@@ -1060,7 +1065,7 @@ bool nsBuiltinDecoder::OnStateMachineThread() const
 
 void nsBuiltinDecoder::NotifyAudioAvailableListener()
 {
-  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  MOZ_ASSERT(NS_IsOwningThread(GetZone()));
   if (mDecoderStateMachine) {
     ReentrantMonitorAutoEnter mon(mReentrantMonitor);
     mDecoderStateMachine->NotifyAudioAvailableListener();

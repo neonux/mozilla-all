@@ -39,6 +39,7 @@
 #ifndef nsThreadUtils_h__
 #define nsThreadUtils_h__
 
+#include "jsapi.h"
 #include "prthread.h"
 #include "prinrval.h"
 #include "nsIThreadManager.h"
@@ -95,6 +96,161 @@ NS_NewThread(nsIThread **result,
 extern NS_COM_GLUE NS_METHOD
 NS_GetCurrentThread(nsIThread **result);
 
+extern JSZoneId
+NS_AllocateContentZone();
+
+extern void
+NS_FreeContentZone(JSZoneId zone);
+
+extern JSBool
+NS_IsOwningThread(JSZoneId zone);
+
+inline bool
+NS_IsChromeOwningThread() { return NS_IsOwningThread(JS_ZONE_CHROME); }
+
+#ifdef NS_DEBUG
+extern void
+NS_FindThreadBitmask(PRThread **pthread, bool *pchrome, PRUint64 *pcontentMask);
+#endif
+
+extern uint32_t
+NS_ThreadLockDepth(JSZoneId zone);
+
+extern void
+NS_LockZone(JSZoneId zone);
+
+extern JSBool
+NS_TryLockZone(JSZoneId zone);
+
+extern void
+NS_UnlockZone(JSZoneId zone);
+
+extern void
+NS_StickContentLock(JSZoneId zone);
+
+extern bool
+NS_TryStickContentLock(JSZoneId zone);
+
+template <typename T>
+inline void
+NS_StickLock(const T &ptr)
+{
+  JSZoneId zone = ptr->GetZone();
+  if (zone >= JS_ZONE_CONTENT_START)
+    NS_StickContentLock(zone);
+}
+
+template <typename T>
+inline bool
+NS_TryStickLock(const T &ptr)
+{
+  JSZoneId zone = ptr->GetZone();
+  if (zone >= JS_ZONE_CONTENT_START)
+    return NS_TryStickContentLock(zone);
+  return true;
+}
+
+struct nsAutoLockZone
+{
+  JSZoneId zone;
+  nsAutoLockZone(JSZoneId zone);
+  ~nsAutoLockZone();
+};
+
+struct nsAutoUnlockZone
+{
+  JSZoneId zone;
+  PRUint32 depth;
+  nsAutoUnlockZone(JSZoneId zone);
+  ~nsAutoUnlockZone();
+};
+
+struct nsAutoTryLockZone
+{
+  JSZoneId zone;
+  bool succeeded;
+  nsAutoTryLockZone(JSZoneId zone);
+  ~nsAutoTryLockZone();
+};
+
+struct nsAutoLockChrome : public nsAutoLockZone
+{
+  nsAutoLockChrome() : nsAutoLockZone(JS_ZONE_CHROME) {}
+};
+
+struct nsAutoUnlockChrome : public nsAutoUnlockZone
+{
+  nsAutoUnlockChrome() : nsAutoUnlockZone(JS_ZONE_CHROME) {}
+};
+
+struct nsAutoTryLockEverything
+{
+  nsAutoTryLockEverything();
+  ~nsAutoTryLockEverything();
+
+  PRInt32 mCount;
+  nsTArray<bool> mLockedArray;
+};
+
+JSBool NS_LockEverything();
+JSBool NS_IsEverythingLocked();
+void NS_UnlockEverything();
+
+uintptr_t NS_FindNativeStackTopForThread(/*(PRThread*)*/ uintptr_t thread);
+
+struct nsAutoLockChromeUnstickContent : public nsAutoLockZone
+{
+  nsAutoLockChromeUnstickContent();
+  ~nsAutoLockChromeUnstickContent();
+
+  nsAutoLockChromeUnstickContent *mPrev;
+  PRThread *mThread;
+};
+
+void NS_RegisterContextStick(JSContext *cx);
+void NS_UnregisterContextStick(JSContext *cx);
+
+struct nsAutoUnlockEverything
+{
+  nsAutoUnlockEverything();
+  ~nsAutoUnlockEverything();
+
+  struct ZoneInfo {
+    bool sticky;
+    PRUint32 depth;
+  };
+
+  PRUint32 mChromeDepth;
+
+  PRInt32 mCount;
+  nsTArray<ZoneInfo> mContent;
+
+#ifdef NS_DEBUG
+  nsAutoLockChromeUnstickContent *mSuspendedUnsticks;
+#endif
+};
+
+void NS_BeginCantLockNewContent();
+void NS_EndCantLockNewContent();
+
+bool NS_CanLockNewContent();
+
+struct nsAutoCantLockNewContent
+{
+  nsAutoCantLockNewContent() { NS_BeginCantLockNewContent(); }
+  ~nsAutoCantLockNewContent() { NS_EndCantLockNewContent(); }
+};
+
+class nsAutoUnstickChrome
+{
+  JSContext *mCx;
+  JS::StickState mStuck;
+
+public:
+  nsAutoUnstickChrome(JSContext *cx);
+  ~nsAutoUnstickChrome();
+};
+
 /**
  * Get a reference to the main thread.
  *
@@ -124,6 +280,24 @@ inline bool NS_IsMainThread()
 extern NS_COM_GLUE bool NS_IsMainThread();
 #endif
 
+// Get the current thread's associated zone, or JS_ZONE_NONE.
+extern JSZoneId NS_FindExecuteThreadZone();
+
+inline bool
+NS_IsExecuteThread()
+{
+  return NS_IsMainThread() || NS_FindExecuteThreadZone() != JS_ZONE_NONE;
+}
+
+extern bool
+NS_CanBlockOnContent();
+
+extern NS_COM_GLUE NS_METHOD
+NS_GetExecuteThread(JSZoneId zone, nsIThread **result);
+
+extern NS_COM_GLUE void
+NS_DumpBacktrace(const char *str, bool flush = false);
+
 /**
  * Dispatch the given event to the current thread.
  *
@@ -137,19 +311,20 @@ extern NS_COM_GLUE NS_METHOD
 NS_DispatchToCurrentThread(nsIRunnable *event);
 
 /**
- * Dispatch the given event to the main thread.
+ * Dispatch the given event to a gecko execution thread.
  *
  * @param event
  *   The event to dispatch.
  * @param dispatchFlags
- *   The flags to pass to the main thread's dispatch method.
+ *   The flags to pass to the thread's dispatch method.
  *
  * @returns NS_ERROR_INVALID_ARG
  *   If event is null.
  */
 extern NS_COM_GLUE NS_METHOD
 NS_DispatchToMainThread(nsIRunnable *event,
-                        PRUint32 dispatchFlags = NS_DISPATCH_NORMAL);
+                        PRUint32 dispatchFlags = NS_DISPATCH_NORMAL,
+                        JSZoneId zone = JS_ZONE_CHROME);
 
 #ifndef XPCOM_GLUE_AVOID_NSPR
 /**
@@ -292,19 +467,40 @@ public:
   typedef typename ReturnTypeEnforcer<ReturnType>::ReturnTypeIsSafe check;
 };
 
+extern NS_COM_GLUE nsresult
+NS_ReleaseReferenceRaw(/* nsISupports */ void *doomed);
+
 template <class ClassType, bool Owning>
 struct nsRunnableMethodReceiver {
   ClassType *mObj;
-  nsRunnableMethodReceiver(ClassType *obj) : mObj(obj) { NS_IF_ADDREF(mObj); }
+  JSZoneId mZone;
+  nsRunnableMethodReceiver(ClassType *obj, JSZoneId zone)
+    : mObj(obj), mZone(zone)
+  {
+    NS_IF_ADDREF(mObj);
+  }
  ~nsRunnableMethodReceiver() { Revoke(); }
-  void Revoke() { NS_IF_RELEASE(mObj); }
+  void Revoke() {
+    MOZ_ASSERT_IF(NS_IsExecuteThread(), NS_IsChromeOwningThread());
+    if (mObj) {
+      if (mZone >= JS_ZONE_CONTENT_START)
+        NS_ReleaseReferenceRaw(mObj);
+      else
+        NS_RELEASE(mObj);
+    }
+    mObj = nsnull;
+  }
 };
 
 template <class ClassType>
 struct nsRunnableMethodReceiver<ClassType, false> {
   ClassType *mObj;
-  nsRunnableMethodReceiver(ClassType *obj) : mObj(obj) {}
-  void Revoke() { mObj = nsnull; }
+  JSZoneId mZone;
+  nsRunnableMethodReceiver(ClassType *obj, JSZoneId zone) : mObj(obj), mZone(zone) {}
+  void Revoke() {
+    MOZ_ASSERT_IF(NS_IsExecuteThread(), NS_IsChromeOwningThread());
+    mObj = nsnull;
+  }
 };
 
 template <typename Method, bool Owning> struct nsRunnableMethodTraits;
@@ -335,12 +531,15 @@ class nsRunnableMethodImpl
 
 public:
   nsRunnableMethodImpl(ClassType *obj,
-                       Method method)
-    : mReceiver(obj)
+                       Method method,
+                       JSZoneId zone)
+    : mReceiver(obj, zone)
     , mMethod(method)
   {}
 
   NS_IMETHOD Run() {
+    if (mReceiver.mZone >= JS_ZONE_CONTENT_START)
+      NS_StickContentLock(mReceiver.mZone);
     if (NS_LIKELY(mReceiver.mObj))
       ((*mReceiver.mObj).*mMethod)();
     return NS_OK;
@@ -363,16 +562,16 @@ public:
 //
 template<typename PtrType, typename Method>
 typename nsRunnableMethodTraits<Method, true>::base_type*
-NS_NewRunnableMethod(PtrType ptr, Method method)
+NS_NewRunnableMethod(PtrType ptr, Method method, JSZoneId zone = JS_ZONE_NONE)
 {
-  return new nsRunnableMethodImpl<Method, true>(ptr, method);
+  return new nsRunnableMethodImpl<Method, true>(ptr, method, zone);
 }
 
 template<typename PtrType, typename Method>
 typename nsRunnableMethodTraits<Method, false>::base_type*
-NS_NewNonOwningRunnableMethod(PtrType ptr, Method method)
+NS_NewNonOwningRunnableMethod(PtrType ptr, Method method, JSZoneId zone = JS_ZONE_NONE)
 {
-  return new nsRunnableMethodImpl<Method, false>(ptr, method);
+  return new nsRunnableMethodImpl<Method, false>(ptr, method, zone);
 }
 
 #endif  // XPCOM_GLUE_AVOID_NSPR

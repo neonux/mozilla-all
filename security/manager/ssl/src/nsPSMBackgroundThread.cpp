@@ -104,6 +104,8 @@ void nsPSMBackgroundThread::requestExit()
       mCond.NotifyAll();
     }
   }
+
+  nsAutoUnlockEverything unlock;
   
   nsCOMPtr<nsIThread> mainThread = do_GetCurrentThread();
   for (;;) {

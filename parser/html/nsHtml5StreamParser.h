@@ -184,13 +184,13 @@ class nsHtml5StreamParser : public nsIStreamListener,
     inline void SetDocumentCharset(const nsACString& aCharset, PRInt32 aSource) {
       NS_PRECONDITION(mStreamState == STREAM_NOT_STARTED,
                       "SetDocumentCharset called too late.");
-      NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
+      NS_ASSERTION(NS_IsChromeOwningThread(), "Wrong thread!");
       mCharset = aCharset;
       mCharsetSource = aSource;
     }
     
     inline void SetObserver(nsIRequestObserver* aObserver) {
-      NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
+      NS_ASSERTION(NS_IsChromeOwningThread(), "Wrong thread!");
       mObserver = aObserver;
     }
 
@@ -230,6 +230,15 @@ class nsHtml5StreamParser : public nsIStreamListener,
      * URL. data: URLs are shown with an ellipsis instead of the actual data.
      */
     void SetViewSourceTitle(nsIURI* aURL);
+
+    JSZoneId DocumentZone()
+    {
+        return mExecutor->GetDocument()->GetZone();
+    }
+
+    bool DocumentDispatch(nsIRunnable *runnable) {
+        return !NS_FAILED(NS_DispatchToMainThread(runnable, NS_DISPATCH_NORMAL, DocumentZone()));
+    }
 
   private:
 

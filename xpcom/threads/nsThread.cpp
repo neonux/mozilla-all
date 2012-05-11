@@ -492,10 +492,16 @@ nsThread::Shutdown()
   // We could still end up with other events being added after the shutdown
   // task, but that's okay because we process pending events in ThreadFunc
   // after setting mShutdownContext just before exiting.
-  
-  // Process events on the current thread until we receive a shutdown ACK.
-  while (!context.shutdownAck)
-    NS_ProcessNextEvent(context.joiningThread);
+
+  {
+    Maybe<nsAutoUnlockEverything> unlock;
+    if (NS_IsChromeOwningThread())
+      unlock.construct();
+
+    // Process events on the current thread until we receive a shutdown ACK.
+    while (!context.shutdownAck)
+      NS_ProcessNextEvent(context.joiningThread);
+  }
 
   // Now, it should be safe to join without fear of dead-locking.
 
@@ -574,25 +580,22 @@ void canary_alarm_handler (int signum)
 
 #endif
 
-#define NOTIFY_EVENT_OBSERVERS(func_, params_)                                 \
-  PR_BEGIN_MACRO                                                               \
-    if (!mEventObservers.IsEmpty()) {                                          \
-      nsAutoTObserverArray<nsCOMPtr<nsIThreadObserver>, 2>::ForwardIterator    \
-        iter_(mEventObservers);                                                \
-      nsCOMPtr<nsIThreadObserver> obs_;                                        \
-      while (iter_.HasMore()) {                                                \
-        obs_ = iter_.GetNext();                                                \
-        obs_ -> func_ params_ ;                                                \
-      }                                                                        \
-    }                                                                          \
-  PR_END_MACRO
-
 NS_IMETHODIMP
 nsThread::ProcessNextEvent(bool mayWait, bool *result)
 {
   LOG(("THRD(%p) ProcessNextEvent [%u %u]\n", this, mayWait, mRunningEvent));
 
   NS_ENSURE_STATE(PR_GetCurrentThread() == mThread);
+
+#ifdef NS_DEBUG
+  if (nsThreadManager::initialized()) {
+    PRThread *thread;
+    bool chrome;
+    PRUint64 contentBitmask;
+    NS_FindThreadBitmask(&thread, &chrome, &contentBitmask);
+    MOZ_ASSERT(!chrome && contentBitmask == 0);
+  }
+#endif
 
   if (MAIN_THREAD == mIsMainThread && mayWait && !ShuttingDown())
     HangMonitor::Suspend();
@@ -614,11 +617,25 @@ nsThread::ProcessNextEvent(bool mayWait, bool *result)
   }
 
   nsCOMPtr<nsIThreadObserver> obs = mObserver;
-  if (obs)
+  if (obs) {
+    Maybe<nsAutoLockChromeUnstickContent> lock;
+    if (OTHER_THREAD != mIsMainThread)
+      lock.construct();
     obs->OnProcessNextEvent(this, mayWait && !ShuttingDown(), mRunningEvent);
+  }
 
-  NOTIFY_EVENT_OBSERVERS(OnProcessNextEvent,
-                         (this, mayWait && !ShuttingDown(), mRunningEvent));
+  if (!mEventObservers.IsEmpty()) {
+    nsAutoTObserverArray<nsCOMPtr<nsIThreadObserver>, 2>::ForwardIterator
+      iter_(mEventObservers);
+    Maybe<nsAutoLockChromeUnstickContent> lock;
+    if (OTHER_THREAD != mIsMainThread && iter_.HasMore())
+      lock.construct();
+    nsCOMPtr<nsIThreadObserver> obs_;
+    while (iter_.HasMore()) {
+      obs_ = iter_.GetNext();
+      obs_->OnProcessNextEvent(this, mayWait && !ShuttingDown(), mRunningEvent);
+    }
+  }
 
   ++mRunningEvent;
 
@@ -626,6 +643,8 @@ nsThread::ProcessNextEvent(bool mayWait, bool *result)
   Canary canary;
 #endif
   nsresult rv = NS_OK;
+
+  Maybe<nsAutoLockChromeUnstickContent> lock;
 
   {
     // Scope for |event| to make sure that its destructor fires while
@@ -650,10 +669,16 @@ nsThread::ProcessNextEvent(bool mayWait, bool *result)
     *result = (event.get() != nsnull);
 
     if (event) {
+      Maybe<ScopedNSAutoreleasePool> releasePools;
+      if (OTHER_THREAD != mIsMainThread) {
+        lock.construct();
+        releasePools.construct();
+      }
       LOG(("THRD(%p) running [%p]\n", this, event.get()));
       if (MAIN_THREAD == mIsMainThread)
         HangMonitor::NotifyActivity();
       event->Run();
+      event = NULL; // decref while any chrome lock is held.
     } else if (mayWait) {
       NS_ASSERTION(ShuttingDown(),
                    "This should only happen when shutting down");
@@ -663,12 +688,27 @@ nsThread::ProcessNextEvent(bool mayWait, bool *result)
 
   --mRunningEvent;
 
-  NOTIFY_EVENT_OBSERVERS(AfterProcessNextEvent, (this, mRunningEvent));
+  if (!mEventObservers.IsEmpty()) {
+    nsAutoTObserverArray<nsCOMPtr<nsIThreadObserver>, 2>::ForwardIterator
+      iter_(mEventObservers);
+    nsCOMPtr<nsIThreadObserver> obs_;
+    while (iter_.HasMore()) {
+      obs_ = iter_.GetNext();
+      obs_->AfterProcessNextEvent(this, mRunningEvent);
+    }
+  }
 
   if (obs)
     obs->AfterProcessNextEvent(this, mRunningEvent);
 
   return rv;
+}
+
+NS_IMETHODIMP
+nsThread::ProcessNextEventFromScript(bool mayWait, bool *result)
+{
+  nsAutoUnlockEverything unlock;
+  return ProcessNextEvent(mayWait, result);
 }
 
 //-----------------------------------------------------------------------------
@@ -751,7 +791,7 @@ NS_IMETHODIMP
 nsThread::AddObserver(nsIThreadObserver *observer)
 {
   NS_ENSURE_ARG_POINTER(observer);
-  NS_ENSURE_STATE(PR_GetCurrentThread() == mThread);
+  MOZ_ASSERT(PR_GetCurrentThread() == mThread);
 
   NS_WARN_IF_FALSE(!mEventObservers.Contains(observer),
                    "Adding an observer twice!");
@@ -767,7 +807,7 @@ nsThread::AddObserver(nsIThreadObserver *observer)
 NS_IMETHODIMP
 nsThread::RemoveObserver(nsIThreadObserver *observer)
 {
-  NS_ENSURE_STATE(PR_GetCurrentThread() == mThread);
+  MOZ_ASSERT(PR_GetCurrentThread() == mThread);
 
   if (observer && !mEventObservers.RemoveElement(observer)) {
     NS_WARNING("Removing an observer that was never added!");

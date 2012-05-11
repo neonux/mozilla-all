@@ -861,6 +861,7 @@ nsComboboxControlFrame::GetDropDown()
 NS_IMETHODIMP
 nsComboboxControlFrame::RedisplaySelectedText()
 {
+  nsAutoLockChrome lock;
   nsAutoScriptBlocker scriptBlocker;
   return RedisplayText(mListControlFrame->GetSelectedIndex());
 }
@@ -1004,6 +1005,7 @@ nsComboboxControlFrame::RemoveOption(PRInt32 aIndex)
 NS_IMETHODIMP
 nsComboboxControlFrame::OnSetSelectedIndex(PRInt32 aOldIndex, PRInt32 aNewIndex)
 {
+  nsAutoLockChrome lock;
   nsAutoScriptBlocker scriptBlocker;
   RedisplayText(aNewIndex);
   NS_ASSERTION(mDropdownFrame, "No dropdown frame!");
@@ -1514,6 +1516,7 @@ nsComboboxControlFrame::OnOptionSelected(PRInt32 aIndex, bool aSelected)
     }
   } else {
     if (aSelected) {
+      nsAutoLockChrome lock;
       nsAutoScriptBlocker blocker;
       RedisplayText(aIndex);
     } else {
@@ -1530,6 +1533,8 @@ nsComboboxControlFrame::OnOptionSelected(PRInt32 aIndex, bool aSelected)
 
 void nsComboboxControlFrame::FireValueChangeEvent()
 {
+  nsAutoLockChrome lock;
+
   // Fire ValueChange event to indicate data value of combo box has changed
   nsContentUtils::AddScriptRunner(
     new nsAsyncDOMEvent(mContent, NS_LITERAL_STRING("ValueChange"), true,

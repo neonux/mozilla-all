@@ -678,16 +678,33 @@ static void HideChildPluginViews(NSView* aView)
   }
 }
 
+class nsChildViewShowEvent : public nsRunnable
+{
+  nsRefPtr<nsChildView> mChildView;
+  bool mState;
+
+ public:
+  nsChildViewShowEvent(nsChildView *aChildView, bool aState)
+    : mChildView(aChildView), mState(aState)
+  {}
+
+  NS_IMETHOD Run() { return mChildView->Show(mState); }
+};
+
 // Hide or show this component
 NS_IMETHODIMP nsChildView::Show(bool aState)
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK_NSRESULT;
+
+  if (!NS_CanLockNewContent())
+    return NS_DispatchToMainThread(new nsChildViewShowEvent(this, aState));
 
   if (aState != mVisible) {
     // Provide an autorelease pool because this gets called during startup
     // on the "hidden window", resulting in cocoa object leakage if there's
     // no pool in place.
     nsAutoreleasePool localPool;
+    nsAutoUnlockEverything unlock;
 
     [mView setHidden:!aState];
     mVisible = aState;
@@ -796,9 +813,27 @@ NS_IMETHODIMP nsChildView::IsEnabled(bool *aState)
   return NS_OK;
 }
 
+class nsChildViewSetFocusEvent : public nsRunnable
+{
+  nsRefPtr<nsChildView> mChildView;
+  bool mRaise;
+
+ public:
+  nsChildViewSetFocusEvent(nsChildView *aChildView, bool aRaise)
+    : mChildView(aChildView), mRaise(aRaise)
+  {}
+
+  NS_IMETHOD Run() { return mChildView->SetFocus(mRaise); }
+};
+
 NS_IMETHODIMP nsChildView::SetFocus(bool aRaise)
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK_NSRESULT;
+
+  if (!NS_CanLockNewContent())
+    return NS_DispatchToMainThread(new nsChildViewSetFocusEvent(this, aRaise));
+
+  nsAutoUnlockEverything unlock;
 
   NSWindow* window = [mView window];
   if (window)
@@ -1531,6 +1566,9 @@ bool nsChildView::ReportDestroyEvent()
 
 bool nsChildView::ReportMoveEvent()
 {
+  Maybe<nsAutoLockChromeUnstickContent> lock;
+  if (!NS_IsChromeOwningThread())
+    lock.construct();
   nsGUIEvent moveEvent(true, NS_MOVE, this);
   moveEvent.refPoint.x = mBounds.x;
   moveEvent.refPoint.y = mBounds.y;
@@ -1540,6 +1578,9 @@ bool nsChildView::ReportMoveEvent()
 
 bool nsChildView::ReportSizeEvent()
 {
+  Maybe<nsAutoLockChromeUnstickContent> lock;
+  if (!NS_IsChromeOwningThread())
+    lock.construct();
   nsSizeEvent sizeEvent(true, NS_SIZE, this);
   sizeEvent.time        = PR_IntervalNow();
   sizeEvent.windowSize  = &mBounds;
@@ -2212,6 +2253,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
   if (!mGeckoChild)
     return;
 
+  nsAutoLockChromeUnstickContent lock;
   nsGUIEvent guiEvent(true, NS_THEMECHANGED, mGeckoChild);
   mGeckoChild->DispatchWindowEvent(guiEvent);
 }
@@ -2364,6 +2406,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
   if (!mGeckoChild)
     return;
 
+  nsAutoLockChromeUnstickContent lock;
   nsEventStatus status = nsEventStatus_eIgnore;
   nsGUIEvent focusGuiEvent(true, eventType, mGeckoChild);
   focusGuiEvent.time = PR_IntervalNow();
@@ -2480,6 +2523,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
 // gecko to paint it
 - (void)drawRect:(NSRect)aRect
 {
+  nsAutoLockChromeUnstickContent lock;
   CGContextRef cgContext = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
   [self drawRect:aRect inContext:cgContext];
 
@@ -2504,6 +2548,9 @@ NSEvent* gLastDragMouseDownEvent = nil;
 - (void)drawRect:(NSRect)aRect inContext:(CGContextRef)aContext
 {
   SAMPLE_LABEL("widget", "ChildView::drawRect");
+
+  nsAutoLockChromeUnstickContent lock;
+
   bool isVisible;
   if (!mGeckoChild || NS_FAILED(mGeckoChild->IsVisible(isVisible)) ||
       !isVisible)
@@ -2665,6 +2712,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
   if (!aWidgetArray) {
     return;
   }
+  nsAutoLockChromeUnstickContent lock;
   NSInteger count = [aWidgetArray count];
   for (NSInteger i = 0; i < count; ++i) {
     NSNumber* pointer = (NSNumber*) [aWidgetArray objectAtIndex:i];
@@ -2675,6 +2723,10 @@ NSEvent* gLastDragMouseDownEvent = nil;
 
 - (void)viewWillDraw
 {
+  Maybe<nsAutoLockChromeUnstickContent> lock;
+  if (!NS_IsChromeOwningThread())
+    lock.construct();
+
   if (mGeckoChild) {
     // The OS normally *will* draw our NSWindow, no matter what we do here.
     // But Gecko can delete our parent widget(s) (along with mGeckoChild)
@@ -2782,6 +2834,8 @@ NSEvent* gLastDragMouseDownEvent = nil;
 - (BOOL)maybeRollup:(NSEvent*)theEvent
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK_RETURN;
+
+  nsAutoLockChrome lock;
 
   BOOL consumeEvent = NO;
 
@@ -3192,6 +3246,10 @@ NSEvent* gLastDragMouseDownEvent = nil;
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
 
+  Maybe<nsAutoLockChromeUnstickContent> lock;
+  if (!NS_IsChromeOwningThread())
+    lock.construct();
+
   if ([self shouldDelayWindowOrderingForEvent:theEvent]) {
     [NSApp preventWindowOrdering];
   }
@@ -3295,6 +3353,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
 - (void)mouseUp:(NSEvent *)theEvent
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
+  nsAutoLockChromeUnstickContent lock;
 
   if (!mGeckoChild || mBlockedLastMouseDown)
     return;
@@ -3386,6 +3445,8 @@ NSEvent* gLastDragMouseDownEvent = nil;
   if (!mGeckoChild)
     return;
 
+  nsAutoLockChromeUnstickContent lock;
+
   NSPoint windowEventLocation = nsCocoaUtils::EventLocationForWindow(aEvent, [self window]);
   NSPoint localEventLocation = [self convertPoint:windowEventLocation fromView:nil];
 
@@ -3435,6 +3496,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
 - (void)handleMouseMoved:(NSEvent*)theEvent
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
+  nsAutoLockChromeUnstickContent lock;
 
   if (!mGeckoChild)
     return;
@@ -3483,6 +3545,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
 - (void)mouseDragged:(NSEvent*)theEvent
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
+  nsAutoLockChromeUnstickContent lock;
 
   if (!mGeckoChild)
     return;
@@ -3539,6 +3602,8 @@ NSEvent* gLastDragMouseDownEvent = nil;
 - (void)rightMouseDown:(NSEvent *)theEvent
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
+  {
+  nsAutoLockChromeUnstickContent lock;
 
   nsAutoRetainCocoaObject kungFuDeathGrip(self);
 
@@ -3584,6 +3649,8 @@ NSEvent* gLastDragMouseDownEvent = nil;
   if (!mGeckoChild)
     return;
 
+  } // unlock everything
+
   // Let the superclass do the context menu stuff.
   [super rightMouseDown:theEvent];
 
@@ -3593,6 +3660,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
 - (void)rightMouseUp:(NSEvent *)theEvent
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
+  nsAutoLockChromeUnstickContent lock;
 
   if (!mGeckoChild)
     return;
@@ -3646,6 +3714,8 @@ NSEvent* gLastDragMouseDownEvent = nil;
   if (!mGeckoChild)
     return;
 
+  nsAutoLockChromeUnstickContent lock;
+
   nsMouseEvent geckoEvent(true, NS_MOUSE_MOVE, mGeckoChild, nsMouseEvent::eReal);
   [self convertCocoaMouseEvent:theEvent toGeckoEvent:&geckoEvent];
   geckoEvent.button = nsMouseEvent::eRightButton;
@@ -3658,6 +3728,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
 - (void)otherMouseDown:(NSEvent *)theEvent
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
+  nsAutoLockChromeUnstickContent lock;
 
   nsAutoRetainCocoaObject kungFuDeathGrip(self);
 
@@ -3682,6 +3753,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
 {
   if (!mGeckoChild)
     return;
+  nsAutoLockChromeUnstickContent lock;
 
   nsMouseEvent geckoEvent(true, NS_MOUSE_BUTTON_UP, mGeckoChild, nsMouseEvent::eReal);
   [self convertCocoaMouseEvent:theEvent toGeckoEvent:&geckoEvent];
@@ -3694,6 +3766,8 @@ NSEvent* gLastDragMouseDownEvent = nil;
 {
   if (!mGeckoChild)
     return;
+
+  nsAutoLockChromeUnstickContent lock;
 
   nsMouseEvent geckoEvent(true, NS_MOUSE_MOVE, mGeckoChild, nsMouseEvent::eReal);
   [self convertCocoaMouseEvent:theEvent toGeckoEvent:&geckoEvent];
@@ -3755,6 +3829,8 @@ NSEvent* gLastDragMouseDownEvent = nil;
   BOOL isMomentumScroll = nsCocoaUtils::IsMomentumScrollEvent(theEvent);
 
   if (scrollDelta != 0) {
+    nsAutoLockChromeUnstickContent lock;
+
     // Send the line scroll event.
     nsMouseScrollEvent geckoEvent(true, NS_MOUSE_SCROLL, mGeckoChild);
     [self convertCocoaMouseEvent:theEvent toGeckoEvent:&geckoEvent];
@@ -3848,6 +3924,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
 
   if (hasPixels) {
     // Send the pixel scroll event.
+    nsAutoLockChromeUnstickContent lock;
     nsMouseScrollEvent geckoEvent(true, NS_MOUSE_PIXEL_SCROLL, mGeckoChild);
     [self convertCocoaMouseEvent:theEvent toGeckoEvent:&geckoEvent];
     geckoEvent.scrollFlags |= inAxis;
@@ -3892,6 +3969,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
 -(NSMenu*)menuForEvent:(NSEvent*)theEvent
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK_NIL;
+  nsAutoLockChromeUnstickContent lock;
 
   if (!mGeckoChild || [self isPluginView])
     return nil;
@@ -4215,6 +4293,8 @@ NSEvent* gLastDragMouseDownEvent = nil;
   if (!mGeckoChild)
     return YES;
 
+  nsAutoLockChromeUnstickContent lock;
+
   nsMouseEvent geckoEvent(true, NS_MOUSE_ACTIVATE, mGeckoChild, nsMouseEvent::eReal);
   [self convertCocoaMouseEvent:aEvent toGeckoEvent:&geckoEvent];
   return !mGeckoChild->DispatchWindowEvent(geckoEvent);
@@ -4277,6 +4357,8 @@ NSEvent* gLastDragMouseDownEvent = nil;
 
   if (![self shouldFocusPlugin:getFocus])
     return NO;
+
+  nsAutoLockChromeUnstickContent lock;
 
   if (mPluginEventModel == NPEventModelCocoa) {
     nsPluginEvent pluginEvent(true, NS_PLUGIN_FOCUS_EVENT, mGeckoChild);
@@ -4405,6 +4487,8 @@ NSEvent* gLastDragMouseDownEvent = nil;
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK_RETURN;
 
+  nsAutoLockChrome lock;
+
   if (!mGeckoChild)
     return NSDragOperationNone;
 
@@ -4528,6 +4612,8 @@ NSEvent* gLastDragMouseDownEvent = nil;
 {
   PR_LOG(sCocoaLog, PR_LOG_ALWAYS, ("ChildView draggingExited: entered\n"));
 
+  nsAutoLockChrome lock;
+
   nsAutoRetainCocoaObject kungFuDeathGrip(self);
   [self doDragAction:NS_DRAGDROP_EXIT sender:sender];
   NS_IF_RELEASE(mDragService);
@@ -4535,6 +4621,8 @@ NSEvent* gLastDragMouseDownEvent = nil;
 
 - (BOOL)performDragOperation:(id <NSDraggingInfo>)sender
 {
+  nsAutoLockChrome lock;
+
   nsAutoRetainCocoaObject kungFuDeathGrip(self);
   BOOL handled = [self doDragAction:NS_DRAGDROP_DROP sender:sender] != NSDragOperationNone;
   NS_IF_RELEASE(mDragService);
@@ -4544,6 +4632,8 @@ NSEvent* gLastDragMouseDownEvent = nil;
 // NSDraggingSource
 - (void)draggedImage:(NSImage *)anImage movedTo:(NSPoint)aPoint
 {
+  nsAutoLockChrome lock;
+
   // Get the drag service if it isn't already cached. The drag service
   // isn't cached when dragging over a different application.
   nsCOMPtr<nsIDragService> dragService = mDragService;
@@ -4562,6 +4652,8 @@ NSEvent* gLastDragMouseDownEvent = nil;
 - (void)draggedImage:(NSImage *)anImage endedAt:(NSPoint)aPoint operation:(NSDragOperation)operation
 {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
+
+  nsAutoLockChrome lock;
 
   gDraggedTransferables = nsnull;
 
@@ -4707,6 +4799,8 @@ NSEvent* gLastDragMouseDownEvent = nil;
   if ((!sendType || IsSupportedType(sendType)) &&
       (!returnType || IsSupportedType(returnType))) {
     if (mGeckoChild) {
+      nsAutoLockChromeUnstickContent lock;
+
       // Assume that this object will be able to handle this request.
       result = self;
 
@@ -4998,6 +5092,7 @@ ChildViewMouseTracker::MouseExitedWindow(NSEvent* aEvent)
 void
 ChildViewMouseTracker::ReEvaluateMouseEnterState(NSEvent* aEvent)
 {
+  nsAutoLockChromeUnstickContent lock;
   ChildView* oldView = sLastMouseEventView;
   sLastMouseEventView = ViewForEvent(aEvent);
   if (sLastMouseEventView != oldView) {
@@ -5049,6 +5144,9 @@ ChildViewMouseTracker::ViewForEvent(NSEvent* aEvent)
     return nil;
 
   NSPoint windowEventLocation = nsCocoaUtils::EventLocationForWindow(aEvent, window);
+
+  nsAutoUnlockChrome unlock;
+
   NSView* view = [[[window contentView] superview] hitTest:windowEventLocation];
   if (![view isKindOfClass:[ChildView class]])
     return nil;
