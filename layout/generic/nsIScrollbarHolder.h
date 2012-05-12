@@ -1,4 +1,4 @@
-/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
@@ -15,15 +15,15 @@
  * The Original Code is mozilla.org code.
  *
  * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998
+ * Markus Stange.
+ * Portions created by the Initial Developer are Copyright (C) 2011
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
  *
  * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * either of the GNU General Public License Version 2 or later (the "GPL"),
+ * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
  * in which case the provisions of the GPL or the LGPL are applicable instead
  * of those above. If you wish to allow use of your version of this file only
  * under the terms of either the GPL or the LGPL, and not to allow others to
@@ -35,33 +35,34 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-#ifndef nsLookAndFeel_h_
-#define nsLookAndFeel_h_
-#include "nsXPLookAndFeel.h"
+#ifndef nsIScrollbarHolder_h___
+#define nsIScrollbarHolder_h___
 
-class nsLookAndFeel: public nsXPLookAndFeel {
+#include "nsQueryFrame.h"
+
+class nsIDOMEventTarget;
+class nsIFrame;
+
+/**
+ * An interface that represents a frame which manages scrollbars.
+ */
+class nsIScrollbarHolder {
 public:
-  nsLookAndFeel();
-  virtual ~nsLookAndFeel();
+  NS_DECL_QUERYFRAME_TARGET(nsIScrollbarHolder)
 
-  virtual nsresult NativeGetColor(ColorID aID, nscolor &aResult);
-  virtual nsresult GetIntImpl(IntID aID, PRInt32 &aResult);
-  virtual nsresult GetFloatImpl(FloatID aID, float &aResult);
-  virtual bool GetFontImpl(FontID aID, nsString& aFontName,
-                           gfxFontStyle& aFontStyle);
-  virtual PRUnichar GetPasswordCharacterImpl()
-  {
-    // unicode value for the bullet character, used for password textfields.
-    return 0x2022;
-  }
+  /**
+   * Obtain an event target that receives mouse events over the scrolled area
+   * and over the scrollbars. This will usually be an ancestor of the frame
+   * that the scrollbars are attached to.
+   */
+  virtual already_AddRefed<nsIDOMEventTarget> GetEventTarget() = 0;
 
-  static bool UseOverlayScrollbars();
+  /**
+   * Obtain the frame for the horizontal or vertical scrollbar, or null
+   * if there is no such box.
+   */
+  virtual nsIFrame* GetScrollbarBox(bool aVertical) = 0;
 
-protected:
-
-  // Apple hasn't defined a constant for scollbars with two arrows on each end, so we'll use this one.
-  static const int kThemeScrollBarArrowsBoth = 2;
-  static const int kThemeScrollBarArrowsUpperLeft = 3;
 };
 
-#endif // nsLookAndFeel_h_
+#endif
