@@ -218,7 +218,7 @@ nsListBoxBodyFrame::Init(nsIContent*     aContent,
   NS_ENSURE_SUCCESS(rv, rv);
   nsIScrollableFrame* scrollFrame = nsLayoutUtils::GetScrollableFrameFor(this);
   if (scrollFrame) {
-    nsIBox* verticalScrollbar = scrollFrame->GetScrollbarBox(true);
+    nsIFrame* verticalScrollbar = scrollFrame->GetScrollbarBox(true);
     nsScrollbarFrame* scrollbarFrame = do_QueryFrame(verticalScrollbar);
     if (scrollbarFrame) {
       scrollbarFrame->SetScrollbarMediatorContent(GetContent());
