@@ -24,6 +24,7 @@
 #include "nsNativeThemeColors.h"
 #include "nsIScrollableFrame.h"
 #include "nsIDOMHTMLProgressElement.h"
+#include "nsLookAndFeel.h"
 
 #include "gfxContext.h"
 #include "gfxQuartzSurface.h"
@@ -2091,34 +2092,61 @@ nsNativeThemeCocoa::DrawWidgetBackground(nsRenderingContext* aContext,
       break;
 
     case NS_THEME_SCROLLBAR_SMALL:
-    case NS_THEME_SCROLLBAR: {
-      DrawScrollbar(cgContext, macRect, aFrame);
-    }
+    case NS_THEME_SCROLLBAR:
+      if (!nsLookAndFeel::UseOverlayScrollbars()) {
+        DrawScrollbar(cgContext, macRect, aFrame);
+      }
       break;
     case NS_THEME_SCROLLBAR_THUMB_VERTICAL:
     case NS_THEME_SCROLLBAR_THUMB_HORIZONTAL:
-#if SCROLLBARS_VISUAL_DEBUG
-      CGContextSetRGBFillColor(cgContext, 1.0, 1.0, 0, 0.6);
-      CGContextFillRect(cgContext, macRect);
-    break;
-#endif
+      if (nsLookAndFeel::UseOverlayScrollbars()) {
+        BOOL isHorizontal = (aWidgetType == NS_THEME_SCROLLBAR_THUMB_HORIZONTAL);
+        const BOOL isOnTopOfBrightBackground = YES; // TODO: detect this properly
+        CUIDraw([NSWindow coreUIRenderer], macRect, cgContext,
+                (CFDictionaryRef)[NSDictionary dictionaryWithObjectsAndKeys:
+                  @"kCUIWidgetOverlayScrollBar", @"widget",
+                  @"regular", @"size",
+                  (isHorizontal ? @"kCUIOrientHorizontal" : @"kCUIOrientVertical"), @"kCUIOrientationKey",
+                  (isOnTopOfBrightBackground ? @"" : @"kCUIVariantWhite"), @"kCUIVariantKey",
+                  [NSNumber numberWithBool:YES], @"indiconly",
+                  [NSNumber numberWithBool:YES], @"kCUIThumbProportionKey",
+                  [NSNumber numberWithBool:YES], @"is.flipped",
+                  nil],
+                nil);
+      }
+      break;
     case NS_THEME_SCROLLBAR_BUTTON_UP:
     case NS_THEME_SCROLLBAR_BUTTON_LEFT:
 #if SCROLLBARS_VISUAL_DEBUG
       CGContextSetRGBFillColor(cgContext, 1.0, 0, 0, 0.6);
       CGContextFillRect(cgContext, macRect);
-    break;
 #endif
+    break;
     case NS_THEME_SCROLLBAR_BUTTON_DOWN:
     case NS_THEME_SCROLLBAR_BUTTON_RIGHT:
 #if SCROLLBARS_VISUAL_DEBUG
       CGContextSetRGBFillColor(cgContext, 0, 1.0, 0, 0.6);
       CGContextFillRect(cgContext, macRect);
-    break;      
 #endif
+    break;      
     case NS_THEME_SCROLLBAR_TRACK_HORIZONTAL:
     case NS_THEME_SCROLLBAR_TRACK_VERTICAL:
-      // do nothing, drawn by scrollbar
+      if (nsLookAndFeel::UseOverlayScrollbars() &&
+          CheckBooleanAttr(GetParentScrollbarFrame(aFrame), nsGkAtoms::hover)) {
+        BOOL isHorizontal = (aWidgetType == NS_THEME_SCROLLBAR_TRACK_HORIZONTAL);
+        const BOOL isOnTopOfBrightBackground = YES; // TODO: detect this properly
+        CUIDraw([NSWindow coreUIRenderer], macRect, cgContext,
+                (CFDictionaryRef)[NSDictionary dictionaryWithObjectsAndKeys:
+                  @"kCUIWidgetOverlayScrollBar", @"widget",
+                  @"regular", @"size",
+                  (isHorizontal ? @"kCUIOrientHorizontal" : @"kCUIOrientVertical"), @"kCUIOrientationKey",
+                  (isOnTopOfBrightBackground ? @"" : @"kCUIVariantWhite"), @"kCUIVariantKey",
+                  [NSNumber numberWithBool:YES], @"noindicator",
+                  [NSNumber numberWithBool:YES], @"kCUIThumbProportionKey",
+                  [NSNumber numberWithBool:YES], @"is.flipped",
+                  nil],
+                nil);
+      }
       break;
 
     case NS_THEME_TEXTFIELD_MULTILINE: {
@@ -2287,13 +2315,13 @@ nsNativeThemeCocoa::GetWidgetBorder(nsDeviceContext* aContext,
     case NS_THEME_SCROLLBAR_TRACK_HORIZONTAL:
     case NS_THEME_SCROLLBAR_TRACK_VERTICAL:
     {
+      bool isHorizontal = (aWidgetType == NS_THEME_SCROLLBAR_TRACK_HORIZONTAL);
+
       // On Lion and later, scrollbars have no arrows.
       if (!nsCocoaFeatures::OnLionOrLater()) {
         // There's only an endcap to worry about when both arrows are on the bottom
         NSString *buttonPlacement = [[NSUserDefaults standardUserDefaults] objectForKey:@"AppleScrollBarVariant"];
         if (!buttonPlacement || [buttonPlacement isEqualToString:@"DoubleMax"]) {
-          bool isHorizontal = (aWidgetType == NS_THEME_SCROLLBAR_TRACK_HORIZONTAL);
-
           nsIFrame *scrollbarFrame = GetParentScrollbarFrame(aFrame);
           if (!scrollbarFrame) return NS_ERROR_FAILURE;
           bool isSmall = (scrollbarFrame->GetStyleDisplay()->mAppearance == NS_THEME_SCROLLBAR_SMALL);
@@ -2308,6 +2336,15 @@ nsNativeThemeCocoa::GetWidgetBorder(nsDeviceContext* aContext,
             aResult->SizeTo(0, endcapSize, 0, 0);
         }
       }
+
+      if (nsLookAndFeel::UseOverlayScrollbars()) {
+        if (isHorizontal) {
+          aResult->SizeTo(1, 0, 1, 0);
+        } else {
+          aResult->SizeTo(0, 1, 0, 1);
+        }
+      }
+
       break;
     }
 
@@ -2498,15 +2535,6 @@ nsNativeThemeCocoa::GetMinimumWidgetSize(nsRenderingContext* aContext,
       break;
     }
       
-    case NS_THEME_SCROLLBAR_SMALL:
-    {
-      SInt32 scrollbarWidth = 0;
-      ::GetThemeMetric(kThemeMetricSmallScrollBarWidth, &scrollbarWidth);
-      aResult->SizeTo(scrollbarWidth, scrollbarWidth);
-      *aIsOverridable = false;
-      break;
-    }
-
     case NS_THEME_SCROLLBAR_THUMB_HORIZONTAL:
     case NS_THEME_SCROLLBAR_THUMB_VERTICAL:
     {
@@ -2524,9 +2552,17 @@ nsNativeThemeCocoa::GetMinimumWidgetSize(nsRenderingContext* aContext,
     }
 
     case NS_THEME_SCROLLBAR:
+    case NS_THEME_SCROLLBAR_SMALL:
     case NS_THEME_SCROLLBAR_TRACK_VERTICAL:
     case NS_THEME_SCROLLBAR_TRACK_HORIZONTAL:
     {
+      *aIsOverridable = false;
+
+      if (nsLookAndFeel::UseOverlayScrollbars()) {
+        aResult->SizeTo(11, 11);
+        break;
+      }
+
       // yeah, i know i'm cheating a little here, but i figure that it
       // really doesn't matter if the scrollbar is vertical or horizontal
       // and the width metric is a really good metric for every piece
@@ -2541,7 +2577,6 @@ nsNativeThemeCocoa::GetMinimumWidgetSize(nsRenderingContext* aContext,
       SInt32 scrollbarWidth = 0;
       ::GetThemeMetric(themeMetric, &scrollbarWidth);
       aResult->SizeTo(scrollbarWidth, scrollbarWidth);
-      *aIsOverridable = false;
       break;
     }
 
@@ -2599,8 +2634,6 @@ nsNativeThemeCocoa::WidgetStateChanged(nsIFrame* aFrame, PRUint8 aWidgetType,
     case NS_THEME_TOOLBOX:
     case NS_THEME_TOOLBAR:
     case NS_THEME_MOZ_MAC_UNIFIED_TOOLBAR:
-    case NS_THEME_SCROLLBAR_TRACK_VERTICAL: 
-    case NS_THEME_SCROLLBAR_TRACK_HORIZONTAL:
     case NS_THEME_STATUSBAR:
     case NS_THEME_STATUSBAR_PANEL:
     case NS_THEME_STATUSBAR_RESIZER_PANEL:
@@ -2635,7 +2668,8 @@ nsNativeThemeCocoa::WidgetStateChanged(nsIFrame* aFrame, PRUint8 aWidgetType,
         aAttribute == nsGkAtoms::sortDirection ||
         aAttribute == nsGkAtoms::focused ||
         aAttribute == nsGkAtoms::_default ||
-        aAttribute == nsGkAtoms::open)
+        aAttribute == nsGkAtoms::open ||
+        aAttribute == nsGkAtoms::hover)
       *aShouldRepaint = true;
   }
 
@@ -2743,11 +2777,12 @@ nsNativeThemeCocoa::ThemeSupportsWidget(nsPresContext* aPresContext, nsIFrame* a
 
       // Note that IsWidgetStyled is not called for resizers on Mac. This is
       // because for scrollable containers, the native resizer looks better
-      // when scrollbars are present even when the style is overriden, and the
-      // custom transparent resizer looks better when scrollbars are not
-      // present.
+      // when (non-overlay) scrollbars are present even when the style is
+      // overriden, and the custom transparent resizer looks better when
+      // scrollbars are not present.
       nsIScrollableFrame* scrollFrame = do_QueryFrame(parentFrame);
-      return (scrollFrame && scrollFrame->GetScrollbarVisibility());
+      return (!nsLookAndFeel::UseOverlayScrollbars() &&
+              scrollFrame && scrollFrame->GetScrollbarVisibility());
       break;
     }
   }
@@ -2799,6 +2834,8 @@ nsNativeThemeCocoa::GetWidgetTransparency(nsIFrame* aFrame, PRUint8 aWidgetType)
 
   case NS_THEME_SCROLLBAR_SMALL:
   case NS_THEME_SCROLLBAR:
+    return nsLookAndFeel::UseOverlayScrollbars() ? eTransparent : eOpaque;
+
   case NS_THEME_STATUSBAR:
     // Knowing that scrollbars and statusbars are opaque improves
     // performance, because we create layers for them.
