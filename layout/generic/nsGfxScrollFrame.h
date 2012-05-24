@@ -32,6 +32,12 @@ class nsIScrollFrameInternal;
 class nsPresState;
 struct ScrollReflowState;
 
+namespace mozilla {
+namespace layout {
+class ScrollbarActivity;
+}
+}
+
 // When set, the next scroll operation on the scrollframe will invalidate its
 // entire contents. Useful for text-overflow.
 // This bit is cleared after each time the scrollframe is scrolled. Whoever
@@ -112,13 +118,12 @@ public:
     nsGfxScrollFrameInner *mInner;
   };
 
-  static void FinishReflowForScrollbar(nsIContent* aContent, nscoord aMinXY,
-                                       nscoord aMaxXY, nscoord aCurPosXY,
-                                       nscoord aPageIncrement,
-                                       nscoord aIncrement);
+  void FinishReflowForScrollbar(nsIContent* aContent, nscoord aMinXY,
+                                nscoord aMaxXY, nscoord aCurPosXY,
+                                nscoord aPageIncrement,
+                                nscoord aIncrement);
   static void SetScrollbarEnabled(nsIContent* aContent, nscoord aMaxPos);
-  static void SetCoordAttribute(nsIContent* aContent, nsIAtom* aAtom,
-                                nscoord aSize);
+  void SetCoordAttribute(nsIContent* aContent, nsIAtom* aAtom, nscoord aSize);
   nscoord GetCoordAttribute(nsIBox* aFrame, nsIAtom* aAtom, nscoord aDefaultValue,
                             nscoord* aRangeStart, nscoord* aRangeLength);
 
@@ -174,7 +179,7 @@ public:
   void RestoreState(nsPresState* aState);
 
   nsIFrame* GetScrolledFrame() const { return mScrolledFrame; }
-  nsIBox* GetScrollbarBox(bool aVertical) const {
+  nsIFrame* GetScrollbarBox(bool aVertical) const {
     return aVertical ? mVScrollbarBox : mHScrollbarBox;
   }
 
@@ -268,6 +273,7 @@ public:
   nsIBox* mResizerBox;
   nsContainerFrame* mOuter;
   nsRefPtr<AsyncScroll> mAsyncScroll;
+  nsCOMPtr<mozilla::layout::ScrollbarActivity> mScrollbarActivity;
   nsTArray<nsIScrollPositionListener*> mListeners;
   nsRect mScrollPort;
   // Where we're currently scrolling to, if we're scrolling asynchronously.
@@ -429,6 +435,15 @@ public:
   virtual void AppendAnonymousContentTo(nsBaseContentList& aElements,
                                         PRUint32 aFilter);
 
+  // nsIScrollbarHolder
+  virtual nsIBox* GetScrollbarBox(bool aVertical) {
+    return mInner.GetScrollbarBox(aVertical);
+  }
+  virtual already_AddRefed<nsIDOMEventTarget> GetEventTarget() {
+    nsCOMPtr<nsIDOMEventTarget> target = do_QueryInterface(GetContent());
+    return target.forget();
+  }
+
   // nsIScrollableFrame
   virtual nsIFrame* GetScrolledFrame() const {
     return mInner.GetScrolledFrame();
@@ -484,9 +499,6 @@ public:
   }
   virtual void RemoveScrollPositionListener(nsIScrollPositionListener* aListener) {
     mInner.RemoveScrollPositionListener(aListener);
-  }
-  virtual nsIBox* GetScrollbarBox(bool aVertical) {
-    return mInner.GetScrollbarBox(aVertical);
   }
   virtual void CurPosAttributeChanged(nsIContent* aChild) {
     mInner.CurPosAttributeChanged(aChild);
@@ -671,6 +683,15 @@ public:
   static void AdjustReflowStateForPrintPreview(nsBoxLayoutState& aState, bool& aSetBack);
   static void AdjustReflowStateBack(nsBoxLayoutState& aState, bool aSetBack);
 
+  // nsIScrollbarHolder
+  virtual nsIBox* GetScrollbarBox(bool aVertical) {
+    return mInner.GetScrollbarBox(aVertical);
+  }
+  virtual already_AddRefed<nsIDOMEventTarget> GetEventTarget() {
+    nsCOMPtr<nsIDOMEventTarget> target = do_QueryInterface(GetContent());
+    return target.forget();
+  }
+
   // nsIScrollableFrame
   virtual nsIFrame* GetScrolledFrame() const {
     return mInner.GetScrolledFrame();
@@ -726,9 +747,6 @@ public:
   }
   virtual void RemoveScrollPositionListener(nsIScrollPositionListener* aListener) {
     mInner.RemoveScrollPositionListener(aListener);
-  }
-  virtual nsIBox* GetScrollbarBox(bool aVertical) {
-    return mInner.GetScrollbarBox(aVertical);
   }
   virtual void CurPosAttributeChanged(nsIContent* aChild) {
     mInner.CurPosAttributeChanged(aChild);
