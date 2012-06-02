@@ -932,7 +932,8 @@ let gGestureSupport = {
    *        True to add/init listeners and false to remove/uninit
    */
   init: function GS_init(aAddListener) {
-    const gestureEvents = ["SwipeGesture",
+    const gestureEvents = ["SwipeGestureStart",
+      "SwipeGestureUpdate", "SwipeGestureEnd", "SwipeGesture",
       "MagnifyGestureStart", "MagnifyGestureUpdate", "MagnifyGesture",
       "RotateGestureStart", "RotateGestureUpdate", "RotateGesture",
       "TapGesture", "PressTapGesture"];
@@ -960,6 +961,15 @@ let gGestureSupport = {
       ({ threshold: aThreshold, latched: !!aLatched });
 
     switch (aEvent.type) {
+      case "MozSwipeGestureStart":
+        aEvent.preventDefault();
+        return this._setupSwipeGesture(aEvent);
+      case "MozSwipeGestureUpdate":
+        aEvent.preventDefault();
+        return this._doUpdate(aEvent);
+      case "MozSwipeGestureEnd":
+        aEvent.preventDefault();
+        return this._doEnd(aEvent);
       case "MozSwipeGesture":
         aEvent.preventDefault();
         this.onSwipe(aEvent);
@@ -1042,6 +1052,38 @@ let gGestureSupport = {
     this._doUpdate(aEvent);
   },
 
+  _swipeNavigatesHistory: function GS__swipeNavigatesHistory(aEvent) {
+    return this._getCommand(aEvent, ["swipe", "left"]) == "Browser:BackOrBackDuplicate" &&
+           this._getCommand(aEvent, ["swipe", "right"]) == "Browser:ForwardOrForwardDuplicate";
+  },
+
+  _setupSwipeGesture: function GS__setupSwipeGesture(aEvent) {
+    if (!this._swipeNavigatesHistory(aEvent) || !gHistorySwipeAnimation.active)
+      return;
+
+    let canGoBack = gBrowser.webNavigation.canGoBack;
+    let canGoForward = gBrowser.webNavigation.canGoForward;
+
+    if (canGoBack)
+      aEvent.allowedDirections |= aEvent.DIRECTION_LEFT;
+    if (canGoForward)
+      aEvent.allowedDirections |= aEvent.DIRECTION_RIGHT;
+
+    gHistorySwipeAnimation.startAnimation(canGoBack, canGoForward);
+
+    this._doUpdate = function GS__doUpdate(aEvent) {
+      gHistorySwipeAnimation.updateAnimation(aEvent.delta);
+    };
+
+    let self = this;
+    this._doEnd = function GS__doEnd(aEvent) {
+      gHistorySwipeAnimation.stopAnimation();
+
+      self._doUpdate = function (aEvent) {};
+      self._doEnd = function (aEvent) {};
+    }
+  },
+  
   /**
    * Generator producing the powerset of the input array where the first result
    * is the complete set and the last result (before StopIteration) is empty.
@@ -1065,6 +1107,22 @@ let gGestureSupport = {
 
   /**
    * Determine what action to do for the gesture based on which keys are
+   * pressed and which commands are set, and execute the command.
+   *
+   * @param aEvent
+   *        The original gesture event to convert into a fake click event
+   * @param aGesture
+   *        Array of gesture name parts (to be joined by periods)
+   * @return Name of the executed command. Returns null if no command is
+   *         found.
+   */
+  _doAction: function GS__doAction(aEvent, aGesture) {
+    let command = this._getCommand(aEvent, aGesture);
+    return command && this._doCommand(aEvent, command);
+  },
+
+  /**
+   * Determine what action to do for the gesture based on which keys are
    * pressed and which commands are set
    *
    * @param aEvent
@@ -1072,7 +1130,7 @@ let gGestureSupport = {
    * @param aGesture
    *        Array of gesture name parts (to be joined by periods)
    */
-  _doAction: function GS__doAction(aEvent, aGesture) {
+  _getCommand: function GS__getCommand(aEvent, aGesture) {
     // Create an array of pressed keys in a fixed order so that a command for
     // "meta" is preferred over "ctrl" when both buttons are pressed (and a
     // command for both don't exist)
@@ -1092,35 +1150,51 @@ let gGestureSupport = {
         command = this._getPref(aGesture.concat(subCombo).join("."));
       } catch (e) {}
 
-      if (!command)
-        continue;
+      if (command)
+        return command;
+    }
+    return null;
+  },
 
-      let node = document.getElementById(command);
-      if (node) {
-        if (node.getAttribute("disabled") != "true") {
-          let cmdEvent = document.createEvent("xulcommandevent");
-          cmdEvent.initCommandEvent("command", true, true, window, 0,
-                                    aEvent.ctrlKey, aEvent.altKey, aEvent.shiftKey,
-                                    aEvent.metaKey, null);
-          node.dispatchEvent(cmdEvent);
-        }
-      } else {
-        goDoCommand(command);
+  /**
+   * Execute the specified command.
+   *
+   * @param aEvent
+   *        The original gesture event to convert into a fake click event
+   * @param aCommand
+   *        Name of the command found for the event's keys and gesture.
+   */
+  _doCommand: function GS__doCommand(aEvent, aCommand) {
+    let node = document.getElementById(aCommand);
+    if (node) {
+      if (node.getAttribute("disabled") != "true") {
+        let cmdEvent = document.createEvent("xulcommandevent");
+        cmdEvent.initCommandEvent("command", true, true, window, 0,
+                                  aEvent.ctrlKey, aEvent.altKey, aEvent.shiftKey,
+                                  aEvent.metaKey, null);
+        node.dispatchEvent(cmdEvent);
       }
-
-      break;
+    } else {
+      goDoCommand(aCommand);
     }
   },
 
   /**
-   * Convert continual motion events into an action if it exceeds a threshold
-   * in a given direction. This function will be set by _setupGesture to
-   * capture state that needs to be shared across multiple gesture updates.
+   * Handle continual motion events.  This function will be set by
+   * _setupGesture or _setupSwipe.
    *
    * @param aEvent
    *        The continual motion update event to handle
    */
   _doUpdate: function(aEvent) {},
+
+  /**
+   * Handle gesture end events.  This function will be set by _setupSwipe.
+   *
+   * @param aEvent
+   *        The gesture end event to handle
+   */
+  _doEnd: function(aEvent) {},
 
   /**
    * Convert the swipe gesture into a browser action based on the direction
@@ -1161,6 +1235,238 @@ let gGestureSupport = {
       return aDef;
     }
   },
+};
+
+let gHistorySwipeAnimation = {
+
+  active: false,
+
+  init: function HSA_init() {
+    if (!this._isWanted())
+      return;
+
+    gBrowser.addEventListener("pagehide", this, false);
+    gBrowser.addEventListener("pageshow", this, false);
+
+    this.active = true;
+  },
+
+  uninit: function HSA_uninit() {
+    gBrowser.removeEventListener("pagehide", this, false);
+    gBrowser.removeEventListener("pageshow", this, false);
+
+    this.active = false;
+  },
+
+  startAnimation: function HSA_startAnimation(canGoBack, canGoForward) {
+    if (!(this._animationRunning() && this._animatedPageIsHidden))
+      this._takeSnapshot();
+
+    if (this._animationRunning())
+      this._reallyStopAnimation();
+
+    this._animatedBrowser = gBrowser.selectedBrowser;
+    this._animatedPageIsHidden = false;
+    this._animationStopIsPending = false;
+    this._canGoBack = canGoBack;
+    this._canGoForward = canGoForward;
+    this._installSnapshots();
+    this._addBoxes();
+    this.updateAnimation(0);
+  },
+
+  stopAnimation: function HSA_stopAnimation() {
+    if (this._animatedPageIsHidden) {
+      // This means that we've received a pagehide event, but no pageshow
+      // event yet. So the new page might not be visible yet.
+      // In that case, wait for the pageshow event before tearing down the
+      // animation overlay, so that we don't flash the old page.
+      this._animationStopIsPending = true;
+    } else {
+      // Tear everything down.
+      this._reallyStopAnimation();
+    }
+  },
+
+  updateAnimation: function HSA_updateAnimation(val) {
+    if (val >= 0) {
+      // The current page is pushed to the right, the intention is to go back.
+      // If there is a page to go back to, it should show in the background
+      // and the backdrop should be hidden.
+      this._positionBox(this._curBox, val);
+      this._backdropBox.collapsed = this._canGoBack;
+
+      // The forward page should be pushed offscreen all the way to the right.
+      if (this._canGoForward)
+        this._positionBox(this._nextBox, 1);
+    } else {
+      // The intention is to go forward. If there is a page to go forward to,
+      // it should slide in from the right. Otherwise, the current page should
+      // slide to the left and the backdrop should appear in the background.
+      if (this._canGoForward) {
+        this._positionBox(this._curBox, 0);
+        this._positionBox(this._nextBox, 1 + val); // val is negative
+      } else {
+        this._backdropBox.collapsed = false;
+        this._positionBox(this._curBox, val);
+      }
+    }
+  },
+
+  handleEvent: function HSA_handleEvent(event) {
+    if (this._animationRunning() &&
+        event.target == this._animatedBrowser.contentDocument) {
+      // We only want to take snapshots when we know which page is visible.
+      // Also, after a swipe navigation, we only want to hide the animation
+      // overlay when the old page has been hidden.
+      // This is tricky because after a navigation the old page stays visible
+      // for a short time while the new page is in "suppressed painting" mode.
+      // Only when painting has been unsuppressed the new page becomes visible.
+      // There are no events for painting unsuppression, so we just freeze
+      // everything between the pagehide event of the old page and the pageshow
+      // event of the new page, i.e. while this._animatedPageIsHidden.
+      this._animatedPageIsHidden = (event.type == "pagehide");
+      if (this._animationStopIsPending)
+        this.stopAnimation();
+      return;
+    }
+
+    // Take a snapshot of a page whenever it's about to be navigated away
+    // from.
+    if (event.type == "pagehide")
+      this._takeSnapshot();
+  },
+
+  _animationRunning: function HSA__animationRunning() {
+    return !!this._curBox;
+  },
+
+  _isWanted: function HSA__isWanted() {
+    // Only activate on Lion.
+    // TODO: Only if [NSEvent isSwipeTrackingFromScrollEventsEnabled]
+    return window.matchMedia("(-moz-mac-lion-theme)").matches;
+  },
+
+  _reallyStopAnimation: function HSA__reallyStopAnimation() {
+    this._animatedBrowser = null;
+    this._removeBoxes();
+    this._uninstallSnapshots();
+  },
+
+  _addBoxes: function HSA__addBoxes() {
+    let browserStack =
+      document.getAnonymousElementByAttribute(gBrowser.getNotificationBox(),
+                                              "anonid", "browserStack");
+    if (this._canGoBack) {
+      this._prevBox = this._createBox("historySwipeAnimationPreviousPage");
+      browserStack.appendChild(this._prevBox);
+    }
+    this._backdropBox = this._createBox("historySwipeAnimationCurrentPageBackdrop");
+    browserStack.appendChild(this._backdropBox);
+    this._curBox = this._createBox("historySwipeAnimationCurrentPage");
+    browserStack.appendChild(this._curBox);
+    if (this._canGoForward) {
+      this._nextBox = this._createBox("historySwipeAnimationNextPage");
+      browserStack.appendChild(this._nextBox);
+    }
+  },
+
+  _removeBoxes: function HSA__removeBoxes() {
+    if (this._prevBox) {
+      this._prevBox.parentNode.removeChild(this._prevBox);
+      this._prevBox = null;
+    }
+    this._backdropBox.parentNode.removeChild(this._backdropBox);
+    this._backdropBox = null;
+    this._curBox.parentNode.removeChild(this._curBox);
+    this._curBox = null;
+    if (this._nextBox) {
+      this._nextBox.parentNode.removeChild(this._nextBox);
+      this._nextBox = null;
+    }
+  },
+
+  _createBox: function HSA__createBox(id) {
+    let XULNS = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
+    let box = document.createElementNS(XULNS, "box");
+    box.id = id;
+    return box;
+  },
+
+  _positionBox: function HSA__positionBox(box, position) {
+    let width = this._curBox.getBoundingClientRect().width;
+    box.style.MozTransform = "translateX(" + width * position + "px)";  
+  },
+
+  _takeSnapshot: function HSA__takeSnapshot() {
+    if (this._maxSnapshotsPerTab() < 1)
+      return;
+
+    let browser = gBrowser.selectedBrowser;
+    let r = browser.getBoundingClientRect();
+    let canvas = document.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
+    canvas.mozOpaque = true;
+    canvas.width = r.width;
+    canvas.height = r.height;
+    let ctx = canvas.getContext("2d");
+    ctx.drawWindow(browser.contentWindow, 0, 0, r.width, r.height, "white",
+                   ctx.DRAWWINDOW_DO_NOT_FLUSH | ctx.DRAWWINDOW_DRAW_VIEW |
+                   ctx.DRAWWINDOW_ASYNC_DECODE_IMAGES);
+    this._assignSnapshotToCurrentBrowser(canvas);
+  },
+
+  _farthestIndex: function HSA__farthestIndex(indices, fromIndex) {
+    indices.sort(function numberComparator(a, b) (a - b));
+    let lowestIndex = indices[0];
+    let highestIndex = indices[indices.length - 1];
+    let distanceToHighest = Math.abs(highestIndex - currentIndex);
+    let distanceToLowest = Math.abs(currentIndex - lowestIndex);
+    return (distanceToHighest > distanceToLowest) ? highestIndex : lowestIndex;
+  },
+
+  _maxSnapshotsPerTab: function HSA__maxSnapshotsPerTab() {
+    return gPrefService.getIntPref("browser.snapshots.maxPerTab");
+  },
+
+  _assignSnapshotToCurrentBrowser: function HSA__assignSnapshotToCurrentBrowser(canvas) {
+    let browser = gBrowser.selectedBrowser;
+    if (!("snapshots" in browser))
+      browser.snapshots = {};
+    let snapshots = browser.snapshots;
+    let currentIndex = getWebNavigation().sessionHistory.index;
+    snapshots[currentIndex] = canvas;
+
+    if (Object.keys(snapshots).length > this._maxSnapshotsPerTab()) {
+      // Evict the snapshot for the page that is farthest away from the current page.
+      // TODO: evict everything on memory pressure notification
+      let indexToDelete = this._farthestIndex(Object.keys(snapshots), currentIndex);
+      delete snapshots[indexToDelete];
+    }
+  },
+
+  _installSnapshots: function HSA__installSnapshots() {
+    let snapshots = gBrowser.selectedBrowser.snapshots || {};
+    let currentIndex = getWebNavigation().sessionHistory.index;
+    if ((currentIndex - 1) in snapshots) {
+        document.mozSetImageElement("historySwipeAnimationPreviousPageSnapshot",
+                                    snapshots[currentIndex - 1]);
+    }
+    if (currentIndex in snapshots) {
+      document.mozSetImageElement("historySwipeAnimationCurrentPageSnapshot",
+                                  snapshots[currentIndex]);
+    }
+    if ((currentIndex + 1) in snapshots) {
+      document.mozSetImageElement("historySwipeAnimationNextPageSnapshot",
+                                  snapshots[currentIndex + 1]);
+    }
+  },
+
+  _uninstallSnapshots: function HSA__uninstallSnapshots() {
+    document.mozSetImageElement("historySwipeAnimationPreviousPageSnapshot", null);
+    document.mozSetImageElement("historySwipeAnimationCurrentPageSnapshot", null);
+    document.mozSetImageElement("historySwipeAnimationNextPageSnapshot", null);
+  }
+
 };
 
 function BrowserStartup() {
@@ -1460,6 +1766,8 @@ function prepareForStartup() {
 
   // setup simple gestures support
   gGestureSupport.init(true);
+
+  gHistorySwipeAnimation.init();
 }
 
 function delayedStartup(isLoadingBlank, mustLoadSidebar) {
@@ -1787,6 +2095,8 @@ function BrowserShutdown() {
   CombinedStopReload.uninit();
 
   gGestureSupport.init(false);
+
+  gHistorySwipeAnimation.uninit();
 
   FullScreen.cleanup();
 
