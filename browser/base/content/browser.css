@@ -35,7 +35,7 @@ tabbrowser {
 
 .tabbrowser-tab:not([pinned]) {
   -moz-box-flex: 100;
-  max-width: 250px;
+  max-width: 210px;
   min-width: 100px;
   width: 0;
   -moz-transition: min-width 200ms ease-out,

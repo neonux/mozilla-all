@@ -1000,6 +1000,7 @@
                   focusFlags |= fm.FLAG_SHOWRING;
                 fm.setFocus(newBrowser, focusFlags);
               } while (false);
+              this.tabContainer._markTabs();
             }
           ]]>
         </body>
@@ -1316,8 +1317,6 @@
             t.linkedPanel = uniqueId;
             t.linkedBrowser = b;
             t._tPos = position;
-            if (t.previousSibling.selected)
-              t.setAttribute("afterselected", true);
 
             // NB: this appendChild call causes us to run constructors for the
             // browser element, which fires off a bunch of notifications. Some
@@ -1397,6 +1396,7 @@
               this._lastRelatedTab = t;
             }
 
+            this.tabContainer._markTabs();
             return t;
           ]]>
         </body>
@@ -1726,8 +1726,9 @@
               }, 0, this.tabContainer);
             }
 
-            // update first-tab/last-tab/beforeselected/afterselected attributes
+            // update tab positional properties and attributes
             this.selectedTab._selected = true;
+            this.tabContainer._markTabs();
 
             // Removing the panel requires fixing up selectedPanel immediately
             // (see below), which would be hindered by the potentially expensive
@@ -1973,6 +1974,7 @@
               this.showTab(tab);
           }, this);
 
+          this.tabContainer._markTabs();
           this.tabContainer.mTabstrip.ensureElementIsVisible(this.selectedTab, false);
         ]]>
         </body>
@@ -2126,6 +2128,8 @@
 
           if (aTab.pinned)
             this.tabContainer._positionPinnedTabs();
+
+          this.tabContainer._markTabs();
 
           var evt = document.createEvent("UIEvents");
           evt.initUIEvent("TabMove", true, false, window, oldPosition);
@@ -2756,6 +2760,8 @@
         <xul:toolbarbutton class="tabs-newtab-button"
                            command="cmd_newNavigatorTab"
                            onclick="checkForMiddleClick(this, event);"
+                           onmouseenter="gBrowser.mTabContainer._enterNewTab();"
+                           onmouseleave="gBrowser.mTabContainer._leaveNewTab();"
                            tooltiptext="&newTabButton.tooltip;"/>
         <xul:spacer class="closing-tabs-spacer" anonid="closing-tabs-spacer"
                     style="width: 0;"/>
@@ -2807,6 +2813,75 @@
         document.getAnonymousElementByAttribute(this, "anonid", "arrowscrollbox");
       </field>
 
+      <field name="_firstTab">
+        null
+      </field>
+
+      <field name="_lastTab">
+        null
+      </field>
+
+      <field name="_beforeSelectedTab">
+        null
+      </field>
+
+      <field name="_afterSelectedTab">
+        null
+      </field>
+
+      <field name="_beforeHoveredTab">
+        null
+      </field>
+
+      <field name="_afterHoveredTab">
+        null
+      </field>
+
+      <method name="_markTabs">
+        <body><![CDATA[
+          let vTabs = this.tabbrowser.visibleTabs;
+
+          if (!vTabs.length) {
+            return;
+          }
+          let selectedIndex = vTabs.indexOf(this.tabbrowser.selectedTab);
+          let lastVisible = vTabs.length - 1;
+
+          if (this._beforeSelectedTab)
+            this._beforeSelectedTab.removeAttribute("beforeselected-visible");
+          if (selectedIndex == 0) {
+            this._beforeSelectedTab = null;
+          } else {
+            this._beforeSelectedTab = vTabs[selectedIndex - 1];
+            this._beforeSelectedTab.setAttribute("beforeselected-visible",
+                                                 "true");
+            if (this._beforeSelectedTab.hasAttribute("beforehovered"))
+              this._beforeSelectedTab.removeAttribute("beforehovered");
+          }
+
+          if (this._afterSelectedTab)
+            this._afterSelectedTab.removeAttribute("afterselected-visible");
+          if (lastVisible == selectedIndex) {
+            this._afterSelectedTab = null;
+          } else {
+            this._afterSelectedTab = vTabs[selectedIndex + 1];
+            this._afterSelectedTab.setAttribute("afterselected-visible",
+                                                "true");
+            if (this._afterSelectedTab.hasAttribute("afterhovered"))
+              this._afterSelectedTab.removeAttribute("afterhovered");
+          }
+
+          if (this._firstTab)
+            this._firstTab.removeAttribute("first-visible-tab");
+          this._firstTab = vTabs[0];
+          this._firstTab.setAttribute("first-visible-tab", "true");
+          if (this._lastTab)
+            this._lastTab.removeAttribute("last-visible-tab");
+          this._lastTab = vTabs[lastVisible];
+          this._lastTab.setAttribute("last-visible-tab", "true");
+        ]]></body>
+      </method>
+
       <field name="_prefObserver"><![CDATA[({
         tabContainer: this,
 
@@ -2856,6 +2931,25 @@
           return val;
         ]]></setter>
       </property>
+
+      <method name="_enterNewTab">
+        <body><![CDATA[
+          let candidate = gBrowser.visibleTabs[gBrowser.visibleTabs.length - 1];
+          if (!candidate.hasAttribute("selected")) {
+            this._beforeHoveredTab = candidate;
+            candidate.setAttribute("beforehovered", "true");
+          }
+        ]]></body>
+      </method>
+
+      <method name="_leaveNewTab">
+        <body><![CDATA[
+          if (this._beforeHoveredTab) {
+            this._beforeHoveredTab.removeAttribute("beforehovered");
+            this._beforeHoveredTab = null;
+          }
+        ]]></body>
+      </method>
 
       <method name="_propagateVisibility">
         <body><![CDATA[
@@ -3815,6 +3909,48 @@
         if (anonid == "close-button")
           this.mOverCloseButton = false;
       </handler>
+      <handler event="mouseenter"><![CDATA[
+        let tab = event.target;
+        if (tab.hasAttribute("selected") ||
+            event.originalTarget.localName != "tab")
+          return;
+
+        let visibleTabs = gBrowser.visibleTabs;
+        let tabIndex = visibleTabs.indexOf(tab);
+        let tabcontainer = gBrowser.mTabContainer;
+        if (tabIndex == 0) {
+          tabcontainer._beforeHoveredTab = null;
+        } else {
+          let candidate = visibleTabs[tabIndex - 1];
+          if (!candidate.hasAttribute("selected")) {
+            tabcontainer._beforeHoveredTab = candidate
+            candidate.setAttribute("beforehovered", "true");
+          }
+        }
+
+        if (visibleTabs.length - 1 == tabIndex) {
+          tabcontainer._afterHoveredTab = null;
+        } else {
+          let candidate = visibleTabs[tabIndex + 1];
+          if (!candidate.hasAttribute("selected")) {
+            tabcontainer._afterHoveredTab = candidate;
+            candidate.setAttribute("afterhovered", "true");
+          }
+        }
+      ]]></handler>
+      <handler event="mouseleave"><![CDATA[
+        let tabcontainer = gBrowser.mTabContainer;
+        if (event.originalTarget.localName != "tab")
+          return;
+        if (tabcontainer._beforeHoveredTab) {
+          tabcontainer._beforeHoveredTab.removeAttribute("beforehovered");
+          tabcontainer._beforeHoveredTab = null;
+        }
+        if (tabcontainer._afterHoveredTab) {
+          tabcontainer._afterHoveredTab.removeAttribute("afterhovered");
+          tabcontainer._afterHoveredTab = null;
+        }
+      ]]></handler>
       <handler event="dragstart" phase="capturing">
         this.style.MozUserFocus = '';
       </handler>

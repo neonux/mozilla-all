@@ -1092,6 +1092,11 @@
     <svg:clipPath id="winstripe-urlbar-back-button-clip-path" clipPathUnits="userSpaceOnUse">
       <svg:path d="M 0,0 0,7.8 C 2.5,11 4,14 4,18 4,22 2.5,25 0,28 l 0,22 10000,0 0,-50 L 0,0 z"/>
     </svg:clipPath>
+# not sure if this is doing anything yet
+# the clip-path for winstripe will probably be exactly the same
+    <svg:clipPath id="winstripe-tab-curve-clip-path" clipPathUnits="userSpaceOnUse">
+      <svg:path d="m 0,28 5,0 4,-3 3,-4 1,-5 1,-5 3,-5 4,-4 4,-2 5,0 0,31 -30,0 z"/>
+    </svg:clipPath>
   </svg:svg>
 #endif
 #ifdef XP_MACOSX
