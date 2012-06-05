@@ -186,6 +186,8 @@ public:
     eIntID_SubmenuDelay,
     // can popups overlap menu/task bar?
     eIntID_MenusCanOverlapOSBar,
+    // should overlay scrollbars be used?
+    eIntID_UseOverlayScrollbars,
     // skip navigating to disabled menu item?
     eIntID_SkipNavigatingDisabledMenuItem,
     // begin a drag if the mouse is moved further than the threshold while the
