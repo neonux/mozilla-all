@@ -49,14 +49,26 @@
 
   .tabbrowser-tab:not(:-moz-lwtheme),
   .tabs-newtab-button:not(:-moz-lwtheme) {
-    color: black;
+    background-image: @toolbarShadowOnTab@, @bgTabTexture@,
+                      -moz-linear-gradient(@customToolbarColor@, @customToolbarColor@);
   }
 
   .tabbrowser-tab:not(:-moz-lwtheme):hover,
   .tabs-newtab-button:not(:-moz-lwtheme):hover {
-    color: black;
+    background-image: @toolbarShadowOnTab@, @bgTabTextureHover@,
+                      -moz-linear-gradient(@customToolbarColor@, @customToolbarColor@);
   }
 
+  .tabbrowser-tab[selected="true"]:not(:-moz-lwtheme) {
+    background-image: -moz-linear-gradient(white, @toolbarHighlight@ 50%),
+                      -moz-linear-gradient(@customToolbarColor@, @customToolbarColor@);
+  }
+
+  #main-window[tabsontop=false]:not([disablechrome]) .tabbrowser-tab[selected=true]:not(:-moz-lwtheme) {
+    background-image: @toolbarShadowOnTab@,
+                      -moz-linear-gradient(white, @toolbarHighlight@ 50%),
+                      -moz-linear-gradient(@customToolbarColor@, @customToolbarColor@);
+  }
 
   #navigator-toolbox:not(:-moz-lwtheme)::after {
     background-color: #aabccf;
@@ -209,29 +221,10 @@
   }
   #main-window[sizemode=normal] #TabsToolbar[tabsontop=true]:not(:-moz-lwtheme) {
     margin-bottom: -1px;
-    background-image: -moz-image-rect(url(tabbrowser/tabbar-glow.png), 0, 26, 27, 0),
-                      -moz-image-rect(url(tabbrowser/tabbar-glow.png), 0, 27, 27, 26),
-                      -moz-image-rect(url(tabbrowser/tabbar-glow.png), 0, 53, 27, 27) !important;
-    background-repeat: no-repeat;
-    background-size: 26px 27px, -moz-calc(100% - 52px) 27px, 26px 27px;
-    background-position: 0 bottom, 26px bottom, 100% bottom;
-  }
-  #main-window[tabsintitlebar]:not([inFullscreen]) #TabsToolbar[tabsontop=true]:not(:-moz-lwtheme) {
-    background-image: -moz-linear-gradient(bottom, @toolbarShadowColor@ 1px, transparent 1px),
-                      -moz-image-rect(url(tabbrowser/tabbar-glow.png), 0, 26, 27, 0),
-                      -moz-image-rect(url(tabbrowser/tabbar-glow.png), 0, 27, 27, 26),
-                      -moz-image-rect(url(tabbrowser/tabbar-glow.png), 0, 53, 27, 27);
-    background-repeat: no-repeat;
-    background-size: 100% 100%, 26px 27px, -moz-calc(100% - 52px) 27px, 26px 27px;
-    background-position: center bottom, 0 bottom, 26px bottom, 100% bottom;
+    background-image: none !important;
   }
   #main-window[sizemode=normal] #tabbrowser-tabs[tabsontop=true] > .tabbrowser-arrowscrollbox > .arrowscrollbox-scrollbox > .scrollbox-innerbox:not(:-moz-lwtheme) {
     position: relative;
-  }
-
-  .tabbrowser-tab:not([selected]) > .tab-stack > .tab-content > .tab-text:not(:-moz-lwtheme-brighttext) {
-    text-shadow: 0 0 10px #fff,
-                 0 0 10px #fff;
   }
 
   #navigator-toolbox[tabsontop=false] > #PersonalToolbar {
