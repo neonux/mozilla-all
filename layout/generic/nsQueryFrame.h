@@ -43,6 +43,7 @@ public:
 #define FRAME_ID(classname) classname##_id,
 #include "nsFrameIdList.h"
 #undef FRAME_ID
+    nsIScrollbarHolder_id,
 
     // The PresArena implementation uses this bit to distinguish objects
     // allocated by size from objects allocated by type ID (that is, frames
