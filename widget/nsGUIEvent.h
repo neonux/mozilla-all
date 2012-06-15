@@ -422,16 +422,18 @@ class nsHashKey;
 
 // Simple gesture events
 #define NS_SIMPLE_GESTURE_EVENT_START    3500
-#define NS_SIMPLE_GESTURE_SWIPE          (NS_SIMPLE_GESTURE_EVENT_START)
-#define NS_SIMPLE_GESTURE_MAGNIFY_START  (NS_SIMPLE_GESTURE_EVENT_START+1)
-#define NS_SIMPLE_GESTURE_MAGNIFY_UPDATE (NS_SIMPLE_GESTURE_EVENT_START+2)
-#define NS_SIMPLE_GESTURE_MAGNIFY        (NS_SIMPLE_GESTURE_EVENT_START+3)
-#define NS_SIMPLE_GESTURE_ROTATE_START   (NS_SIMPLE_GESTURE_EVENT_START+4)
-#define NS_SIMPLE_GESTURE_ROTATE_UPDATE  (NS_SIMPLE_GESTURE_EVENT_START+5)
-#define NS_SIMPLE_GESTURE_ROTATE         (NS_SIMPLE_GESTURE_EVENT_START+6)
-#define NS_SIMPLE_GESTURE_TAP            (NS_SIMPLE_GESTURE_EVENT_START+7)
-#define NS_SIMPLE_GESTURE_PRESSTAP       (NS_SIMPLE_GESTURE_EVENT_START+8)
-#define NS_SIMPLE_GESTURE_EDGEUI         (NS_SIMPLE_GESTURE_EVENT_START+9)
+#define NS_SIMPLE_GESTURE_SWIPE_START    (NS_SIMPLE_GESTURE_EVENT_START)
+#define NS_SIMPLE_GESTURE_SWIPE_UPDATE   (NS_SIMPLE_GESTURE_EVENT_START+1)
+#define NS_SIMPLE_GESTURE_SWIPE_END      (NS_SIMPLE_GESTURE_EVENT_START+2)
+#define NS_SIMPLE_GESTURE_SWIPE          (NS_SIMPLE_GESTURE_EVENT_START+3)
+#define NS_SIMPLE_GESTURE_MAGNIFY_START  (NS_SIMPLE_GESTURE_EVENT_START+4)
+#define NS_SIMPLE_GESTURE_MAGNIFY_UPDATE (NS_SIMPLE_GESTURE_EVENT_START+5)
+#define NS_SIMPLE_GESTURE_MAGNIFY        (NS_SIMPLE_GESTURE_EVENT_START+6)
+#define NS_SIMPLE_GESTURE_ROTATE_START   (NS_SIMPLE_GESTURE_EVENT_START+7)
+#define NS_SIMPLE_GESTURE_ROTATE_UPDATE  (NS_SIMPLE_GESTURE_EVENT_START+8)
+#define NS_SIMPLE_GESTURE_ROTATE         (NS_SIMPLE_GESTURE_EVENT_START+9)
+#define NS_SIMPLE_GESTURE_TAP            (NS_SIMPLE_GESTURE_EVENT_START+10)
+#define NS_SIMPLE_GESTURE_PRESSTAP       (NS_SIMPLE_GESTURE_EVENT_START+11)
 
 // These are used to send native events to plugins.
 #define NS_PLUGIN_EVENT_START            3600
@@ -1698,20 +1700,21 @@ public:
   nsSimpleGestureEvent(bool isTrusted, PRUint32 msg, nsIWidget* w,
                          PRUint32 directionArg, PRFloat64 deltaArg)
     : nsMouseEvent_base(isTrusted, msg, w, NS_SIMPLE_GESTURE_EVENT),
-      direction(directionArg), delta(deltaArg), clickCount(0)
+      allowedDirections(0), direction(directionArg), delta(deltaArg)
   {
   }
 
   nsSimpleGestureEvent(const nsSimpleGestureEvent& other)
     : nsMouseEvent_base((other.flags & NS_EVENT_FLAG_TRUSTED) != 0,
                         other.message, other.widget, NS_SIMPLE_GESTURE_EVENT),
-      direction(other.direction), delta(other.delta), clickCount(0)
+      allowedDirections(other.allowedDirections), direction(other.direction),
+      delta(other.delta)
   {
   }
 
-  PRUint32 direction;   // See nsIDOMSimpleGestureEvent for values
-  PRFloat64 delta;      // Delta for magnify and rotate events
-  PRUint32 clickCount;  // The number of taps for tap events
+  PRUint32 allowedDirections; // See nsIDOMSimpleGestureEvent for values
+  PRUint32 direction;
+  PRFloat64 delta;            // Delta for magnify, rotate and swipe events
 };
 
 class nsTransitionEvent : public nsEvent

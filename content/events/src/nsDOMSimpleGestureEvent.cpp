@@ -41,6 +41,22 @@ NS_INTERFACE_MAP_BEGIN(nsDOMSimpleGestureEvent)
   NS_DOM_INTERFACE_MAP_ENTRY_CLASSINFO(SimpleGestureEvent)
 NS_INTERFACE_MAP_END_INHERITING(nsDOMMouseEvent)
 
+/* attribute unsigned long allowedDirections; */
+NS_IMETHODIMP
+nsDOMSimpleGestureEvent::GetAllowedDirections(PRUint32 *aAllowedDirections)
+{
+  NS_ENSURE_ARG_POINTER(aAllowedDirections);
+  *aAllowedDirections = static_cast<nsSimpleGestureEvent*>(mEvent)->allowedDirections;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDOMSimpleGestureEvent::SetAllowedDirections(PRUint32 aAllowedDirections)
+{
+  static_cast<nsSimpleGestureEvent*>(mEvent)->allowedDirections = aAllowedDirections;
+  return NS_OK;
+}
+
 /* readonly attribute unsigned long direction; */
 NS_IMETHODIMP
 nsDOMSimpleGestureEvent::GetDirection(PRUint32 *aDirection)
@@ -84,6 +100,7 @@ nsDOMSimpleGestureEvent::InitSimpleGestureEvent(const nsAString& aTypeArg,
                                                 bool aMetaKeyArg,
                                                 PRUint16 aButton,
                                                 nsIDOMEventTarget* aRelatedTarget,
+                                                PRUint32 aAllowedDirectionsArg,
                                                 PRUint32 aDirectionArg,
                                                 PRFloat64 aDeltaArg,
                                                 PRUint32 aClickCountArg)
@@ -106,6 +123,7 @@ nsDOMSimpleGestureEvent::InitSimpleGestureEvent(const nsAString& aTypeArg,
   NS_ENSURE_SUCCESS(rv, rv);
 
   nsSimpleGestureEvent* simpleGestureEvent = static_cast<nsSimpleGestureEvent*>(mEvent);
+  simpleGestureEvent->allowedDirections = aAllowedDirectionsArg;
   simpleGestureEvent->direction = aDirectionArg;
   simpleGestureEvent->delta = aDeltaArg;
   simpleGestureEvent->clickCount = aClickCountArg;
