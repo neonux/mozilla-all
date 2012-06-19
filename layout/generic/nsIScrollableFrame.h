@@ -13,7 +13,7 @@
 #include "nsISupports.h"
 #include "nsCoord.h"
 #include "nsPresContext.h"
-#include "nsIScrollbarHolder.h"
+#include "nsIFrame.h" // to get nsIBox, which is a typedef
 
 #define NS_DEFAULT_VERTICAL_SCROLL_DISTANCE 3
 
@@ -25,8 +25,7 @@ class nsIScrollPositionListener;
  * APIs for examining scroll state, observing changes to scroll state,
  * and triggering scrolling.
  */
-class nsIScrollableFrame : public nsQueryFrame,
-                           public nsIScrollbarHolder {
+class nsIScrollableFrame : public nsQueryFrame {
 public:
 
   NS_DECL_QUERYFRAME_TARGET(nsIScrollableFrame)
@@ -173,6 +172,14 @@ public:
    * Remove a scroll position listener.
    */
   virtual void RemoveScrollPositionListener(nsIScrollPositionListener* aListener) = 0;
+
+  /**
+   * Obtain the XUL box for the horizontal or vertical scrollbar, or null
+   * if there is no such box. Avoid using this, but may be useful for
+   * setting up a scrollbar mediator if you want to redirect scrollbar
+   * input.
+   */
+  virtual nsIBox* GetScrollbarBox(bool aVertical) = 0;
 
   /**
    * Internal method used by scrollbars to notify their scrolling
