@@ -1128,6 +1128,9 @@ nsStylePosition::nsStylePosition(void)
   mMinHeight.SetCoordValue(0);
   mMaxHeight.SetNoneValue();
   mBoxSizing = NS_STYLE_BOX_SIZING_CONTENT;
+#ifdef MOZ_FLEXBOX
+  mJustifyContent = NS_STYLE_JUSTIFY_CONTENT_FLEX_START;
+#endif // MOZ_FLEXBOX
   mZIndex.SetAutoValue();
 }
 
@@ -1151,6 +1154,15 @@ nsChangeHint nsStylePosition::CalcDifference(const nsStylePosition& aOther) cons
     // Can affect both widths and heights; just a bad scene.
     return NS_CombineHint(hint, nsChangeHint_ReflowFrame);
   }
+
+#ifdef MOZ_FLEXBOX
+  // Properties that apply to flexbox containers:
+  // Changing justify-content on a flexbox might affect the positioning of its
+  // children, but it won't affect any sizing.
+  if (mJustifyContent != aOther.mJustifyContent) {
+    NS_UpdateHint(hint, nsChangeHint_NeedReflow);
+  }
+#endif // MOZ_FLEXBOX
 
   if (mHeight != aOther.mHeight ||
       mMinHeight != aOther.mMinHeight ||
