@@ -3793,13 +3793,32 @@ nsFrame::ComputeSize(nsRenderingContext *aRenderingContext,
   nscoord boxSizingToMarginEdgeWidth =
     aMargin.width + aBorder.width + aPadding.width - boxSizingAdjust.width;
 
-  // Compute width
+  const nsStyleCoord* widthStyleCoord = &(stylePos->mWidth);
+  const nsStyleCoord* heightStyleCoord = &(stylePos->mHeight);
 
-  if (stylePos->mWidth.GetUnit() != eStyleUnit_Auto) {
+#ifdef MOZ_FLEXBOX
+  // Is our flex basis non-auto?
+  if (stylePos->mFlexBasis.GetUnit() != eStyleUnit_Auto) {
+    // ...and are we in a flex container?
+    const nsStyleDisplay* parentStyleDisp = mParent ?
+      mParent->GetStyleDisplay() : nsnull;
+    if (parentStyleDisp &&
+        (parentStyleDisp->mDisplay == NS_STYLE_DISPLAY_FLEX ||
+         parentStyleDisp->mDisplay == NS_STYLE_DISPLAY_INLINE_FLEX)) {
+      // OK -- our flex basis needs to override our preferred size
+      // in the main axis of the flex container.
+      // XXXdholbert Assuming horizontal flex container for now.
+      widthStyleCoord = &(stylePos->mFlexBasis);
+    }
+  }
+#endif // MOZ_FLEXBOX
+
+  // Compute width
+  if (widthStyleCoord->GetUnit() != eStyleUnit_Auto) {
     result.width =
       nsLayoutUtils::ComputeWidthValue(aRenderingContext, this,
         aCBSize.width, boxSizingAdjust.width, boxSizingToMarginEdgeWidth,
-        stylePos->mWidth);
+        *widthStyleCoord);
   }
 
   if (!(aFlags & eIgnoreMinMaxSizes)) {
@@ -3827,9 +3846,9 @@ nsFrame::ComputeSize(nsRenderingContext *aRenderingContext,
 
   // Compute height
 
-  if (!nsLayoutUtils::IsAutoHeight(stylePos->mHeight, aCBSize.height)) {
+  if (!nsLayoutUtils::IsAutoHeight(*heightStyleCoord, aCBSize.height)) {
     result.height =
-      nsLayoutUtils::ComputeHeightValue(aCBSize.height, stylePos->mHeight) -
+      nsLayoutUtils::ComputeHeightValue(aCBSize.height, *heightStyleCoord) -
       boxSizingAdjust.height;
   }
 

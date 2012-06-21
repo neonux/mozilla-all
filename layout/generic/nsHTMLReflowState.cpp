@@ -136,6 +136,10 @@ nsHTMLReflowState::nsHTMLReflowState(nsPresContext*           aPresContext,
   mFlags.mHasClearance = false;
   mFlags.mIsColumnBalancing = false;
   mFlags.mDummyParentReflowState = false;
+#ifdef MOZ_FLEXBOX
+  mFlags.mFlexContainerIsHorizontal = false;
+  mFlags.mFlexContainerHasDistributedSpace = false;
+#endif // MOZ_FLEXBOX
 
   mDiscoveredClearance = nsnull;
   mPercentHeightObserver = (aParentReflowState.mPercentHeightObserver && 
@@ -634,6 +638,9 @@ nsHTMLReflowState::InitFrameType(nsIAtom* aFrameType)
     case NS_STYLE_DISPLAY_LIST_ITEM:
     case NS_STYLE_DISPLAY_TABLE:
     case NS_STYLE_DISPLAY_TABLE_CAPTION:
+#ifdef MOZ_FLEXBOX
+    case NS_STYLE_DISPLAY_FLEX:
+#endif // MOZ_FLEXBOX
       frameType = NS_CSS_FRAME_TYPE_BLOCK;
       break;
 
@@ -643,6 +650,9 @@ nsHTMLReflowState::InitFrameType(nsIAtom* aFrameType)
     case NS_STYLE_DISPLAY_INLINE_BOX:
     case NS_STYLE_DISPLAY_INLINE_GRID:
     case NS_STYLE_DISPLAY_INLINE_STACK:
+#ifdef MOZ_FLEXBOX
+    case NS_STYLE_DISPLAY_INLINE_FLEX:
+#endif // MOZ_FLEXBOX
       frameType = NS_CSS_FRAME_TYPE_INLINE;
       break;
 
@@ -1745,6 +1755,15 @@ IsSideCaption(nsIFrame* aFrame, const nsStyleDisplay* aStyleDisplay)
          captionSide == NS_STYLE_CAPTION_SIDE_RIGHT;
 }
 
+#ifdef MOZ_FLEXBOX
+static inline bool
+IsFlexItem(const nsIFrame* aFrame)
+{
+  const nsIFrame* parent = aFrame->GetParent();
+  return parent && parent->GetType() == nsGkAtoms::flexContainerFrame;
+}
+#endif // MOZ_FLEXBOX
+
 // XXX refactor this code to have methods for each set of properties
 // we are computing: width,height,line-height; margin; offsets
 
@@ -1954,6 +1973,12 @@ nsHTMLReflowState::InitConstraints(nsPresContext* aPresContext,
             frame->GetContentInsertionFrame()->GetType() == nsGkAtoms::legendFrame))) {
         computeSizeFlags |= nsIFrame::eShrinkWrap;
       }
+#ifdef MOZ_FLEXBOX
+      if (IsFlexItem(frame)) {
+        computeSizeFlags |= nsIFrame::eShrinkWrap |
+          nsIFrame::eIgnoreMinMaxSizes;
+      }
+#endif // MOZ_FLEXBOX
 
       nsSize size =
         frame->ComputeSize(rendContext,
@@ -1970,15 +1995,43 @@ nsHTMLReflowState::InitConstraints(nsPresContext* aPresContext,
                                   mComputedPadding.TopBottom()),
                            computeSizeFlags);
 
-      mComputedWidth = size.width;
-      mComputedHeight = size.height;
+#ifdef MOZ_FLEXBOX
+      // XXXdholbert ASSUMING FLEX CONTAINER IS IN HORIZONTAL AXIS FOR NOW
+      if (mFlags.mFlexContainerHasDistributedSpace) {
+        NS_ABORT_IF_FALSE(IsFlexItem(frame),
+                          "reflow state's flexContainer flags should only "
+                          "be set on flex items");
+        // If we're a flex item, and our flex container has already distributed
+        // its extra space, we should trust that the available space it
+        // provided for us is the size that we should use.
+        if (mFlags.mFlexContainerIsHorizontal) {
+          mComputedWidth = availableWidth;
+          mComputedHeight = size.height;
+        } else { // flex container is vertical
+          // XXXdholbert If we're overriding the computed height, then
+          // mComputedWidth here is probably invalid... That might cause issues
+          mComputedWidth = size.width;
+          mComputedHeight = availableHeight;
+        }
+      } else {
+#endif // MOZ_FLEXBOX
+        mComputedWidth = size.width;
+        mComputedHeight = size.height;
+#ifdef MOZ_FLEXBOX
+      }
+#endif // MOZ_FLEXBOX
       NS_ASSERTION(mComputedWidth >= 0, "Bogus width");
       NS_ASSERTION(mComputedHeight == NS_UNCONSTRAINEDSIZE ||
                    mComputedHeight >= 0, "Bogus height");
 
-      // Exclude inline tables from the block margin calculations
-      if (isBlock && !IsSideCaption(frame, mStyleDisplay) &&
-          frame->GetStyleDisplay()->mDisplay != NS_STYLE_DISPLAY_INLINE_TABLE)
+      // Exclude inline tables and flex items from the block margin calculations
+      if (isBlock &&
+          !IsSideCaption(frame, mStyleDisplay) &&
+          frame->GetStyleDisplay()->mDisplay != NS_STYLE_DISPLAY_INLINE_TABLE
+#ifdef MOZ_FLEXBOX
+          && !IsFlexItem(frame)
+#endif // MOZ_FLEXBOX
+          )
         CalculateBlockSideMargins(availableWidth, mComputedWidth, aFrameType);
     }
   }
