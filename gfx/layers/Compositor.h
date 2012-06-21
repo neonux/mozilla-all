@@ -165,7 +165,7 @@ class DrawableTextureHost : public Texture
    * current process this may return the same object and will only be thread
    * safe.
    */
-  TextureIdentifier GetIdentifierForProcess(base::ProcessHandle aProcess);
+  virtual TextureIdentifier GetIdentifierForProcess(base::ProcessHandle aProcess) = 0;
 };
 
 /* This class allows texture clients to draw into textures through Azure or
@@ -182,22 +182,22 @@ class DrawableTextureClient
    * is to be used with. If the process is identical to the current process
    * this may return the same object and will only be thread safe.
    */
-  TextureIdentifier GetIdentifierForProcess(base::ProcessHandle aProcess);
+  virtual TextureIdentifier GetIdentifierForProcess(base::ProcessHandle aProcess) = 0;
 
   /* This requests a DrawTarget to draw into the current texture. Once the
    * user is finished with the DrawTarget it should call Unlock.
    */
-  TemporaryRef<gfx::DrawTarget> LockDT();
+  virtual TemporaryRef<gfx::DrawTarget> LockDT() = 0;
 
   /* This requests a gfxContext to draw into the current texture. Once the
    * user is finished with the gfxContext it should call Unlock.
    */
-  already_AddRefed<gfxContext> LockContext();
+  virtual already_AddRefed<gfxContext> LockContext() = 0;
 
   /* This unlocks the current DrawableTexture and allows the host to composite
    * it directly.
    */
-  void Unlock();
+  virtual void Unlock() = 0;
 };
 
 class Compositor : RefCounted<Compositor>
@@ -206,29 +206,29 @@ class Compositor : RefCounted<Compositor>
    * accross process or thread boundaries that are compatible with this
    * compositor.
    */
-  TextureHostIdentifier
-    GetTextureHostIdentifier();
+  virtual TextureHostIdentifier
+    GetTextureHostIdentifier() = 0;
 
   /* This creates an immutable texture based on an in-memory bitmap.
    */
-  TemporaryRef<Texture>
+  virtual TemporaryRef<Texture>
     CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PRUint32 aStride,
-                         TextureFormat aFormat);
+                         TextureFormat aFormat) = 0;
 
   /* This creates a DrawableTexture that can be sent accross process or thread
    * boundaries to receive its content.
    */
-  TemporaryRef<DrawableTextureHost>
-    CreateDrawableTexture(const TextureIdentifier &aIdentifier);
+  virtual TemporaryRef<DrawableTextureHost>
+    CreateDrawableTexture(const TextureIdentifier &aIdentifier) = 0;
 
   /* This tells the compositor to actually draw a quad, where the area is
    * specified in userspace, and the source rectangle is the area of the
    * currently set textures to sample from. This area may not refer directly
    * to pixels depending on the effect.
    */
-  void DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
-                const gfx::Rect *aClipRect, const EffectChain &aEffectChain,
-                const gfx::Matrix3x3 &aTransform); 
+  virtual void DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
+                        const gfx::Rect *aClipRect, const EffectChain &aEffectChain,
+                        const gfx::Matrix3x3 &aTransform) = 0; 
 };
 
 class Factory
