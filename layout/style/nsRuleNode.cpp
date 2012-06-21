@@ -6422,6 +6422,49 @@ nsRuleNode::ComputePositionData(void* aStartStruct,
               SETDSC_ENUMERATED, parentPos->mAlignItems,
               NS_STYLE_ALIGN_ITEMS_INITIAL_VALUE, 0, 0, 0, 0);
 
+  // Prep work for align-self.
+  // Holds the value that we'll inherit, if our 'align-self' is 'inherit':
+  PRUint8 inheritedAlignSelf = parentPos->mAlignSelf;
+  if (inheritedAlignSelf == NS_STYLE_ALIGN_SELF_AUTO &&
+      aRuleData->ValueForAlignSelf()->GetUnit() == eCSSUnit_Inherit) {
+    // We're inheriting 'align-self: auto' -- we need to *actually*
+    // inherit the *used* value of 'auto' on our parent.  We figure out that
+    // used value here.
+    if (parentPos == pos) {
+      // We're the root node. (If we weren't, COMPUTE_START_RESET would've
+      // given us a distinct parentPos, since we've got an 'inherit' value.)
+      // Nothing to inherit from --> just use default value.
+      inheritedAlignSelf = NS_STYLE_ALIGN_ITEMS_INITIAL_VALUE;
+    } else {
+      // Our parent's "auto" value computes to our grandparent's value for
+      // "align-items".  So, that's what we're supposed to inherit.
+      NS_ABORT_IF_FALSE(aContext->GetParent(),
+                        "we've got a distinct parent style-struct already, so "
+                        "we should have a parent style-context");
+      nsStyleContext* grandparentContext = aContext->GetParent()->GetParent();
+      if (!grandparentContext) {
+        // No grandparent --> our parent is the root node, so its
+        // "align-self: auto" computes to the default "align-items" value:
+        inheritedAlignSelf = NS_STYLE_ALIGN_ITEMS_INITIAL_VALUE;
+      } else {
+        // Normal case -- we have a grandparent.
+        // Its "align-items" value is what we should end up inheriting.
+        const nsStylePosition* grandparentPos =
+          grandparentContext->GetStylePosition();
+        inheritedAlignSelf = grandparentPos->mAlignItems;
+      }
+    }
+  }
+
+  // align-self: enum, auto, inherit, initial
+  SetDiscrete(*aRuleData->ValueForAlignSelf(),
+              pos->mAlignSelf, canStoreInRuleTree,
+              SETDSC_ENUMERATED | SETDSC_AUTO,
+              inheritedAlignSelf, // inherit == parent's used value
+              NS_STYLE_ALIGN_SELF_AUTO, // initial == auto
+              NS_STYLE_ALIGN_SELF_AUTO, // auto == auto
+              0, 0, 0);
+
   // flex-direction: enum, inherit, initial
   SetDiscrete(*aRuleData->ValueForFlexDirection(),
               pos->mFlexDirection, canStoreInRuleTree,
