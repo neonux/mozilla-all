@@ -59,6 +59,7 @@ CPPSRCS = \
         LayerManagerOGLProgram.cpp \
         LayerSorter.cpp \
         ImageLayers.cpp \
+        Factory.cpp \
         $(NULL)
 
 ifeq ($(MOZ_WIDGET_TOOLKIT),windows)
