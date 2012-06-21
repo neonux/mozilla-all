@@ -736,8 +736,6 @@ var gCSSProperties = {
 		],
 		invalid_values: [ "20", "-1px", "50%" ]
 	},
-/* XXXdholbert In builds with MOZ_FLEXBOX enabled, this should be uncommented.
-   (This would be #ifdef MOZ_FLEXBOX, if that worked in JS files.)
 	"-moz-align-items": {
 		domProp: "MozAlignItems",
 		inherited: false,
@@ -901,7 +899,6 @@ var gCSSProperties = {
 		other_values: [ "flex-end", "center", "space-between", "space-around" ],
 		invalid_values: [ "baseline", "stretch", "30px", "5%" ]
 	},
-*/
 	"-moz-float-edge": {
 		domProp: "MozFloatEdge",
 		inherited: false,
