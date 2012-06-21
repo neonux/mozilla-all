@@ -31,6 +31,7 @@ EXPORTS = \
         BasicLayers.h \
         BasicTiledThebesLayer.h \
         BasicImplData.h \
+        CompositorOGL.h \
         ImageLayers.h \
         Layers.h \
         LayerManagerOGLShaders.h \
@@ -44,6 +45,7 @@ CPPSRCS = \
         BasicImages.cpp \
         BasicLayers.cpp \
         BasicTiledThebesLayer.cpp \
+        CompositorOGL.cpp \
         Layers.cpp \
         RenderTrace.cpp \
         ReadbackProcessor.cpp \
@@ -53,6 +55,7 @@ CPPSRCS = \
         ContainerLayerOGL.cpp \
         ImageLayerOGL.cpp \
         LayerManagerOGL.cpp \
+        TextureOGL.cpp \
         ThebesLayerOGL.cpp \
         TiledThebesLayerOGL.cpp \
         ReusableTileStoreOGL.cpp \
