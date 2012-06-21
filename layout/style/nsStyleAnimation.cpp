@@ -2554,6 +2554,19 @@ nsStyleAnimation::ExtractComputedValue(nsCSSProperty aProperty,
         }
 
 #ifdef MOZ_FLEXBOX
+        case eCSSProperty_flex_grow:
+        case eCSSProperty_flex_shrink: {
+          // These behave like normal float values, except that the spec says
+          // that we're not supposed to animate between '0' and other values.
+          const float* computedVal =
+            static_cast<const float*>(StyleDataAtOffset(styleStruct, ssOffset));
+          if (*computedVal == 0.0f) {
+            return false;
+          }
+          aComputedValue.SetFloatValue(*computedVal);
+          break;
+        }
+
         case eCSSProperty_order: {
           const nsStylePosition *stylePosition =
             static_cast<const nsStylePosition*>(styleStruct);
