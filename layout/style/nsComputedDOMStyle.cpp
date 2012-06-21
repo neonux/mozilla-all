@@ -3354,6 +3354,11 @@ nsComputedDOMStyle::DoGetMinWidth()
   if (eStyleUnit_Auto == minWidth.GetUnit()) {
     // In non-flexbox contexts, "min-width: auto" means "min-width: 0"
     minWidth.SetCoordValue(0);
+    if (mOuterFrame && mOuterFrame->GetParent() &&
+        mOuterFrame->GetParent()->GetType() == nsGkAtoms::flexContainerFrame) {
+      // XXXdholbert Assuming horizontal flexbox
+      minWidth.SetIntValue(NS_STYLE_WIDTH_MIN_CONTENT, eStyleUnit_Enumerated);
+    }
   }
 
   SetValueToCoord(val, minWidth, true,

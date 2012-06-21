@@ -2387,6 +2387,7 @@ nsLayoutUtils::IntrinsicForContainer(nsRenderingContext *aRenderingContext,
   // In non-flexbox contexts, "min-width: auto" means "min-width: 0"
   bool haveFixedMinWidth;
   if (eStyleUnit_Auto == styleMinWidth.GetUnit()) {
+    // XXXdholbert Add flexbox alternative for this
     minw = 0;
     haveFixedMinWidth = true;
   } else {
@@ -2743,7 +2744,16 @@ nsLayoutUtils::ComputeSizeWithIntrinsicDimensions(
                  boxSizingToMarginEdgeWidth, stylePos->mMinWidth);
     NS_ASSERTION(minWidth >= 0, "negative result from ComputeWidthValue");
   } else {
-    minWidth = 0;
+    if (aFrame->GetParent()->GetType() == nsGkAtoms::flexContainerFrame) {
+      // XXXdholbert Assuming horizontal flexbox
+      minWidth = nsLayoutUtils::ComputeWidthValue(aRenderingContext,
+                   aFrame, aCBSize.width, boxSizingAdjust.width,
+                   boxSizingToMarginEdgeWidth,
+                   nsStyleCoord(NS_STYLE_WIDTH_MIN_CONTENT,
+                                eStyleUnit_Enumerated));
+    } else {
+      minWidth = 0;
+    }
   }
 
   if (!isAutoHeight) {
