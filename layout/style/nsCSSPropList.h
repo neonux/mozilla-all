@@ -1532,6 +1532,12 @@ CSS_PROP_POSITION(
     kAlignItemsKTable, // We accept the same values as 'align-items', plus 'auto'
     offsetof(nsStylePosition, mAlignSelf),
     eStyleAnimType_EnumU8)
+CSS_PROP_SHORTHAND(
+    -moz-flex,
+    flex,
+    CSS_PROP_DOMPROP_PREFIXED(Flex),
+    CSS_PROPERTY_PARSE_FUNCTION,
+    "")
 CSS_PROP_POSITION(
     -moz-flex-basis,
     flex_basis,
