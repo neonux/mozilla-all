@@ -143,6 +143,9 @@ skip-if(Android) include first-letter/reftest.list
 # first-line/
 include first-line/reftest.list
 
+# flexbox (display: flex, display: inline-flex)
+include flexbox/reftest.list
+
 # floats/
 include floats/reftest.list
 
