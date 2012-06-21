@@ -12,8 +12,6 @@
     <style>
       body {
         font-size: 10px;
-        letter-spacing: 1px; /* To work around an antialiasing issue between *
-                              * 'o' and 'r' in the word 'orig', on Android.  */
       }
 
       div.inserted {
@@ -31,16 +29,16 @@
     </style>
   </head>
   <body>
-    <div class="flexbox" id="f8"><div class="inserted">[NewDiv]</div>[orig]</div>
-    <div class="flexbox" id="f9">[orig]<div class="inserted">[NewDiv]</div></div>
-    <div class="flexbox" id="f10"><div class="inserted">[NewDiv]</div>  [orig]</div>
-    <div class="flexbox" id="f11">  <div class="inserted">[NewDiv]</div>[orig]</div>
-    <div class="flexbox" id="f12">[orig]<div class="inserted">[NewDiv]</div>  </div>
-    <div class="flexbox" id="f13">[orig]  <div class="inserted">[NewDiv]</div></div>
-    <div class="flexbox" id="f14"><div class="inserted">[NewDiv]</div>[NewText][orig]</div>
-    <div class="flexbox" id="f15">[NewText]<div class="inserted">[NewDiv]</div>[orig]</div>
-    <div class="flexbox" id="f16">[orig]<div class="inserted">[NewDiv]</div>[NewText]</div>
-    <div class="flexbox" id="f17">[orig][NewText]<div class="inserted">[NewDiv]</div></div>
+    <div class="flexbox" id="f8"><div class="inserted">[NewDiv]</div>[OldText]</div>
+    <div class="flexbox" id="f9">[OldText]<div class="inserted">[NewDiv]</div></div>
+    <div class="flexbox" id="f10"><div class="inserted">[NewDiv]</div>  [OldText]</div>
+    <div class="flexbox" id="f11">  <div class="inserted">[NewDiv]</div>[OldText]</div>
+    <div class="flexbox" id="f12">[OldText]<div class="inserted">[NewDiv]</div>  </div>
+    <div class="flexbox" id="f13">[OldText]  <div class="inserted">[NewDiv]</div></div>
+    <div class="flexbox" id="f14"><div class="inserted">[NewDiv]</div>[NewText][OldText]</div>
+    <div class="flexbox" id="f15">[NewText]<div class="inserted">[NewDiv]</div>[OldText]</div>
+    <div class="flexbox" id="f16">[OldText]<div class="inserted">[NewDiv]</div>[NewText]</div>
+    <div class="flexbox" id="f17">[OldText][NewText]<div class="inserted">[NewDiv]</div></div>
   </body>
 </html>
 

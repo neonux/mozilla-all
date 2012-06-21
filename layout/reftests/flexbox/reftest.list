@@ -3,15 +3,15 @@
 # inserted adjacent to that existing content.)
 == flexbox-dyn-insertAroundDiv-1.xhtml flexbox-dyn-insertAroundDiv-1-ref.xhtml
 == flexbox-dyn-insertAroundDiv-2.xhtml flexbox-dyn-insertAroundDiv-2-ref.xhtml
-== flexbox-dyn-insertAroundDiv-3.xhtml flexbox-dyn-insertAroundDiv-3-ref.xhtml
+fails-if(Android) == flexbox-dyn-insertAroundDiv-3.xhtml flexbox-dyn-insertAroundDiv-3-ref.xhtml
 
 == flexbox-dyn-insertAroundSpan-1.xhtml flexbox-dyn-insertAroundText-1-ref.xhtml
 == flexbox-dyn-insertAroundSpan-2.xhtml flexbox-dyn-insertAroundText-2-ref.xhtml
-== flexbox-dyn-insertAroundSpan-3.xhtml flexbox-dyn-insertAroundText-3-ref.xhtml
+fails-if(Android) == flexbox-dyn-insertAroundSpan-3.xhtml flexbox-dyn-insertAroundText-3-ref.xhtml
 
 == flexbox-dyn-insertAroundText-1.xhtml flexbox-dyn-insertAroundText-1-ref.xhtml
 == flexbox-dyn-insertAroundText-2.xhtml flexbox-dyn-insertAroundText-2-ref.xhtml
-== flexbox-dyn-insertAroundText-3.xhtml flexbox-dyn-insertAroundText-3-ref.xhtml
+fails-if(Android) == flexbox-dyn-insertAroundText-3.xhtml flexbox-dyn-insertAroundText-3-ref.xhtml
 
 # Variant of one of the above tests, to regression-test an invalidation issue
 == flexbox-dyn-insertEmptySpan-1.xhtml flexbox-dyn-insertEmptySpan-1-ref.xhtml
