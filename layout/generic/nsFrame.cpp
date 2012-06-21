@@ -3802,26 +3802,28 @@ nsFrame::ComputeSize(nsRenderingContext *aRenderingContext,
         stylePos->mWidth);
   }
 
-  if (stylePos->mMaxWidth.GetUnit() != eStyleUnit_None) {
-    nscoord maxWidth =
-      nsLayoutUtils::ComputeWidthValue(aRenderingContext, this,
-        aCBSize.width, boxSizingAdjust.width, boxSizingToMarginEdgeWidth,
-        stylePos->mMaxWidth);
-    if (maxWidth < result.width)
-      result.width = maxWidth;
-  }
+  if (!(aFlags & eIgnoreMinMaxSizes)) {
+    if (stylePos->mMaxWidth.GetUnit() != eStyleUnit_None) {
+      nscoord maxWidth =
+        nsLayoutUtils::ComputeWidthValue(aRenderingContext, this,
+          aCBSize.width, boxSizingAdjust.width, boxSizingToMarginEdgeWidth,
+          stylePos->mMaxWidth);
+      if (maxWidth < result.width)
+        result.width = maxWidth;
+    }
 
-  nscoord minWidth;
-  if (stylePos->mMinWidth.GetUnit() != eStyleUnit_Auto) {
-    minWidth =
-      nsLayoutUtils::ComputeWidthValue(aRenderingContext, this,
-        aCBSize.width, boxSizingAdjust.width, boxSizingToMarginEdgeWidth,
-        stylePos->mMinWidth);
-  } else {
-    minWidth = 0;
+    nscoord minWidth;
+    if (stylePos->mMinWidth.GetUnit() != eStyleUnit_Auto) {
+      minWidth =
+        nsLayoutUtils::ComputeWidthValue(aRenderingContext, this,
+          aCBSize.width, boxSizingAdjust.width, boxSizingToMarginEdgeWidth,
+          stylePos->mMinWidth);
+    } else {
+      minWidth = 0;
+    }
+    if (minWidth > result.width)
+      result.width = minWidth;
   }
-  if (minWidth > result.width)
-    result.width = minWidth;
 
   // Compute height
 
@@ -3831,24 +3833,29 @@ nsFrame::ComputeSize(nsRenderingContext *aRenderingContext,
       boxSizingAdjust.height;
   }
 
-  if (result.height != NS_UNCONSTRAINEDSIZE) {
-    if (!nsLayoutUtils::IsAutoHeight(stylePos->mMaxHeight, aCBSize.height)) {
-      nscoord maxHeight =
-        nsLayoutUtils::ComputeHeightValue(aCBSize.height, stylePos->mMaxHeight) -
-        boxSizingAdjust.height;
-      if (maxHeight < result.height)
-        result.height = maxHeight;
-    }
+  if (!(aFlags & eIgnoreMinMaxSizes)) {
+    if (result.height != NS_UNCONSTRAINEDSIZE) {
+      if (!nsLayoutUtils::IsAutoHeight(stylePos->mMaxHeight, aCBSize.height)) {
+        nscoord maxHeight =
+          nsLayoutUtils::ComputeHeightValue(aCBSize.height, stylePos->mMaxHeight) -
+          boxSizingAdjust.height;
+        if (maxHeight < result.height)
+          result.height = maxHeight;
+      }
 
-    if (!nsLayoutUtils::IsAutoHeight(stylePos->mMinHeight, aCBSize.height)) {
-      nscoord minHeight =
-        nsLayoutUtils::ComputeHeightValue(aCBSize.height, stylePos->mMinHeight) -
-        boxSizingAdjust.height;
-      if (minHeight > result.height)
-        result.height = minHeight;
+      if (!nsLayoutUtils::IsAutoHeight(stylePos->mMinHeight, aCBSize.height)) {
+        nscoord minHeight =
+          nsLayoutUtils::ComputeHeightValue(aCBSize.height, stylePos->mMinHeight) -
+          boxSizingAdjust.height;
+        if (minHeight > result.height)
+          result.height = minHeight;
+      }
     }
   }
 
+  // XXXdholbert This is sort of a "min/max size" thing too.
+  // We should probably separate out _all_ this min/max stuff into a helper
+  // method that we can call later on in the flexbox algorithm.
   const nsStyleDisplay *disp = GetStyleDisplay();
   if (IsThemed(disp)) {
     nsIntSize widget(0, 0);

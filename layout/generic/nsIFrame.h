@@ -1656,7 +1656,11 @@ public:
     /* Set if the frame is in a context where non-replaced blocks should
      * shrink-wrap (e.g., it's floating, absolutely positioned, or
      * inline-block). */
-    eShrinkWrap =        1 << 0
+    eShrinkWrap =        1 << 0,
+    /* Set if the frame is in a context where min/max size constraints
+     * should be ignored (e.g. it's a flexbox item, in which case we need to
+     * ignore the min/max constraints before we distribute available space). */
+    eIgnoreMinMaxSizes = 2 << 0
   };
 
   /**
