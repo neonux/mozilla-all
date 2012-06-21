@@ -206,6 +206,7 @@ _TEST_FILES +=	\
 		test_flexbox_flex_shorthand.html \
 		test_flexbox_layout.html \
 		db_flexbox_flex.js \
+		test_flexbox_order.xhtml \
 		$(NULL)
 endif
 
