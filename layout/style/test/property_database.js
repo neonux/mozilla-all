@@ -2141,11 +2141,8 @@ var gCSSProperties = {
 			"table-column",
 			"table-cell",
 			"table-caption",
-/* XXXdholbert In builds with MOZ_FLEXBOX enabled, this should be uncommented.
-   (This would be #ifdef MOZ_FLEXBOX, if that worked in JS files.)
 			"-moz-flex",
 			"-moz-inline-flex",
-*/
 			"none"
 		],
 		invalid_values: []
