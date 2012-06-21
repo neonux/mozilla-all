@@ -2384,7 +2384,14 @@ nsLayoutUtils::IntrinsicForContainer(nsRenderingContext *aRenderingContext,
   nscoord maxw;
   bool haveFixedMaxWidth = GetAbsoluteCoord(styleMaxWidth, maxw);
   nscoord minw;
-  bool haveFixedMinWidth = GetAbsoluteCoord(styleMinWidth, minw);
+  // In non-flexbox contexts, "min-width: auto" means "min-width: 0"
+  bool haveFixedMinWidth;
+  if (eStyleUnit_Auto == styleMinWidth.GetUnit()) {
+    minw = 0;
+    haveFixedMinWidth = true;
+  } else {
+    haveFixedMinWidth = GetAbsoluteCoord(styleMinWidth, minw);
+  }
 
   // If we have a specified width (or a specified 'min-width' greater
   // than the specified 'max-width', which works out to the same thing),
@@ -2729,10 +2736,15 @@ nsLayoutUtils::ComputeSizeWithIntrinsicDimensions(
     maxWidth = nscoord_MAX;
   }
 
-  minWidth = nsLayoutUtils::ComputeWidthValue(aRenderingContext,
-               aFrame, aCBSize.width, boxSizingAdjust.width,
-               boxSizingToMarginEdgeWidth, stylePos->mMinWidth);
-  NS_ASSERTION(minWidth >= 0, "negative result from ComputeWidthValue");
+  // Handle "min-width: auto"
+  if (stylePos->mMinWidth.GetUnit() != eStyleUnit_Auto) {
+    minWidth = nsLayoutUtils::ComputeWidthValue(aRenderingContext,
+                 aFrame, aCBSize.width, boxSizingAdjust.width,
+                 boxSizingToMarginEdgeWidth, stylePos->mMinWidth);
+    NS_ASSERTION(minWidth >= 0, "negative result from ComputeWidthValue");
+  } else {
+    minWidth = 0;
+  }
 
   if (!isAutoHeight) {
     height = nsLayoutUtils::

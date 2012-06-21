@@ -3811,10 +3811,15 @@ nsFrame::ComputeSize(nsRenderingContext *aRenderingContext,
       result.width = maxWidth;
   }
 
-  nscoord minWidth =
-    nsLayoutUtils::ComputeWidthValue(aRenderingContext, this,
-      aCBSize.width, boxSizingAdjust.width, boxSizingToMarginEdgeWidth,
-      stylePos->mMinWidth);
+  nscoord minWidth;
+  if (stylePos->mMinWidth.GetUnit() != eStyleUnit_Auto) {
+    minWidth =
+      nsLayoutUtils::ComputeWidthValue(aRenderingContext, this,
+        aCBSize.width, boxSizingAdjust.width, boxSizingToMarginEdgeWidth,
+        stylePos->mMinWidth);
+  } else {
+    minWidth = 0;
+  }
   if (minWidth > result.width)
     result.width = minWidth;
 

@@ -6399,11 +6399,12 @@ nsRuleNode::ComputePositionData(void* aStartStruct,
            SETCOORD_LPOH | SETCOORD_INITIAL_NONE | SETCOORD_STORE_CALC,
            aContext, mPresContext, canStoreInRuleTree);
 
-
-  // Handle 'auto' values for min-width / min-height
-  if (pos->mMinWidth.GetUnit() == eStyleUnit_Auto) {
-    pos->mMinWidth.SetCoordValue(0);
-  }
+  // XXXdholbert Ultimately, we'll want this to stay "auto" and then treat it
+  // as 0 or min-content depending on the context (min-content in vertical
+  // flexbox contexts).  However, that only makes sense once we support
+  // min-content for height properties, which we don't yet. So for now,
+  // we make "min-height: auto" always compute to 0 and don't bother giving
+  // it special treatment anywhere.
   if (pos->mMinHeight.GetUnit() == eStyleUnit_Auto) {
     pos->mMinHeight.SetCoordValue(0);
   }

@@ -3247,7 +3247,15 @@ nsIDOMCSSValue*
 nsComputedDOMStyle::DoGetMinWidth()
 {
   nsROCSSPrimitiveValue *val = GetROCSSPrimitiveValue();
-  SetValueToCoord(val, GetStylePosition()->mMinWidth, true,
+
+  nsStyleCoord minWidth = GetStylePosition()->mMinWidth;
+
+  if (eStyleUnit_Auto == minWidth.GetUnit()) {
+    // In non-flexbox contexts, "min-width: auto" means "min-width: 0"
+    minWidth.SetCoordValue(0);
+  }
+
+  SetValueToCoord(val, minWidth, true,
                   &nsComputedDOMStyle::GetCBContentWidth,
                   nsCSSProps::kWidthKTable);
   return val;

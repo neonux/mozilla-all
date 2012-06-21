@@ -2399,9 +2399,14 @@ nsHTMLReflowState::ComputeMinMaxValues(nscoord aContainingBlockWidth,
                                        nscoord aContainingBlockHeight,
                                        const nsHTMLReflowState* aContainingBlockRS)
 {
-  mComputedMinWidth = ComputeWidthValue(aContainingBlockWidth,
-                                        mStylePosition->mBoxSizing,
-                                        mStylePosition->mMinWidth);
+  // Handle "min-width: auto"
+  if (eStyleUnit_Auto == mStylePosition->mMinWidth.GetUnit()) {
+    mComputedMinWidth = 0;
+  } else {
+    mComputedMinWidth = ComputeWidthValue(aContainingBlockWidth,
+                                          mStylePosition->mBoxSizing,
+                                          mStylePosition->mMinWidth);
+  }
 
   if (eStyleUnit_None == mStylePosition->mMaxWidth.GetUnit()) {
     // Specified value of 'none'

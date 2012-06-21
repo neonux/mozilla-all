@@ -1119,9 +1119,12 @@ nsStylePosition::nsStylePosition(void)
   mOffset.SetRight(autoCoord);
   mOffset.SetBottom(autoCoord);
   mWidth.SetAutoValue();
-  mMinWidth.SetCoordValue(0);
+  mMinWidth.SetAutoValue();
   mMaxWidth.SetNoneValue();
   mHeight.SetAutoValue();
+  // XXXdholbert Per note about min-height in nsRuleNode::ComputePositionData,
+  // this should eventually be SetAutoValue, once we support the 'min-content'
+  // keyword for height properties:
   mMinHeight.SetCoordValue(0);
   mMaxHeight.SetNoneValue();
   mBoxSizing = NS_STYLE_BOX_SIZING_CONTENT;
