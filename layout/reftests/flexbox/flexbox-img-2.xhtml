@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+     Any copyright is dedicated to the Public Domain.
+     http://creativecommons.org/publicdomain/zero/1.0/
+-->
+<!--
+     This test checks that flex() width-values are honored on img elements.
+-->
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <style>
+      div.flexbox {
+        width: 200px;
+        background: yellow;
+        display: -moz-flex;
+      }
+
+      img.a {
+        -moz-flex: 1 auto;
+        width: 30px;
+        outline: 3px dotted purple;
+      }
+      img.b {
+        -moz-flex: 2 auto;
+        width: 50px;
+        outline: 3px dashed lightblue;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="flexbox"
+         ><img class="a" src="solidblue.png"
+        /><img class="b" src="solidblue.png"/></div>
+  </body>
+</html>

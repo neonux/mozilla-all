@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+     Any copyright is dedicated to the Public Domain.
+     http://creativecommons.org/publicdomain/zero/1.0/
+-->
+<!--
+     Reference case with two images as flexbox items (positioned with
+     margins in place of the testcase's "-moz-justify-content: space-around").
+-->
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <style>
+      div.flexbox {
+        width: 200px;
+        line-height: 0;
+        background: yellow;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="flexbox"
+         ><img src="solidblue.png" style="margin-left: 42px;"
+        /><img src="solidblue.png" style="margin-left: 84px;"/>
+    </div>
+  </body>
+</html>

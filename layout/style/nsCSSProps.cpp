@@ -886,6 +886,10 @@ const PRInt32 nsCSSProps::kDisplayKTable[] = {
   eCSSKeyword__moz_popup,         NS_STYLE_DISPLAY_POPUP,
   eCSSKeyword__moz_groupbox,      NS_STYLE_DISPLAY_GROUPBOX,
 #endif
+#ifdef MOZ_FLEXBOX
+  eCSSKeyword__moz_flex,          NS_STYLE_DISPLAY_FLEX,
+  eCSSKeyword__moz_inline_flex,   NS_STYLE_DISPLAY_INLINE_FLEX,
+#endif // MOZ_FLEXBOX
   eCSSKeyword_UNKNOWN,-1
 };
 
@@ -895,6 +899,34 @@ const PRInt32 nsCSSProps::kEmptyCellsKTable[] = {
   eCSSKeyword__moz_show_background, NS_STYLE_TABLE_EMPTY_CELLS_SHOW_BACKGROUND,
   eCSSKeyword_UNKNOWN,-1
 };
+
+#ifdef MOZ_FLEXBOX
+const PRInt32 nsCSSProps::kAlignItemsKTable[] = {
+  eCSSKeyword_flex_start, NS_STYLE_ALIGN_ITEMS_FLEX_START,
+  eCSSKeyword_flex_end,   NS_STYLE_ALIGN_ITEMS_FLEX_END,
+  eCSSKeyword_center,     NS_STYLE_ALIGN_ITEMS_CENTER,
+  eCSSKeyword_baseline,   NS_STYLE_ALIGN_ITEMS_BASELINE,
+  eCSSKeyword_stretch,    NS_STYLE_ALIGN_ITEMS_STRETCH,
+  eCSSKeyword_UNKNOWN,-1
+};
+
+const PRInt32 nsCSSProps::kFlexDirectionKTable[] = {
+  eCSSKeyword_row,            NS_STYLE_FLEX_DIRECTION_ROW,
+  eCSSKeyword_row_reverse,    NS_STYLE_FLEX_DIRECTION_ROW_REVERSE,
+  eCSSKeyword_column,         NS_STYLE_FLEX_DIRECTION_COLUMN,
+  eCSSKeyword_column_reverse, NS_STYLE_FLEX_DIRECTION_COLUMN_REVERSE,
+  eCSSKeyword_UNKNOWN,-1
+};
+
+const PRInt32 nsCSSProps::kJustifyContentKTable[] = {
+  eCSSKeyword_flex_start,    NS_STYLE_JUSTIFY_CONTENT_FLEX_START,
+  eCSSKeyword_flex_end,      NS_STYLE_JUSTIFY_CONTENT_FLEX_END,
+  eCSSKeyword_center,        NS_STYLE_JUSTIFY_CONTENT_CENTER,
+  eCSSKeyword_space_between, NS_STYLE_JUSTIFY_CONTENT_SPACE_BETWEEN,
+  eCSSKeyword_space_around,  NS_STYLE_JUSTIFY_CONTENT_SPACE_AROUND,
+  eCSSKeyword_UNKNOWN,-1
+};
+#endif // MOZ_FLEXBOX
 
 const PRInt32 nsCSSProps::kFloatKTable[] = {
   eCSSKeyword_none,  NS_STYLE_FLOAT_NONE,
@@ -2022,6 +2054,15 @@ static const nsCSSProperty gColumnRuleSubpropTable[] = {
   eCSSProperty__moz_column_rule_color,
   eCSSProperty_UNKNOWN
 };
+
+#ifdef MOZ_FLEXBOX
+static const nsCSSProperty gFlexSubpropTable[] = {
+  eCSSProperty_flex_grow,
+  eCSSProperty_flex_shrink,
+  eCSSProperty_flex_basis,
+  eCSSProperty_UNKNOWN
+};
+#endif // MOZ_FLEXBOX
 
 static const nsCSSProperty gOverflowSubpropTable[] = {
   eCSSProperty_overflow_x,

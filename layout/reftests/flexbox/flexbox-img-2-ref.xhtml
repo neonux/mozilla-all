@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+     Any copyright is dedicated to the Public Domain.
+     http://creativecommons.org/publicdomain/zero/1.0/
+-->
+<!--
+     Reference for testcase using flex() width-values on img elements.
+-->
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <style>
+      table {
+        width: 200px;
+        background: yellow;
+      }
+      td {
+        padding: 0px;
+        vertical-align: top;
+      }
+      img { display: block; }
+      img.a {
+        width:  70px;
+        height: 50px;
+        outline: 3px dotted purple;
+      }
+      img.b {
+        width: 130px;
+        height: 50px;
+        outline: 3px dashed lightblue;
+      }
+    </style>
+  </head>
+  <body>
+    <table class="flexbox" cellpadding="0" cellspacing="0">
+      <td><img class="a" src="solidblue.png"/></td>
+      <td><img class="b" src="solidblue.png"/></td>
+    </table>
+  </body>
+</html>
