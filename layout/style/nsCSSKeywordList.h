@@ -199,6 +199,10 @@ CSS_KEY(closest-side, closest_side)
 CSS_KEY(cm, cm)
 CSS_KEY(col-resize, col_resize)
 CSS_KEY(collapse, collapse)
+#ifdef MOZ_FLEXBOX
+CSS_KEY(column, column)
+CSS_KEY(column-reverse, column_reverse)
+#endif // MOZ_FLEXBOX
 CSS_KEY(condensed, condensed)
 CSS_KEY(contain, contain)
 CSS_KEY(content-box, content_box)
@@ -366,7 +370,13 @@ CSS_KEY(rotatex, rotatex)
 CSS_KEY(rotatey, rotatey)
 CSS_KEY(rotatez, rotatez)
 CSS_KEY(round, round)
+#ifdef MOZ_FLEXBOX
+CSS_KEY(row, row)
+#endif // MOZ_FLEXBOX
 CSS_KEY(row-resize, row_resize)
+#ifdef MOZ_FLEXBOX
+CSS_KEY(row-reverse, row_reverse)
+#endif // MOZ_FLEXBOX
 CSS_KEY(rtl, rtl)
 CSS_KEY(running, running)
 CSS_KEY(s, s)
