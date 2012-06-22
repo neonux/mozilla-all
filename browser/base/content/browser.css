@@ -17,7 +17,6 @@ tabbrowser {
   -moz-binding: url("chrome://browser/content/tabbrowser.xml#tabbrowser-tabs");
 }
 
-#tabbrowser-tabs[closebuttons=hidden]:-moz-any([drag=detach], [drag=drop]) > .tabbrowser-arrowscrollbox > .tabs-newtab-button,
 #tabbrowser-tabs:not([overflow="true"]) ~ #alltabs-button,
 #tabbrowser-tabs:not([overflow="true"]) + #new-tab-button,
 #tabbrowser-tabs[overflow="true"] > .tabbrowser-arrowscrollbox > .tabs-newtab-button,
@@ -63,50 +62,6 @@ tabbrowser {
 .tabbrowser-tabs[positionpinnedtabs] > .tabbrowser-tab[pinned] {
   position: fixed !important;
   display: block; /* position:fixed already does this (bug 579776), but let's be explicit */
-}
-
-.tabbrowser-tabs[drag] > .tabbrowser-tab[selected] {
-  position: relative;
-  z-index: 3; /* ensure selected tab stays on top despite -moz-transform */
-}
-
-.tabbrowser-tabs[drag] > .tabbrowser-tab[dragged] {
-  position: relative;
-  z-index: 2;
-  pointer-events: none; /* avoid blocking dragover events on scroll buttons */
-}
-
-.tabbrowser-tabs:-moz-any([drag=detach], [drag=drop]) > .tabbrowser-tab[dragged] {
-  visibility: collapse;
-}
-
-.tabbrowser-tabs[drag=move] > .tabbrowser-tab[fadein]:not([dragged]) {
-  -moz-transition: -moz-transform 200ms ease-out;
-}
-
-.tabbrowser-tabs[drag=moveend] > .tabbrowser-tab[fadein][dragged] {
-  -moz-transition: -moz-transform 100ms ease-out;
-}
-
-.tab-drag-panel:not([drag=detach]):not([drag=drop]) {
-  opacity: 0;
-}
-
-.tab-drag-panel[drag=drop] > .tab-drag-label {
-  width: 200px;
-}
-
-#navigator-toolbox[drag=detach][tabsontop=true] > toolbar:not(#TabsToolbar),
-#navigator-toolbox[drag=detach][tabsontop=false] #notification-popup-box,
-#navigator-toolbox[drag=detach][tabsontop=false] #identity-box,
-#navigator-toolbox[drag=detach][tabsontop=false] #urlbar-display-box,
-#navigator-toolbox[drag=detach][tabsontop=false] #urlbar-icons,
-#navigator-toolbox[drag=detach] ~ #browser {
-  opacity: 0;
-}
-
-#navigator-toolbox[drag=detach][tabsontop=false] #urlbar {
-  color: transparent;
 }
 
 #alltabs-popup {
