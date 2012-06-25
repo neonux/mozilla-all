@@ -476,6 +476,12 @@ protected:
   bool ParseCalcTerm(nsCSSValue& aValue, PRInt32& aVariantMask);
   bool RequireWhitespace();
 
+#ifdef MOZ_FLEXBOX
+  // For "flex" shorthand property, defined in CSS3 Flexbox
+  bool ParseFlex();
+  bool ParseFlexShorthandComponent(nsCSSValue& aResult);
+#endif
+
   // for 'clip' and '-moz-image-region'
   bool ParseRect(nsCSSProperty aPropID);
   bool ParseColumns();
@@ -4831,6 +4837,144 @@ CSSParserImpl::ParseElement(nsCSSValue& aValue)
   return false;
 }
 
+#ifdef MOZ_FLEXBOX
+// flex:	none | [ <'flex-grow'> <'flex-shrink'>? || <'flex-basis'> ]
+bool
+CSSParserImpl::ParseFlex()
+{
+  // First check for inherit / initial
+  nsCSSValue tmpVal;
+  if (ParseVariant(tmpVal, VARIANT_INHERIT, nsnull)) {
+    // 'inherit' and 'initial' must be alone
+    if (!ExpectEndProperty()) {
+      return false;
+    }
+    NS_ABORT_IF_FALSE(eCSSUnit_Inherit == tmpVal.GetUnit() ||
+                      eCSSUnit_Initial == tmpVal.GetUnit(),
+                      "We only looked for inherit & initial, but we "
+                      "succeeded by getting something else...?");
+    AppendValue(eCSSProperty_flex_grow, tmpVal);
+    AppendValue(eCSSProperty_flex_shrink, tmpVal);
+    AppendValue(eCSSProperty_flex_basis, tmpVal);
+    return true;
+  }
+
+  // Next, check for 'none' == '0 0 auto'
+  if (ParseVariant(tmpVal, VARIANT_NONE, nsnull)) {
+    // 'none' must be alone
+    if (!ExpectEndProperty()) {
+      return false;
+    }
+
+    AppendValue(eCSSProperty_flex_grow, nsCSSValue(0.0f, eCSSUnit_Number));
+    AppendValue(eCSSProperty_flex_shrink, nsCSSValue(0.0f, eCSSUnit_Number));
+    AppendValue(eCSSProperty_flex_basis, nsCSSValue(eCSSUnit_Auto));
+    return true;
+  }
+
+  // Finally, try parsing our value as individual per-subproperty components:
+  //   [ <'flex-grow'> <'flex-shrink'>? || <'flex-basis'> ]
+
+  // Each subproperty has a default value that it takes when it's
+  // omitted from a "flex" shorthand value. (These default values are 
+  // just for when we're using the shorthand syntax, and they're distinct
+  // from the subproperties' own initial values.)  We start out with our
+  // subproperties at these defaults: "1 1 0%"
+  nsCSSValue flexGrow(1.0f, eCSSUnit_Number);
+  nsCSSValue flexShrink(1.0f, eCSSUnit_Number);
+  nsCSSValue flexBasis(0.0f, eCSSUnit_Percent);
+
+  // To keep track of what components we've parsed:
+  bool gotFlexGrow = false;
+  bool gotFlexShrink = false;
+  bool gotFlexBasis = false;
+
+  const PRUint32 numProps = 3;
+  for (PRUint32 i = 0; i < numProps && !CheckEndProperty(); ++i) {
+    // Parse the next component
+    if (!ParseFlexShorthandComponent(tmpVal)) {
+      return false;
+    }
+
+    // Figure out what the value we've just parsed actually represents.
+    //  - If it's a number, then it's flexGrow or flexShrink
+    //    (or an error, if we've already parsed both of those).
+    //  - Otherwise, it's flexBasis.
+    if (tmpVal.GetUnit() == eCSSUnit_Number) {
+      if (!gotFlexGrow) {
+        flexGrow = tmpVal;
+        gotFlexGrow = true;
+      } else if (!gotFlexShrink) {
+        flexShrink = tmpVal;
+        gotFlexShrink = true;
+      } else {
+        // Bad input: More than two raw number values. Fail.
+        // (Note: this is where we reject the invalid value "0 0 0". Even
+        // though '0' would normally be a valid length, the flexbox spec
+        // explicitly _disallows_ it in the flex-basis component of a flex
+        // shorthand value. That's why we can simply fail if we get more than
+        // two raw number values.)
+        return false;
+      }
+    } else if (!gotFlexBasis) {
+      flexBasis = tmpVal;
+      gotFlexBasis = true;
+
+      // OK, we've just parsed the flex-basis.  If we've already gotten a
+      // flex-grow value, then we're done. (Note that there can't still be a
+      // flex-shrink value coming up -- if there were, it'd be invalid syntax
+      // (which we'll catch below in ExpectEndProperty()), since flex-grow and
+      // flex-shrink are supposed to be adjacent in a 'flex' shorthand value.)
+      if (gotFlexGrow) {
+        break;
+      }
+    } else {
+      // More than one non-number value (e.g. multiple flex-basis values).
+      // Parse error.
+      return false;
+    }
+  }
+
+  // Fail if there's still trailing unparsed input:
+  if (!ExpectEndProperty()) {
+    return false;
+  }
+
+  AppendValue(eCSSProperty_flex_grow, flexGrow);
+  AppendValue(eCSSProperty_flex_shrink, flexShrink);
+  AppendValue(eCSSProperty_flex_basis, flexBasis);
+
+  return true;
+}
+
+bool
+CSSParserImpl::ParseFlexShorthandComponent(nsCSSValue& aResult)
+{
+  // NOTE: It's important that we try to parse the token as a number _before_
+  // we try to parse it as a length. This ensures that we'll parse '0' as
+  // a number rather than as a unitless zero length. (Unitless zero is
+  // explicitly prohibited as the flex-basis component of a flex value.)
+
+  // Try parsing next token as a number -- as a flex-grow or flex-shrink value.
+  if (ParseNonNegativeVariant(aResult, VARIANT_NUMBER, nsnull)) {
+    return true;
+  }
+
+  // OK, it's not a number. Try parsing it as a flex-basis value.
+  // (Here we allow anything that would be legal to specify for the
+  // 'flex-basis' property, except for "inherit".)
+  PRUint32 variantMask =
+    nsCSSProps::ParserVariant(eCSSProperty_flex_basis) & ~(VARIANT_INHERIT);
+
+  if (ParseNonNegativeVariant(aResult, variantMask, nsCSSProps::kWidthKTable)) {
+    return true;
+  }
+
+  // Got neither a number nor a valid 'flex-basis' value.  Fail.
+  return false;
+}
+#endif
+
 // <color-stop> : <color> [ <percentage> | <length> ]?
 bool
 CSSParserImpl::ParseColorStop(nsCSSValueGradient* aGradient)
@@ -5488,6 +5632,10 @@ CSSParserImpl::ParsePropertyByFunction(nsCSSProperty aPropID)
     return ParseCounterData(aPropID);
   case eCSSProperty_cursor:
     return ParseCursor();
+#ifdef MOZ_FLEXBOX
+  case eCSSProperty_flex:
+    return ParseFlex();
+#endif // MOZ_FLEXBOX
   case eCSSProperty_font:
     return ParseFont();
   case eCSSProperty_image_region:

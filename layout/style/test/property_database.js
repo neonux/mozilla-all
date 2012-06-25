@@ -736,6 +736,169 @@ var gCSSProperties = {
 		],
 		invalid_values: [ "20", "-1px", "50%" ]
 	},
+	"-moz-align-items": {
+		domProp: "MozAlignItems",
+		inherited: false,
+		type: CSS_TYPE_LONGHAND,
+		initial_values: [ "stretch" ],
+		other_values: [ "flex-start", "flex-end", "center", "baseline" ],
+		invalid_values: [ "space-between", "abc", "30px" ]
+	},
+	"-moz-align-self": {
+		domProp: "MozAlignSelf",
+		inherited: false,
+		type: CSS_TYPE_LONGHAND,
+		// (Assuming defaults on the parent, 'auto' will compute to 'stretch'.)
+		initial_values: [ "auto", "stretch" ],
+		other_values: [ "flex-start", "flex-end", "center", "baseline" ],
+		invalid_values: [ "space-between", "abc", "30px" ]
+	},
+	"-moz-flex": {
+		domProp: "MozFlex",
+		inherited: false,
+		type: CSS_TYPE_TRUE_SHORTHAND,
+		subproperties: [
+			"-moz-flex-grow",
+			"-moz-flex-shrink",
+			"-moz-flex-basis"
+		],
+		initial_values: [ "0 1 auto", "auto 0 1", "0 auto", "auto 0" ],
+		other_values: [
+			"none",
+			"1",
+			"0",
+			"0 1",
+			"0.5",
+			"1.2 3.4",
+			"0 0 0px",
+			"0px 0 0",
+			"5px 0 0",
+			"2 auto",
+			"auto 4",
+			"auto 5.6 7.8",
+			"-moz-max-content",
+			"1 -moz-max-content",
+			"1 2 -moz-max-content",
+			"-moz-max-content 1",
+			"-moz-max-content 1 2",
+			"-0"
+		],
+		invalid_values: [
+			"0 0 0",
+			"1 2px 3",
+			"1 auto 3",
+			"-1",
+			"1 -1"
+		]
+	},
+	"-moz-flex-basis": {
+		domProp: "MozFlexBasis",
+		inherited: false,
+		type: CSS_TYPE_LONGHAND,
+		initial_values: [ " auto" ],
+        /* NOTE: This is cribbed directly from the "width" chunk, since this
+           property takes the exact same values as width (albeit with
+           different semantics on 'auto').
+           XXXdholbert (Maybe these should get separated out into
+           a reusable array defined at the top of this file?) */
+		other_values: [ "15px", "3em", "15%", "-moz-max-content", "-moz-min-content", "-moz-fit-content", "-moz-available",
+			/* valid calc() values */
+			"-moz-calc(-2px)",
+			"-moz-calc(2px)",
+			"-moz-calc(50%)",
+			"-moz-calc(50% + 2px)",
+			"-moz-calc( 50% + 2px)",
+			"-moz-calc(50% + 2px )",
+			"-moz-calc( 50% + 2px )",
+			"-moz-calc(50% - -2px)",
+			"-moz-calc(2px - -50%)",
+			"-moz-calc(3*25px)",
+			"-moz-calc(3 *25px)",
+			"-moz-calc(3 * 25px)",
+			"-moz-calc(3* 25px)",
+			"-moz-calc(25px*3)",
+			"-moz-calc(25px *3)",
+			"-moz-calc(25px* 3)",
+			"-moz-calc(25px * 3)",
+			"-moz-calc(3*25px + 50%)",
+			"-moz-calc(50% - 3em + 2px)",
+			"-moz-calc(50% - (3em + 2px))",
+			"-moz-calc((50% - 3em) + 2px)",
+			"-moz-calc(2em)",
+			"-moz-calc(50%)",
+			"-moz-calc(50px/2)",
+			"-moz-calc(50px/(2 - 1))"
+		],
+		invalid_values: [ "none", "-2px",
+			/* invalid calc() values */
+			"-moz-calc(50%+ 2px)",
+			"-moz-calc(50% +2px)",
+			"-moz-calc(50%+2px)",
+			"-moz-min()",
+			"-moz-calc(min())",
+			"-moz-max()",
+			"-moz-calc(max())",
+			"-moz-min(5px)",
+			"-moz-calc(min(5px))",
+			"-moz-max(5px)",
+			"-moz-calc(max(5px))",
+			"-moz-min(5px,2em)",
+			"-moz-calc(min(5px,2em))",
+			"-moz-max(5px,2em)",
+			"-moz-calc(max(5px,2em))",
+			"-moz-calc(50px/(2 - 2))",
+			/* If we ever support division by values, which is
+			 * complicated for the reasons described in
+			 * http://lists.w3.org/Archives/Public/www-style/2010Jan/0007.html
+			 * , we should support all 4 of these as described in
+			 * http://lists.w3.org/Archives/Public/www-style/2009Dec/0296.html
+			 */
+			"-moz-calc((3em / 100%) * 3em)",
+			"-moz-calc(3em / 100% * 3em)",
+			"-moz-calc(3em * (3em / 100%))",
+			"-moz-calc(3em * 3em / 100%)"
+		]
+	},
+	"-moz-flex-direction": {
+		domProp: "MozFlexDirection",
+		inherited: false,
+		type: CSS_TYPE_LONGHAND,
+		initial_values: [ "row" ],
+		other_values: [ "row-reverse", "column", "column-reverse" ],
+		invalid_values: [ "10px", "30%", "justify", "column wrap" ]
+	},
+	"-moz-flex-grow": {
+		domProp: "MozFlexGrow",
+		inherited: false,
+		type: CSS_TYPE_LONGHAND,
+		initial_values: [ "0" ],
+		other_values: [ "3", "1", "1.0", "2.5", "123" ],
+		invalid_values: [ "0px", "-5", "1%", "3em", "stretch", "auto" ]
+	},
+	"-moz-flex-shrink": {
+		domProp: "MozFlexShrink",
+		inherited: false,
+		type: CSS_TYPE_LONGHAND,
+		initial_values: [ "1" ],
+		other_values: [ "3", "0", "0.0", "2.5", "123" ],
+		invalid_values: [ "0px", "-5", "1%", "3em", "stretch", "auto" ]
+	},
+	"-moz-order": {
+		domProp: "MozOrder",
+		inherited: false,
+		type: CSS_TYPE_LONGHAND,
+		initial_values: [ "0" ],
+		other_values: [ "1", "99999", "-1", "-50" ],
+		invalid_values: [ "0px", "1.0", "1.", "1%", "0.2", "3em", "stretch" ]
+	},
+	"-moz-justify-content": {
+		domProp: "MozJustifyContent",
+		inherited: false,
+		type: CSS_TYPE_LONGHAND,
+		initial_values: [ "flex-start" ],
+		other_values: [ "flex-end", "center", "space-between", "space-around" ],
+		invalid_values: [ "baseline", "stretch", "30px", "5%" ]
+	},
 	"-moz-float-edge": {
 		domProp: "MozFloatEdge",
 		inherited: false,
@@ -1964,7 +2127,24 @@ var gCSSProperties = {
 		initial_values: [ "inline" ],
 		/* XXX none will really mess with other properties */
 		prerequisites: { "float": "none", "position": "static" },
-		other_values: [ "block", "list-item", "inline-block", "table", "inline-table", "table-row-group", "table-header-group", "table-footer-group", "table-row", "table-column-group", "table-column", "table-cell", "table-caption", "none" ],
+		other_values: [
+			"block",
+			"list-item",
+			"inline-block",
+			"table",
+			"inline-table",
+			"table-row-group",
+			"table-header-group",
+			"table-footer-group",
+			"table-row",
+			"table-column-group",
+			"table-column",
+			"table-cell",
+			"table-caption",
+			"-moz-flex",
+			"-moz-inline-flex",
+			"none"
+		],
 		invalid_values: []
 	},
 	"empty-cells": {
