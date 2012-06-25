@@ -44,7 +44,7 @@ public:
 
   virtual void DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
                         const gfx::Rect *aClipRect, const EffectChain &aEffectChain,
-                        const gfx::Matrix3x3 &aTransform) MOZ_OVERRIDE;
+                        const gfx::Matrix4x4 &aTransform) MOZ_OVERRIDE;
 
   virtual PRInt32 GetMaxTextureSize() const
   {
@@ -109,6 +109,82 @@ private:
    * and adds them to mPrograms
    */
   void AddPrograms(gl::ShaderProgramType aType);
+
+  ShaderProgramOGL* GetProgram(gl::ShaderProgramType aType,
+                               MaskType aMask = MaskNone) {
+    NS_ASSERTION(ProgramProfileOGL::ProgramExists(aType, aMask),
+                 "Invalid program type.");
+    return mPrograms[aType].mVariations[aMask];
+  }
+
+  GLuint QuadVBO() { return mQuadVBO; }
+  GLintptr QuadVBOVertexOffset() { return 0; }
+  GLintptr QuadVBOTexCoordOffset() { return sizeof(float)*4*2; }
+  GLintptr QuadVBOFlippedTexCoordOffset() { return sizeof(float)*8*2; }
+
+  void BindQuadVBO() {
+    mGLContext->fBindBuffer(LOCAL_GL_ARRAY_BUFFER, mQuadVBO);
+  }
+
+  void QuadVBOVerticesAttrib(GLuint aAttribIndex) {
+    mGLContext->fVertexAttribPointer(aAttribIndex, 2,
+                                     LOCAL_GL_FLOAT, LOCAL_GL_FALSE, 0,
+                                     (GLvoid*) QuadVBOVertexOffset());
+  }
+
+  void QuadVBOTexCoordsAttrib(GLuint aAttribIndex) {
+    mGLContext->fVertexAttribPointer(aAttribIndex, 2,
+                                     LOCAL_GL_FLOAT, LOCAL_GL_FALSE, 0,
+                                     (GLvoid*) QuadVBOTexCoordOffset());
+  }
+
+  void QuadVBOFlippedTexCoordsAttrib(GLuint aAttribIndex) {
+    mGLContext->fVertexAttribPointer(aAttribIndex, 2,
+                                     LOCAL_GL_FLOAT, LOCAL_GL_FALSE, 0,
+                                     (GLvoid*) QuadVBOFlippedTexCoordOffset());
+  }
+
+  void BindAndDrawQuad(GLuint aVertAttribIndex,
+                       GLuint aTexCoordAttribIndex,
+                       bool aFlipped = false)
+  {
+    BindQuadVBO();
+    QuadVBOVerticesAttrib(aVertAttribIndex);
+
+    if (aTexCoordAttribIndex != GLuint(-1)) {
+      if (aFlipped)
+        QuadVBOFlippedTexCoordsAttrib(aTexCoordAttribIndex);
+      else
+        QuadVBOTexCoordsAttrib(aTexCoordAttribIndex);
+
+      mGLContext->fEnableVertexAttribArray(aTexCoordAttribIndex);
+    }
+
+    mGLContext->fEnableVertexAttribArray(aVertAttribIndex);
+
+    mGLContext->fDrawArrays(LOCAL_GL_TRIANGLE_STRIP, 0, 4);
+
+    mGLContext->fDisableVertexAttribArray(aVertAttribIndex);
+
+    if (aTexCoordAttribIndex != GLuint(-1)) {
+      mGLContext->fDisableVertexAttribArray(aTexCoordAttribIndex);
+    }
+  }
+
+  void BindAndDrawQuad(ShaderProgramOGL *aProg,
+                       bool aFlipped = false)
+  {
+    NS_ASSERTION(aProg->HasInitialized(), "Shader program not correctly initialized");
+    BindAndDrawQuad(aProg->AttribLocation(ShaderProgramOGL::VertexCoordAttrib),
+                    aProg->AttribLocation(ShaderProgramOGL::TexCoordAttrib),
+                    aFlipped);
+  }
+
+  void BindAndDrawQuadWithTextureRect(ShaderProgramOGL *aProg,
+                                      const gfx::IntRect& aTexCoordRect,
+                                      const nsIntSize& aTexSize,
+                                      GLenum aWrapMode = LOCAL_GL_REPEAT,
+                                      bool aFlipped = false);
 
   bool mDestroyed;
 

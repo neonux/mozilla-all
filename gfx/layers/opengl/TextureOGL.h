@@ -7,7 +7,7 @@
 #define MOZILLA_GFX_TEXTUREOGL_H
 
 #include "Compositor.h"
-#include "GLContext.h"
+#include "TiledThebesLayerOGL.h"
 
 namespace mozilla {
 
@@ -16,10 +16,9 @@ namespace layers {
 class TextureOGL : public Texture
 {
   // TODO: Make a better version of TextureOGL.
-
-  typedef mozilla::gl::TextureImage TextureImage;
-
-  nsRefPtr<TextureImage> mTexImage;
+public:
+  TiledTexture mTexture;
+  nsIntSize mSize;
 };
 
 class DrawableTextureHostOGL : public DrawableTextureHost

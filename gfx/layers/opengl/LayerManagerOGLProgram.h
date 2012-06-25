@@ -222,12 +222,25 @@ public:
     SetMatrixUniform(mProfile.LookupUniformLocation("uLayerTransform"), aMatrix);
   }
 
+  void SetLayerTransform(const gfx::Matrix4x4& aMatrix) {
+    SetMatrixUniform(mProfile.LookupUniformLocation("uLayerTransform"), aMatrix);
+  }
+
   void SetLayerQuadRect(const nsIntRect& aRect) {
     gfx3DMatrix m;
     m._11 = float(aRect.width);
     m._22 = float(aRect.height);
     m._41 = float(aRect.x);
     m._42 = float(aRect.y);
+    SetMatrixUniform(mProfile.LookupUniformLocation("uLayerQuadTransform"), m);
+  }
+
+  void SetLayerQuadRect(const gfx::Rect& aRect) {
+    gfx3DMatrix m;
+    m._11 = aRect.width;
+    m._22 = aRect.height;
+    m._41 = aRect.x;
+    m._42 = aRect.y;
     SetMatrixUniform(mProfile.LookupUniformLocation("uLayerQuadTransform"), m);
   }
 
@@ -292,6 +305,10 @@ public:
     SetUniform(mProfile.LookupUniformLocation("uRenderColor"), aColor);
   }
 
+  void SetRenderColor(const gfx::Color& aColor) {
+    SetUniform(mProfile.LookupUniformLocation("uRenderColor"), aColor);
+  }
+
   void SetTexCoordMultiplier(float aWidth, float aHeight) {
     float f[] = {aWidth, aHeight};
     SetUniform(mTexCoordMultiplierUniformLocation, 2, f);
@@ -335,6 +352,14 @@ protected:
     mGL->fUniform4f(aLocation, float(aColor.r), float(aColor.g), float(aColor.b), float(aColor.a));
   }
 
+  void SetUniform(GLint aLocation, const gfx::Color& aColor) {
+    ASSERT_THIS_PROGRAM;
+    NS_ASSERTION(aLocation >= 0, "Invalid location");
+
+    mGL->fUniform4f(aLocation, float(aColor.r), float(aColor.g), float(aColor.b), float(aColor.a));
+  }
+
+
   void SetUniform(GLint aLocation, int aLength, float *aFloatValues) {
     ASSERT_THIS_PROGRAM;
     NS_ASSERTION(aLocation >= 0, "Invalid location");
@@ -360,6 +385,10 @@ protected:
   }
 
   void SetMatrixUniform(GLint aLocation, const gfx3DMatrix& aMatrix) {
+    SetMatrixUniform(aLocation, &aMatrix._11);
+  }
+
+  void SetMatrixUniform(GLint aLocation, const gfx::Matrix4x4& aMatrix) {
     SetMatrixUniform(aLocation, &aMatrix._11);
   }
 

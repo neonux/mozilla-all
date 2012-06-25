@@ -52,7 +52,7 @@ struct Rect :
         Super(float(rect.x), float(rect.y),
               float(rect.width), float(rect.height)) {}
 
-    bool ToIntRect(IntRect *aOut)
+    bool ToIntRect(IntRect *aOut) const
     {
       *aOut = IntRect(int32_t(X()), int32_t(Y()),
                     int32_t(Width()), int32_t(Height()));

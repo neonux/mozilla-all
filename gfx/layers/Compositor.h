@@ -19,14 +19,6 @@ namespace mozilla {
 
 namespace gfx {
 class DrawTarget;
-
-struct Matrix3x3
-{
-  Float _11, _12, _13;
-  Float _21, _22, _23;
-  Float _31, _32, _33;
-};
-
 }
 
 namespace layers {
@@ -228,7 +220,7 @@ class Compositor : RefCounted<Compositor>
    */
   virtual void DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
                         const gfx::Rect *aClipRect, const EffectChain &aEffectChain,
-                        const gfx::Matrix3x3 &aTransform) = 0; 
+                        const gfx::Matrix4x4 &aTransform) = 0; 
 };
 
 class Factory

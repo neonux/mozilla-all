@@ -7,6 +7,8 @@
 #include "TextureOGL.h"
 #include "mozilla/Preferences.h"
 
+#include "gfxUtils.h"
+
 #include "GLContextProvider.h"
 
 #include "nsIServiceManager.h"
@@ -269,6 +271,82 @@ CompositorOGL::Initialize(bool force, nsRefPtr<GLContext> aContext)
   return true;
 }
 
+// |aTexCoordRect| is the rectangle from the texture that we want to
+// draw using the given program.  The program already has a necessary
+// offset and scale, so the geometry that needs to be drawn is a unit
+// square from 0,0 to 1,1.
+//
+// |aTexSize| is the actual size of the texture, as it can be larger
+// than the rectangle given by |aTexCoordRect|.
+void 
+CompositorOGL::BindAndDrawQuadWithTextureRect(ShaderProgramOGL *aProg,
+                                                const gfx::IntRect& aTexCoordRect,
+                                                const nsIntSize& aTexSize,
+                                                GLenum aWrapMode /* = LOCAL_GL_REPEAT */,
+                                                bool aFlipped /* = false */)
+{
+  NS_ASSERTION(aProg->HasInitialized(), "Shader program not correctly initialized");
+  GLuint vertAttribIndex =
+    aProg->AttribLocation(ShaderProgramOGL::VertexCoordAttrib);
+  GLuint texCoordAttribIndex =
+    aProg->AttribLocation(ShaderProgramOGL::TexCoordAttrib);
+  NS_ASSERTION(texCoordAttribIndex != GLuint(-1), "no texture coords?");
+
+  // clear any bound VBO so that glVertexAttribPointer() goes back to
+  // "pointer mode"
+  mGLContext->fBindBuffer(LOCAL_GL_ARRAY_BUFFER, 0);
+
+  // Given what we know about these textures and coordinates, we can
+  // compute fmod(t, 1.0f) to get the same texture coordinate out.  If
+  // the texCoordRect dimension is < 0 or > width/height, then we have
+  // wraparound that we need to deal with by drawing multiple quads,
+  // because we can't rely on full non-power-of-two texture support
+  // (which is required for the REPEAT wrap mode).
+
+  GLContext::RectTriangles rects;
+
+  nsIntSize realTexSize = aTexSize;
+  if (!mGLContext->CanUploadNonPowerOfTwo()) {
+    realTexSize = nsIntSize(gfx::NextPowerOfTwo(aTexSize.width),
+                            gfx::NextPowerOfTwo(aTexSize.height));
+  }
+
+  if (aWrapMode == LOCAL_GL_REPEAT) {
+    rects.addRect(/* dest rectangle */
+                  0.0f, 0.0f, 1.0f, 1.0f,
+                  /* tex coords */
+                  aTexCoordRect.x / GLfloat(realTexSize.width),
+                  aTexCoordRect.y / GLfloat(realTexSize.height),
+                  aTexCoordRect.XMost() / GLfloat(realTexSize.width),
+                  aTexCoordRect.YMost() / GLfloat(realTexSize.height),
+                  aFlipped);
+  } else {
+    nsIntRect tcRect(aTexCoordRect.x, aTexCoordRect.y,
+                     aTexCoordRect.width, aTexCoordRect.height);
+    GLContext::DecomposeIntoNoRepeatTriangles(tcRect, realTexSize,
+                                              rects, aFlipped);
+  }
+
+  mGLContext->fVertexAttribPointer(vertAttribIndex, 2,
+                                   LOCAL_GL_FLOAT, LOCAL_GL_FALSE, 0,
+                                   rects.vertexPointer());
+
+  mGLContext->fVertexAttribPointer(texCoordAttribIndex, 2,
+                                   LOCAL_GL_FLOAT, LOCAL_GL_FALSE, 0,
+                                   rects.texCoordPointer());
+
+  {
+    mGLContext->fEnableVertexAttribArray(texCoordAttribIndex);
+    {
+      mGLContext->fEnableVertexAttribArray(vertAttribIndex);
+
+      mGLContext->fDrawArrays(LOCAL_GL_TRIANGLES, 0, rects.elements());
+
+      mGLContext->fDisableVertexAttribArray(vertAttribIndex);
+    }
+    mGLContext->fDisableVertexAttribArray(texCoordAttribIndex);
+  }
+}
 
 TextureHostIdentifier
 CompositorOGL::GetTextureHostIdentifier()
@@ -283,6 +361,8 @@ CompositorOGL::CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PR
                                     TextureFormat aFormat)
 {
   // TODO: Implement this.
+  // TODO: Set GL_TEXTURE_WRAP_T and GL_TEXTURE_WRAP_S here.
+  // TODO: Set the Texture's mSize here.
 
   return new TextureOGL();
 }
@@ -298,13 +378,60 @@ CompositorOGL::CreateDrawableTexture(const TextureIdentifier &aIdentifier)
 void
 CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
                         const gfx::Rect *aClipRect, const EffectChain &aEffectChain,
-                        const gfx::Matrix3x3 &aTransform)
+                        const gfx::Matrix4x4 &aTransform)
 {
+  gfx::IntRect intSourceRect;
+  aSourceRect->ToIntRect(&intSourceRect);
   if (aEffectChain.mEffects[EFFECT_SOLID_COLOR]) {
+    EffectSolidColor* effectSolidColor =
+      static_cast<EffectSolidColor*>(aEffectChain.mEffects[EFFECT_SOLID_COLOR]);
 
-  } else if (aEffectChain.mEffects[EFFECT_BGRA]) {
+    ShaderProgramOGL *program = GetProgram(gl::ColorLayerProgramType);
+    program->Activate();
+    program->SetLayerQuadRect(aRect);
+    program->SetRenderColor(effectSolidColor->mColor);
+    BindAndDrawQuad(program);
 
-  } else if (aEffectChain.mEffects[EFFECT_BGRX]) {
+  } else if (aEffectChain.mEffects[EFFECT_BGRA] || aEffectChain.mEffects[EFFECT_BGRX])  {
+    RefPtr<TextureOGL> texture;
+    bool premultiplied;
+    gfx::Filter filter;
+    ShaderProgramOGL *program;
+
+    if (aEffectChain.mEffects[EFFECT_BGRA]) {
+      EffectBGRA* effectBGRA =
+        static_cast<EffectBGRA*>(aEffectChain.mEffects[EFFECT_BGRA]);
+      texture = static_cast<TextureOGL*>(effectBGRA->mBGRATexture.get());
+      premultiplied = effectBGRA->mPremultiplied;
+      filter = effectBGRA->mFilter;
+      program = GetProgram(gl::BGRALayerProgramType);
+    } else {
+      EffectBGRX* effectBGRX =
+        static_cast<EffectBGRX*>(aEffectChain.mEffects[EFFECT_BGRX]);
+      texture = static_cast<TextureOGL*>(effectBGRX->mBGRXTexture.get());
+      premultiplied = effectBGRX->mPremultiplied;
+      filter = effectBGRX->mFilter;
+      program = GetProgram(gl::BGRXLayerProgramType);
+    }
+
+    if (!premultiplied) {
+      mGLContext->fBlendFuncSeparate(LOCAL_GL_SRC_ALPHA, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
+                                     LOCAL_GL_ONE, LOCAL_GL_ONE);
+    }
+
+    mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, texture->mTexture.mTextureHandle);
+    mGLContext->ApplyFilterToBoundTexture(gfx::ThebesFilter(filter));
+
+    program->Activate();
+    program->SetTextureUnit(0);
+    program->SetLayerTransform(aTransform);
+    program->SetLayerQuadRect(aRect);
+    BindAndDrawQuadWithTextureRect(program, intSourceRect, texture->mSize);
+
+    if (!premultiplied) {
+      mGLContext->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
+                                     LOCAL_GL_ONE, LOCAL_GL_ONE);
+    }
 
   } else if (aEffectChain.mEffects[EFFECT_YCBCR]) {
 
@@ -312,7 +439,8 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
 
   }
 
-  // TODO: Handle EFFECT_MAX.
+  // TODO: Handle EFFECT_MASK in all cases above.
+  // TODO: Set the clip rect.
 }
 
 } /* layers */
