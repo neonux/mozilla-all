@@ -220,7 +220,7 @@ class Compositor : RefCounted<Compositor>
    */
   virtual void DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
                         const gfx::Rect *aClipRect, const EffectChain &aEffectChain,
-                        const gfx::Matrix4x4 &aTransform) = 0; 
+                        gfx::Float aOpacity, const gfx::Matrix4x4 &aTransform) = 0; 
 };
 
 class Factory
