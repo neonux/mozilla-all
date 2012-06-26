@@ -74,11 +74,14 @@ struct Effect
 
 struct EffectMask : public Effect
 {
-  EffectMask(Texture *aMaskTexture)
+  EffectMask(Texture *aMaskTexture,
+             const gfx::Matrix4x4 &aMaskTransform)
     : Effect(EFFECT_MASK), mMaskTexture(aMaskTexture)
+    , mMaskTransform(aMaskTransform)
   {}
 
   RefPtr<Texture> mMaskTexture;
+  gfx::Matrix4x4 mMaskTransform;
 };
 
 struct EffectBGRX : public Effect
