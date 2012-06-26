@@ -339,6 +339,20 @@ public:
     PRUint16 mDummyParentReflowState:1; // a "fake" reflow state made
                                         // in order to be the parent
                                         // of a real one
+#ifdef MOZ_FLEXBOX
+    // NOTE: The following bits are only meaningful when our parent is
+    // a flex container (which we can check w/ frame->GetParent()->GetType()).
+    // XXXdholbert Maybe just look this up dynamically?  ComputeSize will
+    // already have to do so.
+    PRUint16 mFlexContainerIsHorizontal:1; // Is our flex container horizontal?
+                                           // (if false, it's vertical)
+
+    // XXXdholbert We might not need this after all, if nsFlexContainerFrame does
+    // the pre-distribute-space size calculations on its own (ignoring the
+    // nsHTMLReflowState computed size at that point)
+    PRUint16 mFlexContainerHasDistributedSpace:1; // Has our flex container
+                                                  // distributed space already?
+#endif // MOZ_FLEXBOX
   } mFlags;
 
   // Note: The copy constructor is written by the compiler automatically. You
