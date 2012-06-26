@@ -378,24 +378,48 @@ CompositorOGL::CreateDrawableTexture(const TextureIdentifier &aIdentifier)
 void
 CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
                         const gfx::Rect *aClipRect, const EffectChain &aEffectChain,
-                        const gfx::Matrix4x4 &aTransform)
+                        gfx::Float aOpacity, const gfx::Matrix4x4 &aTransform)
 {
   gfx::IntRect intSourceRect;
-  aSourceRect->ToIntRect(&intSourceRect);
+  if (aSourceRect) {
+    aSourceRect->ToIntRect(&intSourceRect);
+  }
+
+  gfx::IntRect intClipRect;
+  if (aClipRect) {
+    aClipRect->ToIntRect(&intClipRect);
+    mGLContext->fScissor(intClipRect.x, intClipRect.y,
+                         intClipRect.width, intClipRect.height);
+  }
+
   if (aEffectChain.mEffects[EFFECT_SOLID_COLOR]) {
     EffectSolidColor* effectSolidColor =
       static_cast<EffectSolidColor*>(aEffectChain.mEffects[EFFECT_SOLID_COLOR]);
 
+    gfx::Color color = effectSolidColor->mColor;
+
+    /* Multiply color by the layer opacity, as the shader
+     * ignores layer opacity and expects a final color to
+     * write to the color buffer.  This saves a needless
+     * multiply in the fragment shader.
+     */
+    gfx::Float opacity = aOpacity * color.a;
+    color.r *= opacity;
+    color.g *= opacity;
+    color.b *= opacity;
+    color.a = opacity;
     ShaderProgramOGL *program = GetProgram(gl::ColorLayerProgramType);
     program->Activate();
     program->SetLayerQuadRect(aRect);
     program->SetRenderColor(effectSolidColor->mColor);
+    program->SetLayerTransform(aTransform);
+    program->SetRenderOffset(nsIntPoint(0,0));
     BindAndDrawQuad(program);
 
   } else if (aEffectChain.mEffects[EFFECT_BGRA] || aEffectChain.mEffects[EFFECT_BGRX])  {
     RefPtr<TextureOGL> texture;
     bool premultiplied;
-    gfx::Filter filter;
+    gfxPattern::GraphicsFilter filter;
     ShaderProgramOGL *program;
 
     if (aEffectChain.mEffects[EFFECT_BGRA]) {
@@ -403,14 +427,14 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
         static_cast<EffectBGRA*>(aEffectChain.mEffects[EFFECT_BGRA]);
       texture = static_cast<TextureOGL*>(effectBGRA->mBGRATexture.get());
       premultiplied = effectBGRA->mPremultiplied;
-      filter = effectBGRA->mFilter;
+      filter = gfx::ThebesFilter(effectBGRA->mFilter);
       program = GetProgram(gl::BGRALayerProgramType);
     } else {
       EffectBGRX* effectBGRX =
         static_cast<EffectBGRX*>(aEffectChain.mEffects[EFFECT_BGRX]);
       texture = static_cast<TextureOGL*>(effectBGRX->mBGRXTexture.get());
       premultiplied = effectBGRX->mPremultiplied;
-      filter = effectBGRX->mFilter;
+      filter = gfx::ThebesFilter(effectBGRX->mFilter);
       program = GetProgram(gl::BGRXLayerProgramType);
     }
 
@@ -420,11 +444,13 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
     }
 
     mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, texture->mTexture.mTextureHandle);
-    mGLContext->ApplyFilterToBoundTexture(gfx::ThebesFilter(filter));
+    mGLContext->ApplyFilterToBoundTexture(filter);
 
     program->Activate();
     program->SetTextureUnit(0);
+    program->SetLayerOpacity(aOpacity);
     program->SetLayerTransform(aTransform);
+    program->SetRenderOffset(nsIntPoint(0,0));
     program->SetLayerQuadRect(aRect);
     BindAndDrawQuadWithTextureRect(program, intSourceRect, texture->mSize);
 
@@ -434,13 +460,74 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
     }
 
   } else if (aEffectChain.mEffects[EFFECT_YCBCR]) {
+    EffectYCbCr* effectYCbCr =
+      static_cast<EffectYCbCr*>(aEffectChain.mEffects[EFFECT_YCBCR]);
+    RefPtr<TextureOGL> textureY = static_cast<TextureOGL*>(effectYCbCr->mY.get());
+    RefPtr<TextureOGL> textureCb = static_cast<TextureOGL*>(effectYCbCr->mCb.get());
+    RefPtr<TextureOGL> textureCr = static_cast<TextureOGL*>(effectYCbCr->mCr.get());
+    gfxPattern::GraphicsFilter filter = gfx::ThebesFilter(effectYCbCr->mFilter);
+
+    mGLContext->fActiveTexture(LOCAL_GL_TEXTURE0);
+    mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureY->mTexture.mTextureHandle);
+    mGLContext->ApplyFilterToBoundTexture(filter);
+    mGLContext->fActiveTexture(LOCAL_GL_TEXTURE1);
+    mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureCb->mTexture.mTextureHandle);
+    mGLContext->ApplyFilterToBoundTexture(filter);
+    mGLContext->fActiveTexture(LOCAL_GL_TEXTURE2);
+    mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureCr->mTexture.mTextureHandle);
+    mGLContext->ApplyFilterToBoundTexture(filter);
+
+    ShaderProgramOGL *program = GetProgram(YCbCrLayerProgramType);
+
+    program->Activate();
+    program->SetYCbCrTextureUnits(0, 1, 2);
+    program->SetLayerOpacity(aOpacity);
+    program->SetLayerTransform(aTransform);
+    program->SetRenderOffset(nsIntPoint(0,0));
+    program->SetLayerQuadRect(aRect);
+    BindAndDrawQuadWithTextureRect(program, intSourceRect, textureY->mSize);
 
   } else if (aEffectChain.mEffects[EFFECT_COMPONENT_ALPHA]) {
+    EffectComponentAlpha* effectComponentAlpha =
+      static_cast<EffectComponentAlpha*>(aEffectChain.mEffects[EFFECT_COMPONENT_ALPHA]);
+    RefPtr<TextureOGL> textureOnWhite =
+      static_cast<TextureOGL*>(effectComponentAlpha->mOnWhite.get());
+    RefPtr<TextureOGL> textureOnBlack =
+      static_cast<TextureOGL*>(effectComponentAlpha->mOnBlack.get());
 
+    for (PRInt32 pass = 1; pass <=2; ++pass) {
+      ShaderProgramOGL* program;
+      if (pass == 1) {
+        program = GetProgram(gl::ComponentAlphaPass1ProgramType);
+        gl()->fBlendFuncSeparate(LOCAL_GL_ZERO, LOCAL_GL_ONE_MINUS_SRC_COLOR,
+                                 LOCAL_GL_ONE, LOCAL_GL_ONE);
+      } else {
+        program = GetProgram(gl::ComponentAlphaPass2ProgramType);
+        gl()->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE,
+                                 LOCAL_GL_ONE, LOCAL_GL_ONE);
+      }
+
+      mGLContext->fActiveTexture(LOCAL_GL_TEXTURE0);
+      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureOnBlack->mTexture.mTextureHandle);
+      mGLContext->fActiveTexture(LOCAL_GL_TEXTURE1);
+      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureOnWhite->mTexture.mTextureHandle);
+
+      program->Activate();
+      program->SetBlackTextureUnit(0);
+      program->SetWhiteTextureUnit(1);
+      program->SetLayerOpacity(aOpacity);
+      program->SetLayerTransform(aTransform);
+      program->SetRenderOffset(nsIntPoint(0,0));
+      program->SetLayerQuadRect(aRect);
+
+      BindAndDrawQuadWithTextureRect(program, intSourceRect, textureOnBlack->mSize);
+
+      mGLContext->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
+                                     LOCAL_GL_ONE, LOCAL_GL_ONE);
+    }
   }
 
   // TODO: Handle EFFECT_MASK in all cases above.
-  // TODO: Set the clip rect.
 }
 
 } /* layers */
