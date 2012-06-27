@@ -226,6 +226,10 @@ public:
     SetMatrixUniform(mProfile.LookupUniformLocation("uLayerTransform"), aMatrix);
   }
 
+  void SetMaskLayerTransform(const gfx::Matrix4x4& aMatrix) {
+    SetMatrixUniform(mProfile.LookupUniformLocation("uMaskQuadTransform"), aMatrix);
+  }
+
   void SetLayerQuadRect(const nsIntRect& aRect) {
     gfx3DMatrix m;
     m._11 = float(aRect.width);
@@ -299,6 +303,10 @@ public:
 
   void SetWhiteTextureUnit(GLint aUnit) {
     SetUniform(mProfile.LookupUniformLocation("uWhiteTexture"), aUnit);
+  }
+
+  void SetMaskTextureUnit(GLint aUnit) {
+    SetUniform(mProfile.LookupUniformLocation("uMaskTexture"), aUnit);
   }
 
   void SetRenderColor(const gfxRGBA& aColor) {

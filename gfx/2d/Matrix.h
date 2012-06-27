@@ -166,12 +166,27 @@ private:
   }
 };
 
-struct Matrix4x4
+class Matrix4x4
 {
+public:
   Float _11, _12, _13, _14;
   Float _21, _22, _23, _24;
   Float _31, _32, _33, _34;
   Float _41, _42, _43, _44;
+
+  /**
+   * Returns true if the matrix is isomorphic to a 2D affine transformation.
+   */
+  bool Is2D() const
+  {
+    if (_13 != 0.0f || _14 != 0.0f ||
+        _23 != 0.0f || _24 != 0.0f ||
+        _31 != 0.0f || _32 != 0.0f || _33 != 1.0f || _34 != 0.0f ||
+        _43 != 0.0f || _44 != 1.0f) {
+      return false;
+    }
+    return true;
+  }
 };
 
 }
