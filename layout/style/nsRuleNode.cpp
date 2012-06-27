@@ -125,9 +125,6 @@ static void EnsureBlockDisplay(PRUint8& display)
   case NS_STYLE_DISPLAY_TABLE :
   case NS_STYLE_DISPLAY_BLOCK :
   case NS_STYLE_DISPLAY_LIST_ITEM :
-#ifdef MOZ_FLEXBOX
-  case NS_STYLE_DISPLAY_FLEX :
-#endif // MOZ_FLEXBOX
     // do not muck with these at all - already blocks
     // This is equivalent to nsStyleDisplay::IsBlockOutside.  (XXX Maybe we
     // should just call that?)
@@ -139,13 +136,6 @@ static void EnsureBlockDisplay(PRUint8& display)
     // make inline tables into tables
     display = NS_STYLE_DISPLAY_TABLE;
     break;
-
-#ifdef MOZ_FLEXBOX
-  case NS_STYLE_DISPLAY_INLINE_FLEX:
-    // make inline flex containers into flex containers
-    display = NS_STYLE_DISPLAY_FLEX;
-    break;
-#endif // MOZ_FLEXBOX
 
   default :
     // make it a block
@@ -6409,12 +6399,11 @@ nsRuleNode::ComputePositionData(void* aStartStruct,
            SETCOORD_LPOH | SETCOORD_INITIAL_NONE | SETCOORD_STORE_CALC,
            aContext, mPresContext, canStoreInRuleTree);
 
-  // XXXdholbert Ultimately, we'll want this to stay "auto" and then treat it
-  // as 0 or min-content depending on the context (min-content in vertical
-  // flexbox contexts).  However, that only makes sense once we support
-  // min-content for height properties, which we don't yet. So for now,
-  // we make "min-height: auto" always compute to 0 and don't bother giving
-  // it special treatment anywhere.
+
+  // Handle 'auto' values for min-width / min-height
+  if (pos->mMinWidth.GetUnit() == eStyleUnit_Auto) {
+    pos->mMinWidth.SetCoordValue(0);
+  }
   if (pos->mMinHeight.GetUnit() == eStyleUnit_Auto) {
     pos->mMinHeight.SetCoordValue(0);
   }
@@ -6424,91 +6413,6 @@ nsRuleNode::ComputePositionData(void* aStartStruct,
               pos->mBoxSizing, canStoreInRuleTree,
               SETDSC_ENUMERATED, parentPos->mBoxSizing,
               NS_STYLE_BOX_SIZING_CONTENT, 0, 0, 0, 0);
-
-#ifdef MOZ_FLEXBOX
-  // align-items: enum, inherit, initial
-  SetDiscrete(*aRuleData->ValueForAlignItems(),
-              pos->mAlignItems, canStoreInRuleTree,
-              SETDSC_ENUMERATED, parentPos->mAlignItems,
-              NS_STYLE_ALIGN_ITEMS_INITIAL_VALUE, 0, 0, 0, 0);
-
-  // Prep work for align-self.
-  // Holds the value that we'll inherit, if our 'align-self' is 'inherit':
-  PRUint8 inheritedAlignSelf = parentPos->mAlignSelf;
-  if (inheritedAlignSelf == NS_STYLE_ALIGN_SELF_AUTO &&
-      aRuleData->ValueForAlignSelf()->GetUnit() == eCSSUnit_Inherit) {
-    // We're inheriting 'align-self: auto' -- we need to *actually*
-    // inherit the *used* value of 'auto' on our parent.  We figure out that
-    // used value here.
-    if (parentPos == pos) {
-      // We're the root node. (If we weren't, COMPUTE_START_RESET would've
-      // given us a distinct parentPos, since we've got an 'inherit' value.)
-      // Nothing to inherit from --> just use default value.
-      inheritedAlignSelf = NS_STYLE_ALIGN_ITEMS_INITIAL_VALUE;
-    } else {
-      // Our parent's "auto" value computes to our grandparent's value for
-      // "align-items".  So, that's what we're supposed to inherit.
-      NS_ABORT_IF_FALSE(aContext->GetParent(),
-                        "we've got a distinct parent style-struct already, so "
-                        "we should have a parent style-context");
-      nsStyleContext* grandparentContext = aContext->GetParent()->GetParent();
-      if (!grandparentContext) {
-        // No grandparent --> our parent is the root node, so its
-        // "align-self: auto" computes to the default "align-items" value:
-        inheritedAlignSelf = NS_STYLE_ALIGN_ITEMS_INITIAL_VALUE;
-      } else {
-        // Normal case -- we have a grandparent.
-        // Its "align-items" value is what we should end up inheriting.
-        const nsStylePosition* grandparentPos =
-          grandparentContext->GetStylePosition();
-        inheritedAlignSelf = grandparentPos->mAlignItems;
-      }
-    }
-  }
-
-  // align-self: enum, auto, inherit, initial
-  SetDiscrete(*aRuleData->ValueForAlignSelf(),
-              pos->mAlignSelf, canStoreInRuleTree,
-              SETDSC_ENUMERATED | SETDSC_AUTO,
-              inheritedAlignSelf, // inherit == parent's used value
-              NS_STYLE_ALIGN_SELF_AUTO, // initial == auto
-              NS_STYLE_ALIGN_SELF_AUTO, // auto == auto
-              0, 0, 0);
-
-  // flex-basis: auto, length, percent, enum, calc, inherit, initial
-  // (Note: The flags here should match those used for 'width' property above.)
-  SetCoord(*aRuleData->ValueForFlexBasis(), pos->mFlexBasis, parentPos->mFlexBasis,
-           SETCOORD_LPAEH | SETCOORD_INITIAL_AUTO | SETCOORD_STORE_CALC,
-           aContext, mPresContext, canStoreInRuleTree);
-
-  // flex-direction: enum, inherit, initial
-  SetDiscrete(*aRuleData->ValueForFlexDirection(),
-              pos->mFlexDirection, canStoreInRuleTree,
-              SETDSC_ENUMERATED, parentPos->mFlexDirection,
-              NS_STYLE_FLEX_DIRECTION_ROW, 0, 0, 0, 0);
-
-  // flex-grow: float, inherit, initial
-  SetFactor(*aRuleData->ValueForFlexGrow(),
-            pos->mFlexGrow, canStoreInRuleTree,
-            parentPos->mFlexGrow, 0.0f);
-
-  // flex-shrink: float, inherit, initial
-  SetFactor(*aRuleData->ValueForFlexShrink(),
-            pos->mFlexShrink, canStoreInRuleTree,
-            parentPos->mFlexShrink, 1.0f);
-
-  // order: integer, inherit, initial
-  SetDiscrete(*aRuleData->ValueForOrder(),
-              pos->mOrder, canStoreInRuleTree,
-              SETDSC_INTEGER, parentPos->mOrder,
-              NS_STYLE_ORDER_INITIAL, 0, 0, 0, 0);
-
-  // justify-content: enum, inherit, initial
-  SetDiscrete(*aRuleData->ValueForJustifyContent(),
-              pos->mJustifyContent, canStoreInRuleTree,
-              SETDSC_ENUMERATED, parentPos->mJustifyContent,
-              NS_STYLE_JUSTIFY_CONTENT_FLEX_START, 0, 0, 0, 0);
-#endif // MOZ_FLEXBOX
 
   // z-index
   const nsCSSValue* zIndexValue = aRuleData->ValueForZIndex();

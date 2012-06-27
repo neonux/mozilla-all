@@ -122,13 +122,6 @@ var supported_properties = {
                        // opacity is clamped in computed style
                        // (not parsing/interpolation)
                        test_float_zeroToOne_clamped ],
-    "-moz-flex-basis": [ test_length_transition, test_percent_transition,
-                         test_length_clamped, test_percent_clamped ],
-    "-moz-flex-grow": [ test_float_zeroToOne_transition,
-                        test_float_aboveOne_transition ],
-    "-moz-flex-shrink": [ test_float_zeroToOne_transition,
-                          test_float_aboveOne_transition ],
-    "-moz-order": [ test_integer_transition ],
     "flood-color": [ test_color_transition ],
     "flood-opacity" : [ test_float_zeroToOne_transition,
                         // opacity is clamped in computed style
@@ -240,7 +233,7 @@ var supported_properties = {
                test_length_percent_calc_transition,
                test_length_clamped, test_percent_clamped ],
     "word-spacing": [ test_length_transition, test_length_unclamped ],
-    "z-index": [ test_integer_transition, test_pos_integer_or_auto_transition ],
+    "z-index": [ test_zindex_transition, test_pos_integer_or_auto_transition ],
 };
 
 var div = document.getElementById("display");
@@ -856,7 +849,7 @@ function test_radius_transition(prop) {
   div.style.removeProperty("padding");
 }
 
-function test_integer_transition(prop) {
+function test_zindex_transition(prop) {
   div.style.setProperty("-moz-transition-property", "none", "");
   div.style.setProperty(prop, "4", "");
   is(cs.getPropertyValue(prop), "4",
@@ -866,12 +859,12 @@ function test_integer_transition(prop) {
   is(cs.getPropertyValue(prop), "-1",
      "integer-valued property " + prop + ": interpolation of integers");
   check_distance(prop, "6", "1", "-14");
-
-  div.style.setProperty("-moz-transition-property", "none", "");
+  div.style.setProperty(prop, "auto", "");
+  is(cs.getPropertyValue(prop), "auto",
+     "integer-valued property " + prop + ": auto not interpolable");
   div.style.setProperty(prop, "-4", "");
   is(cs.getPropertyValue(prop), "-4",
      "integer-valued property " + prop + ": computed value before transition");
-  div.style.setProperty("-moz-transition-property", prop, "");
   div.style.setProperty(prop, "8", "");
   is(cs.getPropertyValue(prop), "-1",
      "integer-valued property " + prop + ": interpolation of integers");

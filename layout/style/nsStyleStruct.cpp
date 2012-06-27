@@ -1119,27 +1119,12 @@ nsStylePosition::nsStylePosition(void)
   mOffset.SetRight(autoCoord);
   mOffset.SetBottom(autoCoord);
   mWidth.SetAutoValue();
-  mMinWidth.SetAutoValue();
+  mMinWidth.SetCoordValue(0);
   mMaxWidth.SetNoneValue();
   mHeight.SetAutoValue();
-  // XXXdholbert Per note about min-height in nsRuleNode::ComputePositionData,
-  // this should eventually be SetAutoValue, once we support the 'min-content'
-  // keyword for height properties:
   mMinHeight.SetCoordValue(0);
   mMaxHeight.SetNoneValue();
-#ifdef MOZ_FLEXBOX
-  mFlexBasis.SetAutoValue();
-#endif // MOZ_FLEXBOX
   mBoxSizing = NS_STYLE_BOX_SIZING_CONTENT;
-#ifdef MOZ_FLEXBOX
-  mAlignItems = NS_STYLE_ALIGN_ITEMS_INITIAL_VALUE;
-  mAlignSelf = NS_STYLE_ALIGN_SELF_AUTO;
-  mFlexDirection = NS_STYLE_FLEX_DIRECTION_ROW;
-  mJustifyContent = NS_STYLE_JUSTIFY_CONTENT_FLEX_START;
-  mOrder = NS_STYLE_ORDER_INITIAL;
-  mFlexGrow = 0.0f;
-  mFlexShrink = 1.0f;
-#endif // MOZ_FLEXBOX
   mZIndex.SetAutoValue();
 }
 
@@ -1163,36 +1148,6 @@ nsChangeHint nsStylePosition::CalcDifference(const nsStylePosition& aOther) cons
     // Can affect both widths and heights; just a bad scene.
     return NS_CombineHint(hint, nsChangeHint_ReflowFrame);
   }
-
-#ifdef MOZ_FLEXBOX
-  // Properties that apply to flexbox containers:
-
-  // flex-direction can swap a flexbox between vertical & horizontal.
-  // align-items can change the sizing of a flexbox & the positioning
-  // of its children.
-  if (mAlignItems != aOther.mAlignItems ||
-      mFlexDirection != aOther.mFlexDirection) {
-    return NS_CombineHint(hint, nsChangeHint_ReflowFrame);
-  }
-
-  // Changing justify-content on a flexbox might affect the positioning of its
-  // children, but it won't affect any sizing.
-  if (mJustifyContent != aOther.mJustifyContent) {
-    NS_UpdateHint(hint, nsChangeHint_NeedReflow);
-  }
-
-  // Properties that apply to flex items:
-  // NOTE: Changes to "order" on a flex item may trigger some repositioning.
-  // If we're in a multi-line flex container, it also may affect our size
-  // (and that of our container & siblings) by shuffling items between lines.
-  if (mAlignSelf != aOther.mAlignSelf ||
-      mFlexBasis != aOther.mFlexBasis ||
-      mFlexGrow != aOther.mFlexGrow ||
-      mFlexShrink != aOther.mFlexShrink ||
-      mOrder != aOther.mOrder) {
-    return NS_CombineHint(hint, nsChangeHint_ReflowFrame);
-  }
-#endif // MOZ_FLEXBOX
 
   if (mHeight != aOther.mHeight ||
       mMinHeight != aOther.mMinHeight ||
