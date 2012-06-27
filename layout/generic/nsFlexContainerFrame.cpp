@@ -242,9 +242,8 @@ public:
     mMainPosn(nscoord_MIN),
     mCrossSize(nscoord_MIN),
     mCrossPosn(nscoord_MIN),
-    mCrossMinSize(nscoord_MIN),
-    mCrossMaxSize(nscoord_MIN),
-    mCrossBorderPaddingSize(nscoord_MIN),
+    mCrossMinSize(0),
+    mCrossMaxSize(nscoord_MAX),
     mAscent(nscoord_MIN),
     mAlignSelf(mFrame->GetStylePosition()->mAlignSelf),
     mIsStretched(false)
@@ -263,8 +262,6 @@ public:
   { mCrossMinSize = aCrossMinSize; }
   inline void SetCrossMaxSize(nscoord aCrossMaxSize)
   { mCrossMaxSize = aCrossMaxSize; }
-  inline void SetCrossBorderPaddingSize(const nscoord aCrossBorderPaddingSize)
-  { mCrossBorderPaddingSize = aCrossBorderPaddingSize; }
   inline void SetAscent(nscoord aAscent)         { mAscent = aAscent; }
   inline void SetMargin(const nsMargin& aMargin) { mMargin = aMargin; }
   inline void SetIsStretched()                   { mIsStretched = true; }
@@ -287,10 +284,6 @@ public:
                       "returning uninitialized cross size");
     return mCrossSize;
   }
-  // Convenience method to return the border-box cross-size of our frame.
-  inline nscoord GetBorderBoxCrossSize() const {
-    return GetCrossSize() + GetCrossBorderPaddingSize();
-  }
   inline nscoord GetCrossPosition() const {
     NS_ABORT_IF_FALSE(mCrossPosn != nscoord_MIN,
                       "returning uninitialized cross axis position");
@@ -306,12 +299,6 @@ public:
                       "returning uninitialized cross axis max size");
     return mCrossMaxSize;
   }
-  inline nscoord GetCrossBorderPaddingSize() const {
-    NS_ABORT_IF_FALSE(mCrossBorderPaddingSize != nscoord_MIN,
-                      "returning uninitialized cross border/padding size");
-    return mCrossBorderPaddingSize;
-  }
-
   inline nscoord GetAscent() const {
     NS_ABORT_IF_FALSE(mAscent != nscoord_MIN,
                       "returning uninitialized ascent");
@@ -327,14 +314,6 @@ public:
 
   const nscoord& GetMarginComponentForSide(Side aSide) const
   { return GetMarginComponentForSideInternal(mMargin, aSide); }
-
-  inline nscoord GetMarginSizeInAxis(AxisOrientationType aAxis) const
-  {
-    Side startSide = kAxisOrientationToSidesMap[aAxis][eAxisEdge_Start];
-    Side endSide = kAxisOrientationToSidesMap[aAxis][eAxisEdge_End];
-    return GetMarginComponentForSide(startSide) +
-      GetMarginComponentForSide(endSide);
-  }
 
   inline PRUint8 GetAlignSelf() const { return mAlignSelf; }
 
@@ -358,7 +337,6 @@ private:
   nscoord mCrossPosn;
   nscoord mCrossMinSize;
   nscoord mCrossMaxSize;
-  nscoord mCrossBorderPaddingSize;
   nscoord mAscent;
 
   nsMargin mMargin;
@@ -1128,8 +1106,13 @@ SingleLineCrossAxisPositionTracker::
                GetBaselineOffsetFromCrossEnd(curItem));
 
     } else {
-      nscoord curOuterCrossSize = curItem.GetBorderBoxCrossSize() +
-        curItem.GetMarginSizeInAxis(mAxis);
+      nscoord curOuterCrossSize = curItem.GetCrossSize();
+
+      // Add cross margins:
+      for (PRUint32 i = 0; i < eNumAxisEdges; i++) {
+        Side side = kAxisOrientationToSidesMap[mAxis][i];
+        curOuterCrossSize += curItem.GetMarginComponentForSide(side);
+      }
 
       largestOuterCrossSize = NS_MAX(largestOuterCrossSize, curOuterCrossSize);
     }
@@ -1166,13 +1149,8 @@ SingleLineCrossAxisPositionTracker::
   // XXXdholbert This assumes cross axis is Top-To-Bottom.
   // For bottom-to-top support, probably want to make this depend on
   //   DoesAxisGrowInPositiveDirection(mAxis)
-
-  // (Distiance from line cross-end to top of frame) -
-  //  (Distance from top of frame to baseline)
-  return (aItem.GetMarginComponentForSide(crossEndSide) +
-          aItem.GetBorderBoxCrossSize()) -
-    aItem.GetAscent();
-    
+  return aItem.GetCrossSize() - aItem.GetAscent() +
+    aItem.GetMarginComponentForSide(crossEndSide);
 }
 
 void
@@ -1189,11 +1167,14 @@ SingleLineCrossAxisPositionTracker::
     return;
   }
 
-  // Reserve space for margins & border & padding, and then use whatever
-  // remains as our item's cross-size (clamped to its min/max range).
+  Side startSide = kAxisOrientationToSidesMap[mAxis][eAxisEdge_Start];
+  Side endSide   = kAxisOrientationToSidesMap[mAxis][eAxisEdge_End];
+
+  // Reserve space for margins, and then use whatever remains as our item's
+  // cross-size (clamped to its min/max range).
   nscoord stretchedSize = mLineCrossSize -
-    aItem.GetMarginSizeInAxis(mAxis) -
-    aItem.GetCrossBorderPaddingSize();
+    aItem.GetMarginComponentForSide(startSide) -
+    aItem.GetMarginComponentForSide(endSide);
   
   stretchedSize = NS_CSS_MINMAX(stretchedSize,
                                 aItem.GetCrossMinSize(),
@@ -1210,9 +1191,7 @@ SingleLineCrossAxisPositionTracker::
   ResolveAutoMarginsInCrossAxis(ResolvedFlexItem& aItem)
 {
   PRUint32 numAutoMargins = 0;
-  nscoord spaceForAutoMargins = mLineCrossSize -
-    aItem.GetBorderBoxCrossSize();
-
+  nscoord spaceForAutoMargins = mLineCrossSize - aItem.GetCrossSize();
   if (spaceForAutoMargins <= 0) {
     return; // no extra space  --> nothing to do
   }
@@ -1277,19 +1256,17 @@ SingleLineCrossAxisPositionTracker::
       // auto-sized items (which we've already done).
       break;
     case NS_STYLE_ALIGN_ITEMS_FLEX_END:
-      mPosition += (mLineCrossSize - (aItem.GetBorderBoxCrossSize() +
-                                      aItem.GetMarginSizeInAxis(mAxis)));
+      mPosition += (mLineCrossSize - aItem.GetCrossSize());
       break;
     case NS_STYLE_ALIGN_ITEMS_CENTER:
       // Note: If cross-size is odd, the "after" space will get the extra unit.
-      mPosition += (mLineCrossSize - (aItem.GetBorderBoxCrossSize() +
-                                      aItem.GetMarginSizeInAxis(mAxis))) / 2;
+      mPosition += (mLineCrossSize - aItem.GetCrossSize()) / 2;
       break;
     case NS_STYLE_ALIGN_ITEMS_BASELINE:
       NS_ABORT_IF_FALSE(mCrossStartToFurthestBaseline != nscoord_MIN,
                         "using uninitialized baseline offset");
       NS_ABORT_IF_FALSE(mCrossStartToFurthestBaseline >=
-                        GetBaselineOffsetFromCrossStart(aItem),
+                          GetBaselineOffsetFromCrossStart(aItem),
                         "failed at finding largest ascent");
 
       // Advance so that aItem's baseline is aligned with
@@ -1429,90 +1406,76 @@ nsFlexContainerFrame::SizeItemInCrossAxis(
   const nsHTMLReflowState& aChildReflowState,
   ResolvedFlexItem& aItem)
 {
-  // Invalidate child's old overflow rect (greedy; once the
-  // display-list-based invalidation patches have landed, this can go away.)
-  aItem.GetFrame()->InvalidateOverflowRect();
+  // XXXdholbert REDUCE INDENTATION
 
+    // Invalidate child's old overflow rect (greedy; once the
+    // display-list-based invalidation patches have landed, this can go away.)
+    aItem.GetFrame()->InvalidateOverflowRect();
 
-  // Cache resolved versions of min/max size & border/padding in cross axis,
-  // for use in further resolving cross size position
-  aItem.SetCrossMinSize(IsAxisHorizontal(aAxisTracker.GetCrossAxis()) ?
-                        aChildReflowState.mComputedMinWidth :
-                        aChildReflowState.mComputedMinHeight);
-  aItem.SetCrossMaxSize(IsAxisHorizontal(aAxisTracker.GetCrossAxis()) ?
-                        aChildReflowState.mComputedMaxWidth :
-                        aChildReflowState.mComputedMaxHeight);
+    nsHTMLReflowMetrics childDesiredSize;
+    nsReflowStatus childReflowStatus;
+    nsresult rv = ReflowChild(aItem.GetFrame(), aPresContext,
+                              childDesiredSize, aChildReflowState,
+                              0, 0, 0, childReflowStatus);
+    NS_ENSURE_SUCCESS(rv, rv);
 
-  nscoord crossBorderPaddingSize =
-    GetMarginComponentForSideInternal(
-      aChildReflowState.mComputedBorderPadding,
-      kAxisOrientationToSidesMap[aAxisTracker.GetCrossAxis()][eAxisEdge_Start]) +
-    GetMarginComponentForSideInternal(
-      aChildReflowState.mComputedBorderPadding,
-      kAxisOrientationToSidesMap[aAxisTracker.GetCrossAxis()][eAxisEdge_End]);
+    // XXXdholbert Once we do pagination / splitting, we'll need to actually
+    // handle incomplete childReflowStatuses. But for now, we give our kids
+    // unconstrained available height, which means they should always complete.
+    NS_ASSERTION(NS_FRAME_IS_COMPLETE(childReflowStatus),
+                 "We gave flex item unconstrained available height, so it "
+                 "should be complete");
 
-  aItem.SetCrossBorderPaddingSize(crossBorderPaddingSize);
+    NS_ASSERTION(childDesiredSize.width ==
+                 aItem.GetMainSize() +
+                 aChildReflowState.mComputedBorderPadding.left +
+                 aChildReflowState.mComputedBorderPadding.right,
+                 "child didn't take the size that its flex container assigned");
 
+    // Tell the child we're done with its initial reflow.
+    // (Necessary for e.g. GetBaseline() to work below w/out asserting)
+    rv = FinishReflowChild(aItem.GetFrame(), aPresContext,
+                           &aChildReflowState, childDesiredSize, 0, 0, 0);
+    NS_ENSURE_SUCCESS(rv, rv);
 
-  nsHTMLReflowMetrics childDesiredSize;
-  nsReflowStatus childReflowStatus;
-  nsresult rv = ReflowChild(aItem.GetFrame(), aPresContext,
-                            childDesiredSize, aChildReflowState,
-                            0, 0, 0, childReflowStatus);
-  NS_ENSURE_SUCCESS(rv, rv);
+    // Save the sizing info that we learned from this reflow
+    // -----------------------------------------------------
 
-  // XXXdholbert Once we do pagination / splitting, we'll need to actually
-  // handle incomplete childReflowStatuses. But for now, we give our kids
-  // unconstrained available height, which means they should always complete.
-  NS_ASSERTION(NS_FRAME_IS_COMPLETE(childReflowStatus),
-               "We gave flex item unconstrained available height, so it "
-               "should be complete");
+    // Tentatively accept the child's desired size as its cross-size:
+    aItem.SetCrossSize(childDesiredSize.height);
 
-  NS_ASSERTION(childDesiredSize.width ==
-               aItem.GetMainSize() +
-               aChildReflowState.mComputedBorderPadding.left +
-               aChildReflowState.mComputedBorderPadding.right,
-               "child didn't take the size that its flex container assigned");
+    // Cache resolved versions of min/max size & margins in cross axis, too,
+    // for use in further resolving cross size position after this loop.
+    aItem.SetCrossMinSize(IsAxisHorizontal(aAxisTracker.GetCrossAxis()) ?
+                            aChildReflowState.mComputedMinWidth :
+                            aChildReflowState.mComputedMinHeight);
+    aItem.SetCrossMaxSize(IsAxisHorizontal(aAxisTracker.GetCrossAxis()) ?
+                            aChildReflowState.mComputedMaxWidth :
+                            aChildReflowState.mComputedMaxHeight);
 
-  // Tell the child we're done with its initial reflow.
-  // (Necessary for e.g. GetBaseline() to work below w/out asserting)
-  rv = FinishReflowChild(aItem.GetFrame(), aPresContext,
-                         &aChildReflowState, childDesiredSize, 0, 0, 0);
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  // Save the sizing info that we learned from this reflow
-  // -----------------------------------------------------
-
-  // Tentatively accept the child's desired size, minus border/padding, as its
-  // cross-size:
-  NS_ASSERTION(childDesiredSize.height >= aItem.GetCrossBorderPaddingSize(),
-               "Child should ask for at least enough space for border/padding");
-  aItem.SetCrossSize(childDesiredSize.height -
-                     aItem.GetCrossBorderPaddingSize());
-
-  // If we need to do baseline-alignment, store the child's ascent.
-  if (aItem.GetAlignSelf() == NS_STYLE_ALIGN_ITEMS_BASELINE) {
-    // Cribbed from nsLineLayout::PlaceFrame
-    // This is a little hacky. Basically: we'll trust our child on its
-    // GetBaseline(), but not for display:block.  Blocks are supposed to use
-    // the baseline of the first line, but nsBlockFrame::GetBaseline()
-    // returns the baseline of the last line (which is appropriate for
-    // inline-block), so we can't use GetBaseline() for display:block.
-    if (childDesiredSize.ascent == nsHTMLReflowMetrics::ASK_FOR_BASELINE) {
-      if (NS_STYLE_DISPLAY_BLOCK ==
-          aItem.GetFrame()->GetStyleDisplay()->mDisplay) {
-        if (!nsLayoutUtils::GetFirstLineBaseline(aItem.GetFrame(),
-                                                 &childDesiredSize.ascent)) {
-          childDesiredSize.ascent = childDesiredSize.height;
+    // If we need to do baseline-alignment, store the child's ascent.
+    if (aItem.GetAlignSelf() == NS_STYLE_ALIGN_ITEMS_BASELINE) {
+      // Cribbed from nsLineLayout::PlaceFrame
+      // This is a little hacky. Basically: we'll trust our child on its
+      // GetBaseline(), but not for display:block.  Blocks are supposed to use
+      // the baseline of the first line, but nsBlockFrame::GetBaseline()
+      // returns the baseline of the last line (which is appropriate for
+      // inline-block), so we can't use GetBaseline() for display:block.
+      if (childDesiredSize.ascent == nsHTMLReflowMetrics::ASK_FOR_BASELINE) {
+        if (NS_STYLE_DISPLAY_BLOCK ==
+            aItem.GetFrame()->GetStyleDisplay()->mDisplay) {
+          if (!nsLayoutUtils::GetFirstLineBaseline(aItem.GetFrame(),
+                                                   &childDesiredSize.ascent)) {
+            childDesiredSize.ascent = childDesiredSize.height;
+          }
+        } else {
+          childDesiredSize.ascent = aItem.GetFrame()->GetBaseline();
         }
-      } else {
-        childDesiredSize.ascent = aItem.GetFrame()->GetBaseline();
       }
+      aItem.SetAscent(childDesiredSize.ascent);
     }
-    aItem.SetAscent(childDesiredSize.ascent);
-  }
 
-  return NS_OK;
+    return NS_OK;
 }
 
 void
@@ -1531,7 +1494,7 @@ nsFlexContainerFrame::PositionItemInCrossAxis(
   // Compute the cross-axis position of this item
   aLineCrossAxisPosnTracker.EnterAlignPackingSpace(aItem);
   aLineCrossAxisPosnTracker.EnterMargin(aItem.GetMargin());
-  aLineCrossAxisPosnTracker.EnterChildFrame(aItem.GetBorderBoxCrossSize());
+  aLineCrossAxisPosnTracker.EnterChildFrame(aItem.GetCrossSize());
 
   aItem.SetCrossPosition(aLineStartPosition +
                          aLineCrossAxisPosnTracker.GetPosition());
