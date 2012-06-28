@@ -42,6 +42,7 @@ struct TextureHostIdentifier
 {
   TextureHostType mType;
   void *mDescriptor;
+  gfx::IntSize mMaxTextureSize;
 };
 
 struct TextureIdentifier
