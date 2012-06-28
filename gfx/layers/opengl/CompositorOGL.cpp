@@ -281,7 +281,7 @@ CompositorOGL::Initialize(bool force, nsRefPtr<GLContext> aContext)
 void 
 CompositorOGL::BindAndDrawQuadWithTextureRect(ShaderProgramOGL *aProg,
                                                 const gfx::IntRect& aTexCoordRect,
-                                                const nsIntSize& aTexSize,
+                                                const gfx::IntSize& aTexSize,
                                                 GLenum aWrapMode /* = LOCAL_GL_REPEAT */,
                                                 bool aFlipped /* = false */)
 {
@@ -305,10 +305,10 @@ CompositorOGL::BindAndDrawQuadWithTextureRect(ShaderProgramOGL *aProg,
 
   GLContext::RectTriangles rects;
 
-  nsIntSize realTexSize = aTexSize;
+  gfx::IntSize realTexSize = aTexSize;
   if (!mGLContext->CanUploadNonPowerOfTwo()) {
-    realTexSize = nsIntSize(gfx::NextPowerOfTwo(aTexSize.width),
-                            gfx::NextPowerOfTwo(aTexSize.height));
+    realTexSize = gfx::IntSize(gfx::NextPowerOfTwo(aTexSize.width),
+                               gfx::NextPowerOfTwo(aTexSize.height));
   }
 
   if (aWrapMode == LOCAL_GL_REPEAT) {
@@ -323,7 +323,8 @@ CompositorOGL::BindAndDrawQuadWithTextureRect(ShaderProgramOGL *aProg,
   } else {
     nsIntRect tcRect(aTexCoordRect.x, aTexCoordRect.y,
                      aTexCoordRect.width, aTexCoordRect.height);
-    GLContext::DecomposeIntoNoRepeatTriangles(tcRect, realTexSize,
+    GLContext::DecomposeIntoNoRepeatTriangles(tcRect,
+                                              nsIntSize(realTexSize.width, realTexSize.height),
                                               rects, aFlipped);
   }
 
@@ -360,11 +361,54 @@ TemporaryRef<Texture>
 CompositorOGL::CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PRUint32 aStride,
                                     TextureFormat aFormat)
 {
-  // TODO: Implement this.
-  // TODO: Set GL_TEXTURE_WRAP_T and GL_TEXTURE_WRAP_S here.
-  // TODO: Set the Texture's mSize here.
+  RefPtr<TextureOGL> texture = new TextureOGL();
+  texture->mSize = aSize;
+  mGLContext->fGenTextures(1, &(texture->mTexture.mTextureHandle));
+  mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, texture->mTexture.mTextureHandle);
+  mGLContext->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_MIN_FILTER,
+                             LOCAL_GL_LINEAR);
+  mGLContext->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_MAG_FILTER,
+                             LOCAL_GL_LINEAR);
+  mGLContext->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_WRAP_S,
+                             LOCAL_GL_CLAMP_TO_EDGE);
+  mGLContext->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_WRAP_T,
+                             LOCAL_GL_CLAMP_TO_EDGE);
 
-  return new TextureOGL();
+  GLenum type;
+  PRInt32 pixelSize;
+
+  switch (aFormat) {
+    case TEXTUREFORMAT_BGRX32:
+    case TEXTUREFORMAT_BGRA32:
+      texture->format = LOCAL_GL_RGBA;
+      type = LOCAL_GL_UNSIGNED_BYTE;
+      pixelSize = 4;
+      break;
+    case TEXTUREFORMAT_BGR16:
+      texture->format = LOCAL_GL_RGB;
+      type = LOCAL_GL_UNSIGNED_SHORT_5_6_5;
+      pixelSize = 2;
+      break;
+    case TEXTUREFORMAT_Y8:
+      texture->format = LOCAL_GL_LUMINANCE;
+      type = LOCAL_GL_UNSIGNED_BYTE;
+      pixelSize = 1;
+      break;
+    default:
+      MOZ_NOT_REACHED("aFormat is not a valid TextureFormat");
+  }
+
+  if (mGLContext->IsGLES2()) {
+    texture->internalFormat = texture->format;
+  } else {
+    texture->internalFormat = LOCAL_GL_RGBA;
+  }
+
+  mGLContext->TexImage2D(LOCAL_GL_TEXTURE_2D, 0, texture->internalFormat,
+                         aSize.width, aSize.height, aStride, pixelSize,
+                         0, texture->format, type, aData);
+
+  return texture.forget();
 }
 
 TemporaryRef<DrawableTextureHost>

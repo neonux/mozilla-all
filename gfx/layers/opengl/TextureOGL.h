@@ -16,9 +16,12 @@ namespace layers {
 class TextureOGL : public Texture
 {
   // TODO: Make a better version of TextureOGL.
+  // TODO: Release the GL texture on destruction.
 public:
   TiledTexture mTexture;
-  nsIntSize mSize;
+  gfx::IntSize mSize;
+  GLenum format;
+  GLenum internalFormat;
 };
 
 class DrawableTextureHostOGL : public DrawableTextureHost

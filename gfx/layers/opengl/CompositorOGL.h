@@ -182,7 +182,7 @@ private:
 
   void BindAndDrawQuadWithTextureRect(ShaderProgramOGL *aProg,
                                       const gfx::IntRect& aTexCoordRect,
-                                      const nsIntSize& aTexSize,
+                                      const gfx::IntSize& aTexSize,
                                       GLenum aWrapMode = LOCAL_GL_REPEAT,
                                       bool aFlipped = false);
 
