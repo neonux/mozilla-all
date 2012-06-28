@@ -51,10 +51,13 @@
 #include "nsSMILKeySpline.h"
 #include "nsSubDocumentFrame.h"
 #include "nsSVGOuterSVGFrame.h"
+#include "ScrollbarActivity.h"
 #include "mozilla/Attributes.h"
 
 using namespace mozilla;
 using namespace mozilla::dom;
+using namespace mozilla::layout;
+
 
 //----------------------------------------------------------------------
 
@@ -311,13 +314,21 @@ GetScrollbarMetrics(nsBoxLayoutState& aState, nsIBox* aBox, nsSize* aMin,
                "computations");
   
   if (aMin) {
-    *aMin = aBox->GetMinSize(aState);
-    nsBox::AddMargin(aBox, *aMin);
+    if (aBox->IsCollapsed()) {
+      *aMin = nsSize();
+    } else {
+      *aMin = aBox->GetMinSize(aState);
+      nsBox::AddMargin(aBox, *aMin);
+    }
   }
  
   if (aPref) {
-    *aPref = aBox->GetPrefSize(aState);
-    nsBox::AddMargin(aBox, *aPref);
+    if (aBox->IsCollapsed()) {
+      *aPref = nsSize();
+    } else {
+      *aPref = aBox->GetPrefSize(aState);
+      nsBox::AddMargin(aBox, *aPref);
+    }
   }
 }
 
@@ -476,8 +487,9 @@ nsHTMLScrollFrame::ReflowScrolledFrame(ScrollReflowState* aState,
     computedMaxHeight = NS_UNCONSTRAINEDSIZE;
   }
   if (aAssumeHScroll) {
-    nsSize hScrollbarPrefSize = 
-      mInner.mHScrollbarBox->GetPrefSize(const_cast<nsBoxLayoutState&>(aState->mBoxState));
+    nsSize hScrollbarPrefSize;
+    GetScrollbarMetrics(aState->mBoxState, mInner.mHScrollbarBox,
+                        nsnull, &hScrollbarPrefSize, false);
     if (computedHeight != NS_UNCONSTRAINEDSIZE)
       computedHeight = NS_MAX(0, computedHeight - hScrollbarPrefSize.height);
     computedMinHeight = NS_MAX(0, computedMinHeight - hScrollbarPrefSize.height);
@@ -486,8 +498,9 @@ nsHTMLScrollFrame::ReflowScrolledFrame(ScrollReflowState* aState,
   }
 
   if (aAssumeVScroll) {
-    nsSize vScrollbarPrefSize = 
-      mInner.mVScrollbarBox->GetPrefSize(const_cast<nsBoxLayoutState&>(aState->mBoxState));
+    nsSize vScrollbarPrefSize;
+    GetScrollbarMetrics(aState->mBoxState, mInner.mVScrollbarBox,
+                        &vScrollbarPrefSize, nsnull, true);
     availWidth = NS_MAX(0, availWidth - vScrollbarPrefSize.width);
   }
 
@@ -962,6 +975,7 @@ nsHTMLScrollFrame::CreateAccessible()
 
 NS_QUERYFRAME_HEAD(nsHTMLScrollFrame)
   NS_QUERYFRAME_ENTRY(nsIAnonymousContentCreator)
+  NS_QUERYFRAME_ENTRY(nsIScrollbarHolder)
   NS_QUERYFRAME_ENTRY(nsIScrollableFrame)
   NS_QUERYFRAME_ENTRY(nsIStatefulFrame)
 NS_QUERYFRAME_TAIL_INHERITING(nsContainerFrame)
@@ -1270,6 +1284,7 @@ nsXULScrollFrame::DoLayout(nsBoxLayoutState& aState)
 
 NS_QUERYFRAME_HEAD(nsXULScrollFrame)
   NS_QUERYFRAME_ENTRY(nsIAnonymousContentCreator)
+  NS_QUERYFRAME_ENTRY(nsIScrollbarHolder)
   NS_QUERYFRAME_ENTRY(nsIScrollableFrame)
   NS_QUERYFRAME_ENTRY(nsIStatefulFrame)
 NS_QUERYFRAME_TAIL_INHERITING(nsBoxFrame)
@@ -1605,6 +1620,9 @@ nsGfxScrollFrameInner::nsGfxScrollFrameInner(nsContainerFrame* aOuter,
   , mShouldBuildLayer(false)
 {
   mScrollingActive = IsAlwaysActive();
+  if (LookAndFeel::GetInt(LookAndFeel::eIntID_UseOverlayScrollbars) != 0) {
+    mScrollbarActivity = new ScrollbarActivity(do_QueryFrame(aOuter));
+  }
 }
 
 nsGfxScrollFrameInner::~nsGfxScrollFrameInner()
@@ -2844,6 +2862,11 @@ nsGfxScrollFrameInner::AppendAnonymousContentTo(nsBaseContentList& aElements,
 void
 nsGfxScrollFrameInner::Destroy()
 {
+  if (mScrollbarActivity) {
+    mScrollbarActivity->Destroy();
+    mScrollbarActivity = nsnull;
+  }
+
   // Unbind any content created in CreateAnonymousContent from the tree
   nsContentUtils::DestroyAnonymousContent(&mHScrollbarContent);
   nsContentUtils::DestroyAnonymousContent(&mVScrollbarContent);
@@ -2886,6 +2909,10 @@ void nsGfxScrollFrameInner::CurPosAttributeChanged(nsIContent* aContent)
   NS_ASSERTION((mHScrollbarBox && mHScrollbarBox->GetContent() == aContent) ||
                (mVScrollbarBox && mVScrollbarBox->GetContent() == aContent),
                "unexpected child");
+
+  if (mScrollbarActivity) {
+    mScrollbarActivity->ActivityOccurred();
+  }
 
   // Attribute changes on the scrollbars happen in one of three ways:
   // 1) The scrollbar changed the attribute in response to some user event
@@ -3667,6 +3694,26 @@ nsGfxScrollFrameInner::AdjustScrollbarRectForResizer(
     aRect.width = NS_MAX(0, resizerRect.x - aRect.x);
 }
 
+static void
+AdjustOverlappingScrollbars(nsRect& aVRect, nsRect& aHRect)
+{
+  if (aVRect.IsEmpty() || aHRect.IsEmpty())
+    return;
+
+  const nsRect oldVRect = aVRect;
+  const nsRect oldHRect = aHRect;
+  if (oldVRect.Contains(oldHRect.BottomRight() - nsPoint(1, 1))) {
+    aHRect.width = NS_MAX(0, oldVRect.x - oldHRect.x);
+  } else if (oldVRect.Contains(oldHRect.BottomLeft() - nsPoint(0, 1))) {
+    nscoord overlap = NS_MIN(oldHRect.width, oldVRect.XMost() - oldHRect.x);
+    aHRect.x += overlap;
+    aHRect.width -= overlap;
+  }
+  if (oldHRect.Contains(oldVRect.BottomRight() - nsPoint(1, 1))) {
+    aVRect.height = NS_MAX(0, oldHRect.y - oldVRect.y);
+  }
+}
+
 void
 nsGfxScrollFrameInner::LayoutScrollbars(nsBoxLayoutState& aState,
                                         const nsRect& aContentArea,
@@ -3709,22 +3756,21 @@ nsGfxScrollFrameInner::LayoutScrollbars(nsBoxLayoutState& aState,
 
     if (hasResizer) {
       // if a resizer is present, get its size. Assume a default size of 15 pixels.
-      nsSize resizerSize;
       nscoord defaultSize = nsPresContext::CSSPixelsToAppUnits(15);
-      resizerSize.width =
+      nsSize resizerMinSize = mResizerBox->GetMinSize(aState);
+
+      nscoord vScrollbarWidth =
         mVScrollbarBox ? mVScrollbarBox->GetMinSize(aState).width : defaultSize;
-      if (resizerSize.width > r.width) {
-        r.width = resizerSize.width;
-        if (aContentArea.x == mScrollPort.x && !scrollbarOnLeft)
-          r.x = aContentArea.XMost() - r.width;
+      r.width = NS_MAX(NS_MAX(r.width, vScrollbarWidth), resizerMinSize.width);
+      if (aContentArea.x == mScrollPort.x && !scrollbarOnLeft) {
+        r.x = aContentArea.XMost() - r.width;
       }
 
-      resizerSize.height =
+      nscoord hScrollbarHeight =
         mHScrollbarBox ? mHScrollbarBox->GetMinSize(aState).height : defaultSize;
-      if (resizerSize.height > r.height) {
-        r.height = resizerSize.height;
-        if (aContentArea.y == mScrollPort.y)
-          r.y = aContentArea.YMost() - r.height;
+      r.height = NS_MAX(NS_MAX(r.height, hScrollbarHeight), resizerMinSize.height);
+      if (aContentArea.y == mScrollPort.y) {
+        r.y = aContentArea.YMost() - r.height;
       }
 
       LayoutAndInvalidate(aState, mResizerBox, r, false);
@@ -3736,27 +3782,39 @@ nsGfxScrollFrameInner::LayoutScrollbars(nsBoxLayoutState& aState,
   }
 
   nsPresContext* presContext = mScrolledFrame->PresContext();
+  nsRect vRect;
   if (mVScrollbarBox) {
     NS_PRECONDITION(mVScrollbarBox->IsBoxFrame(), "Must be a box frame!");
-    nsRect vRect(mScrollPort);
+    vRect = mScrollPort;
     vRect.width = aContentArea.width - mScrollPort.width;
     vRect.x = scrollbarOnLeft ? aContentArea.x : mScrollPort.XMost();
-    nsMargin margin;
-    mVScrollbarBox->GetMargin(margin);
-    vRect.Deflate(margin);
+    if (mHasVerticalScrollbar) {
+      nsMargin margin;
+      mVScrollbarBox->GetMargin(margin);
+      vRect.Deflate(margin);
+    }
     AdjustScrollbarRectForResizer(mOuter, presContext, vRect, hasResizer, true);
-    LayoutAndInvalidate(aState, mVScrollbarBox, vRect, !mHasVerticalScrollbar);
   }
 
+  nsRect hRect;
   if (mHScrollbarBox) {
     NS_PRECONDITION(mHScrollbarBox->IsBoxFrame(), "Must be a box frame!");
-    nsRect hRect(mScrollPort);
+    hRect = mScrollPort;
     hRect.height = aContentArea.height - mScrollPort.height;
     hRect.y = true ? mScrollPort.YMost() : aContentArea.y;
-    nsMargin margin;
-    mHScrollbarBox->GetMargin(margin);
-    hRect.Deflate(margin);
+    if (mHasHorizontalScrollbar) {
+      nsMargin margin;
+      mHScrollbarBox->GetMargin(margin);
+      hRect.Deflate(margin);
+    }
     AdjustScrollbarRectForResizer(mOuter, presContext, hRect, hasResizer, false);
+  }
+
+  AdjustOverlappingScrollbars(vRect, hRect);
+  if (mVScrollbarBox) {
+    LayoutAndInvalidate(aState, mVScrollbarBox, vRect, !mHasVerticalScrollbar);
+  }
+  if (mHScrollbarBox) {
     LayoutAndInvalidate(aState, mHScrollbarBox, hRect, !mHasHorizontalScrollbar);
   }
 
@@ -3805,6 +3863,10 @@ nsGfxScrollFrameInner::SetCoordAttribute(nsIContent* aContent, nsIAtom* aAtom,
     return;
 
   aContent->SetAttr(kNameSpaceID_None, aAtom, newValue, true);
+
+  if (mScrollbarActivity) {
+    mScrollbarActivity->ActivityOccurred();
+  }
 }
 
 static void
