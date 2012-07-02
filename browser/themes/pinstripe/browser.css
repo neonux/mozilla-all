@@ -1258,10 +1258,23 @@ window[tabsontop="false"] richlistitem[type~="action"][actiontype="switchtab"][s
 }
 
 /* BOOKMARKING PANEL */
+#editBookmarkPanel {
+  width: 384px;
+}
+
+#editBookmarkPanelHeader {
+  background: #f7f7f7;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 5px 5px 0 0;
+  box-shadow: inset 0 -1px rgba(255, 255, 255, 0.45), 0 1px rgba(255, 255, 255, 0.45);
+  margin: -16px -16px 16px !important;
+  padding: 16px;
+}
+
 #editBookmarkPanelStarIcon {
-  list-style-image: url("chrome://browser/skin/places/starred48.png");
-  width: 48px;
-  height: 48px;
+  list-style-image: url("chrome://browser/skin/places/starred32.png");
+  width: 32px;
+  height: 32px;
 }
 
 #editBookmarkPanelStarIcon[unstarred] {
@@ -1269,8 +1282,29 @@ window[tabsontop="false"] richlistitem[type~="action"][actiontype="switchtab"][s
 }
 
 #editBookmarkPanelTitle {
-  font-size: 130%;
+  color: #404040;
+  font-size: 16px;
   font-weight: bold;
+}
+
+/**** Input elements ****/
+#editBookmarkPanel textbox {
+  -moz-appearance: none;
+  background: -moz-linear-gradient(#fafafa, #fff);
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 1px 1px 1px rgba(0, 0, 0, 0.05),
+              0 1px rgba(255, 255, 255, 0.3);
+  margin: 0;
+  padding: 3px 6px;
+}
+
+#editBookmarkPanelGrid row {
+  margin-bottom: 8px;
+}
+
+#editBookmarkPanelGrid row:last-of-type {
+  margin-bottom: 0;
 }
 
 /**** HUD style buttons ****/
@@ -1278,8 +1312,8 @@ window[tabsontop="false"] richlistitem[type~="action"][actiontype="switchtab"][s
 .editBookmarkPanelHeaderButton,
 .editBookmarkPanelBottomButton {
   @hudButton@
-  margin: 6px;
-  min-width: 79px;
+  margin: 0;
+  min-width: 82px;
   min-height: 22px;
 }
 
@@ -1293,12 +1327,12 @@ window[tabsontop="false"] richlistitem[type~="action"][actiontype="switchtab"][s
   @hudButtonFocused@
 }
 
-.editBookmarkPanelBottomButton[default="true"] {
-  background-color: #666;
+.editBookmarkPanelBottomButton:last-child {
+  -moz-margin-start: 8px;
 }
 
-#editBookmarkPanelHeader {
-  margin-bottom: 6px;
+#editBookmarkPanelBottomButtons {
+  margin-top: 8px;
 }
 
 /* The following elements come from editBookmarkOverlay.xul. Styling that's
@@ -1317,9 +1351,6 @@ window[tabsontop="false"] richlistitem[type~="action"][actiontype="switchtab"][s
               inset 0 1px 0 rgba(255,255,255,.15),
               0 1px 0 rgba(255,255,255,.15);
   padding: 0;
-  margin-left: 4px;
-  margin-right: 4px;
-  margin-bottom: 8px;
   height:  20px;
 }
 
@@ -1355,10 +1386,11 @@ window[tabsontop="false"] richlistitem[type~="action"][actiontype="switchtab"][s
 
 #editBMPanel_folderMenuList {
   @hudButton@
-  border-radius: 3px;
+  margin: 0;
+  padding: 2px 4px 1px 8px;
   min-height: 22px;
-  -moz-padding-start: 4px;
-  -moz-padding-end: 0;
+  -moz-padding-start: 8px;
+  -moz-padding-end: 4px;
 }
 
 #editBMPanel_folderMenuList:-moz-focusring {
@@ -1380,7 +1412,7 @@ window[tabsontop="false"] richlistitem[type~="action"][actiontype="switchtab"][s
 }
 
 #editBMPanel_folderMenuList > .menulist-dropmarker > .dropmarker-icon {
-  list-style-image: url("chrome://browser/skin/hud-style-dropmarker-double-arrows.png");
+  list-style-image: url("chrome://browser/skin/arrowpanel-dropdown.png");
 }
 
 /**** folder tree ****/
@@ -1388,13 +1420,10 @@ window[tabsontop="false"] richlistitem[type~="action"][actiontype="switchtab"][s
 #editBMPanel_folderTree {
   -moz-appearance: none;
   border-radius: 2px 2px 0 0;
-  background-color: rgba(50,50,50,.9);
+  background-color: #eee;
   border: 1px solid rgba(0,0,0,.3);
   border-bottom: none;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,.15);
-  color: #fff;
-  /* Implements editBookmarkPanel resizing on folderTree un-collapse. */
-  min-width: 27em;
+  margin: 0 !important;
   position: relative;
 }
 
@@ -1426,12 +1455,9 @@ window[tabsontop="false"] richlistitem[type~="action"][actiontype="switchtab"][s
 #editBMPanel_tagsSelector {
   -moz-appearance: none;
   border-radius: 2px;
-  background-color: rgba(50,50,50,1);
+  background-color: #eee;
   border: 1px solid rgba(0,0,0,.3);
-  border-bottom: none;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,.15),
-              0 1px 0 rgba(255,255,255,.15);
-  color: #fff;
+  margin: 0;
 }
 
 #editBMPanel_tagsSelector:-moz-focusring {
@@ -1479,13 +1505,10 @@ window[tabsontop="false"] richlistitem[type~="action"][actiontype="switchtab"][s
 #editBookmarkPanel .expander-up,
 #editBookmarkPanel .expander-down {
   @hudButton@
-  border-radius: 3px;
+  margin: 0;
   -moz-margin-start: 4px;
-  -moz-margin-end: 2px;
-  padding: 0;
-  -moz-padding-start: 4px;
-  min-width: 10px;
-  min-height: 20px;
+  min-width: 26px;
+  min-height: 22px;
 }
 
 #editBookmarkPanel .expander-up:-moz-focusring,
@@ -1499,34 +1522,21 @@ window[tabsontop="false"] richlistitem[type~="action"][actiontype="switchtab"][s
 }
 
 #editBookmarkPanel .expander-up {
-  list-style-image: url("chrome://browser/skin/hud-style-expander-open.png");
+  list-style-image: url("chrome://browser/skin/places/bookmarks-open.png");
 }
 
 #editBookmarkPanel .expander-down {
-  list-style-image: url("chrome://browser/skin/hud-style-expander-closed.png");
+  list-style-image: url("chrome://browser/skin/places/bookmarks-closed.png");
 }
 
-#editBMPanel_tagsField {
-  -moz-appearance: none !important;
-  -moz-padding-start: 3px !important;
-  margin: 2px !important;
-  border: 1px solid rgba(0,0,0,.5) !important;
-  box-shadow: inset 0 1px 0 rgba(0,0,0,.3);
-  background-color: #666 !important;
-  background-clip: padding-box;
-  background-origin: padding-box;
-  color: #fff !important;
-  min-height: 20px;
+#editBookmarkPanel .expander-up .button-icon,
+#editBookmarkPanel .expander-down .button-icon {
+  -moz-margin-start: 0 !important;
 }
 
-#editBMPanel_tagsField > .autocomplete-textbox-container > .textbox-input-box > html|*.textbox-input:-moz-placeholder {
-  color: #bbb;
-}
-
-#editBMPanel_tagsField[focused="true"] {
-  @hudButtonFocused@
-  background-color: #eee !important;
-  color: #000 !important;
+#editBookmarkPanel .expander-up .button-text,
+#editBookmarkPanel .expander-down .button-text {
+  display: none;
 }
 
 .editBMPanel_rowLabel {
@@ -2223,6 +2233,25 @@ toolbarbutton.chevron > .toolbarbutton-menu-dropmarker {
 }
 
 /* Popup Icons */
+#identity-popup .panel-arrowcontent {
+  padding: 0 !important;
+}
+
+.identity-popup-row {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.identity-popup-icon-area {
+  background: #f7f7f7;
+  border-right: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: inset -1px 0 rgba(255, 255, 255, 0.45), 1px 0 rgba(255, 255, 255, 0.45);
+  padding: 16px 16px 16px 16px;
+}
+
+.identity-popup-row:first-child .identity-popup-icon-area {
+  border-top-left-radius: 5px;
+}
+
 #identity-popup-icon {
   height: 64px;
   width: 64px;
@@ -2240,15 +2269,18 @@ toolbarbutton.chevron > .toolbarbutton-menu-dropmarker {
 }
 
 /* Popup Body Text */
+.identity-popup-info-area, #identity-popup-content-box {
+  padding: 16px;
+  width: 300px;
+}
+
 .identity-popup-description {
-  white-space: pre-wrap;
-  -moz-padding-start: 15px;
+  white-space pre-wrap;
   margin: 2px 0 4px;
 }
 
 .identity-popup-label {
   white-space: pre-wrap;
-  -moz-padding-start: 15px;
   margin: 0;
 }
 
@@ -2271,16 +2303,23 @@ toolbarbutton.chevron > .toolbarbutton-menu-dropmarker {
   margin: 4px 0 2px;
 }
 
-#identity-popup-content-box.verifiedIdentity > #identity-popup-encryption ,
-#identity-popup-content-box.verifiedDomain > #identity-popup-encryption {
-  margin-top: 10px;
-  -moz-margin-start: -24px;
+#identity-popup-encryption-icon {
+  list-style-image: url("chrome://browser/skin/encrypted.png");
+  width: 64px;
+  height: 64px;
 }
 
-#identity-popup-content-box.verifiedIdentity > #identity-popup-encryption > vbox > #identity-popup-encryption-icon ,
-#identity-popup-content-box.verifiedDomain > #identity-popup-encryption > vbox > #identity-popup-encryption-icon {
-  margin-top: 5px;
-  list-style-image: url("chrome://browser/skin/Secure-Glyph-White.png");
+#identity-popup-content-box.verifiedIdentity #identity-popup-encryption-icon,
+#identity-popup-content-box.verifiedDomain #identity-popup-encryption-icon {
+  list-style-image: url("chrome://browser/skin/encrypted.png");
+}
+
+#identity-popup-button-container {
+  background: #e5e5e5;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 0 0 5px 5px;
+  box-shadow: inset 0 -1px rgba(255, 255, 255, 0.5), inset 0 1px 1px rgba(0, 0, 0, 0.03);
+  padding: 16px;
 }
 
 #notification-popup-box {
@@ -2324,12 +2363,14 @@ toolbarbutton.chevron > .toolbarbutton-menu-dropmarker {
 }
 
 .geolocation-text-link {
-  color: #fff;
   -moz-margin-start: 0; /* override default label margin to match description margin */
+  color: #0073e6;
+  text-decoration: none;
 }
 
 .telemetry-text-link {
-  color: #fff;
+  color: #0073e6;
+  text-decoration: none;
 }
 
 #addons-notification-icon {
@@ -2364,9 +2405,9 @@ toolbarbutton.chevron > .toolbarbutton-menu-dropmarker {
 .popup-notification-icon[popupid="addon-install-blocked"],
 .popup-notification-icon[popupid="addon-install-failed"],
 .popup-notification-icon[popupid="addon-install-complete"] {
-  list-style-image: url(chrome://mozapps/skin/extensions/extensionGeneric.png);
-  width: 32px;
-  height: 32px;
+  list-style-image: url(chrome://mozapps/skin/extensions/extensionGeneric-64.png);
+  width: 64px;
+  height: 64px;
 }
 
 .popup-notification-icon[popupid="click-to-play-plugins"] {
@@ -2393,7 +2434,8 @@ toolbarbutton.chevron > .toolbarbutton-menu-dropmarker {
   max-height: 16px;
   max-width: 16px;
   padding: 0;
-  margin: 0 1px 0 1px;
+  margin: 0 1px -1px 1px;
+  -moz-margin-start: 6px;
   list-style-image: url(chrome://mozapps/skin/downloads/buttons.png);
   -moz-image-region: rect(0px, 16px, 16px, 0px);
 }
@@ -2427,7 +2469,6 @@ toolbarbutton.chevron > .toolbarbutton-menu-dropmarker {
 /* Popup Buttons */
 #identity-popup-more-info-button {
   @hudButton@
-  margin: 10px 0 0;
   min-height: 0px;
 }
 

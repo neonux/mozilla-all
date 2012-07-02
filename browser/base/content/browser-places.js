@@ -165,8 +165,7 @@ var StarUI = {
         gNavigatorBundle.getString("editBookmarkPanel.pageBookmarkedTitle") :
         gNavigatorBundle.getString("editBookmarkPanel.editBookmarkTitle");
 
-    // No description; show the Done, Cancel;
-    this._element("editBookmarkPanelDescription").textContent = "";
+    // Show the Done and Cancel buttons;
     this._element("editBookmarkPanelBottomButtons").hidden = false;
     this._element("editBookmarkPanelContent").hidden = false;
 
