@@ -57,7 +57,6 @@
 #include "nsTreeBoxObject.h"
 #include "nsRenderingContext.h"
 #include "nsIScriptableRegion.h"
-#include "ScrollbarActivity.h"
 
 #ifdef ACCESSIBILITY
 #include "nsAccessibilityService.h"
@@ -67,7 +66,6 @@
 #endif
 
 using namespace mozilla;
-using namespace mozilla::layout;
 
 // Enumeration function that cancels all the image requests in our cache
 static PLDHashOperator
@@ -101,7 +99,6 @@ NS_IMPL_FRAMEARENA_HELPERS(nsTreeBodyFrame)
 
 NS_QUERYFRAME_HEAD(nsTreeBodyFrame)
   NS_QUERYFRAME_ENTRY(nsIScrollbarMediator)
-  NS_QUERYFRAME_ENTRY(nsIScrollbarHolder)
   NS_QUERYFRAME_ENTRY(nsTreeBodyFrame)
 NS_QUERYFRAME_TAIL_INHERITING(nsLeafBoxFrame)
 
@@ -171,10 +168,6 @@ nsTreeBodyFrame::Init(nsIContent*     aContent,
 
   mImageCache.Init(16);
   EnsureBoxObject();
-
-  if (LookAndFeel::GetInt(LookAndFeel::eIntID_UseOverlayScrollbars) != 0) {
-    mScrollbarActivity = new ScrollbarActivity(do_QueryFrame(this));
-  }
 
   return rv;
 }
@@ -274,11 +267,6 @@ nsTreeBodyFrame::CalcMaxRowWidth()
 void
 nsTreeBodyFrame::DestroyFrom(nsIFrame* aDestructRoot)
 {
-  if (mScrollbarActivity) {
-    mScrollbarActivity->Destroy();
-    mScrollbarActivity = nsnull;
-  }
-
   mScrollEvent.Revoke();
   // Make sure we cancel any posted callbacks. 
   if (mReflowCallbackPosted) {
@@ -879,8 +867,6 @@ nsTreeBodyFrame::UpdateScrollbars(const ScrollParts& aParts)
 {
   nscoord rowHeightAsPixels = nsPresContext::AppUnitsToIntCSSPixels(mRowHeight);
 
-  nsWeakFrame weakFrame(this);
-
   if (aParts.mVScrollbar) {
     nsAutoString curPos;
     curPos.AppendInt(mTopRowIndex*rowHeightAsPixels);
@@ -893,10 +879,6 @@ nsTreeBodyFrame::UpdateScrollbars(const ScrollParts& aParts)
     curPos.AppendInt(mHorzPosition);
     aParts.mHScrollbarContent->
       SetAttr(kNameSpaceID_None, nsGkAtoms::curpos, curPos, true);
-  }
-
-  if (weakFrame.IsAlive() && mScrollbarActivity) {
-    mScrollbarActivity->ActivityOccurred();
   }
 }
 
@@ -999,10 +981,6 @@ nsTreeBodyFrame::InvalidateScrollbars(const ScrollParts& aParts, nsWeakFrame& aW
     pageStr.AppendInt(nsPresContext::CSSPixelsToAppUnits(16));
     aParts.mHScrollbarContent->
       SetAttr(kNameSpaceID_None, nsGkAtoms::increment, pageStr, true);
-  }
-
-  if (mScrollbarActivity) {
-    mScrollbarActivity->ActivityOccurred();
   }
 }
 

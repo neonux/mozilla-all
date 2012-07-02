@@ -32,8 +32,6 @@ EXPORTS		= \
 		nsIObjectFrame.h \
 		nsIPageSequenceFrame.h \
 		nsIScrollableFrame.h \
-		nsIScrollbarHolder.h \
-		ScrollbarActivity.h \
 		nsIStatefulFrame.h \
 		nsFrameSelection.h \
 		nsSubDocumentFrame.h \
@@ -84,7 +82,6 @@ CPPSRCS		= \
 		nsPageContentFrame.cpp \
 		nsPageFrame.cpp \
 		nsPlaceholderFrame.cpp \
-		ScrollbarActivity.cpp \
 		nsSelection.cpp \
 		nsSimplePageSequence.cpp \
 		nsSplittableFrame.cpp \
