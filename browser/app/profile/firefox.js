@@ -1094,7 +1094,7 @@ pref("devtools.hud.height", 0);
 //   above - above the web page,
 //   below - below the web page,
 //   window - in a separate window/popup panel.
-pref("devtools.webconsole.position", "above");
+pref("devtools.webconsole.position", "below");
 
 // Remember the Web Console filters
 pref("devtools.webconsole.filter.network", true);

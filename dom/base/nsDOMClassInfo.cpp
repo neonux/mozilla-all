@@ -107,6 +107,7 @@
 #include "nsIDOMPerformanceNavigation.h"
 #include "nsIDOMPerformance.h"
 #include "nsClientRect.h"
+#include "nsIDOMHTMLPropertiesCollection.h"
 
 // DOM core includes
 #include "nsDOMError.h"
@@ -534,6 +535,7 @@ using mozilla::dom::indexedDB::IDBWrapperCache;
 
 #undef None // something included above defines this preprocessor symbol, maybe Xlib headers
 #include "WebGLContext.h"
+#include "nsICanvasRenderingContextInternal.h"
 
 using namespace mozilla;
 using namespace mozilla::dom;
@@ -4590,6 +4592,10 @@ nsDOMClassInfo::Init()
   // Non-proxy bindings
   mozilla::dom::Register(nameSpaceManager);
 
+  if (!AzureCanvasEnabled()) {
+    nameSpaceManager->RegisterDefineDOMInterface(NS_LITERAL_STRING("CanvasRenderingContext2D"), NULL);
+  }
+
   sIsInitialized = true;
 
   return NS_OK;
@@ -4914,11 +4920,7 @@ nsDOMClassInfo::CheckAccess(nsIXPConnectWrappedNative *wrapper, JSContext *cx,
 {
   PRUint32 mode_type = mode & JSACC_TYPEMASK;
 
-  if ((mode_type == JSACC_WATCH ||
-       mode_type == JSACC_PROTO ||
-       mode_type == JSACC_PARENT) &&
-      sSecMan) {
-
+  if ((mode_type == JSACC_WATCH || mode_type == JSACC_PROTO) && sSecMan) {
     nsresult rv;
     JSObject *real_obj;
     if (wrapper) {
@@ -5373,11 +5375,10 @@ nsWindowSH::GlobalScopePolluterNewResolve(JSContext *cx, JSHandleObject obj,
                                           JSHandleId id, unsigned flags,
                                           JSObject **objp)
 {
-  if (flags & (JSRESOLVE_ASSIGNING | JSRESOLVE_DECLARING |
-               JSRESOLVE_QUALIFIED) ||
+  if (flags & (JSRESOLVE_ASSIGNING | JSRESOLVE_QUALIFIED) ||
       !JSID_IS_STRING(id)) {
-    // Nothing to do here if we're either assigning or declaring,
-    // doing a qualified resolve, or resolving a number.
+    // Nothing to do here if we're assigning, doing a qualified resolve, or
+    // resolving a non-string property.
 
     return JS_TRUE;
   }

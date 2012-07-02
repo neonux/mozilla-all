@@ -2909,7 +2909,6 @@ nsCSSFrameConstructor::ConstructSelectFrame(nsFrameConstructorState& aState,
                                             nsIFrame**               aNewFrame)
 {
   nsresult rv = NS_OK;
-  const PRInt32 kNoSizeSpecified = -1;
 
   nsIContent* const content = aItem.mContent;
   nsStyleContext* const styleContext = aItem.mStyleContext;
@@ -2922,7 +2921,7 @@ nsCSSFrameConstructor::ConstructSelectFrame(nsFrameConstructorState& aState,
     bool multipleSelect = false;
     sel->GetMultiple(&multipleSelect);
      // Construct a combobox if size=1 or no size is specified and its multiple select
-    if (((1 == size || 0 == size) || (kNoSizeSpecified  == size)) && (false == multipleSelect)) {
+    if ((1 == size || 0 == size) && !multipleSelect) {
         // Construct a frame-based combo box.
         // The frame-based combo box is built out of three parts. A display area, a button and
         // a dropdown list. The display area and button are created through anonymous content.
@@ -7585,11 +7584,6 @@ UpdateViewsForTree(nsIFrame* aFrame,
           DoApplyRenderingChangeToTree(child, aFrameManager,
                                        aChange);
         } else {  // regular frame
-          if ((child->GetStateBits() & NS_FRAME_HAS_CONTAINER_LAYER) &&
-              (aChange & nsChangeHint_RepaintFrame)) {
-            FrameLayerBuilder::InvalidateThebesLayerContents(child,
-              child->GetVisualOverflowRectRelativeToSelf());
-          }
           UpdateViewsForTree(child, aFrameManager, aChange);
         }
       }
@@ -7631,21 +7625,17 @@ DoApplyRenderingChangeToTree(nsIFrame* aFrame,
           nsSVGUtils::InvalidateBounds(aFrame);
         }
       } else {
-        aFrame->InvalidateOverflowRect();
+        aFrame->InvalidateFrameSubtree();
       }
     }
     if (aChange & nsChangeHint_UpdateOpacityLayer) {
       aFrame->MarkLayersActive(nsChangeHint_UpdateOpacityLayer);
-      aFrame->InvalidateLayer(aFrame->GetVisualOverflowRectRelativeToSelf(),
-                              nsDisplayItem::TYPE_OPACITY);
     }
     
     if (aChange & nsChangeHint_UpdateTransformLayer) {
       aFrame->MarkLayersActive(nsChangeHint_UpdateTransformLayer);
-      // Invalidate the old transformed area. The new transformed area
-      // will be invalidated by nsFrame::FinishAndStoreOverflowArea.
-      aFrame->InvalidateTransformLayer();
     }
+    aFrame->SchedulePaint();
   }
 }
 
@@ -12247,15 +12237,14 @@ nsCSSFrameConstructor::RecomputePosition(nsIFrame* aFrame)
     return true;
   }
 
+  aFrame->SchedulePaint();
+
   // For relative positioning, we can simply update the frame rect
   if (display->mPosition == NS_STYLE_POSITION_RELATIVE) {
     nsIFrame* cb = aFrame->GetContainingBlock();
     const nsSize size = cb->GetSize();
     const nsPoint oldOffsets = aFrame->GetRelativeOffset();
     nsMargin newOffsets;
-
-    // Invalidate the old rect
-    aFrame->InvalidateOverflowRect();
 
     // Move the frame
     nsHTMLReflowState::ComputeRelativeOffsets(
@@ -12266,9 +12255,6 @@ nsCSSFrameConstructor::RecomputePosition(nsIFrame* aFrame)
                  "ComputeRelativeOffsets should return valid results");
     aFrame->SetPosition(aFrame->GetPosition() - oldOffsets +
                         nsPoint(newOffsets.left, newOffsets.top));
-
-    // Invalidate the new rect
-    aFrame->InvalidateFrameSubtree();
 
     return true;
   }
@@ -12340,19 +12326,13 @@ nsCSSFrameConstructor::RecomputePosition(nsIFrame* aFrame)
                                          size.height -
                                          reflowState.mComputedMargin.top;
     }
-
-    // Invalidate the old rect
-    aFrame->InvalidateFrameSubtree();
-
+    
     // Move the frame
     nsPoint pos(parentBorder.left + reflowState.mComputedOffsets.left +
                 reflowState.mComputedMargin.left,
                 parentBorder.top + reflowState.mComputedOffsets.top +
                 reflowState.mComputedMargin.top);
     aFrame->SetPosition(pos);
-
-    // Invalidate the new rect
-    aFrame->InvalidateFrameSubtree();
 
     return true;
   }

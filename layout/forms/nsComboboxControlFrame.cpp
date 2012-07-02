@@ -21,6 +21,7 @@
 #include "nsIDOMHTMLOptionElement.h" 
 #include "nsPIDOMWindow.h"
 #include "nsIPresShell.h"
+#include "nsContentList.h"
 #include "nsIView.h"
 #include "nsIViewManager.h"
 #include "nsEventDispatcher.h"
@@ -356,7 +357,7 @@ nsComboboxControlFrame::SetFocus(bool aOn, bool aRepaint)
   // This is needed on a temporary basis. It causes the focus
   // rect to be drawn. This is much faster than ReResolvingStyle
   // Bug 32920
-  Invalidate(nsRect(0,0,mRect.width,mRect.height));
+  InvalidateFrame();
 }
 
 void
