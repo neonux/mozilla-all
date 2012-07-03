@@ -25,6 +25,7 @@
         xmlns:svg="http://www.w3.org/2000/svg"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         onload="gBrowserInit.onLoad()" onunload="gBrowserInit.onUnload()" onclose="return WindowIsClosing();"
+        ondragenter="OnWindowDragEnter(event)"
         title="&mainWindow.title;@PRE_RELEASE_SUFFIX@"
         title_normal="&mainWindow.title;@PRE_RELEASE_SUFFIX@"
 #ifdef XP_MACOSX
@@ -145,16 +146,14 @@
         <vbox align="center">
           <image id="editBookmarkPanelStarIcon"/>
         </vbox>
-        <vbox>
+        <hbox>
           <label id="editBookmarkPanelTitle"/>
-          <description id="editBookmarkPanelDescription"/>
-          <hbox>
-            <button id="editBookmarkPanelRemoveButton"
-                    class="editBookmarkPanelHeaderButton"
-                    oncommand="StarUI.removeBookmarkButtonCommand();"
-                    accesskey="&editBookmark.removeBookmark.accessKey;"/>
-          </hbox>
-        </vbox>
+          <spacer flex="1"/>
+          <button id="editBookmarkPanelRemoveButton"
+                  class="editBookmarkPanelHeaderButton"
+                  oncommand="StarUI.removeBookmarkButtonCommand();"
+                  accesskey="&editBookmark.removeBookmark.accessKey;"/>
+        </hbox>
       </row>
       <vbox id="editBookmarkPanelContent" flex="1" hidden="true"/>
       <hbox id="editBookmarkPanelBottomButtons" pack="end">
@@ -263,42 +262,48 @@
            consumeoutsideclicks="true"
            onpopupshown="gIdentityHandler.onPopupShown(event);"
            level="top">
-      <hbox id="identity-popup-container" align="top">
-        <image id="identity-popup-icon"/>
-        <vbox id="identity-popup-content-box">
-          <label id="identity-popup-connectedToLabel"
-                 class="identity-popup-label"
-                 value="&identity.connectedTo;"/>
-          <label id="identity-popup-connectedToLabel2"
-                 class="identity-popup-label"
-                 value="&identity.unverifiedsite2;"/>
-          <description id="identity-popup-content-host"
-                       class="identity-popup-description"/>
-          <label id="identity-popup-runByLabel"
-                 class="identity-popup-label"
-                 value="&identity.runBy;"/>
-          <description id="identity-popup-content-owner"
-                       class="identity-popup-description"/>
-          <description id="identity-popup-content-supplemental"
-                       class="identity-popup-description"/>
-          <description id="identity-popup-content-verifier"
-                       class="identity-popup-description"/>
-          <hbox id="identity-popup-encryption" flex="1">
-            <vbox>
-              <image id="identity-popup-encryption-icon"/>
-            </vbox>
+      <vbox>
+        <hbox class="identity-popup-row" id="identity-popup-container">
+          <vbox class="identity-popup-icon-area">
+            <image id="identity-popup-icon"/>
+          </vbox>
+          <vbox class="identity-popup-info-area" id="identity-popup-content-box">
+            <label id="identity-popup-connectedToLabel"
+                   class="identity-popup-label"
+                   value="&identity.connectedTo;"/>
+            <label id="identity-popup-connectedToLabel2"
+                   class="identity-popup-label"
+                   value="&identity.unverifiedsite2;"/>
+            <description id="identity-popup-content-host"
+                         class="identity-popup-description"/>
+            <label id="identity-popup-runByLabel"
+                   class="identity-popup-label"
+                   value="&identity.runBy;"/>
+            <description id="identity-popup-content-owner"
+                         class="identity-popup-description"/>
+            <description id="identity-popup-content-supplemental"
+                         class="identity-popup-description"/>
+            <description id="identity-popup-content-verifier"
+                         class="identity-popup-description"/>
+          </vbox>
+        </hbox>
+        <hbox class="identity-popup-row" id="identity-popup-encryption">
+          <vbox class="identity-popup-icon-area">
+            <image id="identity-popup-encryption-icon"/>
+          </vbox>
+          <vbox class="identity-popup-info-area">
             <description id="identity-popup-encryption-label" flex="1"
                          class="identity-popup-description"/>
-          </hbox>
-          <!-- Footer button to open security page info -->
-          <hbox id="identity-popup-button-container" pack="end">
-            <button id="identity-popup-more-info-button"
-                    label="&identity.moreInfoLinkText;"
-                    onblur="gIdentityHandler.hideIdentityPopup();"
-                    oncommand="gIdentityHandler.handleMoreInfoClick(event);"/>
-          </hbox>
-        </vbox>
-      </hbox>
+          </vbox>
+        </hbox>
+        <!-- Footer button to open security page info -->
+        <hbox id="identity-popup-button-container" pack="end">
+          <button id="identity-popup-more-info-button"
+                  label="&identity.moreInfoLinkText;"
+                  onblur="gIdentityHandler.hideIdentityPopup();"
+                  oncommand="gIdentityHandler.handleMoreInfoClick(event);"/>
+        </hbox>
+      </vbox>
     </panel>
 
     <tooltip id="urlTooltip">
