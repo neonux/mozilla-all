@@ -162,6 +162,11 @@ class DrawableTextureHost : public Texture
    * safe.
    */
   virtual TextureIdentifier GetIdentifierForProcess(base::ProcessHandle aProcess) = 0;
+
+  /* Perform any precomputation (e.g. texture upload) that needs to happen to the
+   * texture before rendering.
+   */
+  virtual void PrepareForRendering() = 0;
 };
 
 /* This class allows texture clients to draw into textures through Azure or

@@ -27,6 +27,8 @@ public:
 class DrawableTextureHostOGL : public DrawableTextureHost
 {
   virtual TextureIdentifier GetIdentifierForProcess(base::ProcessHandle aProcess) MOZ_OVERRIDE;
+
+  virtual void PrepareForRendering() MOZ_OVERRIDE;
 };
 
 }
