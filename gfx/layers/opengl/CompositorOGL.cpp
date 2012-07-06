@@ -352,9 +352,11 @@ CompositorOGL::BindAndDrawQuadWithTextureRect(ShaderProgramOGL *aProg,
 TextureHostIdentifier
 CompositorOGL::GetTextureHostIdentifier()
 {
-  // TODO: Implement this.
-
-  return TextureHostIdentifier();
+  TextureHostIdentifier identifier;
+  identifier.mType = HOST_GL;
+  GLint maxTextureSize = mGLContext->GetMaxTextureSize();
+  identifier.mMaxTextureSize = gfx::IntSize(maxTextureSize, maxTextureSize);
+  return identifier;
 }
 
 TemporaryRef<Texture>
