@@ -201,7 +201,7 @@ class DrawableTextureClient
   virtual void Unlock() = 0;
 };
 
-class Compositor : RefCounted<Compositor>
+class Compositor : public RefCounted<Compositor>
 {
   /* Request a texture host identifier that may be used for creating textures
    * accross process or thread boundaries that are compatible with this
