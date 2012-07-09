@@ -24,11 +24,13 @@ using namespace mozilla::gl;
 CompositorOGL::CompositorOGL(nsIWidget *aWidget, int aSurfaceWidth,
                              int aSurfaceHeight, bool aIsRenderingToEGLSurface)
   : mWidget(aWidget)
+  , mWidgetSize(-1, -1)
   , mSurfaceSize(aSurfaceWidth, aSurfaceHeight)
   , mBackBufferFBO(0)
   , mBackBufferTexture(0)
   , mHasBGRA(0)
   , mIsRenderingToEGLSurface(aIsRenderingToEGLSurface)
+  , mFrameInProgress(false)
   , mDestroyed(false)
 {
 }
@@ -349,6 +351,41 @@ CompositorOGL::BindAndDrawQuadWithTextureRect(ShaderProgramOGL *aProg,
   }
 }
 
+void
+CompositorOGL::SetupPipeline(int aWidth, int aHeight)
+{
+  // Set the viewport correctly.
+  mGLContext->fViewport(0, 0, aWidth, aHeight);
+
+  // We flip the view matrix around so that everything is right-side up; we're
+  // drawing directly into the window's back buffer, so this keeps things
+  // looking correct.
+
+  // Matrix to transform (0, 0, aWidth, aHeight) to viewport space (-1.0, 1.0,
+  // 2, 2) and flip the contents.
+  gfxMatrix viewMatrix;
+  viewMatrix.Translate(-gfxPoint(1.0, -1.0));
+  viewMatrix.Scale(2.0f / float(aWidth), 2.0f / float(aHeight));
+  viewMatrix.Scale(1.0f, -1.0f);
+
+  gfx3DMatrix matrix3d = gfx3DMatrix::From2D(viewMatrix);
+  matrix3d._33 = 0.0f;
+
+  SetLayerProgramProjectionMatrix(matrix3d);
+}
+
+void
+LayerManagerOGL::SetLayerProgramProjectionMatrix(const gfx3DMatrix& aMatrix)
+{
+  for (unsigned int i = 0; i < mPrograms.Length(); ++i) {
+    for (PRUint32 mask = MaskNone; mask < NumMaskTypes; ++mask) {
+      if (mPrograms[i].mVariations[mask]) {
+        mPrograms[i].mVariations[mask]->CheckAndSetProjectionMatrix(aMatrix);
+      }
+    }
+  }
+}
+
 TextureHostIdentifier
 CompositorOGL::GetTextureHostIdentifier()
 {
@@ -422,10 +459,59 @@ CompositorOGL::CreateDrawableTexture(const TextureIdentifier &aIdentifier)
 }
 
 void
+CompositorOGL::BeginFrame(const gfx::Rect *aClipRect)
+{
+  mFrameInProgress = true;
+  nsIntRect rect;
+  if (mIsRenderingToEGLSurface) {
+    rect = nsIntRect(0, 0, mSurfaceSize.width, mSurfaceSize.height);
+  } else {
+    mWidget->GetClientBounds(rect);
+  }
+
+  GLint width = rect.width;
+  GLint height = rect.height;
+
+  // If the widget size changed, we have to force a MakeCurrent
+  // to make sure that GL sees the updated widget size.
+  if (mWidgetSize.width != width ||
+      mWidgetSize.height != height)
+  {
+    MakeCurrent(true);
+
+    mWidgetSize.width = width;
+    mWidgetSize.height = height;
+  } else {
+    MakeCurrent();
+  }
+
+  mGLContext->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, 0);
+  SetupPipeline(width, height);
+
+  // Default blend function implements "OVER"
+  mGLContext->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
+                                 LOCAL_GL_ONE, LOCAL_GL_ONE);
+  mGLContext->fEnable(LOCAL_GL_BLEND);
+
+  if (!aClipRect) {
+    mGLContext->fScissor(0, 0, width, height);
+  }
+
+  mGLContext->fEnable(LOCAL_GL_SCISSOR_TEST);
+
+  mGLContext->fClearColor(0.0, 0.0, 0.0, 0.0);
+  mGLContext->fClear(LOCAL_GL_COLOR_BUFFER_BIT | LOCAL_GL_DEPTH_BUFFER_BIT);
+}
+
+void
 CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
                         const gfx::Rect *aClipRect, const EffectChain &aEffectChain,
                         gfx::Float aOpacity, const gfx::Matrix4x4 &aTransform)
 {
+  if (!mFrameInProgress) {
+    BeginFrame(aClipRect);
+  }
+
   gfx::IntRect intSourceRect;
   if (aSourceRect) {
     aSourceRect->ToIntRect(&intSourceRect);
@@ -610,6 +696,14 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
   }
 
   mGLContext->fActiveTexture(LOCAL_GL_TEXTURE0);
+}
+
+void
+CompositorOGL::FlushToScreen()
+{
+  mGLContext->SwapBuffers();
+  mGLContext->fBindBuffer(LOCAL_GL_ARRAY_BUFFER, 0);
+  mFrameInProgress = false;
 }
 
 } /* layers */

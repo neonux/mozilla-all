@@ -66,9 +66,12 @@ public:
     mGLContext->MakeCurrent(aForce);
   }
 
+  void FlushToScreen();
+
 private:
   /** Widget associated with this compositor */
   nsIWidget *mWidget;  // TODO: Do we really need to keep this?
+  nsIntSize mWidgetSize;
   nsRefPtr<GLContext> mGLContext;
 
   /** The size of the surface we are rendering to */
@@ -103,6 +106,18 @@ private:
    * from the widget.
    */
   bool mIsRenderingToEGLSurface;
+
+  /**
+   * Have we had DrawQuad calls since the last frame was rendered?
+   */
+  bool mFrameInProgress;
+
+  void BeginFrame(const gfx::Rect *aClipRect);
+
+  /**
+   * Updates all layer programs with a new projection matrix.
+   */
+  void SetLayerProgramProjectionMatrix(const gfx3DMatrix& aMatrix);
 
   /**
    * Helper method for Initialize, creates all valid variations of a program
@@ -185,6 +200,12 @@ private:
                                       const gfx::IntSize& aTexSize,
                                       GLenum aWrapMode = LOCAL_GL_REPEAT,
                                       bool aFlipped = false);
+
+  /**
+   * Setup the viewport and projection matrix for rendering
+   * to a window of the given dimensions.
+   */
+  void SetupPipeline(int aWidth, int aHeight);
 
   bool mDestroyed;
 
