@@ -375,7 +375,7 @@ CompositorOGL::SetupPipeline(int aWidth, int aHeight)
 }
 
 void
-LayerManagerOGL::SetLayerProgramProjectionMatrix(const gfx3DMatrix& aMatrix)
+CompositorOGL::SetLayerProgramProjectionMatrix(const gfx3DMatrix& aMatrix)
 {
   for (unsigned int i = 0; i < mPrograms.Length(); ++i) {
     for (PRUint32 mask = MaskNone; mask < NumMaskTypes; ++mask) {
