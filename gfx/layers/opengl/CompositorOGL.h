@@ -23,6 +23,8 @@ public:
   CompositorOGL(nsIWidget *aWidget, int aSurfaceWidth = -1, int aSurfaceHeight = -1,
                 bool aIsRenderingToEGLSurface = false);
 
+  virtual ~CompositorOGL();
+
   /**
    * Initializes the compositor with a given GLContext. force should indicate
    * whether GL layers have been force-enabled. If aContext is null, the compositor
@@ -206,6 +208,8 @@ private:
    * to a window of the given dimensions.
    */
   void SetupPipeline(int aWidth, int aHeight);
+
+  void CleanupResources();
 
   bool mDestroyed;
 

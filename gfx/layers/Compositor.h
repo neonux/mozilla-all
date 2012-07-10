@@ -203,6 +203,7 @@ class DrawableTextureClient
 
 class Compositor : public RefCounted<Compositor>
 {
+public:
   /* Request a texture host identifier that may be used for creating textures
    * accross process or thread boundaries that are compatible with this
    * compositor.
@@ -229,7 +230,9 @@ class Compositor : public RefCounted<Compositor>
    */
   virtual void DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
                         const gfx::Rect *aClipRect, const EffectChain &aEffectChain,
-                        gfx::Float aOpacity, const gfx::Matrix4x4 &aTransform) = 0; 
+                        gfx::Float aOpacity, const gfx::Matrix4x4 &aTransform) = 0;
+
+  virtual ~Compositor() {}
 };
 
 class Factory

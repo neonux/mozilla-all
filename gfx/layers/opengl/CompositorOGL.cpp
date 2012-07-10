@@ -35,6 +35,11 @@ CompositorOGL::CompositorOGL(nsIWidget *aWidget, int aSurfaceWidth,
 {
 }
 
+CompositorOGL::~CompositorOGL()
+{
+  Destroy();
+}
+
 already_AddRefed<mozilla::gl::GLContext>
 CompositorOGL::CreateContext()
 {
@@ -72,9 +77,51 @@ CompositorOGL::AddPrograms(ShaderProgramType aType)
 void
 CompositorOGL::Destroy()
 {
-  mDestroyed = true;
+  if (!mDestroyed) {
+    mDestroyed = true;
+    CleanupResources();
+  }
+}
 
-  // TODO: Cleanup resources here.
+void
+CompositorOGL::CleanupResources()
+{
+  if (!mGLContext)
+    return;
+
+  nsRefPtr<GLContext> ctx = mGLContext->GetSharedContext();
+  if (!ctx) {
+    ctx = mGLContext;
+  }
+
+  ctx->MakeCurrent();
+
+  for (PRUint32 i = 0; i < mPrograms.Length(); ++i) {
+    for (PRUint32 type = MaskNone; type < NumMaskTypes; ++type) {
+      delete mPrograms[i].mVariations[type];
+    }
+  }
+  mPrograms.Clear();
+
+  ctx->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, 0);
+
+  if (mBackBufferFBO) {
+    ctx->fDeleteFramebuffers(1, &mBackBufferFBO);
+    mBackBufferFBO = 0;
+  }
+
+  if (mBackBufferTexture) {
+    ctx->fDeleteTextures(1, &mBackBufferTexture);
+    mBackBufferTexture = 0;
+  }
+
+  if (mQuadVBO) {
+    ctx->fDeleteBuffers(1, &mQuadVBO);
+    mQuadVBO = 0;
+  }
+
+  mGLContext = nsnull;
+
 }
 
 bool
@@ -99,7 +146,6 @@ CompositorOGL::Initialize(bool force, nsRefPtr<GLContext> aContext)
   if (!mGLContext)
     return false;
 
-  mGLContext = aContext;
   mGLContext->SetFlipped(true);
 
   MakeCurrent();
