@@ -42,14 +42,17 @@
     ]]></script>
 
     <style type="text/css"><![CDATA[
-      #errorPageContainer:before {
-        content: url('chrome://browser/content/aboutRobots-icon.png');
-        position: absolute;
+      #errorPageContainer {
+        background-image: url("chrome://global/skin/inContentUI/messageBox-Robots-Background.png");
+        padding-bottom: 24px;
       }
 
-      body[dir=rtl] #icon,
       body[dir=rtl] #errorPageContainer:before {
-        -moz-transform: scaleX(-1);
+        background-image: url("chrome://global/skin/inContentUI/messageBox-Robots-Background-RTL.png");
+      }
+
+      button {
+        -moz-margin-end: 24px;
       }
     ]]></style>
   </head>
@@ -93,11 +96,6 @@
       <button id="errorTryAgain"
               label2="&robots.dontpress;"
               onclick="robotButton();">&retry.label;</button>
-
-      <img src="chrome://browser/content/aboutRobots-widget-left.png"
-           style="position: absolute; bottom: -12px; left: -10px;"/>
-      <img src="chrome://browser/content/aboutRobots-widget-left.png"
-           style="position: absolute; bottom: -12px; right: -10px; -moz-transform: scaleX(-1);"/>
     </div>
 
   </body>

@@ -6089,6 +6089,18 @@ function warnAboutClosingWindow() {
 #endif
 }
 
+function OnWindowDragEnter(event) {
+  if (!event.dataTransfer.mozItemCount)
+    return;
+  let draggedTab = event.dataTransfer.mozGetDataAt(TAB_DROP_TYPE, 0);
+  if (draggedTab && draggedTab.parentNode) {
+    let panel = draggedTab.parentNode._tabDragPanel;
+    panel._stayOpen = true;
+    window.focus();
+    delete panel._stayOpen;
+  }
+}
+
 var MailIntegration = {
   sendLinkForWindow: function (aWindow) {
     this.sendMessage(aWindow.location.href,
