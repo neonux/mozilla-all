@@ -581,6 +581,8 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
     } else {
       maskType = Mask3d;
     }
+  } else {
+    maskType = MaskNone;
   }
 
   if (aEffectChain.mEffects[EFFECT_SOLID_COLOR]) {
