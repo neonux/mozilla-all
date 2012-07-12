@@ -150,6 +150,11 @@ struct EffectChain
 {
   // todo - define valid grammar
   Effect* mEffects[EFFECT_MAX];
+
+  EffectChain()
+  {
+    memset(mEffects, 0, EFFECT_MAX * sizeof(Effect*));
+  }
 };
 
 
