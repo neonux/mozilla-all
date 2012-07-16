@@ -1223,7 +1223,9 @@ nsDisplayImage::GetLayerState(nsDisplayListBuilder* aBuilder,
                               const FrameLayerBuilder::ContainerParameters& aParameters)
 {
   if (mImage->GetType() != imgIContainer::TYPE_RASTER ||
+#ifdef USE_OLD_LAYERS
       !aManager->IsCompositingCheap() ||
+#endif
       !nsLayoutUtils::GPUImageScalingEnabled()) {
     return LAYER_NONE;
   }

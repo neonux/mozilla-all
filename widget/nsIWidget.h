@@ -362,7 +362,11 @@ class nsIWidget : public nsISupports {
     typedef mozilla::dom::PBrowserChild PBrowserChild;
 
   public:
+#ifdef USE_OLD_LAYERS
     typedef mozilla::layers::LayerManager LayerManager;
+#else
+    typedef mozilla::layers::LayerTreeManager LayerManager;
+#endif
     typedef LayerManager::LayersBackend LayersBackend;
     typedef mozilla::layers::PLayersChild PLayersChild;
     typedef mozilla::widget::IMEState IMEState;

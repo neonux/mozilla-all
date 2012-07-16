@@ -89,7 +89,11 @@ class Element;
 } // namespace dom
 
 namespace layers{
+#ifdef USE_OLD_LAYERS
 class LayerManager;
+#else
+class LayerTreeManager;
+#endif
 } // namespace layers
 } // namespace mozilla
 
@@ -161,7 +165,11 @@ NS_DEFINE_STATIC_IID_ACCESSOR(nsIPresShell_base, NS_IPRESSHELL_IID)
 class nsIPresShell : public nsIPresShell_base
 {
 protected:
+#ifdef USE_OLD_LAYERS
   typedef mozilla::layers::LayerManager LayerManager;
+#else
+  typedef mozilla::layers::LayerTreeManager LayerManager;
+#endif
 
   enum eRenderFlag {
     STATE_IGNORING_VIEWPORT_SCROLLING = 0x1

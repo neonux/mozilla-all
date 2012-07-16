@@ -5,8 +5,10 @@
 
 #include "mozilla/Util.h"
 
+#ifdef USE_OLD_LAYERS
 #include "mozilla/layers/CompositorChild.h"
 #include "mozilla/layers/CompositorParent.h"
+#endif
 #include "nsBaseWidget.h"
 #include "nsDeviceContext.h"
 #include "nsCOMPtr.h"
@@ -19,8 +21,6 @@
 #include "nsIContent.h"
 #include "nsIServiceManager.h"
 #include "mozilla/Preferences.h"
-#include "BasicLayers.h"
-#include "LayerManagerOGL.h"
 #include "nsIXULRuntime.h"
 #include "nsIGfxInfo.h"
 #include "npapi.h"
@@ -45,7 +45,9 @@ static bool sUseOffMainThreadCompositing = false;
 using namespace mozilla::layers;
 using namespace mozilla;
 using base::Thread;
+#ifdef USE_OLD_LAYERS
 using mozilla::ipc::AsyncChannel;
+#endif
 
 nsIContent* nsBaseWidget::mLastRollup = nsnull;
 // Global user preference for disabling native theme. Used
@@ -109,7 +111,7 @@ nsBaseWidget::nsBaseWidget()
   InitOnlyOnce();
 }
 
-
+#ifdef USE_OLD_LAYERS
 static void DeferredDestroyCompositor(CompositorParent* aCompositorParent,
                               CompositorChild* aCompositorChild,
                               Thread* aCompositorThread)
@@ -119,9 +121,11 @@ static void DeferredDestroyCompositor(CompositorParent* aCompositorParent,
     aCompositorParent->Release();
     aCompositorChild->Release();
 }
+#endif
 
 void nsBaseWidget::DestroyCompositor() 
 {
+#ifdef USE_OLD_LAYERS
   if (mCompositorChild) {
     mCompositorChild->SendWillStop();
 
@@ -140,6 +144,7 @@ void nsBaseWidget::DestroyCompositor()
     mCompositorParent.forget();
     mCompositorChild.forget();
   }
+#endif
 }
 
 //-------------------------------------------------------------------------
@@ -149,6 +154,7 @@ void nsBaseWidget::DestroyCompositor()
 //-------------------------------------------------------------------------
 nsBaseWidget::~nsBaseWidget()
 {
+#ifdef USE_OLD_LAYERS
   if (mLayerManager &&
       mLayerManager->GetBackendType() == LayerManager::LAYERS_BASIC) {
     static_cast<BasicLayerManager*>(mLayerManager.get())->ClearRetainerWidget();
@@ -158,6 +164,7 @@ nsBaseWidget::~nsBaseWidget()
     mLayerManager->Destroy();
     mLayerManager = nsnull;
   }
+#endif
 
   DestroyCompositor();
 
@@ -735,9 +742,14 @@ NS_IMETHODIMP nsBaseWidget::MakeFullScreen(bool aFullScreen)
 
 nsBaseWidget::AutoLayerManagerSetup::AutoLayerManagerSetup(
     nsBaseWidget* aWidget, gfxContext* aTarget,
-    BasicLayerManager::BufferMode aDoubleBuffering)
+#ifdef USE_OLD_LAYERS
+    BasicLayerRenderer::BufferMode aDoubleBuffering)
+#else
+    DirectLayerRenderer::BufferMode aDoubleBuffering)
+#endif
   : mWidget(aWidget)
 {
+#if USE_OLD_LAYERS
   BasicLayerManager* manager =
     static_cast<BasicLayerManager*>(mWidget->GetLayerManager());
   if (manager) {
@@ -745,10 +757,12 @@ nsBaseWidget::AutoLayerManagerSetup::AutoLayerManagerSetup(
       "AutoLayerManagerSetup instantiated for non-basic layer backend!");
     manager->SetDefaultTarget(aTarget, aDoubleBuffering);
   }
+#endif
 }
 
 nsBaseWidget::AutoLayerManagerSetup::~AutoLayerManagerSetup()
 {
+#if 0
   BasicLayerManager* manager =
     static_cast<BasicLayerManager*>(mWidget->GetLayerManager());
   if (manager) {
@@ -756,6 +770,7 @@ nsBaseWidget::AutoLayerManagerSetup::~AutoLayerManagerSetup()
       "AutoLayerManagerSetup instantiated for non-basic layer backend!");
     manager->SetDefaultTarget(nsnull, BasicLayerManager::BUFFER_NONE);
   }
+#endif
 }
 
 nsBaseWidget::AutoUseBasicLayerManager::AutoUseBasicLayerManager(nsBaseWidget* aWidget)
@@ -858,6 +873,7 @@ nsBaseWidget::GetShouldAccelerate()
 
 void nsBaseWidget::CreateCompositor()
 {
+#ifdef USE_OLD_LAYERS
   mCompositorThread = new Thread("CompositorThread");
   if (mCompositorThread->Start()) {
     bool renderToEGLSurface = false;
@@ -905,6 +921,7 @@ void nsBaseWidget::CreateCompositor()
       mCompositorChild = nsnull;
     }
   }
+#endif
 }
 
 bool nsBaseWidget::UseOffMainThreadCompositing()
@@ -917,6 +934,7 @@ LayerManager* nsBaseWidget::GetLayerManager(PLayersChild* aShadowManager,
                                             LayerManagerPersistence aPersistence,
                                             bool* aAllowRetaining)
 {
+#ifdef USE_OLD_LAYERS
   if (!mLayerManager) {
 
     mUseAcceleratedRendering = GetShouldAccelerate();
@@ -958,11 +976,17 @@ LayerManager* nsBaseWidget::GetLayerManager(PLayersChild* aShadowManager,
     *aAllowRetaining = (usedLayerManager == mLayerManager);
   }
   return usedLayerManager;
+#endif
+  return nsnull;
 }
 
-BasicLayerManager* nsBaseWidget::CreateBasicLayerManager()
+DirectLayerRenderer* nsBaseWidget::CreateBasicLayerManager()
 {
-      return new BasicShadowLayerManager(this);
+#ifdef USE_OLD_LAYERS
+  return new BasicShadowLayerManager(this);
+#else
+  return nsnull;
+#endif
 }
 
 //-------------------------------------------------------------------------
@@ -1173,9 +1197,11 @@ nsBaseWidget::SetAcceleratedRendering(bool aEnabled)
     return NS_OK;
   }
   mUseAcceleratedRendering = aEnabled;
+#ifdef USE_OLD_LAYERS
   if (mLayerManager) {
     mLayerManager->Destroy();
   }
+#endif
   mLayerManager = NULL;
   return NS_OK;
 }
@@ -1314,6 +1340,7 @@ nsBaseWidget::BeginMoveDrag(nsMouseEvent* aEvent)
 PRUint32
 nsBaseWidget::GetGLFrameBufferFormat()
 {
+#ifdef USE_OLD_LAYERS
   if (mLayerManager &&
       mLayerManager->GetBackendType() == LayerManager::LAYERS_OPENGL) {
     // Assume that the default framebuffer has RGBA format.  Specific
@@ -1321,6 +1348,9 @@ nsBaseWidget::GetGLFrameBufferFormat()
     return LOCAL_GL_RGBA;
   }
   return LOCAL_GL_NONE;
+#else
+  return 0;
+#endif
 }
 
 static void InitOnlyOnce()

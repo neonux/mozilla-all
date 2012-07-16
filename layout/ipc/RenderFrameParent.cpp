@@ -5,6 +5,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include "IPC/IPCMessageUtils.h"
+#ifdef USE_OLD_LAYERS
 #include "mozilla/layers/ShadowLayersParent.h"
 
 #include "BasicLayers.h"
@@ -12,6 +14,9 @@
 #ifdef MOZ_ENABLE_D3D9_LAYER
 #include "LayerManagerD3D9.h"
 #endif //MOZ_ENABLE_D3D9_LAYER
+#else
+#include "Layers.h"
+#endif
 #include "RenderFrameParent.h"
 
 #include "gfx3DMatrix.h"
@@ -93,11 +98,13 @@ static void
 AssertInTopLevelChromeDoc(ContainerLayer* aContainer,
                           nsIFrame* aContainedFrame)
 {
+#ifdef USE_OLD_LAYERS
   NS_ASSERTION(
     (aContainer->Manager()->GetBackendType() != LayerManager::LAYERS_BASIC) ||
     (aContainedFrame->GetNearestWidget() ==
      static_cast<BasicLayerManager*>(aContainer->Manager())->GetRetainerWidget()),
     "Expected frame to be in top-level chrome document");
+#endif
 }
 
 // Return view for given ID in aArray, NULL if not found.
@@ -238,6 +245,7 @@ TransformShadowTree(nsDisplayListBuilder* aBuilder, nsFrameLoader* aFrameLoader,
                     float aTempScaleDiffX = 1.0,
                     float aTempScaleDiffY = 1.0)
 {
+#ifdef USE_OLD_LAYERS
   ShadowLayer* shadow = aLayer->AsShadowLayer();
   shadow->SetShadowClipRect(aLayer->GetClipRect());
   shadow->SetShadowVisibleRegion(aLayer->GetVisibleRegion());
@@ -298,6 +306,7 @@ TransformShadowTree(nsDisplayListBuilder* aBuilder, nsFrameLoader* aFrameLoader,
     TransformShadowTree(aBuilder, aFrameLoader, aFrame, child, layerTransform,
                         aTempScaleDiffX, aTempScaleDiffY);
   }
+#endif
 }
 
 static void
@@ -315,8 +324,12 @@ ClearContainer(ContainerLayer* aContainer)
 static bool
 IsTempLayerManager(LayerManager* aManager)
 {
+#ifdef USE_OLD_LAYERS
   return (LayerManager::LAYERS_BASIC == aManager->GetBackendType() &&
           !static_cast<BasicLayerManager*>(aManager)->IsRetained());
+#else
+  return true;
+#endif
 }
 
 // Recursively create a new array of scrollables, preserving any scrollables
@@ -405,6 +418,7 @@ BuildBackgroundPatternFor(ContainerLayer* aContainer,
                           LayerManager* aManager,
                           nsIFrame* aFrame)
 {
+#ifdef USE_OLD_LAYERS
   ShadowLayer* shadowRoot = aShadowRoot->AsShadowLayer();
   gfxMatrix t;
   if (!shadowRoot->GetShadowTransform().Is2D(&t)) {
@@ -442,6 +456,7 @@ BuildBackgroundPatternFor(ContainerLayer* aContainer,
   layer->SetVisibleRegion(bgRgn);
 
   aContainer->InsertAfter(layer, nsnull);
+#endif
 }
 
 RenderFrameParent::RenderFrameParent(nsFrameLoader* aFrameLoader)
@@ -449,10 +464,12 @@ RenderFrameParent::RenderFrameParent(nsFrameLoader* aFrameLoader)
   , mFrameLoaderDestroyed(false)
   , mBackgroundColor(gfxRGBA(1, 1, 1))
 {
+#ifdef USE_OLD_LAYERS
   if (aFrameLoader) {
     mContentViews[FrameMetrics::ROOT_SCROLL_ID] =
       new nsContentView(aFrameLoader, FrameMetrics::ROOT_SCROLL_ID);
   }
+#endif
 }
 
 RenderFrameParent::~RenderFrameParent()
@@ -461,6 +478,7 @@ RenderFrameParent::~RenderFrameParent()
 void
 RenderFrameParent::Destroy()
 {
+#ifdef USE_OLD_LAYERS
   size_t numChildren = ManagedPLayersParent().Length();
   NS_ABORT_IF_FALSE(0 == numChildren || 1 == numChildren,
                     "render frame must only have 0 or 1 layer manager");
@@ -472,6 +490,7 @@ RenderFrameParent::Destroy()
   }
 
   mFrameLoaderDestroyed = true;
+#endif
 }
 
 nsContentView*
@@ -554,6 +573,7 @@ RenderFrameParent::BuildLayer(nsDisplayListBuilder* aBuilder,
     return nsnull;
   }
 
+#ifdef USE_OLD_LAYERS
   NS_ABORT_IF_FALSE(!shadowRoot || shadowRoot->Manager() == aManager,
                     "retaining manager changed out from under us ... HELP!");
 
@@ -580,7 +600,7 @@ RenderFrameParent::BuildLayer(nsDisplayListBuilder* aBuilder,
                               aManager, aFrame);
   }
   mContainer->SetVisibleRegion(aVisibleRect);
-
+#endif
   return nsRefPtr<Layer>(mContainer).forget();
 }
 
@@ -610,6 +630,7 @@ RenderFrameParent::ActorDestroy(ActorDestroyReason why)
 PLayersParent*
 RenderFrameParent::AllocPLayers(LayerManager::LayersBackend* aBackendType, int* aMaxTextureSize)
 {
+#ifdef USE_OLD_LAYERS
   if (!mFrameLoader || mFrameLoaderDestroyed) {
     *aBackendType = LayerManager::LAYERS_NONE;
     *aMaxTextureSize = 0;
@@ -627,18 +648,24 @@ RenderFrameParent::AllocPLayers(LayerManager::LayersBackend* aBackendType, int* 
   *aBackendType = lm->GetBackendType();
   *aMaxTextureSize = lm->GetMaxTextureSize();
   return new ShadowLayersParent(slm, this);
+#else
+  return nsnull;
+#endif
 }
 
 bool
 RenderFrameParent::DeallocPLayers(PLayersParent* aLayers)
 {
+#ifdef USE_OLD_LAYERS
   delete aLayers;
+#endif
   return true;
 }
 
 void
 RenderFrameParent::BuildViewMap()
 {
+#ifdef USE_OLD_LAYERS
   ViewMap newContentViews;
   // BuildViewMap assumes we have a primary frame, which may not be the case.
   if (GetRootLayer() && mFrameLoader->GetPrimaryFrameOfOwningContent()) {
@@ -668,23 +695,32 @@ RenderFrameParent::BuildViewMap()
   }
 
   mContentViews = newContentViews;
+#endif
 }
 
 ShadowLayersParent*
 RenderFrameParent::GetShadowLayers() const
 {
+#ifdef USE_OLD_LAYERS
   const nsTArray<PLayersParent*>& shadowParents = ManagedPLayersParent();
   NS_ABORT_IF_FALSE(shadowParents.Length() <= 1,
                     "can only support at most 1 ShadowLayersParent");
   return (shadowParents.Length() == 1) ?
     static_cast<ShadowLayersParent*>(shadowParents[0]) : nsnull;
+#else
+  return nsnull;
+#endif
 }
 
 ContainerLayer*
 RenderFrameParent::GetRootLayer() const
 {
+#ifdef USE_OLD_LAYERS
   ShadowLayersParent* shadowLayers = GetShadowLayers();
   return shadowLayers ? shadowLayers->GetRoot() : nsnull;
+#else
+  return nsnull;
+#endif
 }
 
 NS_IMETHODIMP

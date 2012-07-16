@@ -36,6 +36,7 @@ using mozilla::plugins::PluginInstanceParent;
 #include "WinUtils.h"
 #include "mozilla/unused.h"
 
+#ifdef USE_OLD_LAYERS
 #include "LayerManagerOGL.h"
 #include "BasicLayers.h"
 #ifdef MOZ_ENABLE_D3D9_LAYER
@@ -43,6 +44,9 @@ using mozilla::plugins::PluginInstanceParent;
 #endif
 #ifdef MOZ_ENABLE_D3D10_LAYER
 #include "LayerManagerD3D10.h"
+#endif
+#else
+#include "Layers.h"
 #endif
 
 #include "nsUXThemeData.h"
@@ -303,6 +307,7 @@ bool nsWindow::OnPaint(HDC aDC, PRUint32 aNestingLevel)
                          (PRInt32) mWnd);
 #endif // WIDGET_DEBUG_OUTPUT
 
+#ifdef USE_OLD_LAYERS
     switch (GetLayerManager()->GetBackendType()) {
       case LayerManager::LAYERS_BASIC:
         {
@@ -575,6 +580,7 @@ bool nsWindow::OnPaint(HDC aDC, PRUint32 aNestingLevel)
         NS_ERROR("Unknown layers backend used!");
         break;
     }
+#endif
   }
 
   if (!aDC) {

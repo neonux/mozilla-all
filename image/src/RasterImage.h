@@ -124,7 +124,11 @@ class nsIInputStream;
 
 namespace mozilla {
 namespace layers {
+#ifdef USE_OLD_LAYERS
 class LayerManager;
+#else
+class LayeTreeManager;
+#endif
 class ImageContainer;
 }
 namespace image {

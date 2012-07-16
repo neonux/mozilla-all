@@ -635,12 +635,20 @@ public:
   void SetForceSingleTile(bool aForceSingleTile)
   {
     mForceSingleTile = aForceSingleTile;
+#ifdef USE_OLD_LAYERS
     Mutated();
+#else
+    Mutated(FIELD_FORCE_SINGLE_TILE);
+#endif
   }
 
 protected:
   ImageLayer(LayerManager* aManager, void* aImplData)
+#ifdef USE_OLD_LAYERS
     : Layer(aManager, aImplData), mFilter(gfxPattern::FILTER_GOOD)
+#else
+    : Layer(aManager), mFilter(gfxPattern::FILTER_GOOD)
+#endif
     , mScaleMode(SCALE_NONE), mForceSingleTile(false) {}
 
   virtual nsACString& PrintInfo(nsACString& aTo, const char* aPrefix);

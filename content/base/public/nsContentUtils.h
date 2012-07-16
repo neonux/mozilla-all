@@ -123,7 +123,11 @@ namespace mozilla {
 class Selection;
 
 namespace layers {
+#ifdef USE_OLD_LAYERS
   class LayerManager;
+#else
+  class LayerTreeManager;
+#endif
 } // namespace layers
 
 namespace dom {
@@ -1788,7 +1792,11 @@ public:
    * @param aAllowRetaining an outparam that states whether the returned
    * layer manager should be used for retained layers
    */
+#ifdef USE_OLD_LAYERS
   static already_AddRefed<mozilla::layers::LayerManager>
+#else
+  static already_AddRefed<mozilla::layers::LayerTreeManager>
+#endif
   LayerManagerForDocument(nsIDocument *aDoc, bool *aAllowRetaining = nsnull);
 
   /**
@@ -1805,7 +1813,11 @@ public:
    * @param aAllowRetaining an outparam that states whether the returned
    * layer manager should be used for retained layers
    */
+#ifdef USE_OLD_LAYERS
   static already_AddRefed<mozilla::layers::LayerManager>
+#else
+  static already_AddRefed<mozilla::layers::LayerTreeManager>
+#endif
   PersistentLayerManagerForDocument(nsIDocument *aDoc, bool *aAllowRetaining = nsnull);
 
   /**

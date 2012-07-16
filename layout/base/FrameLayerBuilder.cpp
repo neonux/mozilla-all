@@ -9,7 +9,9 @@
 #include "nsPresContext.h"
 #include "nsLayoutUtils.h"
 #include "Layers.h"
+#ifdef USE_OLD_LAYERS
 #include "BasicLayers.h"
+#endif
 #include "nsSubDocumentFrame.h"
 #include "nsCSSRendering.h"
 #include "nsCSSFrameConstructor.h"
@@ -848,7 +850,7 @@ ContainerState::CreateOrRecycleColorLayer()
     ++mNextFreeRecycledColorLayer;
     // Clear clip rect and mask layer so we don't accidentally stay clipped.
     // We will reapply any necessary clipping.
-    layer->SetClipRect(nsnull);
+    layer->SetClipRect((nsIntRect*)nsnull);
     layer->SetMaskLayer(nsnull);
   } else {
     // Create a new layer
@@ -871,7 +873,7 @@ ContainerState::CreateOrRecycleImageLayer()
     ++mNextFreeRecycledImageLayer;
     // Clear clip rect and mask layer so we don't accidentally stay clipped.
     // We will reapply any necessary clipping.
-    layer->SetClipRect(nsnull);
+    layer->SetClipRect((nsIntRect*)nsnull);
     layer->SetMaskLayer(nsnull);
   } else {
     // Create a new layer
@@ -962,7 +964,7 @@ ContainerState::CreateOrRecycleThebesLayer(nsIFrame* aActiveScrolledRoot)
     ++mNextFreeRecycledThebesLayer;
     // Clear clip rect and mask layer so we don't accidentally stay clipped.
     // We will reapply any necessary clipping.
-    layer->SetClipRect(nsnull);
+    layer->SetClipRect((nsIntRect*)nsnull);
     layer->SetMaskLayer(nsnull);
 
     data = static_cast<ThebesDisplayItemLayerUserData*>
@@ -1547,8 +1549,12 @@ PaintInactiveLayer(nsDisplayListBuilder* aBuilder,
   }
 #endif
 
+#ifdef USE_OLD_LAYERS
   nsRefPtr<BasicLayerManager> tempManager = new BasicLayerManager();
   tempManager->BeginTransactionWithTarget(context);
+#else
+  nsRefPtr<DirectLayerRenderer> tempManager;
+#endif
   nsRefPtr<Layer> layer =
     aItem->BuildLayer(aBuilder, tempManager, FrameLayerBuilder::ContainerParameters());
   if (!layer) {
@@ -2072,7 +2078,7 @@ FrameLayerBuilder::BuildContainerLayerFor(nsDisplayListBuilder* aBuilder,
                      "Wrong layer type");
         containerLayer = static_cast<ContainerLayer*>(oldLayer);
         // Clear clip rect; the caller will set it if necessary.
-        containerLayer->SetClipRect(nsnull);
+        containerLayer->SetClipRect((nsIntRect*)nsnull);
         containerLayer->SetMaskLayer(nsnull);
       }
     }
@@ -2177,7 +2183,7 @@ FrameLayerBuilder::GetLeafLayerFor(nsDisplayListBuilder* aBuilder,
     return nsnull;
   }
   // Clear clip rect; the caller is responsible for setting it.
-  layer->SetClipRect(nsnull);
+  layer->SetClipRect((nsIntRect*)nsnull);
   layer->SetMaskLayer(nsnull);
   return layer;
 }
@@ -2575,9 +2581,11 @@ FrameLayerBuilder::CheckDOMModified()
 void
 FrameLayerBuilder::DumpRetainedLayerTree(FILE* aFile)
 {
+#ifdef USE_OLD_LAYERS
   if (mRetainingManager) {
     mRetainingManager->Dump(aFile);
   }
+#endif
 }
 #endif
 

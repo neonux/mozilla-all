@@ -43,7 +43,6 @@
 #include "nsStyleAnimation.h"
 #include "nsCSSProps.h"
 #include "nsDOMFile.h"
-#include "BasicLayers.h"
 #include "nsTArrayHelpers.h"
 #include "nsIDocShell.h"
 #include "nsIContentViewer.h"
@@ -1902,11 +1901,13 @@ nsDOMWindowUtils::GetLayerManagerType(nsAString& aType)
   if (!widget)
     return NS_ERROR_FAILURE;
 
+#ifdef USE_OLD_LAYERS
   LayerManager *mgr = widget->GetLayerManager();
   if (!mgr)
     return NS_ERROR_FAILURE;
 
   mgr->GetBackendName(aType);
+#endif
 
   return NS_OK;
 }
@@ -1922,7 +1923,9 @@ nsDOMWindowUtils::StartFrameTimeRecording()
   if (!mgr)
     return NS_ERROR_FAILURE;
 
+#ifdef USE_OLD_LAYERS
   mgr->StartFrameTimeRecording();
+#endif
 
   return NS_OK;
 }
@@ -1941,7 +1944,11 @@ nsDOMWindowUtils::StopFrameTimeRecording(PRUint32 *frameCount NS_OUTPARAM, float
   if (!mgr)
     return NS_ERROR_FAILURE;
 
+#ifdef USE_OLD_LAYERS
   nsTArray<float> frameTimes = mgr->StopFrameTimeRecording();
+#else
+  nsTArray<float> frameTimes;
+#endif
 
   *frames = nsnull;
   *frameCount = frameTimes.Length();

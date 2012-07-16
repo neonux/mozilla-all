@@ -83,7 +83,9 @@ public:
       return LAYER_INACTIVE;
 
     // If compositing is cheap, just do that
+#ifdef USE_OLD_LAYERS
     if (aManager->IsCompositingCheap())
+#endif
       return mozilla::LAYER_ACTIVE;
 
     return mFrame->AreLayersMarkedActive() ? LAYER_ACTIVE : LAYER_INACTIVE;

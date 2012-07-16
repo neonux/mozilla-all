@@ -13,7 +13,11 @@
 #include "nsCOMPtr.h"
 #include "nsGUIEvent.h"
 #include "nsAutoPtr.h"
+#ifdef USE_OLD_LAYERS
 #include "BasicLayers.h"
+#else
+#include "Layers.h"
+#endif
 
 class nsIContent;
 class nsAutoRollup;
@@ -44,7 +48,11 @@ class nsBaseWidget : public nsIWidget
   friend class nsAutoRollup;
 
 protected:
-  typedef mozilla::layers::BasicLayerManager BasicLayerManager;
+#ifdef USE_OLD_LAYERS
+  typedef mozilla::layers::BasicLayerRenderer BasicLayerManager;
+#else
+  typedef mozilla::layers::DirectLayerRenderer BasicLayerManager;
+#endif
   typedef mozilla::layers::CompositorChild CompositorChild;
   typedef mozilla::layers::CompositorParent CompositorParent;
   typedef base::Thread Thread;
@@ -284,8 +292,10 @@ protected:
   nsDeviceContext* mContext;
   nsRefPtr<LayerManager> mLayerManager;
   nsRefPtr<LayerManager> mBasicLayerManager;
+#ifdef USE_OLD_LAYERS
   nsRefPtr<CompositorChild> mCompositorChild;
   nsRefPtr<CompositorParent> mCompositorParent;
+#endif
   Thread*           mCompositorThread;
   nscolor           mBackground;
   nscolor           mForeground;

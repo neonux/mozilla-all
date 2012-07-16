@@ -35,7 +35,11 @@ namespace mozilla {
 namespace layers {
   class ImageContainer;
   class ImageLayer;
+#ifdef USE_OLD_LAYERS
   class LayerManager;
+#else
+  class LayerTreeManager;
+#endif
 }
 }
 
