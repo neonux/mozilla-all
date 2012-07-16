@@ -59,6 +59,7 @@
                       -moz-linear-gradient(@customToolbarColor@, @customToolbarColor@);
   }
 
+  .tab-drag-label,
   .tabbrowser-tab[selected="true"]:not(:-moz-lwtheme) {
     background-image: -moz-linear-gradient(white, @toolbarHighlight@ 50%),
                       -moz-linear-gradient(@customToolbarColor@, @customToolbarColor@);
@@ -319,6 +320,15 @@
     background-image: url("chrome://browser/skin/tabview/grain.png"),
                       -moz-linear-gradient(rgba(255,255,255,0), #CCD9EA 200px, #C7D5E7);
     background-attachment: fixed;
+  }
+
+  .tab-drag-label {
+    padding: 4px;
+    background-color: -moz-dialog;
+    border-radius: 3px;
+  }
+  .tab-drag-panel:not([drag=drop]) > html|*.tab-drag-preview {
+    display: block;
   }
 }
 
