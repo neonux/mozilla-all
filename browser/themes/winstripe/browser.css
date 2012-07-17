@@ -1906,7 +1906,25 @@ richlistitem[type~="action"][actiontype="switchtab"] > .ac-url-box > .ac-action-
   outline: 1px dotted;
 }
 
-/* Tab DnD indicator */
+/* Tab drag and drop */
+.tab-drag-panel {
+  border: 0 !important;
+}
+
+.tab-drag-label {
+  margin: 0 !important;
+  padding: 5px;
+  border: 1px solid DimGray;
+}
+
+.tab-drag-panel:not([drag=drop]) > .tab-drag-label {
+  display: none;
+}
+
+html|*.tab-drag-preview {
+  border: 1px solid rgba(0,0,0,.5);
+}
+
 .tab-drop-indicator {
   list-style-image: url(chrome://browser/skin/tabbrowser/tabDragIndicator.png);
   margin-bottom: -11px;
