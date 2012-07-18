@@ -498,7 +498,7 @@ public:
   virtual void SetValidRegion(const nsIntRegion& aRegion)
   {
     mValidRegion = aRegion;
-    Mutated();
+    Mutated(FIELD_VALID_REGION);
   }
 
   /**

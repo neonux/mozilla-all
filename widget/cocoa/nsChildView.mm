@@ -48,9 +48,13 @@
 #include "gfxQuartzSurface.h"
 #include "nsRegion.h"
 #include "Layers.h"
+#ifdef USE_OLD_LAYERS
 #include "LayerManagerOGL.h"
+#endif
 #include "GLContext.h"
+#ifdef USE_OLD_LAYERS
 #include "mozilla/layers/CompositorCocoaWidgetHelper.h"
+#endif
 #ifdef ACCESSIBILITY
 #include "nsAccessibilityService.h"
 #endif
@@ -1747,6 +1751,7 @@ NSView<mozView>* nsChildView::GetEditorView()
 void
 nsChildView::CreateCompositor()
 {
+#ifdef USE_OLD_LAYERS
   nsBaseWidget::CreateCompositor();
   if (mCompositorChild) {
     LayerManagerOGL *manager =
@@ -1758,6 +1763,7 @@ nsChildView::CreateCompositor()
     [(ChildView *)mView setGLContext:glContext];
     [(ChildView *)mView setUsingOMTCompositor:true];
   }
+#endif
 }
 
 gfxASurface*
@@ -1806,6 +1812,7 @@ DrawResizer(CGContextRef aCtx)
 void
 nsChildView::DrawWindowOverlay(LayerManager* aManager, nsIntRect aRect)
 {
+#ifdef USE_OLD_LAYERS
   if (!ShowsResizeIndicator(nsnull)) {
     return;
   }
@@ -1861,6 +1868,7 @@ nsChildView::DrawWindowOverlay(LayerManager* aManager, nsIntRect aRect)
   program->SetTextureUnit(0);
 
   manager->BindAndDrawQuad(program);
+#endif
 }
 
 void
@@ -2472,10 +2480,12 @@ NSEvent* gLastDragMouseDownEvent = nil;
   if (!mGeckoChild)
     return;
 
+#ifdef USE_OLD_LAYERS
   // Title bar drawing only works if we really draw into aContext, which only
   // the basic layer manager will do.
   nsBaseWidget::AutoUseBasicLayerManager setupLayerManager(mGeckoChild);
   [self drawRect:aRect inContext:aContext];
+#endif
 }
 
 - (void)drawRect:(NSRect)aRect inContext:(CGContextRef)aContext
@@ -2547,6 +2557,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
   }
 #endif
 
+#ifdef USE_OLD_LAYERS
   LayerManager *layerManager = mGeckoChild->GetLayerManager(nsnull);
   if (layerManager->GetBackendType() == LayerManager::LAYERS_OPENGL) {
     NSOpenGLContext *glContext;
@@ -2570,6 +2581,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
 
     return;
   }
+#endif
 
   // Create Cairo objects.
   NSSize bufferSize = [self bounds].size;
@@ -2592,6 +2604,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
 
   nsAutoRetainCocoaObject kungFuDeathGrip(self);
   bool painted;
+#ifdef USE_OLD_LAYERS
   {
     nsBaseWidget::AutoLayerManagerSetup
       setupLayerManager(mGeckoChild, targetContext, BasicLayerManager::BUFFER_NONE);
@@ -2607,6 +2620,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
       mDidForceRefreshOpenGL = YES;
     }
   }
+#endif
 
   if (!painted && [self isOpaque]) {
     // Gecko refused to draw, but we've claimed to be opaque, so we have to
