@@ -1553,7 +1553,7 @@ PaintInactiveLayer(nsDisplayListBuilder* aBuilder,
   nsRefPtr<BasicLayerManager> tempManager = new BasicLayerManager();
   tempManager->BeginTransactionWithTarget(context);
 #else
-  nsRefPtr<DirectLayerRenderer> tempManager;
+  nsRefPtr<DirectLayerRenderer> tempManager = new DirectLayerRenderer(aContext->GetDrawTarget());
 #endif
   nsRefPtr<Layer> layer =
     aItem->BuildLayer(aBuilder, tempManager, FrameLayerBuilder::ContainerParameters());
