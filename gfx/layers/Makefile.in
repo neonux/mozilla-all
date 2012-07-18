@@ -43,6 +43,7 @@ EXPORTS = \
 
 CPPSRCS = \
         LayerSorter.cpp \
+		LayerTreeManager.cpp \
         Factory.cpp \
         $(NULL)
 

@@ -1387,7 +1387,6 @@ public:
 
   LayerTreeManager();
 
-
   /**
    * Start a new transaction. Nested transactions are not allowed so
    * there must be no transaction currently in progress.
@@ -1506,7 +1505,7 @@ public:
    * returns the maximum texture size on this layer backend, or PR_INT32_MAX
    * if there is no maximum
    */
-  virtual PRInt32 GetMaxTextureSize() const = 0;
+  virtual int32_t GetMaxTextureSize() const = 0;
 
   /**
    * CONSTRUCTION PHASE ONLY
@@ -1525,27 +1524,27 @@ public:
    * CONSTRUCTION PHASE ONLY
    * Create a ThebesLayer for this manager's layer tree.
    */
-  virtual already_AddRefed<ThebesLayer> CreateThebesLayer() = 0;
+  virtual already_AddRefed<ThebesLayer> CreateThebesLayer();
   /**
    * CONSTRUCTION PHASE ONLY
    * Create a ContainerLayer for this manager's layer tree.
    */
-  virtual already_AddRefed<ContainerLayer> CreateContainerLayer() = 0;
+  virtual already_AddRefed<ContainerLayer> CreateContainerLayer();
   /**
    * CONSTRUCTION PHASE ONLY
    * Create an ImageLayer for this manager's layer tree.
    */
-  virtual already_AddRefed<ImageLayer> CreateImageLayer() = 0;
+  virtual already_AddRefed<ImageLayer> CreateImageLayer() { return NULL; }
   /**
    * CONSTRUCTION PHASE ONLY
    * Create a ColorLayer for this manager's layer tree.
    */
-  virtual already_AddRefed<ColorLayer> CreateColorLayer() = 0;
+  virtual already_AddRefed<ColorLayer> CreateColorLayer();
   /**
    * CONSTRUCTION PHASE ONLY
    * Create a CanvasLayer for this manager's layer tree.
    */
-  virtual already_AddRefed<CanvasLayer> CreateCanvasLayer() = 0;
+  virtual already_AddRefed<CanvasLayer> CreateCanvasLayer() { return NULL; }
   /**
    * CONSTRUCTION PHASE ONLY
    * Create a ReadbackLayer for this manager's layer tree.
@@ -1555,15 +1554,7 @@ public:
   /**
    * Can be called anytime, from any thread.
    */
-  static already_AddRefed<ImageContainer> CreateImageContainer();
-
-  /**
-   * Creates a layer which is optimized for inter-operating with this layer
-   * manager.
-   */
-  already_AddRefed<gfxASurface>
-    CreateSurface(const gfxIntSize &aSize,
-                  gfxASurface::gfxImageFormat imageFormat);
+  static already_AddRefed<ImageContainer> CreateImageContainer() { return NULL; }
 
   /**
    * Which image format to use as an alpha mask with this layer manager.
@@ -1582,6 +1573,7 @@ public:
   bool mSnapEffectiveTransforms;
   Layer *mRoot;
   LayerUserDataSet mUserData;
+  DrawThebesLayerCallback mCallback;
 };
 
 class DirectLayerRenderer : public LayerTreeManager
@@ -2180,13 +2172,22 @@ class THEBES_API ThebesLayer
   , public ThebesLayerData
 {
 public:
+  ThebesLayer(LayerTreeManager* aManager)
+    : Layer(aManager)
+    , mValidRegion()
+    , mUsedForReadback(false)
+    , mAllowResidualTranslation(false)
+  {
+    mContentFlags = 0; // Clear NO_TEXT, NO_TEXT_OVER_TRANSPARENT
+  }
+
   /**
    * CONSTRUCTION PHASE ONLY
    * Tell this layer that the content in some region has changed and
    * will need to be repainted. This area is removed from the valid
    * region.
    */
-  virtual void InvalidateRegion(const nsIntRegion& aRegion) = 0;
+  void InvalidateRegion(const nsIntRegion& aRegion);
   /**
    * CONSTRUCTION PHASE ONLY
    * Set whether ComputeEffectiveTransforms should compute the
@@ -2245,15 +2246,6 @@ public:
   gfxPoint GetResidualTranslation() const { return mResidualTranslation; }
 
 protected:
-  ThebesLayer(LayerTreeManager* aManager, void* aImplData)
-    : Layer(aManager)
-    , mValidRegion()
-    , mUsedForReadback(false)
-    , mAllowResidualTranslation(false)
-  {
-    mContentFlags = 0; // Clear NO_TEXT, NO_TEXT_OVER_TRANSPARENT
-  }
-
   virtual nsACString& PrintInfo(nsACString& aTo, const char* aPrefix);
 
   /**
@@ -2297,6 +2289,10 @@ class THEBES_API ColorLayer
   , public ColorLayerData
 {
 public:
+  ColorLayer(LayerTreeManager* aManager)
+    : Layer(aManager)
+  {}
+
   /**
    * CONSTRUCTION PHASE ONLY
    * Set the color of the layer.
@@ -2317,10 +2313,6 @@ public:
   }
 
 protected:
-  ColorLayer(LayerTreeManager* aManager, void* aImplData)
-    : Layer(aManager)
-  {}
-
   virtual nsACString& PrintInfo(nsACString& aTo, const char* aPrefix);
 };
 
@@ -2352,6 +2344,14 @@ class THEBES_API ContainerLayer
   , public ContainerLayerData
 {
 public:
+  ContainerLayer(LayerTreeManager* aManager)
+    : Layer(aManager),
+      mSupportsComponentAlphaChildren(false),
+      mUseIntermediateSurface(false)
+  {
+    mContentFlags = 0; // Clear NO_TEXT, NO_TEXT_OVER_TRANSPARENT
+  }
+
   /**
    * CONSTRUCTION PHASE ONLY
    * Insert aChild into the child list of this container. aChild must
@@ -2359,15 +2359,16 @@ public:
    * If aAfter is non-null, it must be a child of this container and
    * we insert after that layer. If it's null we insert at the start.
    */
-  virtual void InsertAfter(Layer* aChild, Layer* aAfter) = 0;
+  void InsertAfter(Layer* aChild, Layer* aAfter);
+
   /**
    * CONSTRUCTION PHASE ONLY
    * Remove aChild from the child list of this container. aChild must
    * be a child of this container.
    */
-  virtual void RemoveChild(Layer* aChild) = 0;
+  void RemoveChild(Layer* aChild);
 
-  virtual Layer* GetFirstChild() { return mFirstChild; }
+  Layer* GetFirstChild() { return mFirstChild; }
 
   /**
    * CONSTRUCTION PHASE ONLY
@@ -2398,7 +2399,7 @@ public:
    * container is backend-specific. ComputeEffectiveTransforms must also set
    * mUseIntermediateSurface.
    */
-  virtual void ComputeEffectiveTransforms(const gfx3DMatrix& aTransformToSurface) = 0;
+  virtual void ComputeEffectiveTransforms(const gfx3DMatrix& aTransformToSurface);
 
   /**
    * Call this only after ComputeEffectiveTransforms has been invoked
@@ -2434,14 +2435,6 @@ protected:
 
   void DidInsertChild(Layer* aLayer);
   void DidRemoveChild(Layer* aLayer);
-
-  ContainerLayer(LayerTreeManager* aManager, void* aImplData)
-    : Layer(aManager),
-      mSupportsComponentAlphaChildren(false),
-      mUseIntermediateSurface(false)
-  {
-    mContentFlags = 0; // Clear NO_TEXT, NO_TEXT_OVER_TRANSPARENT
-  }
 
   /**
    * A default implementation of ComputeEffectiveTransforms for use by OpenGL
