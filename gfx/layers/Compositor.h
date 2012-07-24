@@ -55,6 +55,13 @@ class Texture : public RefCounted<Texture>
 {
 };
 
+/* This can be used as an offscreen rendering target by the compositor, and
+ * subsequently can be used as a source by the compositor.
+ */
+class Surface : public RefCounted<Surface>
+{
+};
+
 enum EffectTypes
 {
   EFFECT_BGRX,
@@ -63,6 +70,7 @@ enum EffectTypes
   EFFECT_COMPONENT_ALPHA,
   EFFECT_SOLID_COLOR,
   EFFECT_MASK,
+  EFFECT_SURFACE,
   EFFECT_MAX
 };
 
@@ -83,6 +91,20 @@ struct EffectMask : public Effect
 
   RefPtr<Texture> mMaskTexture;
   gfx::Matrix4x4 mMaskTransform;
+};
+
+struct EffectSurface : public Effect
+{
+  EffectSurface(Surface *aSurface,
+                bool aPremultiplied,
+                mozilla::gfx::Filter aFilter)
+    : Effect(EFFECT_SURFACE), mSurface(aSurface)
+    , mPremultiplied(aPremultiplied), mFilter(aFilter)
+  {}
+
+  RefPtr<Surface> mSurface;
+  bool mPremultiplied;
+  mozilla::gfx::Filter mFilter;
 };
 
 struct EffectBGRX : public Effect
@@ -228,6 +250,19 @@ public:
   virtual TemporaryRef<DrawableTextureHost>
     CreateDrawableTexture(const TextureIdentifier &aIdentifier) = 0;
 
+  /* This creates a Surface that can be used as a rendering target by this
+   * compositor.
+   */
+  virtual TemporaryRef<Surface> CreateSurface() = 0;
+
+  /* Sets the given surface as the target for subsequent calls to DrawQuad.
+   */
+  virtual void SetSurfaceTarget(Surface *aSurface) = 0;
+
+  /* Sets the screen as the target for subsequent calls to DrawQuad.
+   */
+  virtual void RemoveSurfaceTarget() = 0;
+
   /* This tells the compositor to actually draw a quad, where the area is
    * specified in userspace, and the source rectangle is the area of the
    * currently set textures to sample from. This area may not refer directly
@@ -236,6 +271,10 @@ public:
   virtual void DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
                         const gfx::Rect *aClipRect, const EffectChain &aEffectChain,
                         gfx::Float aOpacity, const gfx::Matrix4x4 &aTransform) = 0;
+
+  /* Flush the current frame to the screen.
+   */
+  virtual void EndFrame();
 
   virtual ~Compositor() {}
 };
