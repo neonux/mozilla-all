@@ -35,14 +35,9 @@
 
 #include "mozilla/Preferences.h"
 
-
 namespace mozilla {
 namespace layers {
-#ifdef USE_OLD_LAYERS
-  class LayerManager;
-#else
-  class LayerTreeManager;
-#endif
+class LayerManager;
 }
 }
 using namespace mozilla::layers;

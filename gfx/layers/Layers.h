@@ -46,6 +46,8 @@ class GLContext;
 
 namespace layers {
 
+using namespace gfx;
+
 class Layer;
 class ThebesLayer;
 class ContainerLayer;
@@ -60,7 +62,6 @@ class ShadowableLayer;
 class ShadowLayerForwarder;
 class ShadowLayerManager;
 class SpecificLayerAttributes;
-
 
 /**
  * The viewport and displayport metrics for the painted frame at the
@@ -1132,7 +1133,7 @@ public:
   void SetFrameMetrics(const FrameMetrics& aFrameMetrics)
   {
     mFrameMetrics = aFrameMetrics;
-    Mutated(FIELD_FRAME_METRICS);
+    Mutated();
   }
 
   virtual void FillSpecificAttributes(SpecificLayerAttributes& aAttrs);
@@ -1587,7 +1588,7 @@ public:
 class DirectLayerRenderer : public LayerTreeManager
 {
 public:
-  DirectLayerRenderer(gfx::DrawTarget *aDT)
+  DirectLayerRenderer(DrawTarget *aDT)
     : mDT(aDT)
   {}
 
@@ -1601,7 +1602,7 @@ public:
                               EndTransactionFlags aFlags = END_DEFAULT);
 
 private:
-  RefPtr<gfx::DrawTarget> mDT;
+  RefPtr<DrawTarget> mDT;
 };
 
 /**
@@ -1630,8 +1631,7 @@ public:
     FIELD_MASK_LAYER = 0x10,
     FIELD_CONTENT_FLAGS = 0x20,
     FIELD_FRAME_METRICS = 0x40,
-    FIELD_FORCE_SINGLE_TILE = 0x80,
-    FIELD_VALID_REGION = 0x100
+    FIELD_FORCE_SINGLE_TILE = 0x80
   };
 
   virtual ~LayerData() {}
@@ -1660,8 +1660,8 @@ public:
   };
 
   // These getters can be used anytime.
-  gfx::Float GetOpacity() { return mOpacity; }
-  const gfx::IntRect* GetClipRect() { return mUseClipRect ? &mClipRect : nsnull; }
+  Float GetOpacity() { return mOpacity; }
+  const IntRect* GetClipRect() { return mUseClipRect ? &mClipRect : nsnull; }
   PRUint32 GetContentFlags() { return mContentFlags; }
   const nsIntRegion& GetVisibleRegion() { return mVisibleRegion; }
   ContainerLayer* GetParent() { return mParent; }
@@ -1675,7 +1675,7 @@ public:
   // These getters can be used anytime.  They return the effective
   // values that should be used when drawing this layer to screen,
   // accounting for this layer possibly being a shadow.
-  const gfx::IntRect* GetEffectiveClipRect();
+  const IntRect* GetEffectiveClipRect();
 
   const nsIntRegion& GetEffectiveVisibleRegion();
 
@@ -1683,7 +1683,7 @@ public:
    * Returns the product of the opacities of this layer and all ancestors up
    * to and excluding the nearest ancestor that has UseIntermediateSurface() set.
    */
-  gfx::Float GetEffectiveOpacity();
+  Float GetEffectiveOpacity();
 
   /**
    * This returns the effective transform computed by
@@ -1791,9 +1791,9 @@ protected:
   nsIntRegion mVisibleRegion;
   gfx3DMatrix mTransform;
   gfx3DMatrix mEffectiveTransform;
-  gfx::Float mOpacity;
-  gfx::IntRect mClipRect;
-  gfx::IntRect mTileSourceRect;
+  Float mOpacity;
+  IntRect mClipRect;
+  IntRect mTileSourceRect;
   uint32_t mContentFlags;
   bool mUseClipRect;
   bool mUseTileSourceRect;
@@ -1870,7 +1870,7 @@ public:
    * in device pixels.
    * If aRect is null no clipping will be performed. 
    */
-  void SetClipRect(const gfx::IntRect* aRect)
+  void SetClipRect(const IntRect* aRect)
   {
     mUseClipRect = aRect != nsnull;
     if (aRect) {
@@ -1880,12 +1880,7 @@ public:
   }
   void SetClipRect(const nsIntRect* aRect)
   {
-    if (aRect) {
-      gfx::IntRect rect(aRect->x, aRect->y, aRect->width, aRect->height);
-      SetClipRect(&rect);
-    } else {
-      SetClipRect((gfx::IntRect*) nsnull);
-    }
+    SetClipRect(aRect ? &IntRect(aRect->x, aRect->y, aRect->width, aRect->height) : nsnull);
   }
 
   /**
@@ -1898,7 +1893,7 @@ public:
    * in device pixels.
    * The provided rect is intersected with any existing clip rect.
    */
-  void IntersectClipRect(const gfx::IntRect& aRect)
+  void IntersectClipRect(const IntRect& aRect)
   {
     if (mUseClipRect) {
       mClipRect.IntersectRect(mClipRect, aRect);
@@ -1910,7 +1905,7 @@ public:
   }
   void IntersectClipRect(const nsIntRect &aRect)
   {
-    IntersectClipRect(gfx::IntRect(aRect.x, aRect.y, aRect.width, aRect.height));
+    IntersectClipRect(IntRect(aRect.x, aRect.y, aRect.width, aRect.height));
   }
 
   /**
