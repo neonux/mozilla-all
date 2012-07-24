@@ -6,11 +6,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "mozilla/dom/PBrowserChild.h"
-#ifdef USE_OLD_LAYERS
 #include "BasicLayers.h"
 #if defined(MOZ_ENABLE_D3D10_LAYER)
 # include "LayerManagerD3D10.h"
-#endif
 #endif
 
 #include "gfxPlatform.h"
@@ -139,11 +137,9 @@ PuppetWidget::Destroy()
   Base::Destroy();
   mPaintTask.Revoke();
   mChild = nsnull;
-#ifdef USE_OLD_LAYERS
   if (mLayerManager) {
     mLayerManager->Destroy();
   }
-#endif
   mLayerManager = nsnull;
   mTabChild = nsnull;
   return NS_OK;
@@ -287,7 +283,6 @@ PuppetWidget::GetLayerManager(PLayersChild* aShadowManager,
                               LayerManagerPersistence aPersistence,
                               bool* aAllowRetaining)
 {
-#ifdef USE_OLD_LAYERS
   if (!mLayerManager) {
     // The backend hint is a temporary placeholder until Azure, when
     // all content-process layer managers will be BasicLayerManagers.
@@ -308,7 +303,6 @@ PuppetWidget::GetLayerManager(PLayersChild* aShadowManager,
   if (aAllowRetaining) {
     *aAllowRetaining = true;
   }
-#endif
   return mLayerManager;
 }
 
@@ -501,7 +495,6 @@ PuppetWidget::DispatchPaintEvent()
                          nsCAutoString("PuppetWidget"), nsnull);
 #endif
 
-#ifdef USE_OLD_LAYERS
     if (LayerManager::LAYERS_D3D10 == mLayerManager->GetBackendType()) {
       DispatchEvent(&event, status);
     } else {
@@ -512,7 +505,6 @@ PuppetWidget::DispatchPaintEvent()
                                               BasicLayerManager::BUFFER_NONE);
       DispatchEvent(&event, status);  
     }
-#endif
   }
 
   nsPaintEvent didPaintEvent(true, NS_DID_PAINT, this);

@@ -42,12 +42,6 @@ EXPORTS = \
         $(NULL)
 
 CPPSRCS = \
-        LayerSorter.cpp \
-        Factory.cpp \
-        $(NULL)
-
-ifdef USE_OLD_LAYERS
-CPPSRCS = \
         BasicImages.cpp \
         BasicLayers.cpp \
         BasicTiledThebesLayer.cpp \
@@ -66,9 +60,10 @@ CPPSRCS = \
         TiledThebesLayerOGL.cpp \
         ReusableTileStoreOGL.cpp \
         LayerManagerOGLProgram.cpp \
+        LayerSorter.cpp \
         ImageLayers.cpp \
-		$(NULL)
-endif
+        Factory.cpp \
+        $(NULL)
 
 ifeq ($(MOZ_WIDGET_TOOLKIT),windows)
 ifdef MOZ_ENABLE_D3D9_LAYER
@@ -77,7 +72,6 @@ EXPORTS += \
         DeviceManagerD3D9.h \
         $(NULL)
 
-ifdef USE_OLD_LAYERS
 CPPSRCS += \
         LayerManagerD3D9.cpp \
         ThebesLayerD3D9.cpp \
@@ -90,15 +84,12 @@ CPPSRCS += \
         Nv3DVUtils.cpp \
         $(NULL)
 endif
-endif
-
 ifdef MOZ_ENABLE_D3D10_LAYER
 EXPORTS += \
         LayerManagerD3D10.h \
         ReadbackManagerD3D10.h \
         $(NULL)
 
-ifdef USE_OLD_LAYERS
 CPPSRCS += \
         CanvasLayerD3D10.cpp \
         ColorLayerD3D10.cpp \
@@ -109,7 +100,6 @@ CPPSRCS += \
 	ShadowLayerUtilsD3D10.cpp \
         ThebesLayerD3D10.cpp \
         $(NULL)
-endif
 endif
 endif
 
@@ -126,7 +116,6 @@ EXPORTS_mozilla/layers =\
         RenderTrace.h \
         $(NULL)
 
-ifdef USE_OLD_LAYERS
 CPPSRCS += \
         CompositorCocoaWidgetHelper.cpp \
         CompositorChild.cpp \
@@ -137,13 +126,10 @@ CPPSRCS += \
         ShadowLayerParent.cpp \
         ShadowLayersParent.cpp \
         $(NULL)
-endif
 
 ifdef MOZ_X11 #{
 EXPORTS_mozilla/layers += ShadowLayerUtilsX11.h
-ifdef USE_OLD_LAYERS
 CPPSRCS += ShadowLayerUtilsX11.cpp
-endif
 endif #}
 
 ifdef MOZ_ENABLE_D3D10_LAYER

@@ -149,11 +149,7 @@ protected:
   friend class ReadbackProcessor;
 
   ReadbackLayer(LayerManager* aManager, void* aImplData) :
-#ifdef USE_OLD_LAYERS
     Layer(aManager, aImplData),
-#else
-    Layer(aManager),
-#endif
     mSequenceCounter(0),
     mSize(0,0),
     mBackgroundLayer(nsnull),

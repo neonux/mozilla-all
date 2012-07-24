@@ -15,11 +15,7 @@ class imgIDecoderObserver;
 
 namespace mozilla {
 namespace layers {
-#ifdef USE_OLD_LAYERS
-class LayerManager
-#else
-class LayerTreeManager;
-#endif
+class LayerManager;
 class ImageContainer;
 }
 namespace image {

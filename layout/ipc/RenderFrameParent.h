@@ -9,9 +9,7 @@
 #define mozilla_layout_RenderFrameParent_h
 
 #include "mozilla/layout/PRenderFrameParent.h"
-#ifdef USE_OLD_LAYERS
 #include "mozilla/layers/ShadowLayersManager.h"
-#endif
 
 #include <map>
 #include "nsDisplayList.h"
@@ -29,10 +27,8 @@ class ShadowLayersParent;
 
 namespace layout {
 
-class RenderFrameParent : public PRenderFrameParent
-#ifdef USE_OLD_LAYERS
-	, public mozilla::layers::ShadowLayersManager
-#endif
+class RenderFrameParent : public PRenderFrameParent,
+                          public mozilla::layers::ShadowLayersManager
 {
   typedef mozilla::layers::FrameMetrics FrameMetrics;
   typedef mozilla::layers::ContainerLayer ContainerLayer;
@@ -57,11 +53,7 @@ public:
 
   void ContentViewScaleChanged(nsContentView* aView);
 
-#ifdef USE_OLD_LAYERS
   virtual void ShadowLayersUpdated(bool isFirstPaint) MOZ_OVERRIDE;
-#else
-  virtual void ShadowLayersUpdated(bool isFirstPaint);
-#endif
 
   NS_IMETHOD BuildDisplayList(nsDisplayListBuilder* aBuilder,
                               nsSubDocumentFrame* aFrame,
@@ -78,26 +70,18 @@ public:
   void SetBackgroundColor(nscolor aColor) { mBackgroundColor = gfxRGBA(aColor); };
 
 protected:
-#ifdef USE_OLD_LAYERS
   NS_OVERRIDE void ActorDestroy(ActorDestroyReason why);
 
   NS_OVERRIDE virtual PLayersParent* AllocPLayers(LayerManager::LayersBackend* aBackendType,
                                                   int* aMaxTextureSize);
   NS_OVERRIDE virtual bool DeallocPLayers(PLayersParent* aLayers);
-#else
-  void ActorDestroy(ActorDestroyReason why);
-
-  virtual PLayersParent* AllocPLayers(LayerManager::LayersBackend* aBackendType,
-                                      int* aMaxTextureSize);
-  virtual bool DeallocPLayers(PLayersParent* aLayers);
-#endif
 
 private:
   void BuildViewMap();
 
   ShadowLayersParent* GetShadowLayers() const;
   ContainerLayer* GetRootLayer() const;
-  
+
   nsRefPtr<nsFrameLoader> mFrameLoader;
   nsRefPtr<ContainerLayer> mContainer;
 

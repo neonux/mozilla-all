@@ -12,9 +12,7 @@
 #include "mozilla/layout/RenderFrameChild.h"
 #include "mozilla/docshell/OfflineCacheUpdateChild.h"
 
-#ifdef USE_OLD_LAYERS
 #include "BasicLayers.h"
-#endif
 #include "nsIWebBrowser.h"
 #include "nsIWebBrowserSetup.h"
 #include "nsEmbedCID.h"
@@ -956,7 +954,6 @@ TabChild::InitTabChildGlobal()
 bool
 TabChild::InitWidget(const nsIntSize& size)
 {
-#ifdef USE_OLD_LAYERS
     NS_ABORT_IF_FALSE(!mWidget && !mRemoteFrame, "CreateWidget twice?");
 
     mWidget = nsIWidget::CreatePuppetWidget(this);
@@ -998,7 +995,6 @@ TabChild::InitWidget(const nsIntSize& size)
     lf->SetMaxTextureSize(maxTextureSize);
 
     mRemoteFrame = remoteFrame;
-#endif
     return true;
 }
 

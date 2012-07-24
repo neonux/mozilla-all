@@ -5236,9 +5236,7 @@ PresShell::Paint(nsIView*           aViewToPaint,
   NS_ASSERTION(layerManager, "Must be in paint event");
 
   if (mIsFirstPaint) {
-#ifdef USE_OLD_LAYERS
     layerManager->SetIsFirstPaint();
-#endif
     mIsFirstPaint = false;
   }
   layerManager->BeginTransaction();

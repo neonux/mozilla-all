@@ -349,7 +349,6 @@ public:
                                    LayerManager* aManager,
                                    const FrameLayerBuilder::ContainerParameters& aParameters)
   {
-#ifdef USE_OLD_LAYERS
     if (aManager->GetBackendType() != LayerManager::LAYERS_BASIC) {
       // For non-basic layer managers we can assume that compositing
       // layers is very cheap, and since ImageLayers don't require
@@ -360,7 +359,6 @@ public:
       // just always be active for these managers.
       return LAYER_ACTIVE;
     }
-#endif
     nsHTMLMediaElement* elem =
       static_cast<nsHTMLMediaElement*>(mFrame->GetContent());
     return elem->IsPotentiallyPlaying() ? LAYER_ACTIVE : LAYER_INACTIVE;

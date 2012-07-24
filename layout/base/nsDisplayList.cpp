@@ -29,9 +29,7 @@
 
 #include "imgIContainer.h"
 #include "nsIInterfaceRequestorUtils.h"
-#ifdef USE_OLD_LAYERS
 #include "BasicLayers.h"
-#endif
 #include "nsBoxFrame.h"
 #include "nsViewportFrame.h"
 #include "nsSVGEffects.h"
@@ -585,9 +583,7 @@ void nsDisplayList::PaintForFrame(nsDisplayListBuilder* aBuilder,
       NS_WARNING("Nowhere to paint into");
       return;
     }
-#ifdef USE_OLD_LAYERS
     layerManager = new BasicLayerManager();
-#endif
   }
 
   if (aFlags & PAINT_FLUSH_LAYERS) {
@@ -596,9 +592,7 @@ void nsDisplayList::PaintForFrame(nsDisplayListBuilder* aBuilder,
 
   if (doBeginTransaction) {
     if (aCtx) {
-#ifdef USE_OLD_LAYERS
       layerManager->BeginTransactionWithTarget(aCtx->ThebesContext());
-#endif
     } else {
       layerManager->BeginTransaction();
     }
@@ -1167,11 +1161,7 @@ nsDisplayBackground::GetLayerState(nsDisplayListBuilder* aBuilder,
                                    LayerManager* aManager,
                                    const FrameLayerBuilder::ContainerParameters& aParameters)
 {
-#ifdef USE_OLD_LAYERS
   if (!aManager->IsCompositingCheap() ||
-#else
-  if (
-#endif
       !nsLayoutUtils::GPUImageScalingEnabled() ||
       !TryOptimizeToImageLayer(aBuilder)) {
     return LAYER_NONE;

@@ -21,12 +21,7 @@ interface imgIDecoderObserver;
 
 namespace mozilla {
 namespace layers {
-#ifdef USE_OLD_LAYERS
 class LayerManager;
-#else
-class LayerTreeManager;
-typedef LayerTreeManager LayerManager;
-#endif
 class ImageContainer;
 }
 }

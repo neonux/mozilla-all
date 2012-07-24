@@ -116,7 +116,6 @@
 #include "WinUtils.h"
 #include "WidgetUtils.h"
 
-#ifdef USE_OLD_LAYERS
 #ifdef MOZ_ENABLE_D3D9_LAYER
 #include "LayerManagerD3D9.h"
 #endif
@@ -126,12 +125,8 @@
 #endif
 
 #include "LayerManagerOGL.h"
-#include "BasicLayers.h"
-#else
-#include "prenv.h"
-#endif
-
 #include "nsIGfxInfo.h"
+#include "BasicLayers.h"
 #include "nsUXThemeConstants.h"
 #include "KeyboardLayout.h"
 #include "nsNativeDragTarget.h"
@@ -623,7 +618,6 @@ NS_METHOD nsWindow::Destroy()
   // During the destruction of all of our children, make sure we don't get deleted.
   nsCOMPtr<nsIWidget> kungFuDeathGrip(this);
 
-#ifdef USE_OLD_LAYERS
   /**
    * On windows the LayerManagerOGL destructor wants the widget to be around for
    * cleanup. It also would like to have the HWND intact, so we NULL it here.
@@ -631,7 +625,6 @@ NS_METHOD nsWindow::Destroy()
   if (mLayerManager) {
     mLayerManager->Destroy();
   }
-#endif
   mLayerManager = nsnull;
 
   /* We should clear our cached resources now and not wait for the GC to
@@ -1332,14 +1325,12 @@ NS_METHOD nsWindow::Move(PRInt32 aX, PRInt32 aY)
     // Workaround SetWindowPos bug with D3D9. If our window has a clip
     // region, some drivers or OSes may incorrectly copy into the clipped-out
     // area.
-#ifdef USE_OLD_LAYERS
     if (mWindowType == eWindowType_plugin &&
         (!mLayerManager || mLayerManager->GetBackendType() == LayerManager::LAYERS_D3D9) &&
         mClipRects &&
         (mClipRectCount != 1 || !mClipRects[0].IsEqualInterior(nsIntRect(0, 0, mBounds.width, mBounds.height)))) {
       flags |= SWP_NOCOPYBITS;
     }
-#endif
     VERIFY(::SetWindowPos(mWnd, NULL, aX, aY, 0, 0, flags));
 
     SetThemeRegion();
@@ -3125,7 +3116,6 @@ nsWindow::GetLayerManager(PLayersChild* aShadowManager,
                           LayerManagerPersistence aPersistence,
                           bool* aAllowRetaining)
 {
-#ifdef USE_OLD_LAYERS
   if (aAllowRetaining) {
     *aAllowRetaining = true;
   }
@@ -3233,7 +3223,7 @@ nsWindow::GetLayerManager(PLayersChild* aShadowManager,
   }
 
   NS_ASSERTION(mLayerManager, "Couldn't provide a valid layer manager.");
-#endif
+
   return mLayerManager;
 }
 
@@ -6768,7 +6758,7 @@ nsWindow::ConfigureChildren(const nsTArray<Configuration>& aConfigurations)
     } else if (bounds.TopLeft() != configuration.mBounds.TopLeft()) {
       w->Move(configuration.mBounds.x, configuration.mBounds.y);
 
-#ifdef USE_OLD_LAYERS
+
       if (gfxWindowsPlatform::GetPlatform()->GetRenderMode() ==
           gfxWindowsPlatform::RENDER_DIRECT2D ||
           GetLayerManager()->GetBackendType() != LayerManager::LAYERS_BASIC) {
@@ -6781,7 +6771,6 @@ nsWindow::ConfigureChildren(const nsTArray<Configuration>& aConfigurations)
                  -bounds.y);
         w->Invalidate(r.GetBounds());
       }
-#endif
     }
     rv = w->SetWindowClipRegion(configuration.mClipRegion, false);
     NS_ENSURE_SUCCESS(rv, rv);
@@ -7047,24 +7036,20 @@ bool nsWindow::AutoErase(HDC dc)
 void
 nsWindow::AllowD3D9Callback(nsWindow *aWindow)
 {
-#ifdef USE_OLD_LAYERS
   if (aWindow->mLayerManager) {
     aWindow->mLayerManager->Destroy();
     aWindow->mLayerManager = NULL;
   }
-#endif
 }
 
 void
 nsWindow::AllowD3D9WithReinitializeCallback(nsWindow *aWindow)
 {
-#ifdef USE_OLD_LAYERS
   if (aWindow->mLayerManager) {
     aWindow->mLayerManager->Destroy();
     aWindow->mLayerManager = NULL;
     (void) aWindow->GetLayerManager();
   }
-#endif
 }
 
 void
@@ -7765,13 +7750,11 @@ nsWindow::ClearCachedResources()
 #ifdef CAIRO_HAS_D2D_SURFACE
     mD2DWindowSurface = nsnull;
 #endif
-#ifdef USE_OLD_LAYERS
     if (mLayerManager &&
         mLayerManager->GetBackendType() == LayerManager::LAYERS_BASIC) {
       static_cast<BasicLayerManager*>(mLayerManager.get())->
         ClearCachedResources();
     }
-#endif
     ::EnumChildWindows(mWnd, nsWindow::ClearResourcesCallback, 0);
 }
 

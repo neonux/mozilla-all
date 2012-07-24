@@ -25,11 +25,7 @@ class nsDisplayListBuilder;
 namespace mozilla {
 namespace layers {
 class CanvasLayer;
-#ifdef USE_OLD_LAYERS
 class LayerManager;
-#else
-class LayerTreeManager;
-#endif
 }
 namespace ipc {
 class Shmem;

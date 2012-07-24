@@ -132,9 +132,7 @@ static NS_DEFINE_CID(kXTFServiceCID, NS_XTFSERVICE_CID);
 #include "nsLayoutStatics.h"
 #include "nsLayoutUtils.h"
 #include "nsFrameManager.h"
-#ifdef USE_OLD_LAYERS
 #include "BasicLayers.h"
-#endif
 #include "nsFocusManager.h"
 #include "nsTextEditorState.h"
 #include "nsIPluginHost.h"

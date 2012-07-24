@@ -50,6 +50,7 @@
 #include "nsICachingChannel.h"
 #include "nsLayoutUtils.h"
 #include "nsVideoFrame.h"
+#include "BasicLayers.h"
 #include <limits>
 #include "nsIDocShellTreeItem.h"
 #include "nsIAsyncVerifyRedirectCallback.h"
