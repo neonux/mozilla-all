@@ -62,6 +62,13 @@ class Surface : public RefCounted<Surface>
 {
 };
 
+enum SurfaceInitMode
+{
+  INIT_MODE_NONE,
+  INIT_MODE_CLEAR,
+  INIT_MODE_COPY
+};
+
 enum EffectTypes
 {
   EFFECT_BGRX,
@@ -253,7 +260,14 @@ public:
   /* This creates a Surface that can be used as a rendering target by this
    * compositor.
    */
-  virtual TemporaryRef<Surface> CreateSurface() = 0;
+  virtual TemporaryRef<Surface> CreateSurface(const gfx::Rect &aRect,
+                                              SurfaceInitMode aInit) = 0;
+
+  /* This creates a Surface that can be used as a rendering target by this compositor,
+   * and initializes this surface by copying from the given surface.
+   */
+  virtual TemporaryRef<Surface> CreateSurfaceFromSurface(const gfx::Rect &aRect,
+                                                         const Surface *aSource);
 
   /* Sets the given surface as the target for subsequent calls to DrawQuad.
    */
