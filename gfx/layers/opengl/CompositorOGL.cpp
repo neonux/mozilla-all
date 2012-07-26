@@ -905,6 +905,36 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
       mGLContext->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
                                      LOCAL_GL_ONE, LOCAL_GL_ONE);
     }
+  } else if (aEffectChain.mEffects[EFFECT_SURFACE]) {
+    EffectSurface* effectSurface =
+      static_cast<EffectSurface*>(aEffectChain.mEffects[EFFECT_SURFACE]);
+    RefPtr<SurfaceOGL> surface = static_cast<SurfaceOGL*>(effectSurface->mSurface.get());
+
+    ShaderProgramOGL *program = GetProgram(GetFBOLayerProgramType(), maskType);
+
+    mGLContext->fBindTexture(mFBOTextureTarget, surface->mTexture);
+
+    program->Activate();
+    program->SetTextureUnit(0);
+    program->SetLayerOpacity(aOpacity);
+    program->SetLayerTransform(aTransform);
+    program->SetRenderOffset(nsIntPoint(0,0));
+    program->SetLayerQuadRect(aRect);
+    if (maskType != MaskNone) {
+      mGLContext->fActiveTexture(LOCAL_GL_TEXTURE1);
+      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureMask->mTexture.mTextureHandle);
+      program->SetMaskTextureUnit(1);
+      program->SetMaskLayerTransform(effectMask->mMaskTransform);
+    }
+    if (program->GetTexCoordMultiplierUniformLocation() != -1) {
+      // 2DRect case, get the multiplier right for a sampler2DRect
+      program->SetTexCoordMultiplier(aRect.width, aRect.height);
+    }
+
+    // Drawing is always flipped, but when copying between surfaces we want to avoid
+    // this. Pass true for the flip parameter to introduce a second flip
+    // that cancels the other one out.
+    BindAndDrawQuad(program, true);
   }
 
   mGLContext->fActiveTexture(LOCAL_GL_TEXTURE0);

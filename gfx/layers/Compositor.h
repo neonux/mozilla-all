@@ -102,16 +102,11 @@ struct EffectMask : public Effect
 
 struct EffectSurface : public Effect
 {
-  EffectSurface(Surface *aSurface,
-                bool aPremultiplied,
-                mozilla::gfx::Filter aFilter)
+  EffectSurface(Surface *aSurface)
     : Effect(EFFECT_SURFACE), mSurface(aSurface)
-    , mPremultiplied(aPremultiplied), mFilter(aFilter)
   {}
 
   RefPtr<Surface> mSurface;
-  bool mPremultiplied;
-  mozilla::gfx::Filter mFilter;
 };
 
 struct EffectBGRX : public Effect

@@ -146,6 +146,12 @@ private:
     return mPrograms[aType].mVariations[aMask];
   }
 
+  gl::ShaderProgramType GetFBOLayerProgramType() {
+    if (mFBOTextureTarget == LOCAL_GL_TEXTURE_RECTANGLE_ARB)
+      return gl::RGBARectLayerProgramType;
+    return gl::RGBALayerProgramType;
+  }
+
   /* Create a FBO backed by a texture.
    * Note that the texture target type will be
    * of the type returned by FBOTextureTarget; different
