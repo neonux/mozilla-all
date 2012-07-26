@@ -29,12 +29,12 @@ protected:
 public:
   NS_IMETHOD_(nsrefcnt) AddRef(void);
   NS_IMETHOD_(nsrefcnt) Release(void);
-  NS_SCRIPTABLE NS_IMETHOD GetPreferences(char** prefBranch NS_OUTPARAM, char** id NS_OUTPARAM, char** subjectName NS_OUTPARAM, char** grantedList NS_OUTPARAM, char** deniedList NS_OUTPARAM, bool* isTrusted NS_OUTPARAM);
+  NS_IMETHOD GetPreferences(char** prefBranch, char** id, char** subjectName, char** grantedList, char** deniedList, bool* isTrusted);
   NS_IMETHOD GetSecurityPolicy(void** aSecurityPolicy);
   NS_IMETHOD SetSecurityPolicy(void* aSecurityPolicy);
-  NS_IMETHOD CanEnableCapability(const char* capability, PRInt16* _retval NS_OUTPARAM);
-  NS_IMETHOD IsCapabilityEnabled(const char* capability, void* annotation, bool* _retval NS_OUTPARAM);
-  NS_IMETHOD EnableCapability(const char* capability, void** annotation NS_INOUTPARAM);
+  NS_IMETHOD CanEnableCapability(const char* capability, PRInt16* _retval);
+  NS_IMETHOD IsCapabilityEnabled(const char* capability, void* annotation, bool* _retval);
+  NS_IMETHOD EnableCapability(const char* capability, void** annotation);
   NS_IMETHOD GetHasCertificate(bool* aHasCertificate);
   NS_IMETHOD GetFingerprint(nsACString& aFingerprint);
   NS_IMETHOD GetPrettyName(nsACString& aPrettyName);
@@ -112,34 +112,36 @@ protected:
 class nsPrincipal : public nsBasePrincipal
 {
 public:
-  nsPrincipal();
-
-protected:
-  virtual ~nsPrincipal();
-
-public:
   NS_DECL_ISUPPORTS_INHERITED
   NS_DECL_NSISERIALIZABLE
-  NS_IMETHOD Equals(nsIPrincipal* other, bool* _retval NS_OUTPARAM);
-  NS_IMETHOD EqualsIgnoringDomain(nsIPrincipal* other, bool* _retval NS_OUTPARAM);
+  NS_IMETHOD Equals(nsIPrincipal* other, bool* _retval);
+  NS_IMETHOD EqualsIgnoringDomain(nsIPrincipal* other, bool* _retval);
   NS_IMETHOD GetHashValue(PRUint32* aHashValue);
   NS_IMETHOD GetURI(nsIURI** aURI);
   NS_IMETHOD GetDomain(nsIURI** aDomain);
   NS_IMETHOD SetDomain(nsIURI* aDomain);
   NS_IMETHOD GetOrigin(char** aOrigin);
-  NS_IMETHOD Subsumes(nsIPrincipal* other, bool* _retval NS_OUTPARAM);
-  NS_IMETHOD SubsumesIgnoringDomain(nsIPrincipal* other, bool* _retval NS_OUTPARAM);
+  NS_IMETHOD Subsumes(nsIPrincipal* other, bool* _retval);
+  NS_IMETHOD SubsumesIgnoringDomain(nsIPrincipal* other, bool* _retval);
   NS_IMETHOD CheckMayLoad(nsIURI* uri, bool report);
+  NS_IMETHOD GetExtendedOrigin(nsACString& aExtendedOrigin);
+  NS_IMETHOD GetAppStatus(PRUint16* aAppStatus);
+  NS_IMETHOD GetAppId(PRUint32* aAppStatus);
 #ifdef DEBUG
   virtual void dumpImpl();
 #endif
+
+  nsPrincipal();
+
   // Either Init() or InitFromPersistent() must be called before
   // the principal is in a usable state.
   nsresult Init(const nsACString& aCertFingerprint,
                 const nsACString& aSubjectName,
                 const nsACString& aPrettyName,
                 nsISupports* aCert,
-                nsIURI* aCodebase);
+                nsIURI* aCodebase,
+                PRUint32 aAppId,
+                bool aInMozBrowser);
   nsresult InitFromPersistent(const char* aPrefName,
                               const nsCString& aFingerprint,
                               const nsCString& aSubjectName,
@@ -148,17 +150,34 @@ public:
                               const char* aDeniedList,
                               nsISupports* aCert,
                               bool aIsCert,
-                              bool aTrusted);
+                              bool aTrusted,
+                              PRUint32 aAppId,
+                              bool aInMozBrowser);
 
   virtual void GetScriptLocation(nsACString& aStr) MOZ_OVERRIDE;
   void SetURI(nsIURI* aURI);
 
+  /**
+   * Computes the puny-encoded origin of aURI.
+   */
+  static nsresult GetOriginForURI(nsIURI* aURI, char **aOrigin);
+
   nsCOMPtr<nsIURI> mDomain;
   nsCOMPtr<nsIURI> mCodebase;
+  PRUint32 mAppId;
+  bool mInMozBrowser;
   // If mCodebaseImmutable is true, mCodebase is non-null and immutable
   bool mCodebaseImmutable;
   bool mDomainImmutable;
   bool mInitialized;
+
+protected:
+  virtual ~nsPrincipal();
+
+  /**
+   * Returns the app status of the principal based on mAppId and mInMozBrowser.
+   */
+  PRUint16 GetAppStatus();
 };
 
 class nsExpandedPrincipal : public nsIExpandedPrincipal, public nsBasePrincipal
@@ -173,16 +192,19 @@ public:
   NS_DECL_ISUPPORTS_INHERITED
   NS_DECL_NSIEXPANDEDPRINCIPAL
   NS_DECL_NSISERIALIZABLE
-  NS_IMETHOD Equals(nsIPrincipal* other, bool* _retval NS_OUTPARAM);
-  NS_IMETHOD EqualsIgnoringDomain(nsIPrincipal* other, bool* _retval NS_OUTPARAM);
+  NS_IMETHOD Equals(nsIPrincipal* other, bool* _retval);
+  NS_IMETHOD EqualsIgnoringDomain(nsIPrincipal* other, bool* _retval);
   NS_IMETHOD GetHashValue(PRUint32* aHashValue);
   NS_IMETHOD GetURI(nsIURI** aURI);
   NS_IMETHOD GetDomain(nsIURI** aDomain);
   NS_IMETHOD SetDomain(nsIURI* aDomain);
   NS_IMETHOD GetOrigin(char** aOrigin);
-  NS_IMETHOD Subsumes(nsIPrincipal* other, bool* _retval NS_OUTPARAM);
-  NS_IMETHOD SubsumesIgnoringDomain(nsIPrincipal* other, bool* _retval NS_OUTPARAM);
+  NS_IMETHOD Subsumes(nsIPrincipal* other, bool* _retval);
+  NS_IMETHOD SubsumesIgnoringDomain(nsIPrincipal* other, bool* _retval);
   NS_IMETHOD CheckMayLoad(nsIURI* uri, bool report);
+  NS_IMETHOD GetExtendedOrigin(nsACString& aExtendedOrigin);
+  NS_IMETHOD GetAppStatus(PRUint16* aAppStatus);
+  NS_IMETHOD GetAppId(PRUint32* aAppStatus);
 #ifdef DEBUG
   virtual void dumpImpl();
 #endif

@@ -12,6 +12,7 @@
 #include "nsISVGChildFrame.h"
 #include "nsRenderingContext.h"
 #include "nsSVGContainerFrame.h"
+#include "nsSVGIntegrationUtils.h"
 #include "nsSVGSVGElement.h"
 
 nsIFrame*
@@ -56,6 +57,11 @@ NS_IMETHODIMP
 nsSVGInnerSVGFrame::PaintSVG(nsRenderingContext *aContext,
                              const nsIntRect *aDirtyRect)
 {
+  NS_ASSERTION(!NS_SVGDisplayListPaintingEnabled() ||
+               (mState & NS_STATE_SVG_NONDISPLAY_CHILD),
+               "If display lists are enabled, only painting of non-display "
+               "SVG should take this code path");
+
   gfxContextAutoSaveRestore autoSR;
 
   if (GetStyleDisplay()->IsScrollableOverflow()) {
@@ -68,7 +74,7 @@ nsSVGInnerSVGFrame::PaintSVG(nsRenderingContext *aContext,
     }
 
     nsSVGContainerFrame *parent = static_cast<nsSVGContainerFrame*>(mParent);
-    gfxMatrix clipTransform = parent->GetCanvasTM();
+    gfxMatrix clipTransform = parent->GetCanvasTM(FOR_PAINTING);
 
     gfxContext *gfx = aContext->ThebesContext();
     autoSR.SetContext(gfx);
@@ -81,7 +87,7 @@ nsSVGInnerSVGFrame::PaintSVG(nsRenderingContext *aContext,
 }
 
 void
-nsSVGInnerSVGFrame::UpdateBounds()
+nsSVGInnerSVGFrame::ReflowSVG()
 {
   // mRect must be set before FinishAndStoreOverflow is called in order
   // for our overflow areas to be clipped correctly.
@@ -91,16 +97,12 @@ nsSVGInnerSVGFrame::UpdateBounds()
   mRect = nsLayoutUtils::RoundGfxRectToAppRect(
                            gfxRect(x, y, width, height),
                            PresContext()->AppUnitsPerCSSPixel());
-  nsSVGInnerSVGFrameBase::UpdateBounds();
+  nsSVGInnerSVGFrameBase::ReflowSVG();
 }
 
 void
 nsSVGInnerSVGFrame::NotifySVGChanged(PRUint32 aFlags)
 {
-  NS_ABORT_IF_FALSE(!(aFlags & DO_NOT_NOTIFY_RENDERING_OBSERVERS) ||
-                    (GetStateBits() & NS_STATE_SVG_NONDISPLAY_CHILD),
-                    "Must be NS_STATE_SVG_NONDISPLAY_CHILD!");
-
   NS_ABORT_IF_FALSE(aFlags & (TRANSFORM_CHANGED | COORD_CONTEXT_CHANGED),
                     "Invalidation logic may need adjusting");
 
@@ -108,29 +110,40 @@ nsSVGInnerSVGFrame::NotifySVGChanged(PRUint32 aFlags)
 
     nsSVGSVGElement *svg = static_cast<nsSVGSVGElement*>(mContent);
 
+    bool xOrYIsPercentage =
+      svg->mLengthAttributes[nsSVGSVGElement::X].IsPercentage() ||
+      svg->mLengthAttributes[nsSVGSVGElement::Y].IsPercentage();
+    bool widthOrHeightIsPercentage =
+      svg->mLengthAttributes[nsSVGSVGElement::WIDTH].IsPercentage() ||
+      svg->mLengthAttributes[nsSVGSVGElement::HEIGHT].IsPercentage();
+
+    if (xOrYIsPercentage || widthOrHeightIsPercentage) {
+      // Ancestor changes can't affect how we render from the perspective of
+      // any rendering observers that we may have, so we don't need to
+      // invalidate them. We also don't need to invalidate ourself, since our
+      // changed ancestor will have invalidated its entire area, which includes
+      // our area.
+      // For perf reasons we call this before calling NotifySVGChanged() below.
+      nsSVGUtils::ScheduleReflowSVG(this);
+    }
+
     // Coordinate context changes affect mCanvasTM if we have a
     // percentage 'x' or 'y', or if we have a percentage 'width' or 'height' AND
     // a 'viewBox'.
 
     if (!(aFlags & TRANSFORM_CHANGED) &&
-        (svg->mLengthAttributes[nsSVGSVGElement::X].IsPercentage() ||
-         svg->mLengthAttributes[nsSVGSVGElement::Y].IsPercentage() ||
-         (svg->HasViewBox() &&
-          (svg->mLengthAttributes[nsSVGSVGElement::WIDTH].IsPercentage() ||
-           svg->mLengthAttributes[nsSVGSVGElement::HEIGHT].IsPercentage())))) {
-    
+        (xOrYIsPercentage ||
+         (widthOrHeightIsPercentage && svg->HasViewBox()))) {
       aFlags |= TRANSFORM_CHANGED;
     }
 
-    if (svg->HasViewBox() ||
-        (!svg->mLengthAttributes[nsSVGSVGElement::WIDTH].IsPercentage() &&
-         !svg->mLengthAttributes[nsSVGSVGElement::HEIGHT].IsPercentage())) {
+    if (svg->HasViewBox() || !widthOrHeightIsPercentage) {
       // Remove COORD_CONTEXT_CHANGED, since we establish the coordinate
       // context for our descendants and this notification won't change its
       // dimensions:
       aFlags &= ~COORD_CONTEXT_CHANGED;
 
-      if (!(aFlags & ~DO_NOT_NOTIFY_RENDERING_OBSERVERS)) {
+      if (!aFlags) {
         return; // No notification flags left
       }
     }
@@ -155,6 +168,7 @@ nsSVGInnerSVGFrame::AttributeChanged(PRInt32  aNameSpaceID,
 
     if (aAttribute == nsGkAtoms::width ||
         aAttribute == nsGkAtoms::height) {
+      nsSVGUtils::InvalidateAndScheduleReflowSVG(this);
 
       if (content->HasViewBoxOrSyntheticViewBox()) {
         // make sure our cached transform matrix gets (lazily) updated
@@ -178,6 +192,8 @@ nsSVGInnerSVGFrame::AttributeChanged(PRInt32  aNameSpaceID,
       // make sure our cached transform matrix gets (lazily) updated
       mCanvasTM = nsnull;
 
+      nsSVGUtils::InvalidateAndScheduleReflowSVG(this);
+
       nsSVGUtils::NotifyChildrenOfSVGChange(
           this, aAttribute == nsGkAtoms::viewBox ?
                   TRANSFORM_CHANGED | COORD_CONTEXT_CHANGED : TRANSFORM_CHANGED);
@@ -196,6 +212,11 @@ nsSVGInnerSVGFrame::AttributeChanged(PRInt32  aNameSpaceID,
 NS_IMETHODIMP_(nsIFrame*)
 nsSVGInnerSVGFrame::GetFrameForPoint(const nsPoint &aPoint)
 {
+  NS_ASSERTION(!NS_SVGDisplayListHitTestingEnabled() ||
+               (mState & NS_STATE_SVG_NONDISPLAY_CHILD),
+               "If display lists are enabled, only hit-testing of non-display "
+               "SVG should take this code path");
+
   if (GetStyleDisplay()->IsScrollableOverflow()) {
     nsSVGElement *content = static_cast<nsSVGElement*>(mContent);
     nsSVGContainerFrame *parent = static_cast<nsSVGContainerFrame*>(mParent);
@@ -203,7 +224,7 @@ nsSVGInnerSVGFrame::GetFrameForPoint(const nsPoint &aPoint)
     float clipX, clipY, clipWidth, clipHeight;
     content->GetAnimatedLengthValues(&clipX, &clipY, &clipWidth, &clipHeight, nsnull);
 
-    if (!nsSVGUtils::HitTestRect(parent->GetCanvasTM(),
+    if (!nsSVGUtils::HitTestRect(parent->GetCanvasTM(FOR_HIT_TESTING),
                                  clipX, clipY, clipWidth, clipHeight,
                                  PresContext()->AppUnitsToDevPixels(aPoint.x),
                                  PresContext()->AppUnitsToDevPixels(aPoint.y))) {
@@ -232,15 +253,21 @@ nsSVGInnerSVGFrame::NotifyViewportOrTransformChanged(PRUint32 aFlags)
 // nsSVGContainerFrame methods:
 
 gfxMatrix
-nsSVGInnerSVGFrame::GetCanvasTM()
+nsSVGInnerSVGFrame::GetCanvasTM(PRUint32 aFor)
 {
+  if (!(GetStateBits() & NS_STATE_SVG_NONDISPLAY_CHILD)) {
+    if ((aFor == FOR_PAINTING && NS_SVGDisplayListPaintingEnabled()) ||
+        (aFor == FOR_HIT_TESTING && NS_SVGDisplayListHitTestingEnabled())) {
+      return nsSVGIntegrationUtils::GetCSSPxToDevPxMatrix(this);
+    }
+  }
   if (!mCanvasTM) {
     NS_ASSERTION(mParent, "null parent");
 
     nsSVGContainerFrame *parent = static_cast<nsSVGContainerFrame*>(mParent);
     nsSVGSVGElement *content = static_cast<nsSVGSVGElement*>(mContent);
 
-    gfxMatrix tm = content->PrependLocalTransformsTo(parent->GetCanvasTM());
+    gfxMatrix tm = content->PrependLocalTransformsTo(parent->GetCanvasTM(aFor));
 
     mCanvasTM = new gfxMatrix(tm);
   }

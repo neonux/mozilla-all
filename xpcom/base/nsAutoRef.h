@@ -186,7 +186,7 @@ public:
     void swap(ThisClass& aOther)
     {
         LocalSimpleRef temp;
-        temp.SimpleRef::operator=(this);
+        temp.SimpleRef::operator=(*this);
         SimpleRef::operator=(aOther);
         aOther.SimpleRef::operator=(temp);
     }
@@ -467,7 +467,7 @@ public:
     // The handle is a pointer to T.
     typedef T* RawRef;
     // A NULL pointer does not have a resource.
-    static RawRef Void() { return nsnull; };
+    static RawRef Void() { return nsnull; }
 };
 
 /**

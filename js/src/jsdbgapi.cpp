@@ -185,7 +185,7 @@ JS_SetTrap(JSContext *cx, JSScript *script, jsbytecode *pc, JSTrapHandler handle
     if (!CheckDebugMode(cx))
         return false;
 
-    BreakpointSite *site = script->getOrCreateBreakpointSite(cx, pc, NULL);
+    BreakpointSite *site = script->getOrCreateBreakpointSite(cx, pc);
     if (!site)
         return false;
     site->setTrap(cx->runtime->defaultFreeOp(), handler, closure);
@@ -223,7 +223,9 @@ JS_SetInterrupt(JSRuntime *rt, JSInterruptHook hook, void *closure)
 {
     rt->debugHooks.interruptHook = hook;
     rt->debugHooks.interruptHookData = closure;
-    return JS_TRUE;
+    for (InterpreterFrames *f = rt->interpreterFrames; f; f = f->older)
+        f->enableInterruptsUnconditionally();
+    return true;
 }
 
 JS_PUBLIC_API(JSBool)
@@ -414,21 +416,21 @@ JS_FunctionHasLocalNames(JSContext *cx, JSFunction *fun)
 extern JS_PUBLIC_API(uintptr_t *)
 JS_GetFunctionLocalNameArray(JSContext *cx, JSFunction *fun, void **markp)
 {
-    BindingNames localNames(cx);
-    if (!fun->script()->bindings.getLocalNameArray(cx, &localNames))
+    BindingVector bindings(cx);
+    if (!GetOrderedBindings(cx, fun->script()->bindings, &bindings))
         return NULL;
 
     /* Munge data into the API this method implements.  Avert your eyes! */
     *markp = cx->tempLifoAlloc().mark();
 
-    uintptr_t *names = cx->tempLifoAlloc().newArray<uintptr_t>(localNames.length());
+    uintptr_t *names = cx->tempLifoAlloc().newArray<uintptr_t>(bindings.length());
     if (!names) {
         js_ReportOutOfMemory(cx);
         return NULL;
     }
 
-    for (size_t i = 0; i < localNames.length(); i++)
-        names[i] = reinterpret_cast<uintptr_t>(localNames[i].maybeAtom);
+    for (size_t i = 0; i < bindings.length(); i++)
+        names[i] = reinterpret_cast<uintptr_t>(bindings[i].maybeName);
 
     return names;
 }
@@ -489,15 +491,30 @@ JS_FrameIterator(JSContext *cx, JSStackFrame **iteratorp)
 }
 
 JS_PUBLIC_API(JSScript *)
-JS_GetFrameScript(JSContext *cx, JSStackFrame *fp)
+JS_GetFrameScript(JSContext *cx, JSStackFrame *fpArg)
 {
-    return Valueify(fp)->maybeScript();
+    StackFrame *fp = Valueify(fpArg);
+    if (fp->isDummyFrame())
+        return NULL;
+
+    return fp->maybeScript();
 }
 
 JS_PUBLIC_API(jsbytecode *)
-JS_GetFramePC(JSContext *cx, JSStackFrame *fp)
+JS_GetFramePC(JSContext *cx, JSStackFrame *fpArg)
 {
-    return Valueify(fp)->pcQuadratic(cx->stack);
+    StackFrame *fp = Valueify(fpArg);
+    if (fp->isDummyFrame())
+        return NULL;
+
+    /*
+     * This API is used to compute the line number for jsd and XPConnect
+     * exception handling backtraces. Once the stack gets really deep, the
+     * overall cost can become quadratic. This can hang the browser (eventually
+     * terminated by a slow-script dialog) when content causes infinite
+     * recursion and a backtrace.
+     */
+    return fp->pcQuadratic(cx->stack, 100);
 }
 
 JS_PUBLIC_API(void *)
@@ -783,7 +800,8 @@ GetPropertyDesc(JSContext *cx, JSObject *obj_, Shape *shape, JSPropertyDesc *pd)
         lastException = cx->getPendingException();
     cx->clearPendingException();
 
-    if (!baseops::GetProperty(cx, obj, RootedId(cx, shape->propid()), &pd->value)) {
+    Rooted<jsid> id(cx, shape->propid());
+    if (!baseops::GetProperty(cx, obj, id, &pd->value)) {
         if (!cx->isExceptionPending()) {
             pd->flags = JSPD_ERROR;
             pd->value = JSVAL_VOID;
@@ -802,15 +820,6 @@ GetPropertyDesc(JSContext *cx, JSObject *obj_, Shape *shape, JSPropertyDesc *pd)
               |  (!shape->writable()  ? JSPD_READONLY  : 0)
               |  (!shape->configurable() ? JSPD_PERMANENT : 0);
     pd->spare = 0;
-    if (shape->setter() == CallObject::setArgOp) {
-        pd->slot = shape->shortid();
-        pd->flags |= JSPD_ARGUMENT;
-    } else if (shape->setter() == CallObject::setVarOp) {
-        pd->slot = shape->shortid();
-        pd->flags |= JSPD_VARIABLE;
-    } else {
-        pd->slot = 0;
-    }
     pd->alias = JSVAL_VOID;
 
     return JS_TRUE;
@@ -1771,8 +1780,10 @@ JS_DumpCompartmentBytecode(JSContext *cx)
     ScriptsToDump scripts;
     IterateCells(cx->runtime, cx->compartment, gc::FINALIZE_SCRIPT, &scripts, DumpBytecodeScriptCallback);
 
-    for (size_t i = 0; i < scripts.length(); i++)
-        JS_DumpBytecode(cx, scripts[i]);
+    for (size_t i = 0; i < scripts.length(); i++) {
+        if (scripts[i]->enclosingScriptsCompiledSuccessfully())
+            JS_DumpBytecode(cx, scripts[i]);
+    }
 }
 
 JS_PUBLIC_API(void)
@@ -1780,7 +1791,7 @@ JS_DumpCompartmentPCCounts(JSContext *cx)
 {
     for (CellIter i(cx->compartment, gc::FINALIZE_SCRIPT); !i.done(); i.next()) {
         JSScript *script = i.get<JSScript>();
-        if (script->hasScriptCounts)
+        if (script->hasScriptCounts && script->enclosingScriptsCompiledSuccessfully())
             JS_DumpPCCounts(cx, script);
     }
 }

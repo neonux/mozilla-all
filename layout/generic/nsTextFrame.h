@@ -182,6 +182,7 @@ public:
 #endif
 
   float GetFontSizeInflation() const;
+  bool IsCurrentFontInflation(float aInflation) const;
   bool HasFontSizeInflation() const {
     return (GetStateBits() & TEXT_HAS_FONT_INFLATION) != 0;
   }
@@ -396,7 +397,7 @@ public:
   struct TrimmedOffsets {
     PRInt32 mStart;
     PRInt32 mLength;
-    PRInt32 GetEnd() { return mStart + mLength; }
+    PRInt32 GetEnd() const { return mStart + mLength; }
   };
   TrimmedOffsets GetTrimmedOffsets(const nsTextFragment* aFrag,
                                    bool aTrimAfter);

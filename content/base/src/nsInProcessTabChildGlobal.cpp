@@ -19,6 +19,7 @@
 #include "nsFrameLoader.h"
 #include "xpcpublic.h"
 #include "nsIMozBrowserFrame.h"
+#include "nsDOMClassInfoID.h"
 
 bool SendSyncMessageToParent(void* aCallbackData,
                              const nsAString& aMessage,
@@ -256,7 +257,8 @@ nsInProcessTabChildGlobal::PreHandleEvent(nsEventChainPreVisitor& aVisitor)
 {
   aVisitor.mCanHandle = true;
 
-  if (mIsBrowserFrame) {
+  if (mIsBrowserFrame &&
+      (!mOwner || !nsContentUtils::IsInChromeDocshell(mOwner->OwnerDoc()))) {
     if (mOwner) {
       nsPIDOMWindow* innerWindow = mOwner->OwnerDoc()->GetInnerWindow();
       if (innerWindow) {

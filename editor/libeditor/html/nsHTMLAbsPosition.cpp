@@ -4,32 +4,53 @@
 
 #include <math.h>
 
-#include "nsHTMLEditor.h"
-
-#include "nsIContent.h"
-#include "nsIDocument.h"
-#include "nsIEditor.h"
-#include "nsIPresShell.h"
-
-#include "nsISelection.h"
-
-#include "nsTextEditUtils.h"
-#include "nsEditorUtils.h"
-#include "nsHTMLEditUtils.h"
-#include "nsTextEditRules.h"
-#include "nsHTMLEditRules.h"
-
-#include "nsIDOMHTMLElement.h"
-#include "nsIDOMNodeList.h"
-
-#include "nsIDOMEventTarget.h"
-
-#include "nsIDOMCSSValue.h"
-#include "nsIDOMCSSPrimitiveValue.h"
-#include "nsIDOMRGBColor.h"
-
 #include "mozilla/Preferences.h"
+#include "mozilla/Selection.h"
 #include "mozilla/dom/Element.h"
+#include "mozilla/mozalloc.h"
+#include "nsAString.h"
+#include "nsAlgorithm.h"
+#include "nsAutoPtr.h"
+#include "nsCOMPtr.h"
+#include "nsComputedDOMStyle.h"
+#include "nsDebug.h"
+#include "nsEditProperty.h"
+#include "nsEditRules.h"
+#include "nsEditor.h"
+#include "nsEditorUtils.h"
+#include "nsError.h"
+#include "nsGkAtoms.h"
+#include "nsHTMLCSSUtils.h"
+#include "nsHTMLEditRules.h"
+#include "nsHTMLEditUtils.h"
+#include "nsHTMLEditor.h"
+#include "nsHTMLObjectResizer.h"
+#include "nsIContent.h"
+#include "nsIDOMCSSPrimitiveValue.h"
+#include "nsIDOMCSSStyleDeclaration.h"
+#include "nsIDOMCSSValue.h"
+#include "nsIDOMElement.h"
+#include "nsIDOMEventListener.h"
+#include "nsIDOMEventTarget.h"
+#include "nsIDOMNode.h"
+#include "nsIDOMRGBColor.h"
+#include "nsIDOMWindow.h"
+#include "nsIEditor.h"
+#include "nsIHTMLEditor.h"
+#include "nsIHTMLObjectResizer.h"
+#include "nsINode.h"
+#include "nsIPresShell.h"
+#include "nsISelection.h"
+#include "nsISupportsImpl.h"
+#include "nsISupportsUtils.h"
+#include "nsLiteralString.h"
+#include "nsReadableUtils.h"
+#include "nsString.h"
+#include "nsStringFwd.h"
+#include "nsTextEditRules.h"
+#include "nsTextEditUtils.h"
+#include "nscore.h"
+#include "prtypes.h"
 
 using namespace mozilla;
 
@@ -636,13 +657,9 @@ nsHTMLEditor::CheckPositionedElementBGandFG(nsIDOMElement * aElement,
                                          bgColorStr);
     NS_ENSURE_SUCCESS(res, res);
     if (bgColorStr.EqualsLiteral("transparent")) {
-      nsCOMPtr<nsIDOMWindow> window;
-      res = mHTMLCSSUtils->GetDefaultViewCSS(aElement, getter_AddRefs(window));
-      NS_ENSURE_SUCCESS(res, res);
-
-      nsCOMPtr<nsIDOMCSSStyleDeclaration> cssDecl;
-      res = window->GetComputedStyle(aElement, EmptyString(), getter_AddRefs(cssDecl));
-      NS_ENSURE_SUCCESS(res, res);
+      nsRefPtr<nsComputedDOMStyle> cssDecl =
+        mHTMLCSSUtils->GetComputedStyle(aElement);
+      NS_ENSURE_STATE(cssDecl);
 
       // from these declarations, get the one we want and that one only
       nsCOMPtr<nsIDOMCSSValue> colorCssValue;

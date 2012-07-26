@@ -6,16 +6,23 @@
 #ifdef MOZ_LOGGING
 #define FORCE_PR_LOG /* Allow logging in the release build */
 #endif
+
+#include "mozilla/layers/CompositorParent.h"
+#include "mozilla/layers/ImageBridgeChild.h"
+
 #include "prlog.h"
+#include "prenv.h"
 
 #include "gfxPlatform.h"
+
+#include "nsXULAppAPI.h"
 
 #if defined(XP_WIN)
 #include "gfxWindowsPlatform.h"
 #include "gfxD2DSurface.h"
 #elif defined(XP_MACOSX)
 #include "gfxPlatformMac.h"
-#elif defined(MOZ_WIDGET_GTK2)
+#elif defined(MOZ_WIDGET_GTK)
 #include "gfxPlatformGtk.h"
 #elif defined(MOZ_WIDGET_QT)
 #include "gfxQtPlatform.h"
@@ -52,6 +59,10 @@
 #include "GLContext.h"
 #include "GLContextProvider.h"
 
+#ifdef MOZ_WIDGET_ANDROID
+#include "TexturePoolOGL.h"
+#endif
+
 #include "mozilla/FunctionTimer.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/Assertions.h"
@@ -60,6 +71,7 @@
 #include "nsIGfxInfo.h"
 
 using namespace mozilla;
+using namespace mozilla::layers;
 
 gfxPlatform *gPlatform = nsnull;
 static bool gEverInitialized = false;
@@ -243,6 +255,25 @@ gfxPlatform::Init()
     sCmapDataLog = PR_NewLogModule("cmapdata");;
 #endif
 
+    bool useOffMainThreadCompositing = false;
+#ifdef MOZ_X11
+    // On X11 platforms only use OMTC if firefox was initalized with thread-safe 
+    // X11 (else it would crash).
+    useOffMainThreadCompositing = (PR_GetEnv("MOZ_USE_OMTC") != NULL);
+#else
+    useOffMainThreadCompositing = Preferences::GetBool(
+          "layers.offmainthreadcomposition.enabled", 
+          false);
+#endif
+
+    if (useOffMainThreadCompositing && (XRE_GetProcessType() == 
+                                        GeckoProcessType_Default)) {
+        CompositorParent::StartUp();
+        if (Preferences::GetBool("layers.async-video.enabled",false)) {
+            ImageBridgeChild::StartUp();
+        }
+
+    }
 
     /* Initialize the GfxInfo service.
      * Note: we can't call functions on GfxInfo that depend
@@ -259,7 +290,7 @@ gfxPlatform::Init()
     gPlatform = new gfxWindowsPlatform;
 #elif defined(XP_MACOSX)
     gPlatform = new gfxPlatformMac;
-#elif defined(MOZ_WIDGET_GTK2)
+#elif defined(MOZ_WIDGET_GTK)
     gPlatform = new gfxPlatformGtk;
 #elif defined(MOZ_WIDGET_QT)
     gPlatform = new gfxQtPlatform;
@@ -308,6 +339,11 @@ gfxPlatform::Init()
 
     gPlatform->mWorkAroundDriverBugs = Preferences::GetBool("gfx.work-around-driver-bugs", true);
 
+#ifdef MOZ_WIDGET_ANDROID
+    // Texture pool init
+    mozilla::gl::TexturePoolOGL::Init();
+#endif
+
     // Force registration of the gfx component, thus arranging for
     // ::Shutdown to be called.
     nsCOMPtr<nsISupports> forceReg
@@ -344,6 +380,11 @@ gfxPlatform::Shutdown()
         gPlatform->mFontPrefsObserver = nsnull;
     }
 
+#ifdef MOZ_WIDGET_ANDROID
+    // Shut down the texture pool
+    mozilla::gl::TexturePoolOGL::Shutdown();
+#endif
+
     // Shut down the default GL context provider.
     mozilla::gl::GLContextProvider::Shutdown();
 
@@ -359,6 +400,12 @@ gfxPlatform::Shutdown()
     // WebGL on Optimus.
     mozilla::gl::GLContextProviderEGL::Shutdown();
 #endif
+
+    // This will block this thread untill the ImageBridge protocol is completely
+    // deleted.
+    ImageBridgeChild::ShutDown();
+
+    CompositorParent::ShutDown();
 
     delete gPlatform;
     gPlatform = nsnull;
@@ -385,6 +432,16 @@ gfxPlatform::~gfxPlatform()
     // leaked, and we hit them.
     FcFini();
 #endif
+}
+
+already_AddRefed<gfxASurface>
+gfxPlatform::CreateOffscreenImageSurface(const gfxIntSize& aSize,
+                                         gfxASurface::gfxContentType aContentType)
+{ 
+  nsRefPtr<gfxASurface> newSurface;
+  newSurface = new gfxImageSurface(aSize, OptimalFormatForContent(aContentType));
+
+  return newSurface.forget();
 }
 
 already_AddRefed<gfxASurface>
@@ -1071,6 +1128,22 @@ gfxPlatform::AppendPrefLang(eFontPrefLang aPrefLangs[], PRUint32& aLen, eFontPre
 }
 
 bool
+gfxPlatform::UseProgressiveTilePainting()
+{
+  static bool sUseProgressiveTilePainting;
+  static bool sUseProgressiveTilePaintingPrefCached = false;
+
+  if (!sUseProgressiveTilePaintingPrefCached) {
+    sUseProgressiveTilePaintingPrefCached = true;
+    mozilla::Preferences::AddBoolVarCache(&sUseProgressiveTilePainting,
+                                          "layers.progressive-paint",
+                                          false);
+  }
+
+  return sUseProgressiveTilePainting;
+}
+
+bool
 gfxPlatform::UseAzureContentDrawing()
 {
   static bool sAzureContentDrawingEnabled;
@@ -1078,7 +1151,7 @@ gfxPlatform::UseAzureContentDrawing()
 
   if (!sAzureContentDrawingPrefCached) {
     sAzureContentDrawingPrefCached = true;
-    mozilla::Preferences::AddBoolVarCache(&sAzureContentDrawingEnabled, 
+    mozilla::Preferences::AddBoolVarCache(&sAzureContentDrawingEnabled,
                                           "gfx.content.azure.enabled");
   }
 
@@ -1432,7 +1505,7 @@ gfxPlatform::GetLog(eGfxLog aWhichLog)
 int
 gfxPlatform::GetScreenDepth() const
 {
-    MOZ_ASSERT(false, "Not implemented on this platform");
+    NS_WARNING("GetScreenDepth not implemented on this platform -- returning 0!");
     return 0;
 }
 
@@ -1441,7 +1514,17 @@ gfxPlatform::Optimal2DFormatForContent(gfxASurface::gfxContentType aContent)
 {
   switch (aContent) {
   case gfxASurface::CONTENT_COLOR:
-    return mozilla::gfx::FORMAT_B8G8R8X8;
+    switch (GetOffscreenFormat()) {
+    case gfxASurface::ImageFormatARGB32:
+      return mozilla::gfx::FORMAT_B8G8R8A8;
+    case gfxASurface::ImageFormatRGB24:
+      return mozilla::gfx::FORMAT_B8G8R8X8;
+    case gfxASurface::ImageFormatRGB16_565:
+      return mozilla::gfx::FORMAT_R5G6B5;
+    default:
+      NS_NOTREACHED("unknown gfxImageFormat for CONTENT_COLOR");
+      return mozilla::gfx::FORMAT_B8G8R8A8;
+    }
   case gfxASurface::CONTENT_ALPHA:
     return mozilla::gfx::FORMAT_A8;
   case gfxASurface::CONTENT_COLOR_ALPHA:

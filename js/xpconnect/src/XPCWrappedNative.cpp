@@ -44,7 +44,7 @@ xpc_OkToHandOutWrapper(nsWrapperCache *cache)
 NS_IMPL_CYCLE_COLLECTION_CLASS(XPCWrappedNative)
 
 NS_IMETHODIMP
-NS_CYCLE_COLLECTION_CLASSNAME(XPCWrappedNative)::Unlink(void *p)
+NS_CYCLE_COLLECTION_CLASSNAME(XPCWrappedNative)::UnlinkImpl(void *p)
 {
     XPCWrappedNative *tmp = static_cast<XPCWrappedNative*>(p);
     tmp->ExpireWrapper();
@@ -52,8 +52,9 @@ NS_CYCLE_COLLECTION_CLASSNAME(XPCWrappedNative)::Unlink(void *p)
 }
 
 NS_IMETHODIMP
-NS_CYCLE_COLLECTION_CLASSNAME(XPCWrappedNative)::Traverse(void *p,
-                                                          nsCycleCollectionTraversalCallback &cb)
+NS_CYCLE_COLLECTION_CLASSNAME(XPCWrappedNative)::TraverseImpl
+   (NS_CYCLE_COLLECTION_CLASSNAME(XPCWrappedNative) *that, void *p,
+    nsCycleCollectionTraversalCallback &cb)
 {
     XPCWrappedNative *tmp = static_cast<XPCWrappedNative*>(p);
     if (!tmp->IsValid())
@@ -461,7 +462,6 @@ XPCWrappedNative::GetNewOrUsed(XPCCallContext& ccx,
                 NS_ASSERTION(NS_FAILED(rv), "returning NS_OK on failure");
                 return rv;
             }
-            DEBUG_CheckWrapperThreadSafety(wrapper);
             *resultWrapper = wrapper.forget().get();
             return NS_OK;
         }
@@ -487,8 +487,14 @@ XPCWrappedNative::GetNewOrUsed(XPCCallContext& ccx,
     // If we are making a wrapper for the nsIClassInfo interface then
     // We *don't* want to have it use the prototype meant for instances
     // of that class.
-    JSBool isClassInfo = Interface &&
-                         Interface->GetIID()->Equals(NS_GET_IID(nsIClassInfo));
+    bool iidIsClassInfo = Interface &&
+                          Interface->GetIID()->Equals(NS_GET_IID(nsIClassInfo));
+    PRUint32 classInfoFlags;
+    bool isClassInfoSingleton = helper.GetClassInfo() == helper.Object() &&
+                                NS_SUCCEEDED(helper.GetClassInfo()
+                                                   ->GetFlags(&classInfoFlags)) &&
+                                (classInfoFlags & nsIClassInfo::SINGLETON_CLASSINFO);
+    bool isClassInfo = iidIsClassInfo || isClassInfoSingleton;
 
     nsIClassInfo *info = helper.GetClassInfo();
 
@@ -568,7 +574,6 @@ XPCWrappedNative::GetNewOrUsed(XPCCallContext& ccx,
                 NS_ASSERTION(NS_FAILED(rv), "returning NS_OK on failure");
                 return rv;
             }
-            DEBUG_CheckWrapperThreadSafety(wrapper);
             *resultWrapper = wrapper.forget().get();
             return NS_OK;
         }
@@ -872,9 +877,6 @@ XPCWrappedNative::XPCWrappedNative(already_AddRefed<nsISupports> aIdentity,
       mFlatJSObject(INVALID_OBJECT), // non-null to pass IsValid() test
       mScriptableInfo(nsnull),
       mWrapperWord(0)
-#ifdef XPC_CHECK_WRAPPER_THREADSAFETY
-    , mThread(PR_GetCurrentThread())
-#endif
 {
     mIdentity = aIdentity.get();
 
@@ -894,9 +896,6 @@ XPCWrappedNative::XPCWrappedNative(already_AddRefed<nsISupports> aIdentity,
       mFlatJSObject(INVALID_OBJECT), // non-null to pass IsValid() test
       mScriptableInfo(nsnull),
       mWrapperWord(0)
-#ifdef XPC_CHECK_WRAPPER_THREADSAFETY
-    , mThread(PR_GetCurrentThread())
-#endif
 {
     mIdentity = aIdentity.get();
 
@@ -1207,16 +1206,6 @@ XPCWrappedNative::FinishInit(XPCCallContext &ccx)
         return false;
     }
 
-#ifdef XPC_CHECK_WRAPPER_THREADSAFETY
-    NS_ASSERTION(mThread, "Should have been set at construction time!");
-
-    if (HasProto() && GetProto()->ClassIsMainThreadOnly() && !NS_IsMainThread()) {
-        DEBUG_ReportWrapperThreadSafetyError(ccx,
-                                             "MainThread only wrapper created on the wrong thread", this);
-        return false;
-    }
-#endif
-
     // A hack for bug 517665, increase the probability for GC.
     JS_updateMallocCounter(ccx.GetJSContext(), 2 * sizeof(XPCWrappedNative));
 
@@ -1512,10 +1501,9 @@ XPCWrappedNative::ReparentWrapperIfFound(XPCCallContext& ccx,
     // ReparentWrapperIfFound is really only meant to be called from DOM code
     // which must happen only on the main thread. Bail if we're on some other
     // thread or have a non-main-thread-only wrapper.
-    if (!XPCPerThreadData::IsMainThread(ccx) ||
-        (wrapper &&
-         wrapper->GetProto() &&
-         !wrapper->GetProto()->ClassIsMainThreadOnly())) {
+    if (wrapper &&
+        wrapper->GetProto() &&
+        !wrapper->GetProto()->ClassIsMainThreadOnly()) {
         return NS_ERROR_FAILURE;
     }
 
@@ -1643,15 +1631,15 @@ XPCWrappedNative::ReparentWrapperIfFound(XPCCallContext& ccx,
                 }
 
                 // Ok, now we do the special object-plus-wrapper transplant.
-                ww = js_TransplantObjectWithWrapper(ccx, flat, ww, newobj,
-                                                    newwrapper);
+                ww = xpc::TransplantObjectWithWrapper(ccx, flat, ww, newobj,
+                                                      newwrapper);
                 if (!ww)
                     return NS_ERROR_FAILURE;
 
                 flat = newobj;
                 wrapper->SetWrapper(ww);
             } else {
-                flat = JS_TransplantObject(ccx, flat, newobj);
+                flat = xpc::TransplantObject(ccx, flat, newobj);
                 if (!flat)
                     return NS_ERROR_FAILURE;
             }
@@ -1670,6 +1658,11 @@ XPCWrappedNative::ReparentWrapperIfFound(XPCCallContext& ccx,
                 return NS_ERROR_FAILURE;
             }
         }
+
+        // Call the scriptable hook to indicate that we transplanted.
+        XPCNativeScriptableInfo* si = wrapper->GetScriptableInfo();
+        if (si->GetFlags().WantPostCreate())
+            (void) si->GetCallback()->PostTransplant(wrapper, ccx, flat);
     }
 
     // Now we can just fix up the parent and return the wrapper
@@ -2394,7 +2387,7 @@ CallMethodHelper::Call()
 {
     mCallContext.SetRetVal(JSVAL_VOID);
 
-    mCallContext.GetThreadData()->SetException(nsnull);
+    XPCJSRuntime::Get()->SetPendingException(nsnull);
     mCallContext.GetXPCContext()->SetLastResult(NS_ERROR_UNEXPECTED);
 
     if (mVTableIndex == 0) {
@@ -2673,12 +2666,7 @@ CallMethodHelper::QueryInterfaceFastPath() const
 
     nsresult invokeResult;
     nsISupports* qiresult = nsnull;
-    if (XPCPerThreadData::IsMainThread(mCallContext)) {
-        invokeResult = mCallee->QueryInterface(*iid, (void**) &qiresult);
-    } else {
-        JSAutoSuspendRequest suspended(mCallContext);
-        invokeResult = mCallee->QueryInterface(*iid, (void**) &qiresult);
-    }
+    invokeResult = mCallee->QueryInterface(*iid, (void**) &qiresult);
 
     mCallContext.GetXPCContext()->SetLastResult(invokeResult);
 
@@ -3091,10 +3079,6 @@ CallMethodHelper::Invoke()
     PRUint32 argc = mDispatchParams.Length();
     nsXPTCVariant* argv = mDispatchParams.Elements();
 
-    if (XPCPerThreadData::IsMainThread(mCallContext))
-        return NS_InvokeByIndex(mCallee, mVTableIndex, argc, argv);
-
-    JSAutoSuspendRequest suspended(mCallContext);
     return NS_InvokeByIndex(mCallee, mVTableIndex, argc, argv);
 }
 
@@ -3681,56 +3665,6 @@ void DEBUG_ReportShadowedMembers(XPCNativeSet* set,
                 }
             }
         }
-    }
-}
-#endif
-
-#ifdef XPC_CHECK_WRAPPER_THREADSAFETY
-void DEBUG_ReportWrapperThreadSafetyError(XPCCallContext& ccx,
-                                          const char* msg,
-                                          const XPCWrappedNative* wrapper)
-{
-    XPCPerThreadData* tls = ccx.GetThreadData();
-    if (1 != tls->IncrementWrappedNativeThreadsafetyReportDepth())
-        return;
-
-    printf("---------------------------------------------------------------\n");
-    printf("!!!!! XPConnect wrapper thread use error...\n");
-
-    char* wrapperDump = wrapper->ToString(ccx);
-    if (wrapperDump) {
-        printf("  %s\n  wrapper: %s\n", msg, wrapperDump);
-        JS_smprintf_free(wrapperDump);
-    } else
-        printf("  %s\n  wrapper @ 0x%p\n", msg, (void *)wrapper);
-
-    printf("  JS call stack...\n");
-    xpc_DumpJSStack(ccx, true, true, true);
-    printf("---------------------------------------------------------------\n");
-
-    tls->ClearWrappedNativeThreadsafetyReportDepth();
-}
-
-void DEBUG_CheckWrapperThreadSafety(const XPCWrappedNative* wrapper)
-{
-    XPCWrappedNativeProto* proto = wrapper->GetProto();
-    if (proto && proto->ClassIsThreadSafe())
-        return;
-
-    if (proto && proto->ClassIsMainThreadOnly()) {
-        // NS_IsMainThread is safe to call even after we've started shutting
-        // down.
-        if (!NS_IsMainThread()) {
-            XPCCallContext ccx(NATIVE_CALLER);
-            DEBUG_ReportWrapperThreadSafetyError(ccx,
-                                                 "Main Thread Only wrapper accessed on another thread", wrapper);
-        }
-    } else if (PR_GetCurrentThread() != wrapper->mThread) {
-        XPCCallContext ccx(NATIVE_CALLER);
-        DEBUG_ReportWrapperThreadSafetyError(ccx,
-                                             "XPConnect WrappedNative is being accessed on multiple threads but "
-                                             "the underlying native xpcom object does not have a "
-                                             "nsIClassInfo with the 'THREADSAFE' flag set", wrapper);
     }
 }
 #endif

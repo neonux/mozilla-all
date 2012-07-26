@@ -130,8 +130,13 @@ nsresult nsGStreamerReader::Init(nsBuiltinDecoderReader* aCloneDonor)
   gst_object_unref(sinkpad);
 
   mAudioSink = gst_parse_bin_from_description("capsfilter name=filter ! "
+#ifdef MOZ_SAMPLE_TYPE_FLOAT32
         "appsink name=audiosink sync=true caps=audio/x-raw-float,"
         "channels={1,2},rate=44100,width=32,endianness=1234", TRUE, NULL);
+#else
+        "appsink name=audiosink sync=true caps=audio/x-raw-int,"
+        "channels={1,2},rate=48000,width=16,endianness=1234", TRUE, NULL);
+#endif
   mAudioAppSink = GST_APP_SINK(gst_bin_get_by_name(GST_BIN(mAudioSink),
         "audiosink"));
   gst_app_sink_set_callbacks(mAudioAppSink, &mSinkCallbacks,
@@ -191,7 +196,7 @@ nsresult nsGStreamerReader::ReadMetadata(nsVideoInfo* aInfo)
    * stream but that are otherwise decodeable.
    */
   guint flags[3] = {GST_PLAY_FLAG_VIDEO|GST_PLAY_FLAG_AUDIO,
-    ~GST_PLAY_FLAG_AUDIO, ~GST_PLAY_FLAG_VIDEO};
+    static_cast<guint>(~GST_PLAY_FLAG_AUDIO), static_cast<guint>(~GST_PLAY_FLAG_VIDEO)};
   guint default_flags, current_flags;
   g_object_get(mPlayBin, "flags", &default_flags, NULL);
 

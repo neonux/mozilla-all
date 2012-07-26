@@ -21,6 +21,9 @@ https://bugzilla.mozilla.org/show_bug.cgi?id={678695}
 
 "use strict";
 
+var comp = SpecialPowers.wrap(Components);
+comp.utils.import("resource://gre/modules/SettingsChangeNotifier.jsm");
+SpecialPowers.setBoolPref("dom.mozSettings.enabled", true);
 SpecialPowers.addPermission("websettings-read", true, document);
 SpecialPowers.addPermission("websettings-readwrite", true, document);
 
@@ -99,6 +102,16 @@ var steps = [
       next();
     }
     req2.onerror = onFailure;
+  },
+  function() {
+    ok(true, "Get unknown key");
+    var lock = mozSettings.getLock();
+    req = lock.get("abc.def");
+    req.onsuccess = function() {
+      is(req.result["abc.def"], undefined, "no result");
+      next();
+    };
+    req.onerror = onFailure;
   },
   function() {
     ok(true, "adding onsettingchange");

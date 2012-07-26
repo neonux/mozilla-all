@@ -3,17 +3,27 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include <stdio.h>
+
 #include "CreateElementTxn.h"
-#include "nsEditor.h"
-#include "nsIDOMDocument.h"
-#include "nsIDOMNodeList.h"
-#include "nsISelection.h"
-#include "nsIDOMElement.h"
-#include "nsReadableUtils.h"
-
 #include "mozilla/dom/Element.h"
+#include "nsAlgorithm.h"
+#include "nsDebug.h"
+#include "nsEditor.h"
+#include "nsError.h"
+#include "nsIContent.h"
+#include "nsIDOMCharacterData.h"
+#include "nsIEditor.h"
+#include "nsINode.h"
+#include "nsISelection.h"
+#include "nsISupportsUtils.h"
+#include "nsMemory.h"
+#include "nsReadableUtils.h"
+#include "nsStringFwd.h"
+#include "nsString.h"
+#include "nsAString.h"
 
-#ifdef NS_DEBUG
+#ifdef DEBUG
 static bool gNoisy = false;
 #endif
 
@@ -60,7 +70,7 @@ NS_IMETHODIMP CreateElementTxn::Init(nsEditor      *aEditor,
 
 NS_IMETHODIMP CreateElementTxn::DoTransaction(void)
 {
-#ifdef NS_DEBUG
+#ifdef DEBUG
   if (gNoisy)
   {
     char* nodename = ToNewCString(mTag);
@@ -84,7 +94,7 @@ NS_IMETHODIMP CreateElementTxn::DoTransaction(void)
   // Try to insert formatting whitespace for the new node:
   mEditor->MarkNodeDirty(mNewNode);
 
-#ifdef NS_DEBUG
+#ifdef DEBUG
   if (gNoisy)
   {
     printf("  newNode = %p\n", static_cast<void*>(mNewNode.get()));
@@ -134,7 +144,7 @@ NS_IMETHODIMP CreateElementTxn::DoTransaction(void)
 
 NS_IMETHODIMP CreateElementTxn::UndoTransaction(void)
 {
-#ifdef NS_DEBUG
+#ifdef DEBUG
   if (gNoisy)
   {
     printf("Undo Create Element, mParent = %p, node = %p\n",
@@ -152,7 +162,7 @@ NS_IMETHODIMP CreateElementTxn::UndoTransaction(void)
 
 NS_IMETHODIMP CreateElementTxn::RedoTransaction(void)
 {
-#ifdef NS_DEBUG
+#ifdef DEBUG
   if (gNoisy) { printf("Redo Create Element\n"); }
 #endif
 

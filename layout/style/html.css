@@ -59,7 +59,6 @@ html, html[dir],
 legend, legend[dir],
 li, li[dir],
 listing, listing[dir],
-map, map[dir],
 marquee, marquee[dir],
 menu, menu[dir],
 nav, nav[dir],
@@ -105,7 +104,6 @@ form,
 header,
 hgroup,
 html,
-map,
 nav,
 section {
   display: block;
@@ -393,7 +391,6 @@ table[rules][rules="groups"] > tbody {
 caption {
   display: table-caption;
   text-align: center;
-  -moz-box-sizing: border-box;
 }
 
 table[align="center"] > caption {
@@ -702,13 +699,14 @@ iframe:-moz-full-screen {
 }
 
 /* media elements */
-:-moz-any(video, audio) > xul|videocontrols {
+video > xul|videocontrols, audio > xul|videocontrols {
   display: -moz-box;
   -moz-box-orient: vertical;
   -moz-binding: url("chrome://global/content/bindings/videocontrols.xml#videoControls");
 }
 
-:-moz-any(video, audio):not([controls]):not(:-moz-full-screen) > xul|videocontrols {
+video:not([controls]) > xul|videocontrols,
+audio:not([controls]) > xul|videocontrols {
   visibility: hidden;
 }
 

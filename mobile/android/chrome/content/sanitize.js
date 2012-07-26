@@ -79,17 +79,7 @@ Sanitizer.prototype = {
       clear: function ()
       {
         Services.cookies.removeAll();
-      },
 
-      get canClear()
-      {
-        return true;
-      }
-    },
-
-    geolocation: {
-      clear: function ()
-      {
         // clear any network geolocation provider sessions
         try {
           var branch = Services.prefs.getBranch("geo.wifi.access_token.");
@@ -147,6 +137,8 @@ Sanitizer.prototype = {
     history: {
       clear: function ()
       {
+        sendMessageToJava({ gecko: { type: "Sanitize:ClearHistory" } });
+
         try {
           Services.obs.notifyObservers(null, "browser:purge-session-history", "");
         }

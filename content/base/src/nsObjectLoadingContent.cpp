@@ -41,6 +41,7 @@
 #include "nsPluginError.h"
 
 // Util headers
+#include "prenv.h"
 #include "prlog.h"
 
 #include "nsAutoPtr.h"
@@ -79,20 +80,6 @@ static PRLogModuleInfo* gObjectLog = PR_NewLogModule("objlc");
 
 #define LOG(args) PR_LOG(gObjectLog, PR_LOG_DEBUG, args)
 #define LOG_ENABLED() PR_LOG_TEST(gObjectLog, PR_LOG_DEBUG)
-
-#include "mozilla/Preferences.h"
-
-static bool gClickToPlayPlugins = false;
-
-static void
-InitPrefCache()
-{
-  static bool initializedPrefCache = false;
-  if (!initializedPrefCache) {
-    mozilla::Preferences::AddBoolVarCache(&gClickToPlayPlugins, "plugins.click_to_play");
-  }
-  initializedPrefCache = true;
-}
 
 class nsAsyncInstantiateEvent : public nsRunnable {
 public:
@@ -180,6 +167,12 @@ nsPluginErrorEvent::Run()
   switch (mState) {
     case ePluginClickToPlay:
       type = NS_LITERAL_STRING("PluginClickToPlay");
+      break;
+    case ePluginVulnerableUpdatable:
+      type = NS_LITERAL_STRING("PluginVulnerableUpdatable");
+      break;
+    case ePluginVulnerableNoUpdate:
+      type = NS_LITERAL_STRING("PluginVulnerableNoUpdate");
       break;
     case ePluginUnsupported:
       type = NS_LITERAL_STRING("PluginNotFound");
@@ -484,7 +477,11 @@ nsresult nsObjectLoadingContent::IsPluginEnabledForType(const nsCString& aMIMETy
     return rv;
   }
 
-  if (!mShouldPlay) {
+  if (!pluginHost->IsPluginClickToPlayForType(aMIMEType.get())) {
+    mCTPPlayable = true;
+  }
+
+  if (!mCTPPlayable) {
     nsCOMPtr<nsIContent> thisContent = do_QueryInterface(static_cast<nsIObjectLoadingContent*>(this));
     MOZ_ASSERT(thisContent);
     nsIDocument* ownerDoc = thisContent->OwnerDoc();
@@ -500,17 +497,32 @@ nsresult nsObjectLoadingContent::IsPluginEnabledForType(const nsCString& aMIMETy
     rv = topWindow->GetDocument(getter_AddRefs(topDocument));
     NS_ENSURE_SUCCESS(rv, rv);
     nsCOMPtr<nsIDocument> topDoc = do_QueryInterface(topDocument);
-    nsIURI* topUri = topDoc->GetDocumentURI();
 
     nsCOMPtr<nsIPermissionManager> permissionManager = do_GetService(NS_PERMISSIONMANAGER_CONTRACTID, &rv);
     NS_ENSURE_SUCCESS(rv, rv);
-    PRUint32 permission;
-    rv = permissionManager->TestPermission(topUri,
-                                           "plugins",
-                                           &permission);
+    bool allowPerm = false;
+    // For now we always say that the system principal uses click-to-play since
+    // that maintains current behavior and we have tests that expect this.
+    // What we really should do is disable plugins entirely in pages that use
+    // the system principal, i.e. in chrome pages. That way the click-to-play
+    // code here wouldn't matter at all. Bug 775301 is tracking this.
+    if (!nsContentUtils::IsSystemPrincipal(topDoc->NodePrincipal())) {
+      PRUint32 permission;
+      rv = permissionManager->TestPermissionFromPrincipal(topDoc->NodePrincipal(),
+                                                          "plugins",
+                                                          &permission);
+      NS_ENSURE_SUCCESS(rv, rv);
+      allowPerm = permission == nsIPermissionManager::ALLOW_ACTION;
+    }
+
+    PRUint32 state;
+    rv = pluginHost->GetBlocklistStateForType(aMIMEType.get(), &state);
     NS_ENSURE_SUCCESS(rv, rv);
-    if (permission == nsIPermissionManager::ALLOW_ACTION) {
-      mShouldPlay = true;
+
+    if (allowPerm &&
+        state != nsIBlocklistService::STATE_VULNERABLE_UPDATE_AVAILABLE &&
+        state != nsIBlocklistService::STATE_VULNERABLE_NO_UPDATE) {
+      mCTPPlayable = true;
     } else {
       return NS_ERROR_PLUGIN_CLICKTOPLAY;
     }
@@ -542,12 +554,9 @@ GetExtensionFromURI(nsIURI* uri, nsCString& ext)
  */
 bool nsObjectLoadingContent::IsPluginEnabledByExtension(nsIURI* uri, nsCString& mimeType)
 {
-  if (!mShouldPlay) {
-    return false;
-  }
-
   nsCAutoString ext;
   GetExtensionFromURI(uri, ext);
+  bool enabled = false;
 
   if (ext.IsEmpty()) {
     return false;
@@ -562,9 +571,18 @@ bool nsObjectLoadingContent::IsPluginEnabledByExtension(nsIURI* uri, nsCString& 
   const char* typeFromExt;
   if (NS_SUCCEEDED(pluginHost->IsPluginEnabledForExtension(ext.get(), typeFromExt))) {
     mimeType = typeFromExt;
-    return true;
+    enabled = true;
+
+    if (!pluginHost->IsPluginClickToPlayForType(mimeType.get())) {
+      mCTPPlayable = true;
+    }
   }
-  return false;
+
+  if (!mCTPPlayable) {
+    return false;
+  } else {
+    return enabled;
+  }
 }
 
 nsresult
@@ -598,13 +616,8 @@ nsObjectLoadingContent::nsObjectLoadingContent()
   , mIsStopping(false)
   , mSrcStreamLoading(false)
   , mFallbackReason(ePluginOtherState)
-{
-  InitPrefCache();
-  // If plugins.click_to_play is false, plugins should always play
-  mShouldPlay = !gClickToPlayPlugins;
-  // If plugins.click_to_play is true, track the activated state of plugins.
-  mActivated = !gClickToPlayPlugins;
-}
+  , mCTPPlayable(false)
+  , mActivated(false) {}
 
 nsObjectLoadingContent::~nsObjectLoadingContent()
 {
@@ -617,10 +630,6 @@ nsObjectLoadingContent::~nsObjectLoadingContent()
 nsresult
 nsObjectLoadingContent::InstantiatePluginInstance(const char* aMimeType, nsIURI* aURI)
 {
-  if (!mShouldPlay) {
-    return NS_ERROR_PLUGIN_CLICKTOPLAY;
-  }
-
   // Don't do anything if we already have an active instance.
   if (mInstanceOwner) {
     return NS_OK;
@@ -643,7 +652,7 @@ nsObjectLoadingContent::InstantiatePluginInstance(const char* aMimeType, nsIURI*
   if (!aURI) {
     // We need some URI. If we have nothing else, use the base URI.
     // XXX(biesi): The code used to do this. Not sure why this is correct...
-    GetObjectBaseURI(nsCString(aMimeType), getter_AddRefs(baseURI));
+    GetObjectBaseURI(thisContent, getter_AddRefs(baseURI));
     aURI = baseURI;
   }
 
@@ -663,6 +672,14 @@ nsObjectLoadingContent::InstantiatePluginInstance(const char* aMimeType, nsIURI*
   nsPluginHost* pluginHost = static_cast<nsPluginHost*>(pluginHostCOM.get());
   if (NS_FAILED(rv)) {
     return rv;
+  }
+
+  if (!pluginHost->IsPluginClickToPlayForType(aMimeType)) {
+    mCTPPlayable = true;
+  }
+
+  if (!mCTPPlayable) {
+    return NS_ERROR_PLUGIN_CLICKTOPLAY;
   }
 
   // If you add early return(s), be sure to balance this call to
@@ -1191,6 +1208,10 @@ nsObjectLoadingContent::ObjectState() const
       switch (mFallbackReason) {
         case ePluginClickToPlay:
           return NS_EVENT_STATE_TYPE_CLICK_TO_PLAY;
+        case ePluginVulnerableUpdatable:
+          return NS_EVENT_STATE_VULNERABLE_UPDATABLE;
+        case ePluginVulnerableNoUpdate:
+          return NS_EVENT_STATE_VULNERABLE_NO_UPDATE;
         case ePluginDisabled:
           state |= NS_EVENT_STATE_HANDLER_DISABLED;
           break;
@@ -1200,9 +1221,16 @@ nsObjectLoadingContent::ObjectState() const
         case ePluginCrashed:
           state |= NS_EVENT_STATE_HANDLER_CRASHED;
           break;
-        case ePluginUnsupported:
-          state |= NS_EVENT_STATE_TYPE_UNSUPPORTED;
+        case ePluginUnsupported: {
+          // Check to see if plugins are blocked on this platform.
+          char* pluginsBlocked = PR_GetEnv("MOZ_PLUGINS_BLOCKED");
+          if (pluginsBlocked && pluginsBlocked[0] == '1') {
+            state |= NS_EVENT_STATE_TYPE_UNSUPPORTED_PLATFORM;
+          } else {
+            state |= NS_EVENT_STATE_TYPE_UNSUPPORTED;
+          }
           break;
+        }
         case ePluginOutdated:
         case ePluginOtherState:
           // Do nothing, but avoid a compile warning
@@ -1232,7 +1260,7 @@ nsObjectLoadingContent::LoadObject(const nsAString& aURI,
 
   nsIDocument* doc = thisContent->OwnerDoc();
   nsCOMPtr<nsIURI> baseURI;
-  GetObjectBaseURI(aTypeHint, getter_AddRefs(baseURI));
+  GetObjectBaseURI(thisContent, getter_AddRefs(baseURI));
 
   nsCOMPtr<nsIURI> uri;
   nsContentUtils::NewURIWithDocumentCharset(getter_AddRefs(uri),
@@ -1261,51 +1289,6 @@ nsObjectLoadingContent::UpdateFallbackState(nsIContent* aContent,
     fallback.SetPluginState(state);
     FirePluginError(aContent, state);
   }
-}
-
-bool
-nsObjectLoadingContent::IsFileCodebaseAllowable(nsIURI* aBaseURI, nsIURI* aOriginURI)
-{
-  nsCOMPtr<nsIFileURL> baseFileURL(do_QueryInterface(aBaseURI));
-  nsCOMPtr<nsIFileURL> originFileURL(do_QueryInterface(aOriginURI));
-
-  // get IFile handles and normalize
-  nsCOMPtr<nsIFile> originFile;
-  nsCOMPtr<nsIFile> baseFile;
-  if (!originFileURL || !baseFileURL ||
-      NS_FAILED(originFileURL->GetFile(getter_AddRefs(originFile))) ||
-      NS_FAILED(baseFileURL->GetFile(getter_AddRefs(baseFile))) ||
-      NS_FAILED(baseFile->Normalize()) ||
-      NS_FAILED(originFile->Normalize())) {
-    return false;
-  }
-
-  // If the origin is a directory, it should contain/equal baseURI
-  // Otherwise, its parent directory should contain/equal baseURI
-  bool origin_is_dir;
-  bool contained = false;
-  nsresult rv = originFile->IsDirectory(&origin_is_dir);
-  NS_ENSURE_SUCCESS(rv, false);
-
-  if (origin_is_dir) {
-    // originURI is a directory, ensure it contains the baseURI
-    rv = originFile->Contains(baseFile, true, &contained);
-    if (NS_SUCCEEDED(rv) && !contained) {
-      rv = originFile->Equals(baseFile, &contained);
-    }
-  } else {
-    // originURI is a file, ensure its parent contains the baseURI
-    nsCOMPtr<nsIFile> originParent;
-    rv = originFile->GetParent(getter_AddRefs(originParent));
-    if (NS_SUCCEEDED(rv) && originParent) {
-      rv = originParent->Contains(baseFile, true, &contained);
-      if (NS_SUCCEEDED(rv) && !contained) {
-        rv = originParent->Equals(baseFile, &contained);
-      }
-    }
-  }
-
-  return NS_SUCCEEDED(rv) && contained;
 }
 
 nsresult
@@ -1405,28 +1388,6 @@ nsObjectLoadingContent::LoadObject(nsIURI* aURI,
     if (NS_FAILED(rv) || NS_CP_REJECTED(shouldLoad)) {
       HandleBeingBlockedByContentPolicy(rv, shouldLoad);
       return NS_OK;
-    }
-
-    // If this is a file:// URI, require that the codebase (baseURI)
-    // is contained within the same folder as the document origin (originURI)
-    // or within the document origin, if it is a folder.
-    // No originURI implies chrome, which bypasses the check
-    // -- bug 406541
-    nsCOMPtr<nsIURI> originURI;
-    nsCOMPtr<nsIURI> baseURI;
-    GetObjectBaseURI(aTypeHint, getter_AddRefs(baseURI));
-    rv = thisContent->NodePrincipal()->GetURI(getter_AddRefs(originURI));
-    if (NS_FAILED(rv)) {
-      Fallback(aNotify);
-      return NS_OK;
-    }
-    if (originURI) {
-      bool isfile;
-      if (NS_FAILED(originURI->SchemeIs("file", &isfile)) ||
-          (isfile && !IsFileCodebaseAllowable(baseURI, originURI))) {
-        Fallback(aNotify);
-        return NS_OK;
-      }
     }
   }
 
@@ -1545,7 +1506,7 @@ nsObjectLoadingContent::LoadObject(nsIURI* aURI,
       // XXX(biesi). The plugin instantiation code used to pass the base URI
       // here instead of the plugin URI for instantiation via class ID, so I
       // continue to do so. Why that is, no idea...
-      GetObjectBaseURI(mContentType, getter_AddRefs(mURI));
+      GetObjectBaseURI(thisContent, getter_AddRefs(mURI));
       if (!mURI) {
         mURI = aURI;
       }
@@ -1922,38 +1883,25 @@ nsObjectLoadingContent::TypeForClassID(const nsAString& aClassID,
   return NS_ERROR_NOT_AVAILABLE;
 }
 
-NS_IMETHODIMP
-nsObjectLoadingContent::GetObjectBaseURI(const nsACString & aMimeType, nsIURI** aURI)
+void
+nsObjectLoadingContent::GetObjectBaseURI(nsIContent* thisContent, nsIURI** aURI)
 {
-  nsCOMPtr<nsIContent> thisContent =
-    do_QueryInterface(static_cast<nsIImageLoadingContent*>(this));
+  // We want to use swap(); since this is just called from this file,
+  // we can assert this (callers use comptrs)
+  NS_PRECONDITION(*aURI == nsnull, "URI must be inited to zero");
 
   // For plugins, the codebase attribute is the base URI
   nsCOMPtr<nsIURI> baseURI = thisContent->GetBaseURI();
   nsAutoString codebase;
   thisContent->GetAttr(kNameSpaceID_None, nsGkAtoms::codebase,
                        codebase);
-
-  if (codebase.IsEmpty() && aMimeType.Equals("application/x-java-vm")) {
-    // bug 406541
-    // Java resolves codebase="" as "/" -- so we replicate that quirk, to ensure
-    // we run security checks against the same path.
-    codebase.AssignLiteral("/");
-  }
-
   if (!codebase.IsEmpty()) {
-    nsresult rv = nsContentUtils::NewURIWithDocumentCharset(aURI, codebase,
-                                                            thisContent->OwnerDoc(),
-                                                            baseURI);
-    if (NS_SUCCEEDED(rv))
-      return rv;
-    NS_WARNING("GetObjectBaseURI: Could not resolve plugin's codebase to a URI, using baseURI instead");
+    nsContentUtils::NewURIWithDocumentCharset(aURI, codebase,
+                                              thisContent->OwnerDoc(),
+                                              baseURI);
+  } else {
+    baseURI.swap(*aURI);
   }
-
-  // Codebase empty or build URI failed, just use baseURI
-  *aURI = NULL;
-  baseURI.swap(*aURI);
-  return NS_OK;
 }
 
 nsObjectFrame*
@@ -2013,8 +1961,10 @@ nsObjectLoadingContent::GetPluginSupportState(nsIContent* aContent,
   }
 
   PluginSupportState pluginDisabledState = GetPluginDisabledState(aContentType);
-  if (pluginDisabledState == ePluginClickToPlay) {
-    return ePluginClickToPlay;
+  if (pluginDisabledState == ePluginClickToPlay ||
+      pluginDisabledState == ePluginVulnerableUpdatable ||
+      pluginDisabledState == ePluginVulnerableNoUpdate) {
+    return pluginDisabledState;
   } else if (hasAlternateContent) {
     return ePluginOtherState;
   } else {
@@ -2026,12 +1976,28 @@ PluginSupportState
 nsObjectLoadingContent::GetPluginDisabledState(const nsCString& aContentType)
 {
   nsresult rv = IsPluginEnabledForType(aContentType);
-  if (rv == NS_ERROR_PLUGIN_DISABLED)
+  if (rv == NS_ERROR_PLUGIN_DISABLED) {
     return ePluginDisabled;
-  if (rv == NS_ERROR_PLUGIN_CLICKTOPLAY)
+  }
+  if (rv == NS_ERROR_PLUGIN_CLICKTOPLAY) {
+    PRUint32 state;
+    nsCOMPtr<nsIPluginHost> pluginHostCOM(do_GetService(MOZ_PLUGIN_HOST_CONTRACTID));
+    nsPluginHost *pluginHost = static_cast<nsPluginHost*>(pluginHostCOM.get());
+    if (pluginHost) {
+      rv = pluginHost->GetBlocklistStateForType(aContentType.get(), &state);
+      if (NS_SUCCEEDED(rv)) {
+        if (state == nsIBlocklistService::STATE_VULNERABLE_UPDATE_AVAILABLE) {
+          return ePluginVulnerableUpdatable;
+        } else if (state == nsIBlocklistService::STATE_VULNERABLE_NO_UPDATE) {
+          return ePluginVulnerableNoUpdate;
+        }
+      }
+    }
     return ePluginClickToPlay;
-  if (rv == NS_ERROR_PLUGIN_BLOCKLISTED)
+  }
+  if (rv == NS_ERROR_PLUGIN_BLOCKLISTED) {
     return ePluginBlocklisted;
+  }
   return ePluginUnsupported;
 }
 
@@ -2293,7 +2259,7 @@ nsObjectLoadingContent::PlayPlugin()
   if (!nsContentUtils::IsCallerChrome())
     return NS_OK;
 
-  mShouldPlay = true;
+  mCTPPlayable = true;
   return LoadObject(mURI, true, mContentType, true);
 }
 

@@ -6,6 +6,7 @@
 // Keep in (case-insensitive) order:
 #include "gfxMatrix.h"
 #include "nsSVGAElement.h"
+#include "nsSVGIntegrationUtils.h"
 #include "nsSVGTSpanFrame.h"
 #include "nsSVGUtils.h"
 #include "SVGLengthList.h"
@@ -58,7 +59,7 @@ public:
   virtual void NotifySVGChanged(PRUint32 aFlags);
   
   // nsSVGContainerFrame methods:
-  virtual gfxMatrix GetCanvasTM();
+  virtual gfxMatrix GetCanvasTM(PRUint32 aFor);
 
   // nsSVGTextContainerFrame methods:
   virtual void GetXY(mozilla::SVGUserUnitList *aX, mozilla::SVGUserUnitList *aY);
@@ -106,7 +107,7 @@ nsSVGAFrame::AttributeChanged(PRInt32         aNameSpaceID,
 {
   if (aNameSpaceID == kNameSpaceID_None &&
       aAttribute == nsGkAtoms::transform) {
-
+    nsSVGUtils::InvalidateAndScheduleReflowSVG(this);
     NotifySVGChanged(TRANSFORM_CHANGED);
   }
 
@@ -125,10 +126,6 @@ nsSVGAFrame::GetType() const
 void
 nsSVGAFrame::NotifySVGChanged(PRUint32 aFlags)
 {
-  NS_ABORT_IF_FALSE(!(aFlags & DO_NOT_NOTIFY_RENDERING_OBSERVERS) ||
-                    (GetStateBits() & NS_STATE_SVG_NONDISPLAY_CHILD),
-                    "Must be NS_STATE_SVG_NONDISPLAY_CHILD!");
-
   NS_ABORT_IF_FALSE(aFlags & (TRANSFORM_CHANGED | COORD_CONTEXT_CHANGED),
                     "Invalidation logic may need adjusting");
 
@@ -144,15 +141,21 @@ nsSVGAFrame::NotifySVGChanged(PRUint32 aFlags)
 // nsSVGContainerFrame methods:
 
 gfxMatrix
-nsSVGAFrame::GetCanvasTM()
+nsSVGAFrame::GetCanvasTM(PRUint32 aFor)
 {
+  if (!(GetStateBits() & NS_STATE_SVG_NONDISPLAY_CHILD)) {
+    if ((aFor == FOR_PAINTING && NS_SVGDisplayListPaintingEnabled()) ||
+        (aFor == FOR_HIT_TESTING && NS_SVGDisplayListHitTestingEnabled())) {
+      return nsSVGIntegrationUtils::GetCSSPxToDevPxMatrix(this);
+    }
+  }
   if (!mCanvasTM) {
     NS_ASSERTION(mParent, "null parent");
 
     nsSVGContainerFrame *parent = static_cast<nsSVGContainerFrame*>(mParent);
     nsSVGAElement *content = static_cast<nsSVGAElement*>(mContent);
 
-    gfxMatrix tm = content->PrependLocalTransformsTo(parent->GetCanvasTM());
+    gfxMatrix tm = content->PrependLocalTransformsTo(parent->GetCanvasTM(aFor));
 
     mCanvasTM = new gfxMatrix(tm);
   }

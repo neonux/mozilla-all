@@ -95,10 +95,15 @@ MOZCONFIG_LOADER := build/autoconf/mozconfig2client-mk
 MOZCONFIG_FINDER := build/autoconf/mozconfig-find 
 MOZCONFIG_MODULES := build/unix/uniq.pl
 
-run_for_side_effects := \
-  $(shell $(TOPSRCDIR)/$(MOZCONFIG_LOADER) $(TOPSRCDIR) $(TOPSRCDIR)/.mozconfig.mk > $(TOPSRCDIR)/.mozconfig.out)
+define CR
 
-include $(TOPSRCDIR)/.mozconfig.mk
+
+endef
+
+# As $(shell) doesn't preserve newlines, use sed to replace them with an
+# unlikely sequence (||), which is then replaced back to newlines by make
+# before evaluation.
+$(eval $(subst ||,$(CR),$(shell $(TOPSRCDIR)/$(MOZCONFIG_LOADER) $(TOPSRCDIR) 2> $(TOPSRCDIR)/.mozconfig.out | sed 's/$$/||/')))
 
 ifndef MOZ_OBJDIR
   MOZ_OBJDIR = obj-$(CONFIG_GUESS)
@@ -186,7 +191,7 @@ endif
 
 profiledbuild::
 	$(MAKE) -f $(TOPSRCDIR)/client.mk realbuild MOZ_PROFILE_GENERATE=1 MOZ_PGO_INSTRUMENTED=1
-	$(MAKE) -C $(PGO_OBJDIR) stage-package MOZ_PGO_INSTRUMENTED=1
+	$(MAKE) -C $(PGO_OBJDIR) package MOZ_PGO_INSTRUMENTED=1 MOZ_INTERNAL_SIGNING_FORMAT= MOZ_EXTERNAL_SIGNING_FORMAT=
 	MOZ_PGO_INSTRUMENTED=1 OBJDIR=${PGO_OBJDIR} JARLOG_DIR=${PGO_OBJDIR}/jarlog/en-US $(PROFILE_GEN_SCRIPT)
 	$(MAKE) -f $(TOPSRCDIR)/client.mk maybe_clobber_profiledbuild
 	$(MAKE) -f $(TOPSRCDIR)/client.mk realbuild MOZ_PROFILE_USE=1
@@ -249,10 +254,10 @@ CONFIG_STATUS = $(wildcard $(OBJDIR)/config.status)
 CONFIG_CACHE  = $(wildcard $(OBJDIR)/config.cache)
 
 EXTRA_CONFIG_DEPS := \
-	$(TOPSRCDIR)/aclocal.m4 \
-	$(wildcard $(TOPSRCDIR)/build/autoconf/*.m4) \
-	$(TOPSRCDIR)/js/src/aclocal.m4 \
-	$(NULL)
+  $(TOPSRCDIR)/aclocal.m4 \
+  $(wildcard $(TOPSRCDIR)/build/autoconf/*.m4) \
+  $(TOPSRCDIR)/js/src/aclocal.m4 \
+  $(NULL)
 
 $(CONFIGURES): %: %.in $(EXTRA_CONFIG_DEPS)
 	@$(PYTHON) $(TOPSRCDIR)/js/src/config/check-sync-dirs.py $(TOPSRCDIR)/js/src/build $(TOPSRCDIR)/build
@@ -260,16 +265,16 @@ $(CONFIGURES): %: %.in $(EXTRA_CONFIG_DEPS)
 	cd $(@D); $(AUTOCONF)
 
 CONFIG_STATUS_DEPS := \
-	$(wildcard \
-        $(CONFIGURES) \
-        $(TOPSRCDIR)/allmakefiles.sh \
-        $(TOPSRCDIR)/nsprpub/configure \
-        $(TOPSRCDIR)/config/milestone.txt \
-        $(TOPSRCDIR)/js/src/config/milestone.txt \
-        $(TOPSRCDIR)/browser/config/version.txt \
-        $(TOPSRCDIR)/*/confvars.sh \
-	) \
-	$(NULL)
+  $(wildcard $(TOPSRCDIR)/*/confvars.sh) \
+  $(CONFIGURES) \
+  $(TOPSRCDIR)/allmakefiles.sh \
+  $(TOPSRCDIR)/nsprpub/configure \
+  $(TOPSRCDIR)/config/milestone.txt \
+  $(TOPSRCDIR)/js/src/config/milestone.txt \
+  $(TOPSRCDIR)/browser/config/version.txt \
+  $(TOPSRCDIR)/build/virtualenv/packages.txt \
+  $(TOPSRCDIR)/build/virtualenv/populate_virtualenv.py \
+  $(NULL)
 
 CONFIGURE_ENV_ARGS += \
   MAKE="$(MAKE)" \
@@ -293,7 +298,7 @@ configure-preqs = \
   save-mozconfig \
   $(NULL)
 
-save-mozconfig:
+save-mozconfig: $(FOUND_MOZCONFIG)
 	-cp $(FOUND_MOZCONFIG) $(OBJDIR)/.mozconfig
 
 configure:: $(configure-preqs)

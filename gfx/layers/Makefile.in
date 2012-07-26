@@ -34,16 +34,26 @@ EXPORTS = \
         CompositorOGL.h \
         ImageLayers.h \
         Layers.h \
+        LayersBackend.h \
         LayerManagerOGLShaders.h \
         LayerManagerOGL.h \
         LayerManagerOGLProgram.h \
         ReadbackLayer.h \
         LayerSorter.h \
+        TexturePoolOGL.h \
+        SharedTextureImage.h \
         $(NULL)
 
 CPPSRCS = \
         BasicImages.cpp \
-        BasicLayers.cpp \
+        BasicLayerManager.cpp \
+        BasicCanvasLayer.cpp \
+        BasicColorLayer.cpp \
+        BasicContainerLayer.cpp \
+        BasicImageLayer.cpp \
+        BasicLayersImpl.cpp \
+        BasicThebesLayer.cpp \
+        BasicBuffers.cpp \
         BasicTiledThebesLayer.cpp \
         CompositorOGL.cpp \
         Layers.cpp \
@@ -62,6 +72,7 @@ CPPSRCS = \
         LayerManagerOGLProgram.cpp \
         LayerSorter.cpp \
         ImageLayers.cpp \
+        TexturePoolOGL.cpp \
         Factory.cpp \
         $(NULL)
 
@@ -106,20 +117,36 @@ endif
 EXPORTS_NAMESPACES = gfxipc mozilla/layers
 EXPORTS_gfxipc = ShadowLayerUtils.h
 EXPORTS_mozilla/layers =\
+        AsyncPanZoomController.h \
+        Axis.h \
         CompositorCocoaWidgetHelper.h \
         CompositorChild.h \
         CompositorParent.h \
+        GeckoContentController.h \
+        GestureEventListener.h \
+        ImageBridgeChild.h \
+        ImageBridgeParent.h \
+        ImageContainerChild.h \
+        ImageContainerParent.h \
         ShadowLayers.h \
         ShadowLayersChild.h \
         ShadowLayersParent.h \
         ShadowLayersManager.h \
         RenderTrace.h \
+        SharedImageUtils.h \
         $(NULL)
 
 CPPSRCS += \
+        AsyncPanZoomController.cpp \
+        Axis.cpp \
         CompositorCocoaWidgetHelper.cpp \
         CompositorChild.cpp \
         CompositorParent.cpp \
+        GestureEventListener.cpp \
+        ImageBridgeChild.cpp \
+        ImageBridgeParent.cpp \
+        ImageContainerChild.cpp \
+        ImageContainerParent.cpp \
         ShadowLayers.cpp \
         ShadowLayerChild.cpp \
         ShadowLayersChild.cpp \
@@ -137,8 +164,20 @@ EXPORTS_mozilla/layers += ShadowLayerUtilsD3D10.h
 DEFINES	+= -DMOZ_ENABLE_D3D10_LAYER
 endif
 
+# NB: Gralloc is available on other platforms that use the android GL
+# libraries, but only Gonk is able to use it reliably because Gecko
+# has full system permissions there.
+ifeq ($(MOZ_WIDGET_TOOLKIT),gonk)
+EXPORTS_mozilla/layers += ShadowLayerUtilsGralloc.h
+CPPSRCS += ShadowLayerUtilsGralloc.cpp
+endif
+
 include $(topsrcdir)/config/rules.mk
 
 include $(topsrcdir)/ipc/chromium/chromium-config.mk
+
+LOCAL_INCLUDES += \
+        -I$(topsrcdir)/content/events/src \
+        $(NULL)
 
 CXXFLAGS += $(MOZ_CAIRO_CFLAGS) $(MOZ_PIXMAN_CFLAGS) $(TK_CFLAGS)

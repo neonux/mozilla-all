@@ -7,8 +7,10 @@ package org.mozilla.gecko.sync.setup;
 import java.io.UnsupportedEncodingException;
 import java.security.NoSuchAlgorithmException;
 
+import org.mozilla.gecko.sync.GlobalConstants;
 import org.mozilla.gecko.sync.Logger;
 import org.mozilla.gecko.sync.Utils;
+import org.mozilla.gecko.sync.config.AccountPickler;
 import org.mozilla.gecko.sync.setup.activities.SetupSyncActivity;
 
 import android.accounts.AbstractAccountAuthenticator;
@@ -62,7 +64,7 @@ public class SyncAuthenticatorService extends Service {
       final Intent intent = new Intent(mContext, SetupSyncActivity.class);
       intent.putExtra(AccountManager.KEY_ACCOUNT_AUTHENTICATOR_RESPONSE,
                       response);
-      intent.putExtra("accountType", Constants.ACCOUNTTYPE_SYNC);
+      intent.putExtra("accountType", GlobalConstants.ACCOUNTTYPE_SYNC);
       intent.putExtra(Constants.INTENT_EXTRA_IS_SETUP, true);
 
       final Bundle result = new Bundle();
@@ -100,14 +102,13 @@ public class SyncAuthenticatorService extends Service {
 
       // Extract the username and password from the Account Manager, and ask
       // the server for an appropriate AuthToken.
-      Logger.info(LOG_TAG, "AccountManager.get(" + mContext + ")");
       final AccountManager am = AccountManager.get(mContext);
       final String password = am.getPassword(account);
       if (password != null) {
         final Bundle result = new Bundle();
 
         // This is a Sync account.
-        result.putString(AccountManager.KEY_ACCOUNT_TYPE, Constants.ACCOUNTTYPE_SYNC);
+        result.putString(AccountManager.KEY_ACCOUNT_TYPE, GlobalConstants.ACCOUNTTYPE_SYNC);
 
         // Server.
         String serverURL = am.getUserData(account, Constants.OPTION_SERVER);
@@ -119,8 +120,8 @@ public class SyncAuthenticatorService extends Service {
         // Username after hashing.
         try {
           String username = Utils.usernameFromAccount(account.name);
-          Logger.pii(LOG_TAG, "Account " + account.name + " hashes to " + username);
-          Logger.info(LOG_TAG, "Setting username. Null? " + (username == null));
+          Logger.pii(LOG_TAG, "Account " + account.name + " hashes to " + username + ".");
+          Logger.debug(LOG_TAG, "Setting username. Null? " + (username == null));
           result.putString(Constants.OPTION_USERNAME, username);
         } catch (NoSuchAlgorithmException e) {
           // Do nothing. Calling code must check for missing value.
@@ -130,7 +131,7 @@ public class SyncAuthenticatorService extends Service {
 
         // Sync key.
         final String syncKey = am.getUserData(account, Constants.OPTION_SYNCKEY);
-        Logger.info(LOG_TAG, "Setting Sync Key. Null? " + (syncKey == null));
+        Logger.debug(LOG_TAG, "Setting sync key. Null? " + (syncKey == null));
         result.putString(Constants.OPTION_SYNCKEY, syncKey);
 
         // Password.
@@ -160,6 +161,36 @@ public class SyncAuthenticatorService extends Service {
         throws NetworkErrorException {
       Logger.debug(LOG_TAG, "updateCredentials()");
       return null;
+    }
+
+    /**
+     * Bug 769745: persist pickled Sync account settings so that we can unpickle
+     * after Fennec is moved to the SD card.
+     * <p>
+     * This is <b>not</b> called when an Android Account is blown away due to the
+     * SD card being unmounted.
+     * <p>
+     * This is a terrible hack, but it's better than the catching the generic
+     * "accounts changed" broadcast intent and trying to figure out whether our
+     * Account disappeared.
+     */
+    @Override
+    public Bundle getAccountRemovalAllowed(AccountAuthenticatorResponse response, Account account) throws NetworkErrorException {
+      Bundle result = super.getAccountRemovalAllowed(response, account);
+
+      if (result != null &&
+          result.containsKey(AccountManager.KEY_BOOLEAN_RESULT) &&
+          !result.containsKey(AccountManager.KEY_INTENT)) {
+        final boolean removalAllowed = result.getBoolean(AccountManager.KEY_BOOLEAN_RESULT);
+
+        if (removalAllowed) {
+          Logger.info(LOG_TAG, "Account named " + account.name + " being removed; " +
+              "deleting saved pickle file '" + Constants.ACCOUNT_PICKLE_FILENAME + "'.");
+          AccountPickler.deletePickle(mContext, Constants.ACCOUNT_PICKLE_FILENAME);
+        }
+      }
+
+      return result;
     }
   }
 }

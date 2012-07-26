@@ -30,6 +30,8 @@ class SourceSurfaceD2D;
 class GradientStopsD2D;
 class ScaledFontDWrite;
 
+const int32_t kLayerCacheSize = 5;
+
 struct PrivateD3D10DataD2D
 {
   RefPtr<ID3D10Effect> mEffect;
@@ -121,6 +123,9 @@ public:
   bool Init(const IntSize &aSize, SurfaceFormat aFormat);
   bool Init(ID3D10Texture2D *aTexture, SurfaceFormat aFormat);
   bool InitD3D10Data();
+  uint32_t GetByteSize() const;
+  TemporaryRef<ID2D1Layer> GetCachedLayer();
+  void PopCachedLayer(ID2D1RenderTarget *aRT);
 
   static ID2D1Factory *factory();
   static TemporaryRef<ID2D1StrokeStyle> CreateStrokeStyleForOptions(const StrokeOptions &aStrokeOptions);
@@ -131,6 +136,10 @@ public:
     stream << "DrawTargetD2D(" << this << ")";
     return stream.str();
   }
+
+  static uint64_t mVRAMUsageDT;
+  static uint64_t mVRAMUsageSS;
+
 private:
   friend class AutoSaveRestoreClippedOut;
   friend class SourceSurfaceD2DTarget;
@@ -183,7 +192,8 @@ private:
   // This creates a (partially) uploaded bitmap for a DataSourceSurface. It
   // uploads the minimum requirement and possibly downscales. It adjusts the
   // input Matrix to compensate.
-  TemporaryRef<ID2D1Bitmap> CreatePartialBitmapForSurface(DataSourceSurface *aSurface, Matrix &aMatrix);
+  TemporaryRef<ID2D1Bitmap> CreatePartialBitmapForSurface(DataSourceSurface *aSurface, Matrix &aMatrix,
+                                                          ExtendMode aExtendMode);
 
   void SetupEffectForRadialGradient(const RadialGradientPattern *aPattern);
   void SetupStateForRendering();
@@ -197,6 +207,9 @@ private:
   RefPtr<ID3D10Texture2D> mCurrentClipMaskTexture;
   RefPtr<ID2D1PathGeometry> mCurrentClippedGeometry;
   mutable RefPtr<ID2D1RenderTarget> mRT;
+
+  // We store this to prevent excessive SetTextRenderingParams calls.
+  RefPtr<IDWriteRenderingParams> mTextRenderingParams;
 
   // Temporary texture and render target used for supporting alternative operators.
   RefPtr<ID3D10Texture2D> mTempTexture;
@@ -214,6 +227,13 @@ private:
     RefPtr<PathD2D> mPath;
   };
   std::vector<PushedClip> mPushedClips;
+
+  // We cache ID2D1Layer objects as it causes D2D to keep around textures that
+  // serve as the temporary surfaces for these operations. As texture creation
+  // is quite expensive this considerably improved performance.
+  // Careful here, RAII will not ensure destruction of the RefPtrs.
+  RefPtr<ID2D1Layer> mCachedLayers[kLayerCacheSize];
+  uint32_t mCurrentCachedLayer;
   
   // The latest snapshot of this surface. This needs to be told when this
   // target is modified. We keep it alive as a cache.

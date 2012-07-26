@@ -6,12 +6,15 @@
 #ifndef nsTransactionItem_h__
 #define nsTransactionItem_h__
 
-#include "nsITransaction.h"
 #include "nsCOMPtr.h"
 #include "nsCycleCollectionParticipant.h"
+#include "nsISupportsImpl.h"
+#include "nscore.h"
+#include "prtypes.h"
 
-class nsTransactionStack;
+class nsITransaction;
 class nsTransactionManager;
+class nsTransactionStack;
 
 class nsTransactionItem
 {
@@ -30,7 +33,7 @@ public:
   NS_DECL_CYCLE_COLLECTION_NATIVE_CLASS(nsTransactionItem)
 
   virtual nsresult AddChild(nsTransactionItem *aTransactionItem);
-  virtual nsresult GetTransaction(nsITransaction **aTransaction);
+  already_AddRefed<nsITransaction> GetTransaction();
   virtual nsresult GetIsBatch(bool *aIsBatch);
   virtual nsresult GetNumberOfChildren(PRInt32 *aNumChildren);
   virtual nsresult GetChild(PRInt32 aIndex, nsTransactionItem **aChild);

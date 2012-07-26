@@ -16,6 +16,7 @@
 #include "nsServiceManagerUtils.h"
 #include "nsString.h"
 #include "xpcpublic.h"
+#include "mozilla/Attributes.h"
 
 #undef LOG
 #define LOG(args...)  __android_log_print(ANDROID_LOG_INFO, "AutoMounterSetting" , ## args)
@@ -27,7 +28,7 @@
 namespace mozilla {
 namespace system {
 
-class SettingsServiceCallback : public nsISettingsServiceCallback
+class SettingsServiceCallback MOZ_FINAL : public nsISettingsServiceCallback
 {
 public:
   NS_DECL_ISUPPORTS
@@ -98,8 +99,6 @@ AutoMounterSetting::Observe(nsISupports *aSubject,
   if (strcmp(aTopic, MOZSETTINGS_CHANGED) != 0) {
     return NS_OK;
   }
-  LOG("%s: detected %s data = '%s'", __FUNCTION__, aTopic,
-      NS_LossyConvertUTF16toASCII(aData).get());
 
   // Note that this function gets called for any and all settings changes,
   // so we need to carefully check if we have the one we're interested in.

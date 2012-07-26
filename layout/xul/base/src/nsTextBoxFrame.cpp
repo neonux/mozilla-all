@@ -17,8 +17,6 @@
 #include "nsMenuBarListener.h"
 #include "nsXPIDLString.h"
 #include "nsIServiceManager.h"
-#include "nsIDocument.h"
-#include "nsIDOMDocument.h"
 #include "nsIDOMElement.h"
 #include "nsIDOMXULLabelElement.h"
 #include "nsEventStateManager.h"
@@ -31,6 +29,7 @@
 #include "nsBoxFrame.h"
 #include "mozilla/Preferences.h"
 #include "nsLayoutUtils.h"
+#include "mozilla/Attributes.h"
 
 #ifdef IBMBIDI
 #include "nsBidiUtils.h"
@@ -154,7 +153,7 @@ nsTextBoxFrame::InsertSeparatorBeforeAccessKey()
   return gInsertSeparatorBeforeAccessKey;
 }
 
-class nsAsyncAccesskeyUpdate : public nsIReflowCallback
+class nsAsyncAccesskeyUpdate MOZ_FINAL : public nsIReflowCallback
 {
 public:
     nsAsyncAccesskeyUpdate(nsIFrame* aFrame) : mWeakFrame(aFrame)
@@ -462,6 +461,7 @@ nsTextBoxFrame::DrawText(nsRenderingContext& aRenderingContext,
                 presContext->AppUnitsToGfxUnits(aTextRect.y));
     gfxFloat width = presContext->AppUnitsToGfxUnits(aTextRect.width);
     gfxFloat ascentPixel = presContext->AppUnitsToGfxUnits(ascent);
+    gfxFloat xInFrame = PresContext()->AppUnitsToGfxUnits(mTextDrawRect.x);
     gfxRect dirtyRect(presContext->AppUnitsToGfxUnits(aDirtyRect));
 
     // Underlines are drawn before overlines, and both before the text
@@ -476,15 +476,15 @@ nsTextBoxFrame::DrawText(nsRenderingContext& aRenderingContext,
       gfxFloat sizePixel = presContext->AppUnitsToGfxUnits(size);
       if ((decorations & NS_FONT_DECORATION_UNDERLINE) &&
           underStyle != NS_STYLE_TEXT_DECORATION_STYLE_NONE) {
-        nsCSSRendering::PaintDecorationLine(ctx, dirtyRect, underColor,
-                          pt, gfxSize(width, sizePixel),
+        nsCSSRendering::PaintDecorationLine(this, ctx, dirtyRect, underColor,
+                          pt, xInFrame, gfxSize(width, sizePixel),
                           ascentPixel, offsetPixel,
                           NS_STYLE_TEXT_DECORATION_LINE_UNDERLINE, underStyle);
       }
       if ((decorations & NS_FONT_DECORATION_OVERLINE) &&
           overStyle != NS_STYLE_TEXT_DECORATION_STYLE_NONE) {
-        nsCSSRendering::PaintDecorationLine(ctx, dirtyRect, overColor,
-                          pt, gfxSize(width, sizePixel),
+        nsCSSRendering::PaintDecorationLine(this, ctx, dirtyRect, overColor,
+                          pt, xInFrame, gfxSize(width, sizePixel),
                           ascentPixel, ascentPixel,
                           NS_STYLE_TEXT_DECORATION_LINE_OVERLINE, overStyle);
       }
@@ -565,9 +565,9 @@ nsTextBoxFrame::DrawText(nsRenderingContext& aRenderingContext,
       fontMet->GetStrikeout(offset, size);
       gfxFloat offsetPixel = presContext->AppUnitsToGfxUnits(offset);
       gfxFloat sizePixel = presContext->AppUnitsToGfxUnits(size);
-      nsCSSRendering::PaintDecorationLine(ctx, dirtyRect, strikeColor,
-                        pt, gfxSize(width, sizePixel), ascentPixel, offsetPixel,
-                        NS_STYLE_TEXT_DECORATION_LINE_LINE_THROUGH,
+      nsCSSRendering::PaintDecorationLine(this, ctx, dirtyRect, strikeColor,
+                        pt, xInFrame, gfxSize(width, sizePixel), ascentPixel,
+                        offsetPixel, NS_STYLE_TEXT_DECORATION_LINE_LINE_THROUGH,
                         strikeStyle);
     }
 }
@@ -929,7 +929,10 @@ nsTextBoxFrame::DoLayout(nsBoxLayoutState& aBoxLayoutState)
 nsRect
 nsTextBoxFrame::GetComponentAlphaBounds()
 {
-  return GetVisualOverflowRectRelativeToSelf();
+  if (GetStyleText()->mTextShadow) {
+    return GetVisualOverflowRectRelativeToSelf();
+  }
+  return mTextDrawRect;
 }
 
 bool

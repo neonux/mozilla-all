@@ -31,6 +31,7 @@
 #include "nsIHTMLAbsPosEditor.h"
 #include "nsIHTMLInlineTableEditor.h"
 #include "nsIHTMLObjectResizeListener.h"
+#include "nsIHTMLObjectResizer.h"
 
 #include "nsIDocumentObserver.h"
 
@@ -38,6 +39,7 @@
 #include "nsTArray.h"
 #include "nsAutoPtr.h"
 #include "nsAttrName.h"
+#include "nsStubMutationObserver.h"
 
 #include "mozilla/Attributes.h"
 #include "mozilla/dom/Element.h"
@@ -229,19 +231,18 @@ public:
   /* ------------ Block methods moved from nsEditor -------------- */
   static already_AddRefed<nsIDOMNode> GetBlockNodeParent(nsIDOMNode *aNode);
 
-  static already_AddRefed<nsIDOMNode> NextNodeInBlock(nsIDOMNode *aNode, IterDirection aDir);
-  void     IsNextCharWhitespace(nsIDOMNode *aParentNode,
-                                PRInt32 aOffset, 
-                                bool *outIsSpace, 
-                                bool *outIsNBSP,
-                                nsCOMPtr<nsIDOMNode> *outNode = 0,
-                                PRInt32 *outOffset = 0);
-  void     IsPrevCharWhitespace(nsIDOMNode *aParentNode,
-                                PRInt32 aOffset, 
-                                bool *outIsSpace, 
-                                bool *outIsNBSP,
-                                nsCOMPtr<nsIDOMNode> *outNode = 0,
-                                PRInt32 *outOffset = 0);
+  void IsNextCharInNodeWhitespace(nsIContent* aContent,
+                                  PRInt32 aOffset,
+                                  bool* outIsSpace,
+                                  bool* outIsNBSP,
+                                  nsIContent** outNode = nsnull,
+                                  PRInt32* outOffset = 0);
+  void IsPrevCharInNodeWhitespace(nsIContent* aContent,
+                                  PRInt32 aOffset,
+                                  bool* outIsSpace,
+                                  bool* outIsNBSP,
+                                  nsIContent** outNode = nsnull,
+                                  PRInt32* outOffset = 0);
 
   /* ------------ Overrides of nsEditor interface methods -------------- */
 
@@ -252,8 +253,14 @@ public:
   NS_IMETHOD PreDestroy(bool aDestroyingFrames);
 
   /** Internal, static version */
+  // aElement must not be null.
+  static bool NodeIsBlockStatic(const mozilla::dom::Element* aElement);
   static nsresult NodeIsBlockStatic(nsIDOMNode *aNode, bool *aIsBlock);
+protected:
+  using nsEditor::IsBlockNode;
+  virtual bool IsBlockNode(nsINode *aNode);
 
+public:
   NS_IMETHOD SetFlags(PRUint32 aFlags);
 
   NS_IMETHOD Paste(PRInt32 aSelectionType);
@@ -310,6 +317,8 @@ public:
   NS_IMETHOD_(bool) IsModifiableNode(nsIDOMNode *aNode);
   virtual bool IsModifiableNode(nsINode *aNode);
 
+  NS_IMETHOD GetIsSelectionEditable(bool* aIsSelectionEditable);
+
   NS_IMETHOD SelectAll();
 
   NS_IMETHOD GetRootElement(nsIDOMElement **aRootElement);
@@ -324,7 +333,6 @@ public:
                               nsCOMPtr<nsIDOMNode> *ioParent, 
                               PRInt32 *ioOffset, 
                               bool aNoEmptyNodes);
-  virtual already_AddRefed<nsIDOMNode> FindUserSelectAllNode(nsIDOMNode* aNode);
 
   // Use this to assure that selection is set after attribute nodes when 
   //  trying to collapse selection at begining of a block node
@@ -479,9 +487,6 @@ protected:
   NS_IMETHOD SetSelectionAtDocumentStart(nsISelection *aSelection);
 
 // End of Table Editing utilities
-  
-  virtual bool IsBlockNode(nsIDOMNode *aNode);
-  virtual bool IsBlockNode(nsINode *aNode);
   
   static nsCOMPtr<nsIDOMNode> GetEnclosingTable(nsIDOMNode *aNode);
 
@@ -689,7 +694,11 @@ protected:
   nsresult GetNextHTMLSibling(nsIDOMNode *inParent, PRInt32 inOffset, nsCOMPtr<nsIDOMNode> *outNode);
   nsresult GetPriorHTMLNode(nsIDOMNode *inNode, nsCOMPtr<nsIDOMNode> *outNode, bool bNoBlockCrossing = false);
   nsresult GetPriorHTMLNode(nsIDOMNode *inParent, PRInt32 inOffset, nsCOMPtr<nsIDOMNode> *outNode, bool bNoBlockCrossing = false);
+  nsIContent* GetPriorHTMLNode(nsINode* aParent, PRInt32 aOffset,
+                               bool aNoBlockCrossing = false);
   nsresult GetNextHTMLNode(nsIDOMNode *inNode, nsCOMPtr<nsIDOMNode> *outNode, bool bNoBlockCrossing = false);
+  nsIContent* GetNextHTMLNode(nsINode* aParent, PRInt32 aOffset,
+                              bool aNoBlockCrossing = false);
   nsresult GetNextHTMLNode(nsIDOMNode *inParent, PRInt32 inOffset, nsCOMPtr<nsIDOMNode> *outNode, bool bNoBlockCrossing = false);
 
   nsresult IsFirstEditableChild( nsIDOMNode *aNode, bool *aOutIsFirst);

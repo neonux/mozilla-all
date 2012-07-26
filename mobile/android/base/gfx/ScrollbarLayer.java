@@ -9,12 +9,11 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.PointF;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.opengl.GLES20;
-import android.util.Log;
+
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import org.mozilla.gecko.FloatUtils;
@@ -227,6 +226,7 @@ public class ScrollbarLayer extends TileLayer {
         Rect rect = RectUtils.round(mVertical
                 ? getVerticalRect(context)
                 : getHorizontalRect(context));
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getTextureID());
 
         float viewWidth = context.viewport.width();

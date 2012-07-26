@@ -3,12 +3,19 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "JoinElementTxn.h"
-#include "nsEditor.h"
-#include "nsIDOMNodeList.h"
-#include "nsIDOMCharacterData.h"
+#include <stdio.h>                      // for printf
 
-#ifdef NS_DEBUG
+#include "JoinElementTxn.h"
+#include "nsAString.h"
+#include "nsDebug.h"                    // for NS_ASSERTION, etc
+#include "nsEditor.h"                   // for nsEditor
+#include "nsError.h"                    // for NS_ERROR_NULL_POINTER, etc
+#include "nsIDOMCharacterData.h"        // for nsIDOMCharacterData
+#include "nsIEditor.h"                  // for nsEditor::IsModifiableNode
+#include "nsINode.h"                    // for nsINode
+#include "nsISupportsImpl.h"            // for EditTxn::QueryInterface, etc
+
+#ifdef DEBUG
 static bool gNoisy = false;
 #endif
 
@@ -56,7 +63,7 @@ NS_IMETHODIMP JoinElementTxn::Init(nsEditor   *aEditor,
 // After DoTransaction() and RedoTransaction(), the left node is removed from the content tree and right node remains.
 NS_IMETHODIMP JoinElementTxn::DoTransaction(void)
 {
-#ifdef NS_DEBUG
+#ifdef DEBUG
   if (gNoisy)
   {
     printf("%p Do Join of %p and %p\n",
@@ -108,7 +115,7 @@ NS_IMETHODIMP JoinElementTxn::DoTransaction(void)
 //     and re-inserted mLeft?
 NS_IMETHODIMP JoinElementTxn::UndoTransaction(void)
 {
-#ifdef NS_DEBUG
+#ifdef DEBUG
   if (gNoisy)
   {
     printf("%p Undo Join, right node = %p\n",

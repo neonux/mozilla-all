@@ -146,14 +146,31 @@ public:
   static void LoadStart();
   static void LoadEnd();
 
+  enum IsCompartment {
+    CompartmentGC,
+    NonCompartmentGC
+  };
+
+  enum IsShrinking {
+    ShrinkingGC,
+    NonShrinkingGC
+  };
+
+  enum IsIncremental {
+    IncrementalGC,
+    NonIncrementalGC
+  };
+
   static void GarbageCollectNow(js::gcreason::Reason reason,
-                                PRUint32 aGckind,
-                                bool aGlobal);
+                                IsIncremental aIncremental = NonIncrementalGC,
+                                IsCompartment aCompartment = NonCompartmentGC,
+                                IsShrinking aShrinking = NonShrinkingGC);
   static void ShrinkGCBuffersNow();
   // If aExtraForgetSkippableCalls is -1, forgetSkippable won't be
   // called even if the previous collection was GC.
   static void CycleCollectNow(nsICycleCollectorListener *aListener = nsnull,
-                              PRInt32 aExtraForgetSkippableCalls = 0);
+                              PRInt32 aExtraForgetSkippableCalls = 0,
+                              bool aForced = true);
 
   static void PokeGC(js::gcreason::Reason aReason, int aDelay = 0);
   static void KillGCTimer();

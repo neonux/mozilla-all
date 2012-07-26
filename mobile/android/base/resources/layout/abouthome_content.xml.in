@@ -16,8 +16,7 @@
                         android:layout_height="wrap_content"
                         android:layout_alignParentTop="true"
                         android:layout_alignParentLeft="true"
-                        android:isScrollContainer="false"
-                        android:background="@drawable/abouthome_topsites_bg_repeat">
+                        android:isScrollContainer="false">
 
             <ImageView android:id="@+id/top_sites_top"
                        android:layout_width="fill_parent"
@@ -25,21 +24,16 @@
                        android:gravity="fill"
                        android:background="@drawable/abouthome_bg_repeat"/>
 
-            <ImageView android:layout_width="wrap_content"
-                       android:layout_height="wrap_content"
-                       android:layout_alignParentTop="true"
-                       android:layout_alignParentRight="true"
-                       android:src="@drawable/abouthome_icon"/>
-
             <TextView android:id="@+id/top_sites_title"
                       android:layout_width="fill_parent"
-                      android:layout_height="wrap_content"
+                      android:layout_height="26dip"
                       android:layout_below="@id/top_sites_top"
-                      android:layout_marginLeft="12dip"
-                      android:layout_marginTop="5dip"
+                      android:background="#34FFFFFF"
+                      android:paddingLeft="12dip"
                       android:textSize="12sp"
                       android:textColor="#000000"
                       android:textStyle="bold"
+                      android:gravity="left|center_vertical"
                       android:text="@string/abouthome_top_sites_title"/>
 
             <TextView android:id="@+id/no_top_sites_text"
@@ -56,15 +50,24 @@
                       android:text="@string/abouthome_no_top_sites"
                       android:visibility="gone"/>
 
+            <ImageView android:layout_width="wrap_content"
+                       android:layout_height="wrap_content"
+                       android:layout_marginTop="4dp"
+                       android:layout_alignParentTop="true"
+                       android:layout_alignParentRight="true"
+                       android:src="@drawable/abouthome_icon"/>
+
             <view class="org.mozilla.gecko.AboutHomeContent$TopSitesGridView"
                   android:id="@+id/top_sites_grid"
                   android:layout_width="fill_parent"
                   android:layout_height="wrap_content"
+                  android:layout_marginTop="12dp"
                   android:layout_below="@id/top_sites_title"
                   android:verticalSpacing="8dip"
                   android:horizontalSpacing="0dip"
                   android:isScrollContainer="false"
-                  android:gravity="center"/>
+                  android:gravity="center"
+                  android:listSelector="@drawable/action_bar_button"/>
 
             <org.mozilla.gecko.LinkTextView android:id="@+id/all_top_sites_text"
                                             android:layout_width="fill_parent"

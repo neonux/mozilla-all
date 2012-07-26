@@ -97,10 +97,16 @@ static void ProfilerSignalHandler(int signal, siginfo_t* info, void* context) {
     sample->pc = reinterpret_cast<Address>(mcontext.gregs[R15]);
     sample->sp = reinterpret_cast<Address>(mcontext.gregs[R13]);
     sample->fp = reinterpret_cast<Address>(mcontext.gregs[R11]);
+#ifdef ENABLE_ARM_LR_SAVING
+    sample->lr = reinterpret_cast<Address>(mcontext.gregs[R14]);
+#endif
 #else
     sample->pc = reinterpret_cast<Address>(mcontext.arm_pc);
     sample->sp = reinterpret_cast<Address>(mcontext.arm_sp);
     sample->fp = reinterpret_cast<Address>(mcontext.arm_fp);
+#ifdef ENABLE_ARM_LR_SAVING
+    sample->lr = reinterpret_cast<Address>(mcontext.arm_lr);
+#endif
 #endif
 #elif V8_HOST_ARCH_MIPS
     // Implement this on MIPS.
@@ -247,7 +253,7 @@ void Sampler::Stop() {
 
   // Restore old signal handler
   if (data_->signal_handler_installed_) {
-    sigaction(SIGPROF, &data_->old_sigsave_signal_handler_, 0);
+    sigaction(SIGNAL_SAVE_PROFILE, &data_->old_sigsave_signal_handler_, 0);
     sigaction(SIGPROF, &data_->old_sigprof_signal_handler_, 0);
     data_->signal_handler_installed_ = false;
   }
@@ -256,23 +262,24 @@ void Sampler::Stop() {
   sActiveSampler = NULL;
 }
 
-static struct sigaction old_sigstartstop_signal_handler;
-const int SIGSTARTSTOP = SIGUSR1;
+#ifdef ANDROID
+static struct sigaction old_sigstart_signal_handler;
+const int SIGSTART = SIGUSR1;
 
-static void StartStopSignalHandler(int signal, siginfo_t* info, void* context) {
+static void StartSignalHandler(int signal, siginfo_t* info, void* context) {
   mozilla_sampler_start(PROFILE_DEFAULT_ENTRY, PROFILE_DEFAULT_INTERVAL,
                         PROFILE_DEFAULT_FEATURES, PROFILE_DEFAULT_FEATURE_COUNT);
 }
 
-void OS::RegisterStartStopHandlers()
+void OS::RegisterStartHandler()
 {
-  LOG("Registering start/stop signal");
+  LOG("Registering start signal");
   struct sigaction sa;
-  sa.sa_sigaction = StartStopSignalHandler;
+  sa.sa_sigaction = StartSignalHandler;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = SA_RESTART | SA_SIGINFO;
-  if (sigaction(SIGSTARTSTOP, &sa, &old_sigstartstop_signal_handler) != 0) {
+  if (sigaction(SIGSTART, &sa, &old_sigstart_signal_handler) != 0) {
     LOG("Error installing signal");
   }
 }
-
+#endif

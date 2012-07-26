@@ -304,20 +304,20 @@ nsresult nsChildView::Create(nsIWidget *aParent,
     // inherit the top-level window. NS_NATIVE_WIDGET is always a NSView
     // regardless of if we're asking a window or a view (for compatibility
     // with windows).
-    mParentView = (NSView*)aParent->GetNativeData(NS_NATIVE_WIDGET); 
+    mParentView = (NSView<mozView>*)aParent->GetNativeData(NS_NATIVE_WIDGET); 
     mParentWidget = aParent;   
   } else {
     // This is the normal case. When we're the root widget of the view hiararchy,
     // aNativeParent will be the contentView of our window, since that's what
     // nsCocoaWindow returns when asked for an NS_NATIVE_VIEW.
-    mParentView = reinterpret_cast<NSView*>(aNativeParent);
+    mParentView = reinterpret_cast<NSView<mozView>*>(aNativeParent);
   }
   
   // create our parallel NSView and hook it up to our parent. Recall
   // that NS_NATIVE_WIDGET is the NSView.
   NSRect r;
   nsCocoaUtils::GeckoRectToNSRect(mBounds, r);
-  mView = [CreateCocoaView(r) retain];
+  mView = [(NSView<mozView>*)CreateCocoaView(r) retain];
   if (!mView) return NS_ERROR_FAILURE;
 
   [(ChildView*)mView setIsPluginView:(mWindowType == eWindowType_plugin)];
@@ -526,26 +526,20 @@ void nsChildView::SetTransparencyMode(nsTransparencyMode aMode)
   NS_OBJC_END_TRY_ABORT_BLOCK;
 }
 
-NS_IMETHODIMP nsChildView::IsVisible(bool& outState)
+bool nsChildView::IsVisible() const
 {
-  NS_OBJC_BEGIN_TRY_ABORT_BLOCK_NSRESULT;
+  NS_OBJC_BEGIN_TRY_ABORT_BLOCK_RETURN;
 
   if (!mVisible) {
-    outState = mVisible;
-  }
-  else {
-    // mVisible does not accurately reflect the state of a hidden tabbed view
-    // so verify that the view has a window as well
-    outState = ([mView window] != nil);
-    // now check native widget hierarchy visibility
-    if (outState && NSIsEmptyRect([mView visibleRect])) {
-      outState = false;
-    }
+    return mVisible;
   }
 
-  return NS_OK;
+  // mVisible does not accurately reflect the state of a hidden tabbed view
+  // so verify that the view has a window as well
+  // then check native widget hierarchy visibility
+  return ([mView window] != nil) && !NSIsEmptyRect([mView visibleRect]);
 
-  NS_OBJC_END_TRY_ABORT_BLOCK_NSRESULT;
+  NS_OBJC_END_TRY_ABORT_BLOCK_RETURN(false);
 }
 
 void nsChildView::HidePlugin()
@@ -709,7 +703,7 @@ nsChildView::ReparentNativeWidget(nsIWidget* aNewParent)
     return NS_OK;
 
   NSView<mozView>* newParentView =
-   (NSView*)aNewParent->GetNativeData(NS_NATIVE_WIDGET); 
+   (NSView<mozView>*)aNewParent->GetNativeData(NS_NATIVE_WIDGET); 
   NS_ENSURE_TRUE(newParentView, NS_ERROR_FAILURE);
 
   // we hold a ref to mView, so this is safe
@@ -754,12 +748,9 @@ NS_IMETHODIMP nsChildView::Enable(bool aState)
   return NS_OK;
 }
 
-NS_IMETHODIMP nsChildView::IsEnabled(bool *aState)
+bool nsChildView::IsEnabled() const
 {
-  // unimplemented
-  if (aState)
-   *aState = true;
-  return NS_OK;
+  return true;
 }
 
 NS_IMETHODIMP nsChildView::SetFocus(bool aRaise)
@@ -838,6 +829,7 @@ NS_IMETHODIMP nsChildView::Move(PRInt32 aX, PRInt32 aY)
   if (mVisible)
     [mView setNeedsDisplay:YES];
 
+  NotifyRollupGeometryChange(gRollupListener);
   ReportMoveEvent();
 
   return NS_OK;
@@ -862,6 +854,7 @@ NS_IMETHODIMP nsChildView::Resize(PRInt32 aWidth, PRInt32 aHeight, bool aRepaint
   if (mVisible && aRepaint)
     [mView setNeedsDisplay:YES];
 
+  NotifyRollupGeometryChange(gRollupListener);
   ReportSizeEvent();
 
   return NS_OK;
@@ -894,6 +887,7 @@ NS_IMETHODIMP nsChildView::Resize(PRInt32 aX, PRInt32 aY, PRInt32 aWidth, PRInt3
   if (mVisible && aRepaint)
     [mView setNeedsDisplay:YES];
 
+  NotifyRollupGeometryChange(gRollupListener);
   if (isMoving) {
     ReportMoveEvent();
     if (mOnDestroyCalled)
@@ -973,9 +967,7 @@ NS_IMETHODIMP nsChildView::GetPluginClipRect(nsIntRect& outClipRect, nsIntPoint&
   outOrigin.x = -NSToIntRound(viewOrigin.x);
   outOrigin.y = -NSToIntRound(viewOrigin.y);
 
-  bool isVisible;
-  IsVisible(isVisible);
-  if (isVisible && [mView window] != nil) {
+  if (IsVisible() && [mView window] != nil) {
     outClipRect.width  = NSToIntRound(visibleBounds.origin.x + visibleBounds.size.width) - NSToIntRound(visibleBounds.origin.x);
     outClipRect.height = NSToIntRound(visibleBounds.origin.y + visibleBounds.size.height) - NSToIntRound(visibleBounds.origin.y);
 
@@ -2481,9 +2473,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
 - (void)drawRect:(NSRect)aRect inContext:(CGContextRef)aContext
 {
   SAMPLE_LABEL("widget", "ChildView::drawRect");
-  bool isVisible;
-  if (!mGeckoChild || NS_FAILED(mGeckoChild->IsVisible(isVisible)) ||
-      !isVisible)
+  if (!mGeckoChild || !mGeckoChild->IsVisible())
     return;
 
 #ifndef NP_NO_QUICKDRAW
@@ -2548,7 +2538,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
 #endif
 
   LayerManager *layerManager = mGeckoChild->GetLayerManager(nsnull);
-  if (layerManager->GetBackendType() == LayerManager::LAYERS_OPENGL) {
+  if (layerManager->GetBackendType() == mozilla::layers::LAYERS_OPENGL) {
     NSOpenGLContext *glContext;
 
     LayerManagerOGL *manager = static_cast<LayerManagerOGL*>(layerManager);
@@ -3707,17 +3697,26 @@ NSEvent* gLastDragMouseDownEvent = nil;
   }
 
   // Some scrolling devices supports pixel scrolling, e.g. a Macbook
-  // touchpad or a Mighty Mouse. On those devices, [event deviceDeltaX/Y]
-  // contains the amount of pixels to scroll. 
+  // touchpad or a Mighty Mouse. On those devices, [theEvent deviceDeltaX/Y]
+  // contains the amount of pixels to scroll. Since Lion this has changed 
+  // to [theEvent scrollingDeltaX/Y].
   if (inAxis & nsMouseScrollEvent::kIsVertical) {
     scrollDelta       = -[theEvent deltaY];
     if (checkPixels && (scrollDelta == 0 || scrollDelta != floor(scrollDelta))) {
-      scrollDeltaPixels = -[theEvent deviceDeltaY];
+      if ([theEvent respondsToSelector:@selector(scrollingDeltaY)]) {
+        scrollDeltaPixels = -[theEvent scrollingDeltaY];
+      } else {
+        scrollDeltaPixels = -[theEvent deviceDeltaY];
+      }
     }
   } else if (inAxis & nsMouseScrollEvent::kIsHorizontal) {
     scrollDelta       = -[theEvent deltaX];
     if (checkPixels && (scrollDelta == 0 || scrollDelta != floor(scrollDelta))) {
-      scrollDeltaPixels = -[theEvent deviceDeltaX];
+      if ([theEvent respondsToSelector:@selector(scrollingDeltaX)]) {
+        scrollDeltaPixels = -[theEvent scrollingDeltaX];
+      } else {
+        scrollDeltaPixels = -[theEvent deviceDeltaX];
+      }
     }
   } else {
     return; // caller screwed up
@@ -4544,7 +4543,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
 
   NSEvent *currentEvent = [NSApp currentEvent];
   gUserCancelledDrag = ([currentEvent type] == NSKeyDown &&
-                        [currentEvent keyCode] == kEscapeKeyCode);
+                        [currentEvent keyCode] == kVK_Escape);
 
   if (!mDragService) {
     CallGetService(kDragServiceContractID, &mDragService);
@@ -4633,6 +4632,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
       NS_ERROR("no transferable");
       return nil;
     }
+    item->Init(nsnull);
 
     item->SetTransferData(kFilePromiseDirectoryMime, macLocalFile, sizeof(nsIFile*));
     
@@ -4787,6 +4787,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
   nsCOMPtr<nsITransferable> trans = do_CreateInstance("@mozilla.org/widget/transferable;1", &rv);
   if (NS_FAILED(rv))
     return NO;
+  trans->Init(nsnull);
 
   trans->AddDataFlavor(kUnicodeMime);
   trans->AddDataFlavor(kHTMLMime);

@@ -134,6 +134,12 @@ XPCOMUtils.defineLazyGetter(this, "Tilt", function() {
   return new tmp.Tilt(window);
 });
 
+XPCOMUtils.defineLazyGetter(this, "Social", function() {
+  let tmp = {};
+  Cu.import("resource:///modules/Social.jsm", tmp);
+  return tmp.Social;
+});
+
 let gInitialPages = [
   "about:blank",
   "about:newtab",
@@ -148,6 +154,7 @@ let gInitialPages = [
 #include browser-fullZoom.js
 #include browser-places.js
 #include browser-plugins.js
+#include browser-social.js
 #include browser-tabPreviews.js
 #include browser-tabview.js
 #include browser-thumbnails.js
@@ -1001,6 +1008,8 @@ var gBrowserInit = {
     gBrowser.addEventListener("PluginOutdated",     gPluginHandler, true);
     gBrowser.addEventListener("PluginDisabled",     gPluginHandler, true);
     gBrowser.addEventListener("PluginClickToPlay",  gPluginHandler, true);
+    gBrowser.addEventListener("PluginVulnerableUpdatable", gPluginHandler, true);
+    gBrowser.addEventListener("PluginVulnerableNoUpdate", gPluginHandler, true);
     gBrowser.addEventListener("NewPluginInstalled", gPluginHandler.newPluginInstalled, true);
 #ifdef XP_MACOSX
     gBrowser.addEventListener("npapi-carbon-event-model-failure", gPluginHandler, true);
@@ -1244,6 +1253,7 @@ var gBrowserInit = {
     OfflineApps.init();
     IndexedDBPromptHelper.init();
     gFormSubmitObserver.init();
+    SocialUI.init();
     AddonManager.addAddonListener(AddonsMgrListener);
 
     gBrowser.addEventListener("pageshow", function(evt) { setTimeout(pageShowEventHandlers, 0, evt); }, true);
@@ -1392,48 +1402,39 @@ var gBrowserInit = {
     // Enable developer toolbar?
     let devToolbarEnabled = gPrefService.getBoolPref("devtools.toolbar.enabled");
     if (devToolbarEnabled) {
-      document.getElementById("menu_devToolbar").hidden = false;
-      document.getElementById("Tools:DevToolbar").removeAttribute("disabled");
-#ifdef MENUBAR_CAN_AUTOHIDE
-      document.getElementById("appmenu_devToolbar").hidden = false;
-#endif
+      let cmd = document.getElementById("Tools:DevToolbar");
+      cmd.removeAttribute("disabled");
+      cmd.removeAttribute("hidden");
+      document.getElementById("Tools:DevToolbarFocus").removeAttribute("disabled");
 
       // Show the toolbar if it was previously visible
       if (gPrefService.getBoolPref("devtools.toolbar.visible")) {
-        this.DeveloperToolbar.show();
+        DeveloperToolbar.show(false);
       }
     }
 
     // Enable Inspector?
     let enabled = gPrefService.getBoolPref("devtools.inspector.enabled");
     if (enabled) {
-      document.getElementById("menu_pageinspect").hidden = false;
-      document.getElementById("Tools:Inspect").removeAttribute("disabled");
-#ifdef MENUBAR_CAN_AUTOHIDE
-      document.getElementById("appmenu_pageInspect").hidden = false;
-#endif
-      document.getElementById("developer-toolbar-inspector").hidden = false;
+      let cmd = document.getElementById("Tools:Inspect");
+      cmd.removeAttribute("disabled");
+      cmd.removeAttribute("hidden");
     }
 
     // Enable Debugger?
     let enabled = gPrefService.getBoolPref("devtools.debugger.enabled");
     if (enabled) {
-      document.getElementById("menu_debugger").hidden = false;
-      document.getElementById("Tools:Debugger").removeAttribute("disabled");
-#ifdef MENUBAR_CAN_AUTOHIDE
-      document.getElementById("appmenu_debugger").hidden = false;
-#endif
-      document.getElementById("developer-toolbar-debugger").hidden = false;
+      let cmd = document.getElementById("Tools:Debugger");
+      cmd.removeAttribute("disabled");
+      cmd.removeAttribute("hidden");
     }
 
     // Enable Remote Debugger?
     let enabled = gPrefService.getBoolPref("devtools.debugger.remote-enabled");
     if (enabled) {
-      document.getElementById("menu_remoteDebugger").hidden = false;
-      document.getElementById("Tools:RemoteDebugger").removeAttribute("disabled");
-#ifdef MENUBAR_CAN_AUTOHIDE
-      document.getElementById("appmenu_remoteDebugger").hidden = false;
-#endif
+      let cmd = document.getElementById("Tools:RemoteDebugger");
+      cmd.removeAttribute("disabled");
+      cmd.removeAttribute("hidden");
     }
 
     // Enable Chrome Debugger?
@@ -1441,42 +1442,34 @@ var gBrowserInit = {
                   gPrefService.getBoolPref("devtools.debugger.chrome-enabled") &&
                   gPrefService.getBoolPref("devtools.debugger.remote-enabled");
     if (enabled) {
-      document.getElementById("menu_chromeDebugger").hidden = false;
-      document.getElementById("Tools:ChromeDebugger").removeAttribute("disabled");
-#ifdef MENUBAR_CAN_AUTOHIDE
-      document.getElementById("appmenu_chromeDebugger").hidden = false;
-#endif
+      let cmd = document.getElementById("Tools:ChromeDebugger");
+      cmd.removeAttribute("disabled");
+      cmd.removeAttribute("hidden");
     }
 
     // Enable Error Console?
     // XXX Temporarily always-enabled, see bug 601201
     let consoleEnabled = true || gPrefService.getBoolPref("devtools.errorconsole.enabled");
     if (consoleEnabled) {
-      document.getElementById("javascriptConsole").hidden = false;
-      document.getElementById("key_errorConsole").removeAttribute("disabled");
-#ifdef MENUBAR_CAN_AUTOHIDE
-      document.getElementById("appmenu_errorConsole").hidden = false;
-#endif
+      let cmd = document.getElementById("Tools:ErrorConsole");
+      cmd.removeAttribute("disabled");
+      cmd.removeAttribute("hidden");
     }
 
     // Enable Scratchpad in the UI, if the preference allows this.
     let scratchpadEnabled = gPrefService.getBoolPref(Scratchpad.prefEnabledName);
     if (scratchpadEnabled) {
-      document.getElementById("menu_scratchpad").hidden = false;
-      document.getElementById("Tools:Scratchpad").removeAttribute("disabled");
-#ifdef MENUBAR_CAN_AUTOHIDE
-      document.getElementById("appmenu_scratchpad").hidden = false;
-#endif
+      let cmd = document.getElementById("Tools:Scratchpad");
+      cmd.removeAttribute("disabled");
+      cmd.removeAttribute("hidden");
     }
 
     // Enable Style Editor?
     let styleEditorEnabled = gPrefService.getBoolPref(StyleEditor.prefEnabledName);
     if (styleEditorEnabled) {
-      document.getElementById("menu_styleeditor").hidden = false;
-      document.getElementById("Tools:StyleEditor").removeAttribute("disabled");
-#ifdef MENUBAR_CAN_AUTOHIDE
-      document.getElementById("appmenu_styleeditor").hidden = false;
-#endif
+      let cmd = document.getElementById("Tools:StyleEditor");
+      cmd.removeAttribute("disabled");
+      cmd.removeAttribute("hidden");
     }
 
 #ifdef MENUBAR_CAN_AUTOHIDE
@@ -1491,12 +1484,9 @@ var gBrowserInit = {
     // Enable Responsive UI?
     let responsiveUIEnabled = gPrefService.getBoolPref("devtools.responsiveUI.enabled");
     if (responsiveUIEnabled) {
-      document.getElementById("menu_responsiveUI").hidden = false;
-      document.getElementById("Tools:ResponsiveUI").removeAttribute("disabled");
-#ifdef MENUBAR_CAN_AUTOHIDE
-      document.getElementById("appmenu_responsiveUI").hidden = false;
-#endif
-      document.getElementById("developer-toolbar-responsiveui").hidden = false;
+      let cmd = document.getElementById("Tools:ResponsiveUI");
+      cmd.removeAttribute("disabled");
+      cmd.removeAttribute("hidden");
     }
 
     let appMenuButton = document.getElementById("appmenu-button");
@@ -1612,6 +1602,7 @@ var gBrowserInit = {
       OfflineApps.uninit();
       IndexedDBPromptHelper.uninit();
       AddonManager.removeAddonListener(AddonsMgrListener);
+      SocialUI.uninit();
     }
 
     // Final window teardown, do this last.
@@ -2227,6 +2218,12 @@ function getPostDataStream(aStringData, aKeyword, aEncKeyword, aType) {
   return mimeStream.QueryInterface(Ci.nsIInputStream);
 }
 
+function getLoadContext() {
+  return window.QueryInterface(Ci.nsIInterfaceRequestor)
+               .getInterface(Ci.nsIWebNavigation)
+               .QueryInterface(Ci.nsILoadContext);
+}
+
 function readFromClipboard()
 {
   var url;
@@ -2239,6 +2236,7 @@ function readFromClipboard()
     // Create transferable that will transfer the text.
     var trans = Components.classes["@mozilla.org/widget/transferable;1"]
                           .createInstance(Components.interfaces.nsITransferable);
+    trans.init(getLoadContext());
 
     trans.addDataFlavor("text/unicode");
 
@@ -2603,13 +2601,16 @@ function BrowserOnClick(event) {
         if (previousNotification)
           notificationBox.removeNotification(previousNotification);
 
-        notificationBox.appendNotification(
+        let notification = notificationBox.appendNotification(
           title,
           value,
           "chrome://global/skin/icons/blacklist_favicon.png",
           notificationBox.PRIORITY_CRITICAL_HIGH,
           buttons
         );
+        // Persist the notification until the user removes so it
+        // doesn't get removed on redirects.
+        notification.persistence = -1;
       }
     }
     else if (/^about:home$/i.test(ownerDoc.documentURI)) {
@@ -3547,6 +3548,7 @@ function BrowserToolboxCustomizeDone(aToolboxChanged) {
     URLBarSetURI();
     XULBrowserWindow.asyncUpdateUI();
     PlacesStarButton.updateState();
+    SocialShareButton.updateShareState();
   }
 
   TabsInTitlebar.allowedBy("customizing-toolbars", true);
@@ -4025,6 +4027,7 @@ var XULBrowserWindow = {
 
         // Update starring UI
         PlacesStarButton.updateState();
+        SocialShareButton.updateShareState();
       }
 
       // Show or hide browser chrome based on the whitelist
@@ -4678,15 +4681,9 @@ var TabsInTitlebar = {
     this._readPref();
     Services.prefs.addObserver(this._prefName, this, false);
 
-    // Don't trust the initial value of the sizemode attribute; wait for the resize event.
+    // Don't trust the initial value of the sizemode attribute; wait for
+    // the resize event (handled in tabbrowser.xml).
     this.allowedBy("sizemode", false);
-    window.addEventListener("resize", function (event) {
-      if (event.target != window)
-        return;
-      let sizemode = document.documentElement.getAttribute("sizemode");
-      TabsInTitlebar.allowedBy("sizemode",
-                               sizemode == "maximized" || sizemode == "fullscreen");
-    }, false);
 
     this._initialized = true;
 #endif
@@ -4859,10 +4856,17 @@ function toggleSidebar(commandID, forceOpen) {
 
   if (sidebarBroadcaster.getAttribute("checked") == "true") {
     if (!forceOpen) {
+      // Replace the document currently displayed in the sidebar with about:blank
+      // so that we can free memory by unloading the page. We need to explicitly
+      // create a new content viewer because the old one doesn't get destroyed
+      // until about:blank has loaded (which does not happen as long as the
+      // element is hidden).
+      sidebar.setAttribute("src", "about:blank");
+      sidebar.docShell.createAboutBlankContentViewer(null);
+
       sidebarBroadcaster.removeAttribute("checked");
       sidebarBox.setAttribute("sidebarcommand", "");
       sidebarTitle.value = "";
-      sidebar.setAttribute("src", "about:blank");
       sidebarBox.hidden = true;
       sidebarSplitter.hidden = true;
       content.focus();
@@ -5254,10 +5258,9 @@ function middleMousePaste(event) {
     Cu.reportError(ex);
   }
 
-  // FIXME: Bug 631500, use openUILink directly
-  let where = whereToOpenLink(event, true);
-  openUILinkIn(url, where,
-               { disallowInheritPrincipal: !mayInheritPrincipal.value });
+  openUILink(url, event,
+             { ignoreButton: true,
+               disallowInheritPrincipal: !mayInheritPrincipal.value });
 
   event.stopPropagation();
 }
@@ -6046,16 +6049,45 @@ function WindowIsClosing()
  */
 function warnAboutClosingWindow() {
   // Popups aren't considered full browser windows.
-  if (!toolbar.visible)
+  let isPBWindow = gPrivateBrowsingUI.privateWindow;
+  if (!isPBWindow && !toolbar.visible)
     return gBrowser.warnAboutClosingTabs(true);
 
   // Figure out if there's at least one other browser window around.
   let e = Services.wm.getEnumerator("navigator:browser");
+  let otherPBWindowExists = false;
+  let warnAboutClosingTabs = false;
   while (e.hasMoreElements()) {
     let win = e.getNext();
-    if (win != window && win.toolbar.visible)
-      return gBrowser.warnAboutClosingTabs(true);
+    if (win != window) {
+      if (isPBWindow &&
+          ("gPrivateBrowsingUI" in win) &&
+          win.gPrivateBrowsingUI.privateWindow)
+        otherPBWindowExists = true;
+      if (win.toolbar.visible)
+        warnAboutClosingTabs = true;
+      // If the current window is not in private browsing mode we don't need to 
+      // look for other pb windows, we can leave the loop when finding the 
+      // first non-popup window. If however the current window is in private 
+      // browsing mode then we need at least one other pb and one non-popup 
+      // window to break out early.
+      if ((!isPBWindow || otherPBWindowExists) && warnAboutClosingTabs)
+        break;
+    }
   }
+
+  if (isPBWindow && !otherPBWindowExists) {
+    let exitingCanceled = Cc["@mozilla.org/supports-PRBool;1"].
+                          createInstance(Ci.nsISupportsPRBool);
+    exitingCanceled.data = false;
+    Services.obs.notifyObservers(exitingCanceled,
+                                 "last-pb-context-exiting",
+                                 null);
+    if (exitingCanceled.data)
+      return false;
+  }
+  if (warnAboutClosingTabs)
+    return gBrowser.warnAboutClosingTabs(true);
 
   let os = Services.obs;
 
@@ -6707,10 +6739,6 @@ var gIdentityHandler = {
     // the popup is actually needed
     this._identityPopup.hidden = false;
 
-    // Tell the popup to consume dismiss clicks, to avoid bug 395314
-    this._identityPopup.popupBoxObject
-        .setConsumeRollupEvent(Ci.nsIPopupBoxObject.ROLLUP_CONSUME);
-
     // Update the popup strings
     this.setPopupMessages(this._identityBox.className);
 
@@ -6911,6 +6939,7 @@ let gPrivateBrowsingUI = {
   _searchBarValue: null,
   _findBarValue: null,
   _inited: false,
+  _initCallbacks: [],
 
   init: function PBUI_init() {
     Services.obs.addObserver(this, "private-browsing", false);
@@ -6923,6 +6952,9 @@ let gPrivateBrowsingUI = {
       this.onEnterPrivateBrowsing(true);
 
     this._inited = true;
+
+    this._initCallbacks.forEach(function (callback) callback.apply());
+    this._initCallbacks = [];
   },
 
   uninit: function PBUI_unint() {
@@ -6931,6 +6963,17 @@ let gPrivateBrowsingUI = {
 
     Services.obs.removeObserver(this, "private-browsing");
     Services.obs.removeObserver(this, "private-browsing-transition-complete");
+  },
+
+  get initialized() {
+    return this._inited;
+  },
+
+  addInitializationCallback: function PBUI_addInitializationCallback(aCallback) {
+    if (this._inited)
+      return;
+
+    this._initCallbacks.push(aCallback);
   },
 
   get _disableUIOnToggle() {
@@ -7135,16 +7178,21 @@ let gPrivateBrowsingUI = {
       !this.privateBrowsingEnabled;
   },
 
+  get autoStarted() {
+    return this._privateBrowsingService.autoStarted;
+  },
+
   get privateBrowsingEnabled() {
     return this._privateBrowsingService.privateBrowsingEnabled;
   },
 
   /**
-   * These accessors are used to support per-window Private Browsing mode.
-   * For now the getter returns nsIPrivateBrowsingService.privateBrowsingEnabled,
-   * and the setter should only be used in tests.
+   * This accessor is used to support per-window Private Browsing mode.
    */
   get privateWindow() {
+    if (!gBrowser)
+      return false;
+
     return gBrowser.docShell.QueryInterface(Ci.nsILoadContext)
                             .usePrivateBrowsing;
   }
@@ -7371,39 +7419,28 @@ var StyleEditor = {
    */
   openChrome: function SE_openChrome(aSelectedStyleSheet, aLine, aCol)
   {
-    const CHROME_URL = "chrome://browser/content/styleeditor.xul";
-    const CHROME_WINDOW_TYPE = "Tools:StyleEditor";
-    const CHROME_WINDOW_FLAGS = "chrome,centerscreen,resizable,dialog=no";
-
-    // focus currently open Style Editor window for this document, if any
     let contentWindow = gBrowser.selectedBrowser.contentWindow;
-    let contentWindowID = contentWindow.QueryInterface(Ci.nsIInterfaceRequestor).
-      getInterface(Ci.nsIDOMWindowUtils).currentInnerWindowID;
-    let enumerator = Services.wm.getEnumerator(CHROME_WINDOW_TYPE);
-    while (enumerator.hasMoreElements()) {
-      var win = enumerator.getNext();
-      if (win.styleEditorChrome.contentWindowID == contentWindowID) {
-        if (aSelectedStyleSheet) {
-          win.styleEditorChrome.selectStyleSheet(aSelectedStyleSheet, aLine, aCol);
-        }
-        win.focus();
-        return win;
-      }
+    let win = this.StyleEditorManager.getEditorForWindow(contentWindow);
+    if (win) {
+      this.StyleEditorManager.selectEditor(win);
+      return win;
+    } else {
+      return this.StyleEditorManager.newEditor(contentWindow,
+                                               aSelectedStyleSheet, aLine, aCol);
     }
+  },
 
-    let args = {
-      contentWindow: contentWindow,
-      selectedStyleSheet: aSelectedStyleSheet,
-      line: aLine,
-      col: aCol
-    };
-    args.wrappedJSObject = args;
-    let chromeWindow = Services.ww.openWindow(null, CHROME_URL, "_blank",
-                                              CHROME_WINDOW_FLAGS, args);
-    chromeWindow.focus();
-    return chromeWindow;
+  toggle: function SE_toggle()
+  {
+    this.StyleEditorManager.toggleEditor(gBrowser.contentWindow);
   }
 };
+
+XPCOMUtils.defineLazyGetter(StyleEditor, "StyleEditorManager", function() {
+  let tmp = {};
+  Cu.import("resource:///modules/devtools/StyleEditor.jsm", tmp);
+  return new tmp.StyleEditorManager(window);
+});
 
 
 XPCOMUtils.defineLazyGetter(window, "gShowPageResizers", function () {

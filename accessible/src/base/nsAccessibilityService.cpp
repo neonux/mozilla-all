@@ -36,33 +36,27 @@
 #ifdef XP_WIN
 #include "nsHTMLWin32ObjectAccessible.h"
 #endif
-#include "TextLeafAccessible.h"
+#include "TextLeafAccessibleWrap.h"
 
 #ifdef DEBUG
 #include "Logging.h"
 #endif
 
-#include "nsCURILoader.h"
-#include "nsEventStates.h"
-#include "nsIContentViewer.h"
+#ifdef MOZ_CRASHREPORTER
+#include "nsExceptionHandler.h"
+#endif
+
 #include "nsIDOMDocument.h"
-#include "nsIDOMHTMLAreaElement.h"
-#include "nsIDOMHTMLLegendElement.h"
 #include "nsIDOMHTMLObjectElement.h"
-#include "nsIDOMHTMLOptGroupElement.h"
-#include "nsIDOMHTMLOptionElement.h"
 #include "nsIDOMXULElement.h"
-#include "nsIHTMLDocument.h"
 #include "nsImageFrame.h"
-#include "nsILink.h"
 #include "nsIObserverService.h"
 #include "nsLayoutUtils.h"
 #include "nsNPAPIPluginInstance.h"
-#include "nsISupportsUtils.h"
 #include "nsObjectFrame.h"
-#include "nsTextFragment.h"
 #include "mozilla/FunctionTimer.h"
 #include "mozilla/dom/Element.h"
+#include "mozilla/Preferences.h"
 #include "mozilla/Services.h"
 #include "mozilla/Util.h"
 
@@ -415,7 +409,7 @@ nsAccessibilityService::CreateTextLeafAccessible(nsIContent* aContent,
                                                  nsIPresShell* aPresShell)
 {
   Accessible* accessible =
-    new TextLeafAccessible(aContent, GetDocAccessible(aPresShell));
+    new TextLeafAccessibleWrap(aContent, GetDocAccessible(aPresShell));
   NS_ADDREF(accessible);
   return accessible;
 }
@@ -659,7 +653,8 @@ nsAccessibilityService::GetAccessibleFor(nsIDOMNode *aNode,
 NS_IMETHODIMP
 nsAccessibilityService::GetStringRole(PRUint32 aRole, nsAString& aString)
 {
-#define ROLE(geckoRole, stringRole, atkRole, macRole, msaaRole, ia2Role) \
+#define ROLE(geckoRole, stringRole, atkRole, \
+             macRole, msaaRole, ia2Role, nameRule) \
   case roles::geckoRole: \
     CopyUTF8toUTF16(stringRole, aString); \
     return NS_OK;
@@ -1163,11 +1158,14 @@ nsAccessibilityService::GetOrCreateAccessible(nsINode* aNode,
   }
 
   if (!newAcc) {
-    // Create generic accessibles for SVG and MathML nodes.
-    if (content->IsSVG(nsGkAtoms::svg)) {
+    // xul:deck does not have XBL and nsIFrame::CreateAccessible() is only called 
+    // on HTML elements
+    nsIAtom* tag = content->Tag();
+    if ((tag == nsGkAtoms::deck) || (tag == nsGkAtoms::tabpanels)) {
+      newAcc = new XULDeckAccessible(content, docAcc);
+    } else if (content->IsSVG(nsGkAtoms::svg)) {
       newAcc = new EnumRoleAccessible(content, docAcc, roles::DIAGRAM);
-    }
-    else if (content->IsMathML(nsGkAtoms::math)) {
+    } else if (content->IsMathML(nsGkAtoms::math)) {
       newAcc = new EnumRoleAccessible(content, docAcc, roles::EQUATION);
     }
   }
@@ -1229,6 +1227,12 @@ nsAccessibilityService::Init()
 
   // Initialize accessibility.
   nsAccessNodeWrap::InitAccessibility();
+
+#ifdef MOZ_CRASHREPORTER
+  CrashReporter::
+    AnnotateCrashReport(NS_LITERAL_CSTRING("Accessibility"),
+                        NS_LITERAL_CSTRING("Active"));
+#endif
 
   gIsShutdown = false;
   return true;
@@ -1336,6 +1340,10 @@ nsAccessibilityService::CreateAccessibleByType(nsIContent* aContent,
       accessible = new XULComboboxAccessible(aContent, aDoc);
       break;
 
+    case nsIAccessibleProvider::XULDeck:
+      accessible = new XULDeckAccessible(aContent, aDoc);
+      break;
+
     case nsIAccessibleProvider::XULDropmarker:
       accessible = new XULDropmarkerAccessible(aContent, aDoc);
       break;
@@ -1438,10 +1446,6 @@ nsAccessibilityService::CreateAccessibleByType(nsIContent* aContent,
 
     case nsIAccessibleProvider::XULTabs:
       accessible = new XULTabsAccessible(aContent, aDoc);
-      break;
-
-    case nsIAccessibleProvider::XULTabpanels:
-      accessible = new XULTabpanelsAccessible(aContent, aDoc);
       break;
 
     case nsIAccessibleProvider::XULText:
@@ -1819,8 +1823,30 @@ nsAccessibilityService::CreateAccessibleForXULTree(nsIContent* aContent,
 // Services
 ////////////////////////////////////////////////////////////////////////////////
 
-mozilla::a11y::FocusManager*
-mozilla::a11y::FocusMgr()
+namespace mozilla {
+namespace a11y {
+
+FocusManager*
+FocusMgr()
 {
   return nsAccessibilityService::gAccessibilityService;
+}
+
+EPlatformDisabledState
+PlatformDisabledState()
+{
+  static int disabledState = 0xff;
+
+  if (disabledState == 0xff) {
+    disabledState = Preferences::GetInt("accessibility.force_disabled", 0);
+    if (disabledState < ePlatformIsForceEnabled)
+      disabledState = ePlatformIsForceEnabled;
+    else if (disabledState > ePlatformIsDisabled)
+      disabledState = ePlatformIsDisabled;
+  }
+
+  return (EPlatformDisabledState)disabledState;
+}
+
+}
 }

@@ -8,6 +8,7 @@
 interface nsIDOMMozMobileConnectionInfo;
 interface nsIDOMDOMRequest;
 interface nsIDOMWindow;
+interface nsIDOMMozVoicemailStatus;
 
 [scriptable, uuid(c14c71b8-afba-403b-8320-94593de9380f)]
 interface nsIRILTelephonyCallback : nsISupports
@@ -62,30 +63,41 @@ interface nsIRILTelephonyCallback : nsISupports
                    in AString error);
 };
 
-[scriptable, uuid(66a55943-e63b-4731-aece-9c04bfc14019)]
-interface nsIRILDataCallInfo : nsISupports
+[scriptable, uuid(521cfe4a-bf79-4134-a9fc-e2242164d657)]
+interface nsIRILVoicemailCallback : nsISupports
 {
-  readonly attribute unsigned long callState;
-  readonly attribute AString cid;
-  readonly attribute AString apn;
+  /**
+   * Called when a voicemail notification has been received by the network.
+   *
+   * @param status
+   *        The new voicemail status
+   */
+  void voicemailNotification(in nsIDOMMozVoicemailStatus status);
 };
 
-[scriptable, uuid(cea91bcb-3cfb-42bb-8638-dae89e8870fc)]
+[scriptable, uuid(8a711703-1ee5-4675-9d9a-0b188e944cfe)]
+interface nsIRILDataCallInfo : nsISupports
+{
+  /**
+   * Current data call state, one of the
+   * nsINetworkInterface::NETWORK_STATE_* constants.
+   */
+  readonly attribute unsigned long state;
+  readonly attribute AString cid;
+  readonly attribute AString apn;
+  readonly attribute AString ifname;
+};
+
+[scriptable, uuid(5bcac053-c245-46f0-bb45-d0039bfb89f5)]
 interface nsIRILDataCallback : nsISupports
 {
   /**
    * Notified when a data call changes state.
    *
-   * @param cid
-   *        The CID of the data call.
-   * @param interfaceName
-   *        Name of the associated network interface.
-   * @param dataState
-   *        One of the nsIRadioInterfaceLayer::DATACALL_STATE_* values.
+   * @param dataCall
+   *        A nsIRILDataCallInfo object.
    */
-  void dataCallStateChanged(in AString cid,
-                            in AString interfaceName,
-                            in unsigned short callState);
+  void dataCallStateChanged(in nsIRILDataCallInfo dataCall);
 
   /**
    * Called when nsIRadioInterfaceLayer is asked to enumerate the current
@@ -118,11 +130,14 @@ interface nsIRILContactCallback : nsISupports
  * Helper that runs in the content process and exposes information
  * to the DOM.
  */
-[scriptable, uuid(2f8b0929-2ecf-498c-bfa7-42690509696e)]
+[scriptable, uuid(31ea634b-e710-49ce-bb7d-bfcbaa40fb00)]
 interface nsIRILContentHelper : nsIMobileConnectionProvider
 {
   void registerTelephonyCallback(in nsIRILTelephonyCallback callback);
   void unregisterTelephonyCallback(in nsIRILTelephonyCallback callback);
+
+  void registerVoicemailCallback(in nsIRILVoicemailCallback callback);
+  void unregisterVoicemailCallback(in nsIRILVoicemailCallback callback);
 
   /**
    * Will continue calling callback.enumerateCallState until the callback
@@ -134,6 +149,7 @@ interface nsIRILContentHelper : nsIMobileConnectionProvider
    * Functionality for making and managing phone calls.
    */
   void dial(in DOMString number);
+  void dialEmergency(in DOMString number);
   void hangUp(in unsigned long callIndex);
 
   void startTone(in DOMString dtmfChar);
@@ -146,6 +162,10 @@ interface nsIRILContentHelper : nsIMobileConnectionProvider
 
   attribute bool microphoneMuted;
   attribute bool speakerEnabled;
+
+  readonly attribute nsIDOMMozVoicemailStatus voicemailStatus;
+  readonly attribute DOMString voicemailNumber;
+  readonly attribute DOMString voicemailDisplayName;
 };
 
 [scriptable, uuid(fd9e8b38-b839-4d56-8482-3bf1f5c8f2ee)]
@@ -222,7 +242,7 @@ interface nsIRilContext : nsISupports
   readonly attribute nsIDOMMozMobileConnectionInfo data;
 };
 
-[scriptable, uuid(92bea0af-8d75-4592-87d0-1cab88e36904)]
+[scriptable, uuid(8b649965-6687-46a8-88fa-a5495ce90735)]
 interface nsIRadioInterfaceLayer : nsISupports
 {
   const unsigned short CALL_STATE_UNKNOWN = 0;
@@ -237,13 +257,6 @@ interface nsIRadioInterfaceLayer : nsISupports
   const unsigned short CALL_STATE_DISCONNECTING = 9;
   const unsigned short CALL_STATE_DISCONNECTED = 10;
   const unsigned short CALL_STATE_INCOMING = 11;
-
-  // Keep consistent with GECKO_DATACALL_STATE_* values in ril_consts.js
-  const unsigned short DATACALL_STATE_UNKNOWN = 0;
-  const unsigned short DATACALL_STATE_CONNECTING = 1;
-  const unsigned short DATACALL_STATE_CONNECTED = 2;
-  const unsigned short DATACALL_STATE_DISCONNECTING = 3;
-  const unsigned short DATACALL_STATE_DISCONNECTED = 4;
 
   /**
    * Activates or deactivates radio power.

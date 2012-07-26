@@ -56,7 +56,7 @@ public:
   }
 
   // nsSVGGeometryFrame methods:
-  virtual gfxMatrix GetCanvasTM() = 0;
+  virtual gfxMatrix GetCanvasTM(PRUint32 aFor) = 0;
   PRUint16 GetClipRule();
 
   float GetStrokeWidth();
@@ -104,8 +104,6 @@ protected:
    * given 'fill-opacity'/'stroke-opacity' is returned unmodified.
    */
   float MaybeOptimizeOpacity(float aFillOrStrokeOpacity);
-
-  nsRect mCoveredRegion;
 
 private:
   bool GetStrokeDashData(FallibleTArray<gfxFloat>& dashes, gfxFloat *dashOffset);

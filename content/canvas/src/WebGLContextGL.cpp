@@ -442,6 +442,9 @@ NS_IMETHODIMP
 WebGLContext::BufferData(WebGLenum target, const JS::Value& data, GLenum usage,
                          JSContext* cx)
 {
+    if (!IsContextStable())
+        return NS_OK;
+
     if (data.isNull()) {
         BufferData(target, static_cast<ArrayBuffer*>(nsnull), usage);
         return NS_OK;
@@ -1525,8 +1528,17 @@ WebGLContext::DoFakeVertexAttrib0(WebGLuint vertexCount)
     if (whatDoesAttrib0Need == VertexAttrib0Status::Default)
         return true;
 
+    if (!mAlreadyWarnedAboutFakeVertexAttrib0) {
+        GenerateWarning("Drawing without vertex attrib 0 array enabled forces the browser "
+                        "to do expensive emulation work when running on desktop OpenGL "
+                        "platforms, for example on Mac. It is preferable to always draw "
+                        "with vertex attrib 0 array enabled, by using bindAttribLocation "
+                        "to bind some always-used attribute to location 0.");
+        mAlreadyWarnedAboutFakeVertexAttrib0 = true;
+    }
+
     CheckedUint32 checked_dataSize = CheckedUint32(vertexCount) * 4 * sizeof(WebGLfloat);
-    
+
     if (!checked_dataSize.isValid()) {
         ErrorOutOfMemory("Integer overflow trying to construct a fake vertex attrib 0 array for a draw-operation "
                          "with %d vertices. Try reducing the number of vertices.", vertexCount);
@@ -2447,7 +2459,7 @@ WebGLContext::GetParameter(JSContext* cx, WebGLenum pname, ErrorResult& rv)
         case LOCAL_GL_COMPRESSED_TEXTURE_FORMATS:
         {
             uint32_t length = mCompressedTextureFormats.Length();
-            JSObject* obj = Uint32Array::Create(cx, length, mCompressedTextureFormats.Elements());
+            JSObject* obj = Uint32Array::Create(cx, this, length, mCompressedTextureFormats.Elements());
             if (!obj) {
                 rv = NS_ERROR_OUT_OF_MEMORY;
             }
@@ -2524,7 +2536,7 @@ WebGLContext::GetParameter(JSContext* cx, WebGLenum pname, ErrorResult& rv)
         {
             GLfloat fv[2] = { 0 };
             gl->fGetFloatv(pname, fv);
-            JSObject* obj = Float32Array::Create(cx, 2, fv);
+            JSObject* obj = Float32Array::Create(cx, this, 2, fv);
             if (!obj) {
                 rv = NS_ERROR_OUT_OF_MEMORY;
             }
@@ -2536,7 +2548,7 @@ WebGLContext::GetParameter(JSContext* cx, WebGLenum pname, ErrorResult& rv)
         {
             GLfloat fv[4] = { 0 };
             gl->fGetFloatv(pname, fv);
-            JSObject* obj = Float32Array::Create(cx, 4, fv);
+            JSObject* obj = Float32Array::Create(cx, this, 4, fv);
             if (!obj) {
                 rv = NS_ERROR_OUT_OF_MEMORY;
             }
@@ -2547,7 +2559,7 @@ WebGLContext::GetParameter(JSContext* cx, WebGLenum pname, ErrorResult& rv)
         {
             GLint iv[2] = { 0 };
             gl->fGetIntegerv(pname, iv);
-            JSObject* obj = Int32Array::Create(cx, 2, iv);
+            JSObject* obj = Int32Array::Create(cx, this, 2, iv);
             if (!obj) {
                 rv = NS_ERROR_OUT_OF_MEMORY;
             }
@@ -2559,7 +2571,7 @@ WebGLContext::GetParameter(JSContext* cx, WebGLenum pname, ErrorResult& rv)
         {
             GLint iv[4] = { 0 };
             gl->fGetIntegerv(pname, iv);
-            JSObject* obj = Int32Array::Create(cx, 4, iv);
+            JSObject* obj = Int32Array::Create(cx, this, 4, iv);
             if (!obj) {
                 rv = NS_ERROR_OUT_OF_MEMORY;
             }
@@ -3323,7 +3335,7 @@ WebGLContext::GetUniform(JSContext* cx, WebGLProgram *prog,
         if (unitSize == 1) {
             return JS::DoubleValue(fv[0]);
         } else {
-            JSObject* obj = Float32Array::Create(cx, unitSize, fv);
+            JSObject* obj = Float32Array::Create(cx, this, unitSize, fv);
             if (!obj) {
                 rv.Throw(NS_ERROR_OUT_OF_MEMORY);
             }
@@ -3335,7 +3347,7 @@ WebGLContext::GetUniform(JSContext* cx, WebGLProgram *prog,
         if (unitSize == 1) {
             return JS::Int32Value(iv[0]);
         } else {
-            JSObject* obj = Int32Array::Create(cx, unitSize, iv);
+            JSObject* obj = Int32Array::Create(cx, this, unitSize, iv);
             if (!obj) {
                 rv.Throw(NS_ERROR_OUT_OF_MEMORY);
             }
@@ -3462,7 +3474,7 @@ WebGLContext::GetVertexAttrib(JSContext* cx, WebGLuint index, WebGLenum pname,
                 vec[2] = mVertexAttrib0Vector[2];
                 vec[3] = mVertexAttrib0Vector[3];
             }
-            JSObject* obj = Float32Array::Create(cx, 4, vec);
+            JSObject* obj = Float32Array::Create(cx, this, 4, vec);
             if (!obj) {
                 rv.Throw(NS_ERROR_OUT_OF_MEMORY);
             }
@@ -4954,12 +4966,16 @@ WebGLContext::CompileShader(WebGLShader *shader)
             compileOptions |= SH_OBJECT_CODE
                             | SH_MAP_LONG_VARIABLE_NAMES;
 #ifdef XP_MACOSX
-            // work around bug 665578
-            if (gl->WorkAroundDriverBugs() &&
-                !nsCocoaFeatures::OnLionOrLater() &&
-                gl->Vendor() == gl::GLContext::VendorATI)
-            {
-                compileOptions |= SH_EMULATE_BUILT_IN_FUNCTIONS;
+            if (gl->WorkAroundDriverBugs()) {
+                // Work around bug 665578 and bug 769810
+                if (gl->Vendor() == gl::GLContext::VendorATI) {
+                    compileOptions |= SH_EMULATE_BUILT_IN_FUNCTIONS;
+                }
+
+                // Work around bug 735560
+                if (gl->Vendor() == gl::GLContext::VendorIntel) {
+                    compileOptions |= SH_EMULATE_BUILT_IN_FUNCTIONS;
+                }
             }
 #endif
         }
@@ -5018,9 +5034,13 @@ WebGLContext::CompileShader(WebGLShader *shader)
             // we always query uniform info, regardless of useShaderSourceTranslation,
             // as we need it to validate uniform setter calls, and it doesn't rely on
             // shader translation.
+            char mappedNameLength = strlen(mapped_name);
+            char mappedNameLastChar = mappedNameLength > 1
+                                      ? mapped_name[mappedNameLength - 1]
+                                      : 0;
             shader->mUniformInfos.AppendElement(WebGLUniformInfo(
                                                     size,
-                                                    length > 1 && mapped_name[length - 1] == ']',
+                                                    mappedNameLastChar == ']',
                                                     type));
         }
 

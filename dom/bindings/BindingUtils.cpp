@@ -4,6 +4,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include <stdarg.h>
+
 #include "BindingUtils.h"
 
 #include "xpcprivate.h"
@@ -11,6 +13,32 @@
 
 namespace mozilla {
 namespace dom {
+
+JSErrorFormatString ErrorFormatString[] = {
+#define MSG_DEF(_name, _argc, _str) \
+  { _str, _argc, JSEXN_TYPEERR },
+#include "mozilla/dom/Errors.msg"
+#undef MSG_DEF
+};
+
+const JSErrorFormatString*
+GetErrorMessage(void* aUserRef, const char* aLocale,
+                const unsigned aErrorNumber)
+{
+  MOZ_ASSERT(aErrorNumber < ArrayLength(ErrorFormatString));
+  return &ErrorFormatString[aErrorNumber];
+}
+
+bool
+ThrowErrorMessage(JSContext* aCx, const ErrNum aErrorNumber, ...)
+{
+  va_list ap;
+  va_start(ap, aErrorNumber);
+  JS_ReportErrorNumberVA(aCx, GetErrorMessage, NULL,
+                         static_cast<const unsigned>(aErrorNumber), ap);
+  va_end(ap);
+  return false;
+}
 
 bool
 DefineConstants(JSContext* cx, JSObject* obj, ConstantSpec* cs)
@@ -94,26 +122,13 @@ InterfaceObjectToString(JSContext* cx, unsigned argc, JS::Value *vp)
     return false;
   }
 
-  JS::Value* argv = JS_ARGV(cx, vp);
-  uint32_t indent = 0;
-  if (argc != 0 && !JS_ValueToECMAUint32(cx, argv[0], &indent))
-      return false;
-
-  nsAutoString spaces;
-  while (indent-- > 0) {
-    spaces.Append(PRUnichar(' '));
-  }
-
   nsString str;
-  str.Append(spaces);
   str.AppendLiteral("function ");
   str.Append(name, length);
   str.AppendLiteral("() {");
   str.Append('\n');
-  str.Append(spaces);
   str.AppendLiteral("    [native code]");
   str.Append('\n');
-  str.Append(spaces);
   str.AppendLiteral("}");
 
   return xpc::NonVoidStringToJsval(cx, str, vp);
@@ -395,6 +410,148 @@ JSBool
 ThrowingConstructorWorkers(JSContext* cx, unsigned argc, JS::Value* vp)
 {
   return Throw<false>(cx, NS_ERROR_FAILURE);
+}
+
+bool
+XrayResolveProperty(JSContext* cx, JSObject* wrapper, jsid id,
+                    JSPropertyDescriptor* desc,
+                    // And the things we need to determine the descriptor
+                    Prefable<JSFunctionSpec>* methods,
+                    jsid* methodIds,
+                    JSFunctionSpec* methodSpecs,
+                    size_t methodCount,
+                    Prefable<JSPropertySpec>* attributes,
+                    jsid* attributeIds,
+                    JSPropertySpec* attributeSpecs,
+                    size_t attributeCount,
+                    Prefable<ConstantSpec>* constants,
+                    jsid* constantIds,
+                    ConstantSpec* constantSpecs,
+                    size_t constantCount)
+{
+  for (size_t prefIdx = 0; prefIdx < methodCount; ++prefIdx) {
+    MOZ_ASSERT(methods[prefIdx].specs);
+    if (methods[prefIdx].enabled) {
+      // Set i to be the index into our full list of ids/specs that we're
+      // looking at now.
+      size_t i = methods[prefIdx].specs - methodSpecs;
+      for ( ; methodIds[i] != JSID_VOID; ++i) {
+        if (id == methodIds[i]) {
+          JSFunction *fun = JS_NewFunctionById(cx, methodSpecs[i].call,
+                                               methodSpecs[i].nargs, 0,
+                                               wrapper, id);
+          if (!fun)
+              return false;
+          JSObject *funobj = JS_GetFunctionObject(fun);
+          desc->value.setObject(*funobj);
+          desc->attrs = methodSpecs[i].flags;
+          desc->obj = wrapper;
+          desc->setter = nsnull;
+          desc->getter = nsnull;
+          return true;
+        }
+      }
+    }
+  }
+
+  for (size_t prefIdx = 0; prefIdx < attributeCount; ++prefIdx) {
+    MOZ_ASSERT(attributes[prefIdx].specs);
+    if (attributes[prefIdx].enabled) {
+      // Set i to be the index into our full list of ids/specs that we're
+      // looking at now.
+      size_t i = attributes[prefIdx].specs - attributeSpecs;
+      for ( ; attributeIds[i] != JSID_VOID; ++i) {
+        if (id == attributeIds[i]) {
+          desc->attrs = attributeSpecs[i].flags;
+          desc->obj = wrapper;
+          desc->setter = attributeSpecs[i].setter;
+          desc->getter = attributeSpecs[i].getter;
+          return true;
+        }
+      }
+    }
+  }
+
+  for (size_t prefIdx = 0; prefIdx < constantCount; ++prefIdx) {
+    MOZ_ASSERT(constants[prefIdx].specs);
+    if (constants[prefIdx].enabled) {
+      // Set i to be the index into our full list of ids/specs that we're
+      // looking at now.
+      size_t i = constants[prefIdx].specs - constantSpecs;
+      for ( ; constantIds[i] != JSID_VOID; ++i) {
+        if (id == constantIds[i]) {
+          desc->attrs = JSPROP_ENUMERATE | JSPROP_READONLY | JSPROP_PERMANENT;
+          desc->obj = wrapper;
+          desc->value = constantSpecs[i].value;
+          return true;
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
+bool
+XrayEnumerateProperties(JS::AutoIdVector& props,
+                        Prefable<JSFunctionSpec>* methods,
+                        jsid* methodIds,
+                        JSFunctionSpec* methodSpecs,
+                        size_t methodCount,
+                        Prefable<JSPropertySpec>* attributes,
+                        jsid* attributeIds,
+                        JSPropertySpec* attributeSpecs,
+                        size_t attributeCount,
+                        Prefable<ConstantSpec>* constants,
+                        jsid* constantIds,
+                        ConstantSpec* constantSpecs,
+                        size_t constantCount)
+{
+  for (size_t prefIdx = 0; prefIdx < methodCount; ++prefIdx) {
+    MOZ_ASSERT(methods[prefIdx].specs);
+    if (methods[prefIdx].enabled) {
+      // Set i to be the index into our full list of ids/specs that we're
+      // looking at now.
+      size_t i = methods[prefIdx].specs - methodSpecs;
+      for ( ; methodIds[i] != JSID_VOID; ++i) {
+        if ((methodSpecs[i].flags & JSPROP_ENUMERATE) &&
+            !props.append(methodIds[i])) {
+          return false;
+        }
+      }
+    }
+  }
+
+  for (size_t prefIdx = 0; prefIdx < attributeCount; ++prefIdx) {
+    MOZ_ASSERT(attributes[prefIdx].specs);
+    if (attributes[prefIdx].enabled) {
+      // Set i to be the index into our full list of ids/specs that we're
+      // looking at now.
+      size_t i = attributes[prefIdx].specs - attributeSpecs;
+      for ( ; attributeIds[i] != JSID_VOID; ++i) {
+        if ((attributeSpecs[i].flags & JSPROP_ENUMERATE) &&
+            !props.append(attributeIds[i])) {
+          return false;
+        }
+      }
+    }
+  }
+
+  for (size_t prefIdx = 0; prefIdx < constantCount; ++prefIdx) {
+    MOZ_ASSERT(constants[prefIdx].specs);
+    if (constants[prefIdx].enabled) {
+      // Set i to be the index into our full list of ids/specs that we're
+      // looking at now.
+      size_t i = constants[prefIdx].specs - constantSpecs;
+      for ( ; constantIds[i] != JSID_VOID; ++i) {
+        if (!props.append(constantIds[i])) {
+          return false;
+        }
+      }
+    }
+  }
+
+  return true;
 }
 
 } // namespace dom

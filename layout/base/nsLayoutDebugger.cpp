@@ -17,7 +17,7 @@
 
 using namespace mozilla::layers;
 
-#ifdef NS_DEBUG
+#ifdef DEBUG
 class nsLayoutDebugger : public nsILayoutDebugger {
 public:
   nsLayoutDebugger();
@@ -152,6 +152,7 @@ PrintDisplayListTo(nsDisplayListBuilder* aBuilder, const nsDisplayList& aList,
     }
     nscolor color;
     nsRect vis = i->GetVisibleRect();
+    nsRect component = i->GetComponentAlphaBounds(aBuilder);
     nsDisplayList* list = i->GetList();
     nsRegion opaque;
     if (i->GetType() == nsDisplayItem::TYPE_TRANSFORM) {
@@ -169,18 +170,22 @@ PrintDisplayListTo(nsDisplayListBuilder* aBuilder, const nsDisplayList& aList,
       string.AppendInt((PRUint64)i);
       fprintf(aOutput, "<a href=\"javascript:ViewImage('%s')\">", string.BeginReading());
     }
-    fprintf(aOutput, "%s %p(%s) (%d,%d,%d,%d)(%d,%d,%d,%d)%s%s",
+    fprintf(aOutput, "%s %p(%s) (%d,%d,%d,%d)(%d,%d,%d,%d)(%d,%d,%d,%d)%s",
             i->Name(), (void*)f, NS_ConvertUTF16toUTF8(fName).get(),
             rect.x, rect.y, rect.width, rect.height,
             vis.x, vis.y, vis.width, vis.height,
-            opaque.IsEmpty() ? "" : " opaque",
+            component.x, component.y, component.width, component.height,
             i->IsUniform(aBuilder, &color) ? " uniform" : "");
+    nsRegionRectIterator iter(opaque);
+    for (const nsRect* r = iter.Next(); r; r = iter.Next()) {
+      printf("(opaque %d,%d,%d,%d)", r->x, r->y, r->width, r->height);
+    } 
     if (i->Painted()) {
       fprintf(aOutput, "</a>");
     }
     if (f) {
       PRUint32 key = i->GetPerFrameKey();
-      Layer* layer = aBuilder->LayerBuilder()->GetOldLayerFor(f, key);
+      Layer* layer = mozilla::FrameLayerBuilder::GetDebugOldLayerFor(f, key);
       if (layer) {
         fprintf(aOutput, " <a href=\"#%p\">layer=%p</a>", layer, layer);
       }

@@ -178,6 +178,7 @@ ShouldBeInElements(nsIFormControl* aFormControl)
   case NS_FORM_INPUT_TEXT :
   case NS_FORM_INPUT_TEL :
   case NS_FORM_INPUT_URL :
+  case NS_FORM_INPUT_NUMBER :
   case NS_FORM_SELECT :
   case NS_FORM_TEXTAREA :
   case NS_FORM_FIELDSET :
@@ -990,7 +991,7 @@ nsHTMLFormElement::WalkFormElements(nsFormSubmission* aFormSubmission)
 NS_IMETHODIMP_(PRUint32)
 nsHTMLFormElement::GetElementCount() const 
 {
-  PRUint32 count = nsnull;
+  PRUint32 count = 0;
   mControls->GetLength(&count); 
   return count;
 }
@@ -1851,8 +1852,8 @@ nsHTMLFormElement::OnSecurityChange(nsIWebProgress* aWebProgress,
 NS_IMETHODIMP_(PRInt32)
 nsHTMLFormElement::IndexOfControl(nsIFormControl* aControl)
 {
-  PRInt32 index = nsnull;
-  return mControls->IndexOfControl(aControl, &index) == NS_OK ? index : nsnull;
+  PRInt32 index = 0;
+  return mControls->IndexOfControl(aControl, &index) == NS_OK ? index : 0;
 }
 
 NS_IMETHODIMP

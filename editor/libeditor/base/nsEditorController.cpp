@@ -3,11 +3,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "nsString.h"
-#include "nsIComponentManager.h"
-#include "nsEditorController.h"
+#include "mozilla/mozalloc.h"
+#include "nsDebug.h"
 #include "nsEditorCommands.h"
+#include "nsEditorController.h"
+#include "nsError.h"
 #include "nsIControllerCommandTable.h"
+
+class nsIControllerCommand;
 
 
 
@@ -58,7 +61,6 @@ nsresult nsEditorController::RegisterEditingCommands(nsIControllerCommandTable *
   NS_REGISTER_ONE_COMMAND(nsSwitchTextDirectionCommand, "cmd_switchTextDirection");
 
   NS_REGISTER_FIRST_COMMAND(nsDeleteCommand, "cmd_delete");
-  NS_REGISTER_NEXT_COMMAND(nsDeleteCommand, "cmd_forwardDelete");
   NS_REGISTER_NEXT_COMMAND(nsDeleteCommand, "cmd_deleteCharBackward");
   NS_REGISTER_NEXT_COMMAND(nsDeleteCommand, "cmd_deleteCharForward");
   NS_REGISTER_NEXT_COMMAND(nsDeleteCommand, "cmd_deleteWordBackward");

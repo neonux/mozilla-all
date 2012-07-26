@@ -1675,13 +1675,16 @@ ComputeLinearGradientLine(nsPresContext* aPresContext,
     double angle;
     if (aGradient->mAngle.IsAngleValue()) {
       angle = aGradient->mAngle.GetAngleValueInRadians();
+      if (!aGradient->mLegacySyntax) {
+        angle = M_PI_2 - angle;
+      }
     } else {
       angle = -M_PI_2; // defaults to vertical gradient starting from top
     }
     gfxPoint center(aBoxSize.width/2, aBoxSize.height/2);
     *aLineEnd = ComputeGradientLineEndFromAngle(center, angle, aBoxSize);
     *aLineStart = gfxPoint(aBoxSize.width, aBoxSize.height) - *aLineEnd;
-  } else if (aGradient->mToCorner) {
+  } else if (!aGradient->mLegacySyntax) {
     float xSign = aGradient->mBgPosX.GetPercentValue() * 2 - 1;
     float ySign = 1 - aGradient->mBgPosY.GetPercentValue() * 2;
     double angle = atan2(ySign * aBoxSize.width, xSign * aBoxSize.height);
@@ -1696,6 +1699,7 @@ ComputeLinearGradientLine(nsPresContext* aPresContext,
       ConvertGradientValueToPixels(aGradient->mBgPosY, aBoxSize.height,
                                    appUnitsPerPixel));
     if (aGradient->mAngle.IsAngleValue()) {
+      MOZ_ASSERT(aGradient->mLegacySyntax);
       double angle = aGradient->mAngle.GetAngleValueInRadians();
       *aLineEnd = ComputeGradientLineEndFromAngle(*aLineStart, angle, aBoxSize);
     } else {
@@ -1775,6 +1779,14 @@ ComputeRadialGradientLine(nsPresContext* aPresContext,
       radiusX = offsetX*M_SQRT2;
       radiusY = offsetY*M_SQRT2;
     }
+    break;
+  }
+  case NS_STYLE_GRADIENT_SIZE_EXPLICIT_SIZE: {
+    PRInt32 appUnitsPerPixel = aPresContext->AppUnitsPerDevPixel();
+    radiusX = ConvertGradientValueToPixels(aGradient->mRadiusX,
+                                           aBoxSize.width, appUnitsPerPixel);
+    radiusY = ConvertGradientValueToPixels(aGradient->mRadiusY,
+                                           aBoxSize.height, appUnitsPerPixel);
     break;
   }
   default:
@@ -1997,6 +2009,7 @@ nsCSSRendering::PaintGradient(nsPresContext* aPresContext,
 
   // Create the gradient pattern.
   nsRefPtr<gfxPattern> gradientPattern;
+  bool forceRepeatToCoverTiles = false;
   if (aGradient->mShape == NS_STYLE_GRADIENT_SHAPE_LINEAR) {
     // Compute the actual gradient line ends we need to pass to cairo after
     // stops have been normalized.
@@ -2015,6 +2028,16 @@ nsCSSRendering::PaintGradient(nsPresContext* aPresContext,
 
     gradientPattern = new gfxPattern(gradientStart.x, gradientStart.y,
                                      gradientEnd.x, gradientEnd.y);
+
+    // When the gradient line is parallel to the x axis from the left edge
+    // to the right edge of a tile, then we can repeat by just repeating the
+    // gradient.
+    if ((gradientStart.y == gradientEnd.y && gradientStart.x == 0 &&
+         gradientEnd.x == oneCellArea.width) ||
+        (gradientStart.x == gradientEnd.x && gradientStart.y == 0 &&
+         gradientEnd.y == oneCellArea.height)) {
+      forceRepeatToCoverTiles = true;
+    }
   } else {
     NS_ASSERTION(firstStop >= 0.0,
                  "Negative stops not allowed for radial gradients");
@@ -2065,7 +2088,7 @@ nsCSSRendering::PaintGradient(nsPresContext* aPresContext,
   }
 
   // Set repeat mode. Default cairo extend mode is PAD.
-  if (aGradient->mRepeating) {
+  if (aGradient->mRepeating || forceRepeatToCoverTiles) {
     gradientPattern->SetExtend(gfxPattern::EXTEND_REPEAT);
   }
 
@@ -2084,8 +2107,9 @@ nsCSSRendering::PaintGradient(nsPresContext* aPresContext,
   // xStart/yStart are the top-left corner of the top-left tile.
   nscoord xStart = FindTileStart(dirty.x, aOneCellArea.x, aOneCellArea.width);
   nscoord yStart = FindTileStart(dirty.y, aOneCellArea.y, aOneCellArea.height);
-  nscoord xEnd = dirty.XMost();
-  nscoord yEnd = dirty.YMost();
+  nscoord xEnd = forceRepeatToCoverTiles ? xStart + aOneCellArea.width : dirty.XMost();
+  nscoord yEnd = forceRepeatToCoverTiles ? yStart + aOneCellArea.height : dirty.YMost();
+
   // x and y are the top-left corner of the tile to draw
   for (nscoord y = yStart; y < yEnd; y += aOneCellArea.height) {
     for (nscoord x = xStart; x < xEnd; x += aOneCellArea.width) {
@@ -2095,7 +2119,8 @@ nsCSSRendering::PaintGradient(nsPresContext* aPresContext,
                       appUnitsPerPixel);
       // The actual area to fill with this tile is the intersection of this
       // tile with the overall area we're supposed to be filling
-      gfxRect fillRect = tileRect.Intersect(areaToFill);
+      gfxRect fillRect =
+        forceRepeatToCoverTiles ? areaToFill : tileRect.Intersect(areaToFill);
       ctx->NewPath();
       ctx->Translate(tileRect.TopLeft());
       ctx->SetPattern(gradientPattern);
@@ -3249,11 +3274,56 @@ nsCSSRendering::DrawTableBorderSegment(nsRenderingContext&     aContext,
 
 // End table border-collapsing section
 
+gfxRect
+nsCSSRendering::ExpandPaintingRectForDecorationLine(nsIFrame* aFrame,
+                                                    const PRUint8 aStyle,
+                                                    const gfxRect& aClippedRect,
+                                                    const gfxFloat aXInFrame,
+                                                    const gfxFloat aCycleLength)
+{
+  switch (aStyle) {
+    case NS_STYLE_TEXT_DECORATION_STYLE_DOTTED:
+    case NS_STYLE_TEXT_DECORATION_STYLE_DASHED:
+    case NS_STYLE_TEXT_DECORATION_STYLE_WAVY:
+      break;
+    default:
+      NS_ERROR("Invalid style was specified");
+      return aClippedRect;
+  }
+
+  nsBlockFrame* block = nsnull;
+  // Note that when we paint the decoration lines in relative positioned
+  // box, we should paint them like all of the boxes are positioned as static.
+  nscoord relativeX = 0;
+  for (nsIFrame* f = aFrame; f; f = f->GetParent()) {
+    block = do_QueryFrame(f);
+    if (block) {
+      break;
+    }
+    relativeX += f->GetRelativeOffset(f->GetStyleDisplay()).x;
+  }
+
+  NS_ENSURE_TRUE(block, aClippedRect);
+
+  nscoord frameXInBlockAppUnits = aFrame->GetOffsetTo(block).x - relativeX;
+  nsPresContext *pc = aFrame->PresContext();
+  gfxFloat frameXInBlock = pc->AppUnitsToGfxUnits(frameXInBlockAppUnits);
+  PRInt32 rectXInBlock = PRInt32(NS_round(frameXInBlock + aXInFrame));
+  PRInt32 extraLeft =
+    rectXInBlock - (rectXInBlock / PRInt32(aCycleLength) * aCycleLength);
+  gfxRect rect(aClippedRect);
+  rect.x -= extraLeft;
+  rect.width += extraLeft;
+  return rect;
+}
+
 void
-nsCSSRendering::PaintDecorationLine(gfxContext* aGfxContext,
+nsCSSRendering::PaintDecorationLine(nsIFrame* aFrame,
+                                    gfxContext* aGfxContext,
                                     const gfxRect& aDirtyRect,
                                     const nscolor aColor,
                                     const gfxPoint& aPt,
+                                    const gfxFloat aXInFrame,
                                     const gfxSize& aLineSize,
                                     const gfxFloat aAscent,
                                     const gfxFloat aOffset,
@@ -3297,6 +3367,8 @@ nsCSSRendering::PaintDecorationLine(gfxContext* aGfxContext,
       gfxFloat dash[2] = { dashWidth, dashWidth };
       aGfxContext->SetLineCap(gfxContext::LINE_CAP_BUTT);
       aGfxContext->SetDash(dash, 2, 0.0);
+      rect = ExpandPaintingRectForDecorationLine(aFrame, aStyle, rect,
+                                                 aXInFrame, dashWidth * 2);
       // We should continue to draw the last dash even if it is not in the rect.
       rect.width += dashWidth;
       break;
@@ -3316,6 +3388,8 @@ nsCSSRendering::PaintDecorationLine(gfxContext* aGfxContext,
         dash[1] = dashWidth;
       }
       aGfxContext->SetDash(dash, 2, 0.0);
+      rect = ExpandPaintingRectForDecorationLine(aFrame, aStyle, rect,
+                                                 aXInFrame, dashWidth * 2);
       // We should continue to draw the last dot even if it is not in the rect.
       rect.width += dashWidth;
       break;
@@ -3413,10 +3487,13 @@ nsCSSRendering::PaintDecorationLine(gfxContext* aGfxContext,
       gfxFloat adv = rect.Height() - lineHeight;
       gfxFloat flatLengthAtVertex = NS_MAX((lineHeight - 1.0) * 2.0, 1.0);
 
+      // Align the start of wavy lines to the nearest ancestor block.
+      gfxFloat cycleLength = 2 * (adv + flatLengthAtVertex);
+      rect = ExpandPaintingRectForDecorationLine(aFrame, aStyle, rect,
+                                                 aXInFrame, cycleLength);
       // figure out if we can trim whole cycles from the left and right edges
       // of the line, to try and avoid creating an unnecessarily long and
       // complex path
-      gfxFloat cycleLength = 2 * (adv + flatLengthAtVertex);
       PRInt32 skipCycles = floor((aDirtyRect.x - rect.x) / cycleLength);
       if (skipCycles > 0) {
         rect.x += skipCycles * cycleLength;
@@ -3801,14 +3878,14 @@ nsImageRenderer::ComputeUnscaledDimensions(const nsSize& aBgPositioningArea,
           size = aBgPositioningArea;
         } else {
           // The intrinsic image size for a generic nsIFrame paint server is
-          // the frame's bbox size rounded to device pixels.
+          // the union of the border-box rects of all of its continuations,
+          // rounded to device pixels.
           PRInt32 appUnitsPerDevPixel =
             mForFrame->PresContext()->AppUnitsPerDevPixel();
-          nsRect rect =
-            nsSVGIntegrationUtils::GetNonSVGUserSpace(mPaintServerFrame);
-          nsRect rectSize = rect - rect.TopLeft();
-          nsIntRect rounded = rectSize.ToNearestPixels(appUnitsPerDevPixel);
-          size = rounded.ToAppUnits(appUnitsPerDevPixel).Size();
+          size =
+            nsSVGIntegrationUtils::GetContinuationUnionSize(mPaintServerFrame).
+              ToNearestPixels(appUnitsPerDevPixel).
+              ToAppUnits(appUnitsPerDevPixel);
         }
       } else {
         NS_ASSERTION(mImageElementSurface.mSurface, "Surface should be ready.");

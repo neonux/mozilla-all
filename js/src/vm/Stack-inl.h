@@ -114,6 +114,9 @@ StackFrame::initInlineFrame(JSFunction *fun, StackFrame *prevfp, jsbytecode *pre
     flags_ = StackFrame::FUNCTION;
     exec.fun = fun;
     resetInlinePrev(prevfp, prevpc);
+
+    if (prevfp->hasPushedSPSFrame())
+        setPushedSPSFrame();
 }
 
 inline void
@@ -183,19 +186,7 @@ StackFrame::jitHeavyweightFunctionPrologue(JSContext *cx)
     pushOnScopeChain(*callobj);
     flags_ |= HAS_CALL_OBJ;
 
-    if (script()->nesting()) {
-        types::NestingPrologue(cx, this);
-        flags_ |= HAS_NESTING;
-    }
-
     return true;
-}
-
-inline void
-StackFrame::jitTypeNestingPrologue(JSContext *cx)
-{
-    types::NestingPrologue(cx, this);
-    flags_ |= HAS_NESTING;
 }
 
 inline void
@@ -252,10 +243,10 @@ StackFrame::unaliasedFormal(unsigned i, MaybeCheckAliasing checkAliasing)
 }
 
 inline Value &
-StackFrame::unaliasedActual(unsigned i)
+StackFrame::unaliasedActual(unsigned i, MaybeCheckAliasing checkAliasing)
 {
     JS_ASSERT(i < numActualArgs());
-    JS_ASSERT(!script()->formalIsAliased(i));
+    JS_ASSERT_IF(checkAliasing && i < numFormalArgs(), !script()->formalIsAliased(i));
     return i < numFormalArgs() ? formals()[i] : actuals()[i];
 }
 
@@ -554,45 +545,6 @@ ContextStack::currentScript(jsbytecode **ppc) const
 
     if (ppc)
         *ppc = fp->pcQuadratic(*this);
-    return script;
-}
-
-inline JSScript *
-ContextStack::currentScriptWithDiagnostics(jsbytecode **ppc) const
-{
-    if (ppc)
-        *ppc = NULL;
-
-    FrameRegs *regs = maybeRegs();
-    StackFrame *fp = regs ? regs->fp() : NULL;
-    while (fp && fp->isDummyFrame())
-        fp = fp->prev();
-    if (!fp)
-        *(int *) 0x10 = 0;
-
-#ifdef JS_METHODJIT
-    mjit::CallSite *inlined = regs->inlined();
-    if (inlined) {
-        mjit::JITChunk *chunk = fp->jit()->chunk(regs->pc);
-        JS_ASSERT(inlined->inlineIndex < chunk->nInlineFrames);
-        mjit::InlineFrame *frame = &chunk->inlineFrames()[inlined->inlineIndex];
-        JSScript *script = frame->fun->script();
-        if (script->compartment() != cx_->compartment)
-            *(int *) 0x20 = 0;
-        if (ppc)
-            *ppc = script->code + inlined->pcOffset;
-        return script;
-    }
-#endif
-
-    JSScript *script = fp->script();
-    if (script->compartment() != cx_->compartment)
-        *(int *) 0x30 = 0;
-
-    if (ppc)
-        *ppc = fp->pcQuadratic(*this);
-    if (!script)
-        *(int *) 0x40 = 0;
     return script;
 }
 

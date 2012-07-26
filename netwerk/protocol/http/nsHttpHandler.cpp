@@ -140,7 +140,6 @@ nsHttpHandler::nsHttpHandler()
     , mMaxRequestDelay(10)
     , mIdleSynTimeout(250)
     , mMaxConnections(24)
-    , mMaxConnectionsPerServer(8)
     , mMaxPersistentConnectionsPerServer(2)
     , mMaxPersistentConnectionsPerProxy(4)
     , mMaxPipelinedRequests(32)
@@ -176,6 +175,7 @@ nsHttpHandler::nsHttpHandler()
     , mSpdySendingChunkSize(ASpdySession::kSendingChunkSize)
     , mSpdyPingThreshold(PR_SecondsToInterval(44))
     , mSpdyPingTimeout(PR_SecondsToInterval(8))
+    , mConnectTimeout(90000)
 {
 #if defined(PR_LOGGING)
     gHttpLog = PR_NewLogModule("nsHttp");
@@ -245,6 +245,8 @@ nsHttpHandler::Init()
 
     mMisc.AssignLiteral("rv:" MOZILLA_UAVERSION);
 
+    mCompatFirefox.AssignLiteral("Firefox/" MOZILLA_UAVERSION);
+
     nsCOMPtr<nsIXULAppInfo> appInfo =
         do_GetService("@mozilla.org/xre/app-info;1");
 
@@ -261,6 +263,16 @@ nsHttpHandler::Init()
         mAppVersion.AssignLiteral(MOZ_APP_UA_VERSION);
     }
 
+    mSessionStartTime = NowInSeconds();
+
+    rv = mAuthCache.Init();
+    if (NS_FAILED(rv)) return rv;
+
+    rv = InitConnectionMgr();
+    if (NS_FAILED(rv)) return rv;
+
+    mProductSub.AssignLiteral(MOZILLA_UAVERSION);
+
 #if DEBUG
     // dump user agent prefs
     LOG(("> legacy-app-name = %s\n", mLegacyAppName.get()));
@@ -275,16 +287,6 @@ nsHttpHandler::Init()
     LOG(("> compat-firefox = %s\n", mCompatFirefox.get()));
     LOG(("> user-agent = %s\n", UserAgent().get()));
 #endif
-
-    mSessionStartTime = NowInSeconds();
-
-    rv = mAuthCache.Init();
-    if (NS_FAILED(rv)) return rv;
-
-    rv = InitConnectionMgr();
-    if (NS_FAILED(rv)) return rv;
-
-    mProductSub.AssignLiteral(MOZILLA_UAVERSION);
 
     // Startup the http category
     // Bring alive the objects in the http-protocol-startup category
@@ -320,8 +322,6 @@ nsHttpHandler::InitConnectionMgr()
     }
 
     rv = mConnMgr->Init(mMaxConnections,
-                        mMaxConnectionsPerServer,
-                        mMaxConnectionsPerServer,
                         mMaxPersistentConnectionsPerServer,
                         mMaxPersistentConnectionsPerProxy,
                         mMaxRequestDelay,
@@ -568,17 +568,19 @@ nsHttpHandler::BuildUserAgent()
     mUserAgent += '/';
     mUserAgent += mProductSub;
 
-    // "Firefox/x.y.z" compatibility token
-    if (!mCompatFirefox.IsEmpty()) {
+    bool isFirefox = mAppName.EqualsLiteral("Firefox");
+    if (isFirefox || mCompatFirefoxEnabled) {
+        // "Firefox/x.y" (compatibility) app token
         mUserAgent += ' ';
         mUserAgent += mCompatFirefox;
     }
-
-    // App portion
-    mUserAgent += ' ';
-    mUserAgent += mAppName;
-    mUserAgent += '/';
-    mUserAgent += mAppVersion;
+    if (!isFirefox) {
+        // App portion
+        mUserAgent += ' ';
+        mUserAgent += mAppName;
+        mUserAgent += '/';
+        mUserAgent += mAppVersion;
+    }
 }
 
 #ifdef XP_WIN
@@ -747,11 +749,7 @@ nsHttpHandler::PrefsChanged(nsIPrefBranch *prefs, const char *pref)
 
     if (PREF_CHANGED(UA_PREF("compatMode.firefox"))) {
         rv = prefs->GetBoolPref(UA_PREF("compatMode.firefox"), &cVar);
-        if (NS_SUCCEEDED(rv) && cVar) {
-            mCompatFirefox.AssignLiteral("Firefox/" MOZ_UA_FIREFOX_VERSION);
-        } else {
-            mCompatFirefox.Truncate();
-        }
+        mCompatFirefoxEnabled = (NS_SUCCEEDED(rv) && cVar);
         mUserAgentIsDirty = true;
     }
 
@@ -798,19 +796,6 @@ nsHttpHandler::PrefsChanged(nsIPrefBranch *prefs, const char *pref)
             if (mConnMgr)
                 mConnMgr->UpdateParam(nsHttpConnectionMgr::MAX_CONNECTIONS,
                                       mMaxConnections);
-        }
-    }
-
-    if (PREF_CHANGED(HTTP_PREF("max-connections-per-server"))) {
-        rv = prefs->GetIntPref(HTTP_PREF("max-connections-per-server"), &val);
-        if (NS_SUCCEEDED(rv)) {
-            mMaxConnectionsPerServer = (PRUint8) clamped(val, 1, 0xff);
-            if (mConnMgr) {
-                mConnMgr->UpdateParam(nsHttpConnectionMgr::MAX_CONNECTIONS_PER_HOST,
-                                      mMaxConnectionsPerServer);
-                mConnMgr->UpdateParam(nsHttpConnectionMgr::MAX_CONNECTIONS_PER_PROXY,
-                                      mMaxConnectionsPerServer);
-            }
         }
     }
 
@@ -880,26 +865,6 @@ nsHttpHandler::PrefsChanged(nsIPrefBranch *prefs, const char *pref)
             else
                 mProxyHttpVersion = NS_HTTP_VERSION_1_0;
             // it does not make sense to issue a HTTP/0.9 request to a proxy server
-        }
-    }
-
-    if (PREF_CHANGED(HTTP_PREF("keep-alive"))) {
-        rv = prefs->GetBoolPref(HTTP_PREF("keep-alive"), &cVar);
-        if (NS_SUCCEEDED(rv)) {
-            if (cVar)
-                mCapabilities |= NS_HTTP_ALLOW_KEEPALIVE;
-            else
-                mCapabilities &= ~NS_HTTP_ALLOW_KEEPALIVE;
-        }
-    }
-
-    if (PREF_CHANGED(HTTP_PREF("proxy.keep-alive"))) {
-        rv = prefs->GetBoolPref(HTTP_PREF("proxy.keep-alive"), &cVar);
-        if (NS_SUCCEEDED(rv)) {
-            if (cVar)
-                mProxyCapabilities |= NS_HTTP_ALLOW_KEEPALIVE;
-            else
-                mProxyCapabilities &= ~NS_HTTP_ALLOW_KEEPALIVE;
         }
     }
 
@@ -1143,6 +1108,24 @@ nsHttpHandler::PrefsChanged(nsIPrefBranch *prefs, const char *pref)
                 PR_SecondsToInterval((PRUint16) clamped(val, 0, 0x7fffffff));
     }
 
+    // The maximum amount of time to wait for socket transport to be
+    // established
+    if (PREF_CHANGED(HTTP_PREF("connection-timeout"))) {
+        rv = prefs->GetIntPref(HTTP_PREF("connection-timeout"), &val);
+        if (NS_SUCCEEDED(rv))
+            // the pref is in seconds, but the variable is in milliseconds
+            mConnectTimeout = clamped(val, 1, 0xffff) * PR_MSEC_PER_SEC;
+    }
+
+    // on transition of network.http.diagnostics to true print
+    // a bunch of information to the console
+    if (pref && PREF_CHANGED(HTTP_PREF("diagnostics"))) {
+        rv = prefs->GetBoolPref(HTTP_PREF("diagnostics"), &cVar);
+        if (NS_SUCCEEDED(rv) && cVar) {
+            if (mConnMgr)
+                mConnMgr->PrintDiagnostics();
+        }
+    }
     //
     // INTL options
     //

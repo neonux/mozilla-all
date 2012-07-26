@@ -155,7 +155,7 @@ pref("media.raw.enabled", true);
 pref("media.ogg.enabled", true);
 #endif
 #ifdef MOZ_OPUS
-pref("media.opus.enabled", false);
+pref("media.opus.enabled", true);
 #endif
 #ifdef MOZ_WAVE
 pref("media.wave.enabled", true);
@@ -253,10 +253,6 @@ pref("accessibility.browsewithcaret_shortcut.enabled", true);
 pref("accessibility.tabfocus", 7);
 pref("accessibility.tabfocus_applies_to_xul", false);
 
-// Forcibly disable a11y on win32, even if something attempts
-// to enable it.
-pref("accessibility.win32.force_disabled", false);
-
 // On OS X, we follow the "Click in the scrollbar to:" system preference
 // unless this preference was set manually
 pref("ui.scrollToClick", 0);
@@ -265,6 +261,19 @@ pref("ui.scrollToClick", 0);
 // Only on mac tabfocus is expected to handle UI widgets as well as web content
 pref("accessibility.tabfocus_applies_to_xul", true);
 #endif
+
+// We want the ability to forcibly disable platform a11y, because
+// some non-a11y-related components attempt to bring it up.  See bug
+// 538530 for details about Windows; we have a pref here that allows it
+// to be disabled for performance and testing resons.
+// See bug 761589 for the crossplatform aspect.
+//
+// This pref is checked only once, and the browser needs a restart to
+// pick up any changes.
+//
+// Values are -1 always on. 1 always off, 0 is auto as some platform perform
+// further checks.
+pref("accessibility.force_disabled", 0);
 
 pref("focusmanager.testmode", false);
 
@@ -315,11 +324,16 @@ pref("toolkit.telemetry.infoURL", "http://www.mozilla.com/legal/privacy/firefox.
 // i.e. dynamically constructed SQL strings or SQL executed by addons against addon DBs
 pref("toolkit.telemetry.debugSlowSql", false);
 
+// Identity module
+pref("toolkit.identity.debug", false);
+
 // Disable remote debugging protocol logging
 pref("devtools.debugger.log", false);
 // Disable remote debugging connections
 pref("devtools.debugger.remote-enabled", false);
 pref("devtools.debugger.remote-port", 6000);
+// Force debugger server binding on the loopback interface
+pref("devtools.debugger.force-local", true);
 
 // view source
 pref("view_source.syntax_highlight", true);
@@ -338,6 +352,10 @@ pref("nglayout.enable_drag_images", true);
 
 // enable/disable paint flashing --- useful for debugging
 pref("nglayout.debug.paint_flashing", false);
+
+// enable/disable widget update area flashing --- only supported with 
+// BasicLayers (other layer managers always update the entire widget area)
+pref("nglayout.debug.widget_update_flashing", false);
 
 // scrollbar snapping region
 // 0 - off
@@ -633,6 +651,9 @@ pref("dom.min_background_timeout_value", 1000);
 pref("dom.new_bindings", true);
 pref("dom.experimental_bindings", true);
 
+// Don't use new input types
+pref("dom.experimental_forms", false);
+
 // Parsing perf prefs. For now just mimic what the old code did.
 #ifndef XP_WIN
 pref("content.sink.pending_event_mode", 0);
@@ -676,7 +697,17 @@ pref("javascript.options.mem.disable_explicit_compartment_gc", true);
 pref("javascript.options.mem.gc_incremental", true);
 pref("javascript.options.mem.gc_incremental_slice_ms", 10);
 pref("javascript.options.mem.log", false);
+pref("javascript.options.mem.notify", false);
 pref("javascript.options.gc_on_memory_pressure", true);
+
+pref("javascript.options.mem.gc_high_frequency_time_limit_ms", 1000);
+pref("javascript.options.mem.gc_high_frequency_low_limit_mb", 100);
+pref("javascript.options.mem.gc_high_frequency_high_limit_mb", 500);
+pref("javascript.options.mem.gc_high_frequency_heap_growth_max", 300);
+pref("javascript.options.mem.gc_high_frequency_heap_growth_min", 150);
+pref("javascript.options.mem.gc_low_frequency_heap_growth", 150);
+pref("javascript.options.mem.gc_dynamic_heap_growth", true);
+pref("javascript.options.mem.gc_dynamic_mark_slice", true);
 
 // advanced prefs
 pref("advanced.mailftp",                    false);
@@ -750,8 +781,6 @@ pref("network.http.use-cache", true);
 // HTTP traffic.  an empty value indicates the normal TCP/IP socket type.
 pref("network.http.default-socket-type", "");
 
-pref("network.http.keep-alive", true); // set it to false in case of problems
-pref("network.http.proxy.keep-alive", true);
 // There is a problem with some IIS7 servers that don't close the connection
 // properly after it times out (bug #491541). Default timeout on IIS7 is
 // 120 seconds. We need to reuse or drop the connection within this time.
@@ -765,17 +794,12 @@ pref("network.http.keep-alive.timeout", 115);
 // file descriptors for things other than sockets.   
 pref("network.http.max-connections", 256);
 
-// limit the absolute number of http connections that can be established per
-// host.  if a http proxy server is enabled, then the "server" is the proxy
-// server.  Otherwise, "server" is the http origin server.
-pref("network.http.max-connections-per-server", 15);
-
-// if network.http.keep-alive is true, and if NOT connecting via a proxy, then
+// If NOT connecting via a proxy, then
 // a new connection will only be attempted if the number of active persistent
 // connections to the server is less then max-persistent-connections-per-server.
 pref("network.http.max-persistent-connections-per-server", 6);
 
-// if network.http.keep-alive is true, and if connecting via a proxy, then a
+// If connecting via a proxy, then a
 // new connection will only be attempted if the number of active persistent
 // connections to the proxy is less then max-persistent-connections-per-proxy.
 pref("network.http.max-persistent-connections-per-proxy", 8);
@@ -844,6 +868,10 @@ pref("network.http.qos", 0);
 // connection.
 pref("network.http.connection-retry-timeout", 250);
 
+// The number of seconds after sending initial SYN for an HTTP connection
+// to give up if the OS does not give up first
+pref("network.http.connection-timeout", 90);
+
 // Disable IPv6 for backup connections to workaround problems about broken
 // IPv6 connectivity.
 pref("network.http.fast-fallback-to-IPv4", true);
@@ -858,6 +886,8 @@ pref("network.http.spdy.coalesce-hostnames", true);
 pref("network.http.spdy.use-alternate-protocol", true);
 pref("network.http.spdy.ping-threshold", 44);
 pref("network.http.spdy.ping-timeout", 8);
+
+pref("network.http.diagnostics", false);
 
 // default values for FTP
 // in a DSCP environment this should be 40 (0x28, or AF11), per RFC-4594,
@@ -907,6 +937,10 @@ pref("network.websocket.max-connections", 200);
 // by default scripts loaded from a https:// origin can only open secure
 // (i.e. wss://) websockets.
 pref("network.websocket.allowInsecureFromHTTPS", false);
+
+// by default we delay websocket reconnects to same host/port if previous
+// connection failed, per RFC 6455 section 7.2.3 
+pref("network.websocket.delay-failed-reconnects", true);
 
 // </ws>
 
@@ -1280,13 +1314,13 @@ pref("security.csp.debug", false);
 
 // Modifier key prefs: default to Windows settings,
 // menu access key = alt, accelerator key = control.
-// Use 17 for Ctrl, 18 for Alt, 224 for Meta, 0 for none. Mac settings in macprefs.js
+// Use 17 for Ctrl, 18 for Alt, 224 for Meta, 91 for Win, 0 for none. Mac settings in macprefs.js
 pref("ui.key.accelKey", 17);
 pref("ui.key.menuAccessKey", 18);
 pref("ui.key.generalAccessKey", -1);
 
 // If generalAccessKey is -1, use the following two prefs instead.
-// Use 0 for disabled, 1 for Shift, 2 for Ctrl, 4 for Alt, 8 for Meta
+// Use 0 for disabled, 1 for Shift, 2 for Ctrl, 4 for Alt, 8 for Meta, 16 for Win
 // (values can be combined, e.g. 5 for Alt+Shift)
 pref("ui.key.chromeAccess", 4);
 pref("ui.key.contentAccess", 5);
@@ -1607,6 +1641,8 @@ pref("dom.ipc.plugins.parentTimeoutSecs", 0);
 // Disable oopp for standard java. They run their own process isolation (which
 // conflicts with our implementation, at least on Windows).
 pref("dom.ipc.plugins.java.enabled", false);
+
+pref("dom.ipc.plugins.flash.subprocess.crashreporter.enabled", true);
 
 #ifndef ANDROID
 #ifndef XP_MACOSX
@@ -2256,15 +2292,13 @@ pref("font.name-list.monospace.x-baltic", "Courier");
 pref("font.name-list.cursive.x-baltic", "Apple Chancery");
 pref("font.name-list.fantasy.x-baltic", "Papyrus");
 
-// no suitable fonts for bengali ship with mac os x
-// however two can be freely downloaded
 // SolaimanLipi, Rupali http://ekushey.org/?page/mac_download
-pref("font.name.serif.x-beng", "সোলাইমান লিপি");
-pref("font.name.sans-serif.x-beng", "রূপালী");
-pref("font.name.monospace.x-beng", "রূপালী");
-pref("font.name-list.serif.x-beng", "সোলাইমান লিপি");
-pref("font.name-list.sans-serif.x-beng", "রূপালী");
-pref("font.name-list.monospace.x-beng", "রূপালী");
+pref("font.name.serif.x-beng", "Bangla MN");
+pref("font.name.sans-serif.x-beng", "Bangla Sangam MN");
+pref("font.name.monospace.x-beng", "Bangla Sangam MN");
+pref("font.name-list.serif.x-beng", "Bangla MN");
+pref("font.name-list.sans-serif.x-beng", "Bangla Sangam MN");
+pref("font.name-list.monospace.x-beng", "Bangla Sangam MN");
 
 pref("font.name.serif.x-cans", "Euphemia UCAS");
 pref("font.name.sans-serif.x-cans", "Euphemia UCAS");
@@ -2296,21 +2330,19 @@ pref("font.name-list.cursive.x-cyrillic", "Geneva");
 pref("font.name-list.fantasy.x-cyrillic", "Charcoal CY");
 
 pref("font.name.serif.x-devanagari", "Devanagari MT");
-pref("font.name.sans-serif.x-devanagari", "Devanagari MT");
-pref("font.name.monospace.x-devanagari", "Devanagari MT");
+pref("font.name.sans-serif.x-devanagari", "Devanagari Sangam MN");
+pref("font.name.monospace.x-devanagari", "Devanagari Sangam MN");
 pref("font.name-list.serif.x-devanagari", "Devanagari MT");
-pref("font.name-list.sans-serif.x-devanagari", "Devanagari MT");
-pref("font.name-list.monospace.x-devanagari", "Devanagari MT");
+pref("font.name-list.sans-serif.x-devanagari", "Devanagari Sangam MN,Devanagari MT");
+pref("font.name-list.monospace.x-devanagari", "Devanagari Sangam MN,Devanagari MT");
 
-// no suitable fonts for ethiopic ship with mac os x
-// however one can be freely downloaded
 // Abyssinica SIL http://scripts.sil.org/AbyssinicaSIL_Download
-pref("font.name.serif.x-ethi", "Abyssinica SIL");
-pref("font.name.sans-serif.x-ethi", "Abyssinica SIL");
-pref("font.name.monospace.x-ethi", "Abyssinica SIL");
-pref("font.name-list.serif.x-ethi", "Abyssinica SIL");
-pref("font.name-list.sans-serif.x-ethi", "Abyssinica SIL");
-pref("font.name-list.monospace.x-ethi", "Abyssinica SIL");
+pref("font.name.serif.x-ethi", "Kefa");
+pref("font.name.sans-serif.x-ethi", "Kefa");
+pref("font.name.monospace.x-ethi", "Kefa");
+pref("font.name-list.serif.x-ethi", "Kefa,Abyssinica SIL");
+pref("font.name-list.sans-serif.x-ethi", "Kefa,Abyssinica SIL");
+pref("font.name-list.monospace.x-ethi", "Kefa,Abyssinica SIL");
 
 // no suitable fonts for georgian ship with mac os x
 // however some can be freely downloaded
@@ -2324,11 +2356,11 @@ pref("font.name-list.sans-serif.x-geor", "Zuzumbo");
 pref("font.name-list.monospace.x-geor", "Zuzumbo");
 
 pref("font.name.serif.x-gujr", "Gujarati MT");
-pref("font.name.sans-serif.x-gujr", "Gujarati MT");
-pref("font.name.monospace.x-gujr", "Gujarati MT");
+pref("font.name.sans-serif.x-gujr", "Gujarati Sangam MN");
+pref("font.name.monospace.x-gujr", "Gujarati Sangam MN");
 pref("font.name-list.serif.x-gujr", "Gujarati MT"); 
-pref("font.name-list.sans-serif.x-gujr", "Gujarati MT");
-pref("font.name-list.monospace.x-gujr", "Gujarati MT");
+pref("font.name-list.sans-serif.x-gujr", "Gujarati Sangam MN,Gujarati MT");
+pref("font.name-list.monospace.x-gujr", "Gujarati Sangam MN,Gujarati MT");
 
 pref("font.name.serif.x-guru", "Gurmukhi MT");
 pref("font.name.sans-serif.x-guru", "Gurmukhi MT");
@@ -2337,37 +2369,49 @@ pref("font.name-list.serif.x-guru", "Gurmukhi MT");
 pref("font.name-list.sans-serif.x-guru", "Gurmukhi MT");
 pref("font.name-list.monospace.x-guru", "Gurmukhi MT");
 
-// no suitable fonts for khmer ship with mac os x
-// add this section when fonts exist
+pref("font.name.serif.x-khmr", "Khmer MN");
+pref("font.name.sans-serif.x-khmr", "Khmer Sangam MN");
+pref("font.name.monospace.x-khmr", "Khmer Sangam MN");
+pref("font.name-list.serif.x-khmr", "Khmer MN"); 
+pref("font.name-list.sans-serif.x-khmr", "Khmer Sangam MN");
+pref("font.name-list.monospace.x-khmr", "Khmer Sangam MN");
 
-// no suitable fonts for malayalam ship with mac os x
-// add this section when fonts exist
+pref("font.name.serif.x-mlym", "Malayalam MN");
+pref("font.name.sans-serif.x-mlym", "Malayalam Sangam MN");
+pref("font.name.monospace.x-mlym", "Malayalam Sangam MN");
+pref("font.name-list.serif.x-mlym", "Malayalam MN"); 
+pref("font.name-list.sans-serif.x-mlym", "Malayalam Sangam MN");
+pref("font.name-list.monospace.x-mlym", "Malayalam Sangam MN");
 
-// no suitable fonts for oriya ship with mac os x
-// add this section when fonts exist
+pref("font.name.serif.x-orya", "Oriya MN");
+pref("font.name.sans-serif.x-orya", "Oriya Sangam MN");
+pref("font.name.monospace.x-orya", "Oriya Sangam MN");
+pref("font.name-list.serif.x-orya", "Oriya MN"); 
+pref("font.name-list.sans-serif.x-orya", "Oriya Sangam MN");
+pref("font.name-list.monospace.x-orya", "Oriya Sangam MN");
 
-// no suitable fonts for telugu ship with mac os x
-// however one can be freely downloaded
 // Pothana http://web.nickshanks.com/typography/telugu/
-pref("font.name.serif.x-telu", "Pothana");
-pref("font.name.sans-serif.x-telu", "Pothana");
-pref("font.name.monospace.x-telu", "Pothana");
-pref("font.name-list.serif.x-telu", "Pothana");
-pref("font.name-list.sans-serif.x-telu", "Pothana");
-pref("font.name-list.monospace.x-telu", "Pothana");
+pref("font.name.serif.x-telu", "Telugu MN");
+pref("font.name.sans-serif.x-telu", "Telugu Sangam MN");
+pref("font.name.monospace.x-telu", "Telugu Sangam MN");
+pref("font.name-list.serif.x-telu", "Telugu MN,Pothana");
+pref("font.name-list.sans-serif.x-telu", "Telugu Sangam MN,Pothana");
+pref("font.name-list.monospace.x-telu", "Telugu Sangam MN,Pothana");
 
-// no suitable fonts for kannada ship with mac os x
-// however one can be freely downloaded
 // Kedage http://web.nickshanks.com/typography/kannada/
-pref("font.name.serif.x-knda", "Kedage");
-pref("font.name.sans-serif.x-knda", "Kedage");
-pref("font.name.monospace.x-knda", "Kedage");
-pref("font.name-list.serif.x-knda", "Kedage");
-pref("font.name-list.sans-serif.x-knda", "Kedage");
-pref("font.name-list.monospace.x-knda", "Kedage");
+pref("font.name.serif.x-knda", "Kannada MN");
+pref("font.name.sans-serif.x-knda", "Kannada Sangam MN");
+pref("font.name.monospace.x-knda", "Kannada Sangam MN");
+pref("font.name-list.serif.x-knda", "Kannada MN,Kedage");
+pref("font.name-list.sans-serif.x-knda", "Kannada Sangam MN,Kedage");
+pref("font.name-list.monospace.x-knda", "Kannada Sangam MN,Kedage");
 
-// no suitable fonts for sinhala ship with mac os x
-// add this section when fonts exist
+pref("font.name.serif.x-sinh", "Sinhala MN");
+pref("font.name.sans-serif.x-sinh", "Sinhala Sangam MN");
+pref("font.name.monospace.x-sinh", "Sinhala Sangam MN");
+pref("font.name-list.serif.x-sinh", "Sinhala MN");
+pref("font.name-list.sans-serif.x-sinh", "Sinhala Sangam MN");
+pref("font.name-list.monospace.x-sinh", "Sinhala Sangam MN");
 
 pref("font.name.serif.x-tamil", "InaiMathi");
 pref("font.name.sans-serif.x-tamil", "InaiMathi");
@@ -2802,9 +2846,6 @@ pref("middlemouse.paste", true);
 pref("middlemouse.contentLoadURL", true);
 pref("middlemouse.openNewWindow", true);
 pref("middlemouse.scrollbarPosition", true);
-
-// Clipboard behavior
-pref("clipboard.autocopy", true);
 
 pref("browser.urlbar.clickSelectsAll", false);
 
@@ -3438,11 +3479,17 @@ pref("webgl.min_capability_mode", false);
 pref("webgl.disable-extensions", false);
 pref("webgl.msaa-level", 2);
 pref("webgl.msaa-force", false);
+pref("webgl.prefer-16bpp", false);
+pref("webgl.default-no-alpha", false);
 
 #ifdef XP_WIN
 // The default TCP send window on Windows is too small, and autotuning only occurs on receive
 pref("network.tcp.sendbuffer", 131072);
 #endif
+
+// Asynchonous video compositing using the ImageBridge IPDL protocol.
+// requires off-main-thread compositing.
+pref("layers.async-video.enabled",false);
 
 // Whether to disable acceleration for all widgets.
 #ifdef MOZ_E10S_COMPAT
@@ -3525,6 +3572,9 @@ pref("full-screen-api.allow-trusted-requests-only", true);
 pref("full-screen-api.exit-on-deactivate", true);
 pref("full-screen-api.pointer-lock.enabled", true);
 
+// DOM idle observers API
+pref("dom.idle-observers-api.enabled", true);
+
 // Time limit, in milliseconds, for nsEventStateManager::IsHandlingUserInput().
 // Used to detect long running handlers of user-generated events.
 pref("dom.event.handling-user-input-time-limit", 1000);
@@ -3546,6 +3596,9 @@ pref("dom.sms.whitelist", "");
 // WebContacts
 pref("dom.mozContacts.enabled", false);
 pref("dom.mozContacts.whitelist", "");
+
+// WebAlarms
+pref("dom.mozAlarms.enabled", false);
 
 // WebSettings
 pref("dom.mozSettings.enabled", false);
@@ -3585,3 +3638,5 @@ pref("memory.low_memory_notification_interval_ms", 10000);
 // likely leak)?  This should be longer than it usually takes for an eligible
 // window to be collected via the GC/CC.
 pref("memory.ghost_window_timeout_seconds", 60);
+
+pref("social.enabled", false);

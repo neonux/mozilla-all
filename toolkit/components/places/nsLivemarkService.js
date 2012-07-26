@@ -248,8 +248,8 @@ LivemarkService.prototype = {
     this._reportDeprecatedMethod();
   },
 
-  createLivemark: function LS_createLivemark(aParentId, aTitle, aSiteURI,
-                                             aFeedURI, aIndex)
+  createLivemark: function DEPRECATED_LS_createLivemark(aParentId, aTitle, aSiteURI,
+                                                        aFeedURI, aIndex)
   {
     this._reportDeprecatedMethod();
     this._ensureSynchronousCache();
@@ -663,8 +663,8 @@ function Livemark(aLivemarkInfo)
   this._status = Ci.mozILivemark.STATUS_READY;
 
   // Hash of resultObservers, hashed by container.
-  this._resultObservers = new WeakMap();
-  // This keeps a list of the containers used as keys in the weakmap, since
+  this._resultObservers = new Map();
+  // This keeps a list of the containers used as keys in the map, since
   // it's not iterable.  In future may use an iterable Map.
   this._resultObserversList = [];
 
@@ -674,7 +674,7 @@ function Livemark(aLivemarkInfo)
 
   // Keeps a separate array of nodes for each requesting container, hashed by
   // the container itself.
-  this._nodes = new WeakMap();
+  this._nodes = new Map();
 
   this._guid = "";
   this._lastModified = 0;
@@ -756,7 +756,7 @@ Livemark.prototype = {
     }
 
     // Security check the site URI against the feed URI principal.
-    let feedPrincipal = secMan.getCodebasePrincipal(this.feedURI);
+    let feedPrincipal = secMan.getSimpleCodebasePrincipal(this.feedURI);
     try {
       secMan.checkLoadURIWithPrincipal(feedPrincipal, aSiteURI, SEC_FLAGS);
     }
@@ -1090,7 +1090,8 @@ LivemarkLoadListener.prototype = {
 
     try {
       // We need this to make sure the item links are safe
-      let feedPrincipal = secMan.getCodebasePrincipal(this._livemark.feedURI);
+      let feedPrincipal =
+        secMan.getSimpleCodebasePrincipal(this._livemark.feedURI);
 
       // Enforce well-formedness because the existing code does
       if (!aResult || !aResult.doc || aResult.bozo) {

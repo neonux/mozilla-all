@@ -22,11 +22,10 @@
 #include "frontend/ParseNode.h"
 #include "frontend/TreeContext.h"
 
-typedef struct BindData BindData;
-
 namespace js {
+namespace frontend {
 
-class StaticBlockObject;
+struct BindData;
 
 enum FunctionSyntaxKind { Expression, Statement };
 enum LetContext { LetExpresion, LetStatement };
@@ -38,7 +37,6 @@ struct Parser : private AutoGCRooter
     StrictModeGetter    strictModeGetter; /* used by tokenStream to test for strict mode */
     TokenStream         tokenStream;
     void                *tempPoolMark;  /* initial JSContext.tempLifoAlloc mark */
-    StackFrame          *const callerFrame;  /* scripted caller frame for eval and dbgapi */
     ParseNodeAllocator  allocator;
     ObjectBox           *traceListHead; /* list of parsed object for GC tracing */
 
@@ -55,9 +53,8 @@ struct Parser : private AutoGCRooter
     const bool          compileAndGo:1;
 
   public:
-    Parser(JSContext *cx, JSPrincipals *prin, JSPrincipals *originPrin,
-           const jschar *chars, size_t length, const char *fn, unsigned ln, JSVersion version,
-           StackFrame *cfp, bool foldConstants, bool compileAndGo);
+    Parser(JSContext *cx, const CompileOptions &options,
+           const jschar *chars, size_t length, bool foldConstants);
     ~Parser();
 
     friend void AutoGCRooter::trace(JSTracer *trc);
@@ -88,7 +85,8 @@ struct Parser : private AutoGCRooter
      */
     ObjectBox *newObjectBox(JSObject *obj);
 
-    FunctionBox *newFunctionBox(JSObject *obj, ParseNode *fn, TreeContext *tc);
+    FunctionBox *newFunctionBox(JSObject *obj, ParseNode *fn, TreeContext *tc,
+                                StrictMode::StrictModeState sms);
 
     /*
      * Create a new function object given tree context (tc) and a name (which
@@ -101,7 +99,12 @@ struct Parser : private AutoGCRooter
     /*
      * Report a parse (compile) error.
      */
-    inline bool reportErrorNumber(ParseNode *pn, unsigned flags, unsigned errorNumber, ...);
+    inline bool reportError(ParseNode *pn, unsigned errorNumber, ...);
+    inline bool reportUcError(ParseNode *pn, unsigned errorNumber, ...);
+    inline bool reportWarning(ParseNode *pn, unsigned errorNumber, ...);
+    inline bool reportStrictWarning(ParseNode *pn, unsigned errorNumber, ...);
+    inline bool reportStrictModeError(ParseNode *pn, unsigned errorNumber, ...);
+    typedef bool (Parser::*Reporter)(ParseNode *pn, unsigned errorNumber, ...);
 
   private:
     ParseNode *allocParseNode(size_t size) {
@@ -132,7 +135,7 @@ struct Parser : private AutoGCRooter
 
     /* Public entry points for parsing. */
     ParseNode *statement();
-    bool recognizeDirectivePrologue(ParseNode *pn, bool *isDirectivePrologueMember);
+    bool processDirectives(ParseNode *stringsAtStart);
 
     /*
      * Parse a function body.  Pass StatementListBody if the body is a list of
@@ -140,8 +143,6 @@ struct Parser : private AutoGCRooter
      */
     enum FunctionBodyType { StatementListBody, ExpressionBody };
     ParseNode *functionBody(FunctionBodyType type);
-
-    bool checkForArgumentsAndRest();
 
   private:
     /*
@@ -198,9 +199,9 @@ struct Parser : private AutoGCRooter
     ParseNode *mulExpr1i();
     ParseNode *mulExpr1n();
     ParseNode *unaryExpr();
-    ParseNode *memberExpr(JSBool allowCallSyntax);
+    ParseNode *memberExpr(bool allowCallSyntax);
     ParseNode *primaryExpr(TokenKind tt, bool afterDoubleDot);
-    ParseNode *parenExpr(JSBool *genexp = NULL);
+    ParseNode *parenExpr(bool *genexp = NULL);
 
     /*
      * Additional JS parsers.
@@ -216,7 +217,7 @@ struct Parser : private AutoGCRooter
     ParseNode *comprehensionTail(ParseNode *kid, unsigned blockid, bool isGenexp,
                                  ParseNodeKind kind = PNK_SEMI, JSOp op = JSOP_NOP);
     ParseNode *generatorExpr(ParseNode *kid);
-    JSBool argumentList(ParseNode *listNode);
+    bool argumentList(ParseNode *listNode);
     ParseNode *bracketedExpr();
     ParseNode *letBlock(LetContext letContext);
     ParseNode *returnOrYield(bool useAssignExpr);
@@ -227,8 +228,18 @@ struct Parser : private AutoGCRooter
     ParseNode *identifierName(bool afterDoubleDot);
 
 #if JS_HAS_XML_SUPPORT
-    // True if E4X syntax is allowed in the current syntactic context.
-    bool allowsXML() const { return !tc->sc->inStrictMode() && tokenStream.allowsXML(); }
+    // True if E4X syntax is allowed in the current syntactic context. Note this
+    // function may be false while TokenStream::allowsXML() is true!
+    // Specifically, when strictModeState is not STRICT, Parser::allowsXML()
+    // will be false, where TokenStream::allowsXML() is only false when
+    // strictModeState is STRICT. The reason for this is when we are parsing the
+    // directive prologue, the tokenizer looks ahead into the body of the
+    // function. So, we have to be lenient in case the function is not
+    // strict. This also effectively bans XML in function defaults. See bug
+    // 772691.
+    bool allowsXML() const {
+        return tc->sc->strictModeState == StrictMode::NOTSTRICT && tokenStream.allowsXML();
+    }
 
     ParseNode *endBracketedExpr();
 
@@ -236,27 +247,70 @@ struct Parser : private AutoGCRooter
     ParseNode *qualifiedSuffix(ParseNode *pn);
     ParseNode *qualifiedIdentifier();
     ParseNode *attributeIdentifier();
-    ParseNode *xmlExpr(JSBool inTag);
+    ParseNode *xmlExpr(bool inTag);
     ParseNode *xmlNameExpr();
     ParseNode *xmlTagContent(ParseNodeKind tagkind, JSAtom **namep);
-    JSBool xmlElementContent(ParseNode *pn);
-    ParseNode *xmlElementOrList(JSBool allowList);
-    ParseNode *xmlElementOrListRoot(JSBool allowList);
+    bool xmlElementContent(ParseNode *pn);
+    ParseNode *xmlElementOrList(bool allowList);
+    ParseNode *xmlElementOrListRoot(bool allowList);
 
     ParseNode *starOrAtPropertyIdentifier(TokenKind tt);
     ParseNode *propertyQualifiedIdentifier();
 #endif /* JS_HAS_XML_SUPPORT */
 
+    bool setStrictMode(bool strictMode);
     bool setAssignmentLhsOps(ParseNode *pn, JSOp op);
     bool matchInOrOf(bool *isForOfp);
 };
 
 inline bool
-Parser::reportErrorNumber(ParseNode *pn, unsigned flags, unsigned errorNumber, ...)
+Parser::reportError(ParseNode *pn, unsigned errorNumber, ...)
 {
     va_list args;
     va_start(args, errorNumber);
-    bool result = tokenStream.reportCompileErrorNumberVA(pn, flags, errorNumber, args);
+    bool result = tokenStream.reportCompileErrorNumberVA(pn, JSREPORT_ERROR, errorNumber, args);
+    va_end(args);
+    return result;
+}
+
+inline bool
+Parser::reportUcError(ParseNode *pn, unsigned errorNumber, ...)
+{
+    va_list args;
+    va_start(args, errorNumber);
+    bool result = tokenStream.reportCompileErrorNumberVA(pn, JSREPORT_UC | JSREPORT_ERROR,
+                                                         errorNumber, args);
+    va_end(args);
+    return result;
+}
+
+inline bool
+Parser::reportWarning(ParseNode *pn, unsigned errorNumber, ...)
+{
+    va_list args;
+    va_start(args, errorNumber);
+    bool result = tokenStream.reportCompileErrorNumberVA(pn, JSREPORT_WARNING, errorNumber, args);
+    va_end(args);
+    return result;
+}
+
+inline bool
+Parser::reportStrictWarning(ParseNode *pn, unsigned errorNumber, ...)
+{
+    va_list args;
+    va_start(args, errorNumber);
+    bool result = tokenStream.reportCompileErrorNumberVA(pn, JSREPORT_STRICT | JSREPORT_WARNING,
+                                                         errorNumber, args);
+    va_end(args);
+    return result;
+}
+
+inline bool
+Parser::reportStrictModeError(ParseNode *pn, unsigned errorNumber, ...)
+{
+    va_list args;
+    va_start(args, errorNumber);
+    bool result = tokenStream.reportStrictModeErrorNumberVA(pn, errorNumber, args);
     va_end(args);
     return result;
 }
@@ -264,6 +318,7 @@ Parser::reportErrorNumber(ParseNode *pn, unsigned flags, unsigned errorNumber, .
 bool
 DefineArg(ParseNode *pn, JSAtom *atom, unsigned i, Parser *parser);
 
+} /* namespace frontend */
 } /* namespace js */
 
 /*

@@ -49,6 +49,12 @@ public:
                   nsIFrame*        aPrevInFlow);
 #endif
 
+  NS_IMETHOD BuildDisplayList(nsDisplayListBuilder*   aBuilder,
+                              const nsRect&           aDirtyRect,
+                              const nsDisplayListSet& aLists) {
+    return NS_OK;
+  }
+
   /**
    * Get the "type" of the frame
    *
@@ -89,7 +95,7 @@ private:
   bool mInUse;
 
   // nsSVGContainerFrame methods:
-  virtual gfxMatrix GetCanvasTM();
+  virtual gfxMatrix GetCanvasTM(PRUint32 aFor);
 };
 
 #endif

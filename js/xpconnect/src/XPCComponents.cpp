@@ -31,6 +31,7 @@
 #include "mozilla/Preferences.h"
 #include "nsPrincipal.h"
 #include "mozilla/Attributes.h"
+#include "nsIScriptContext.h"
 
 using namespace mozilla;
 using namespace js;
@@ -2696,71 +2697,66 @@ nsXPCComponents_Utils::LookupMethod(const JS::Value& object,
     JSAutoRequest ar(cx);
 
     // first param must be a JSObject
-    if (JSVAL_IS_PRIMITIVE(object))
+    if (!object.isObject())
         return NS_ERROR_XPC_BAD_CONVERT_JS;
+    JSObject *obj = &object.toObject();
 
-    JSObject* obj = JSVAL_TO_OBJECT(object);
-    while (obj && !js::IsWrapper(obj) && !IS_WRAPPER_CLASS(js::GetObjectClass(obj)))
-        obj = JS_GetPrototype(obj);
-
-    if (!obj)
-        return NS_ERROR_XPC_BAD_CONVERT_JS;
-
-    JSObject* unwrappedObject;
-    nsresult rv = nsXPConnect::GetXPConnect()->GetJSObjectOfWrapper(cx, obj, &unwrappedObject);
-    if (NS_FAILED(rv))
-        return rv;
-
-    unwrappedObject = JS_ObjectToInnerObject(cx, unwrappedObject);
-    if (!unwrappedObject)
-        return NS_ERROR_XPC_BAD_CONVERT_JS;
-
-    // second param must be a string
+    // second param must be a string.
     if (!JSVAL_IS_STRING(name))
         return NS_ERROR_XPC_BAD_CONVERT_JS;
+    JSString *methodName = name.toString();
+    jsid methodId = INTERNED_STRING_TO_JSID(cx, JS_InternJSString(cx, methodName));
 
-    // Make sure the name that we use for looking up the method/property is
-    // atomized.
-    jsid name_id;
-    JS::Value dummy;
-    if (!JS_ValueToId(cx, name, &name_id) ||
-        !JS_IdToValue(cx, name_id, &dummy))
-        return NS_ERROR_XPC_BAD_CONVERT_JS;
+    // If |obj| is a cross-compartment wrapper, try to puncture it. If this fails,
+    // we don't have full access to the other compartment, in which case we throw.
+    // Otherwise, enter the compartment.
+    if (js::IsCrossCompartmentWrapper(obj)) {
+        obj = js::UnwrapOneChecked(cx, obj);
+        if (!obj)
+            return NS_ERROR_XPC_BAD_CONVERT_JS;
+    }
 
-    // this will do verification and the method lookup for us
-    // Note that if |obj| is an XPCNativeWrapper this will all still work.
-    // We'll hand back the same method that we'd hand back for the underlying
-    // XPCWrappedNative.  This means no deep wrapping, unfortunately, but we
-    // can't keep track of both the underlying function and the
-    // XPCNativeWrapper at once in a single parent slot...
-    XPCCallContext inner_cc(JS_CALLER, cx, unwrappedObject, nsnull, name_id);
+    {
+        // Enter the target compartment.
+        JSAutoEnterCompartment ac;
+        if (!ac.enter(cx, obj))
+            return NS_ERROR_FAILURE;
 
-    // was our jsobject really a wrapped native at all?
-    XPCWrappedNative* wrapper = inner_cc.GetWrapper();
-    if (!wrapper || !wrapper->IsValid())
-        return NS_ERROR_XPC_BAD_CONVERT_JS;
+        // Morph slim wrappers.
+        if (IS_SLIM_WRAPPER(obj) && !MorphSlimWrapper(cx, obj))
+            return NS_ERROR_FAILURE;
 
-    // did we find a method/attribute by that name?
-    XPCNativeMember* member = inner_cc.GetMember();
-    if (!member || member->IsConstant())
-        return NS_ERROR_XPC_BAD_CONVERT_JS;
+        // Now, try to create an Xray wrapper around the object. This won't work
+        // if the object isn't Xray-able. In that case, we throw.
+        JSObject *xray = WrapperFactory::WrapForSameCompartmentXray(cx, obj);
+        if (!xray)
+            return NS_ERROR_XPC_BAD_CONVERT_JS;
 
-    // it would a be a big surprise if there is a member without an interface :)
-    XPCNativeInterface* iface = inner_cc.GetInterface();
-    if (!iface)
-        return NS_ERROR_XPC_BAD_CONVERT_JS;
+        // Alright, now do the lookup.
+        *retval = JSVAL_VOID;
+        JSPropertyDescriptor desc;
+        if (!JS_GetPropertyDescriptorById(cx, xray, methodId, 0, &desc))
+            return NS_ERROR_FAILURE;
 
-    jsval funval;
+        // First look for a method value. If that's not there, try a getter,
+        // since historically lookupMethod also works for getters.
+        JSObject *methodObj = desc.value.isObject() ? &desc.value.toObject() : NULL;
+        if (!methodObj && (desc.attrs & JSPROP_GETTER))
+            methodObj = JS_FUNC_TO_DATA_PTR(JSObject *, desc.getter);
 
-    // get (and perhaps lazily create) the member's cloned function
-    if (!member->NewFunctionObject(inner_cc, iface, obj, &funval))
-        return NS_ERROR_XPC_BAD_CONVERT_JS;
+        // Callers of this function seem to expect bound methods. Make it happen.
+        // Note that this is unnecessary until bug 658909 is fixed.
+        if (methodObj && JS_ObjectIsCallable(cx, methodObj))
+            methodObj = JS_BindCallable(cx, methodObj, obj);
 
-    NS_ASSERTION(JS_ValueToFunction(inner_cc, funval),
-                 "Function is not a function");
+        // Set the return value if appropriate.
+        *retval = methodObj ? ObjectValue(*methodObj) : JSVAL_VOID;
+    }
 
-    // Stick the function in the return value. This roots it.
-    *retval = funval;
+    // Now that we've left the target compartment, wrap for the caller.
+    if (!JS_WrapValue(cx, retval))
+        return NS_ERROR_FAILURE;;
+
     return NS_OK;
 }
 
@@ -3058,9 +3054,76 @@ NS_IMPL_ISUPPORTS0(Identity)
 
 xpc::SandboxProxyHandler xpc::sandboxProxyHandler;
 
+// A proxy handler that lets us wrap callables and invoke them with
+// the correct this object, while forwarding all other operations down
+// to them directly.
+class SandboxCallableProxyHandler : public js::DirectWrapper {
+public:
+    SandboxCallableProxyHandler() : js::DirectWrapper(0)
+    {
+    }
+
+    virtual bool call(JSContext *cx, JSObject *proxy, unsigned argc,
+                      Value *vp);
+};
+
+bool
+SandboxCallableProxyHandler::call(JSContext *cx, JSObject *proxy, unsigned argc,
+                                  Value *vp)
+{
+    // We forward the call to our underlying callable. The callable to forward
+    // to can be gotten via GetProxyCall.
+
+    // The parent of our proxy is the SandboxProxyHandler proxy
+    JSObject *sandboxProxy = JS_GetParent(proxy);
+    MOZ_ASSERT(js::IsProxy(sandboxProxy) &&
+               js::GetProxyHandler(sandboxProxy) == &xpc::sandboxProxyHandler);
+
+    // The parent of the sandboxProxy is the sandbox global, and the
+    // target object is the original proto.
+    JSObject *sandboxGlobal = JS_GetParent(sandboxProxy);
+    MOZ_ASSERT(js::GetObjectJSClass(sandboxGlobal) == &SandboxClass);
+
+    // If our this object is the sandbox global, we call with this set to the
+    // original proto instead.  Note that we very carefully avoid using JS_THIS
+    // or JS_THIS_OBJECT here, because we do NOT want to box undefined into the
+    // global.  Instead, we just pass it through to our callable, and it will
+    // compute the global based on its own scope chain, which will do the right
+    // thing.
+    JS::Value thisVal = JS_THIS_VALUE(cx, vp);
+    if (thisVal == ObjectValue(*sandboxGlobal)) {
+        thisVal = ObjectValue(*js::GetProxyTargetObject(sandboxProxy));
+    }
+
+    return JS::Call(cx, thisVal, js::GetProxyCall(proxy), argc,
+                    JS_ARGV(cx, vp), vp);
+}
+
+static SandboxCallableProxyHandler sandboxCallableProxyHandler;
+
+// Wrap a callable such that if we're called with oldThisObj as the
+// "this" we will instead call it with newThisObj as the this.
+static JSObject*
+WrapCallable(JSContext *cx, JSObject *callable, JSObject *sandboxProtoProxy)
+{
+    MOZ_ASSERT(JS_ObjectIsCallable(cx, callable));
+    // Our proxy is wrapping the callable.  So we need to use the
+    // callable as the private.  We use the given sandboxProtoProxy as
+    // the parent, and our call() hook depends on that.
+    MOZ_ASSERT(js::IsProxy(sandboxProtoProxy) &&
+               js::GetProxyHandler(sandboxProtoProxy) ==
+                 &xpc::sandboxProxyHandler);
+
+    // We need to pass the given callable in as the "call" and
+    // "construct" so we get a function proxy.
+    return js::NewProxyObject(cx, &sandboxCallableProxyHandler,
+                              ObjectValue(*callable), nsnull,
+                              sandboxProtoProxy, callable, callable);
+}
+
 template<typename Op>
-bool BindPropertyOp(JSContext *cx, JSObject *targetObj, Op& op,
-                    PropertyDescriptor *desc, jsid id, unsigned attrFlag)
+bool BindPropertyOp(JSContext *cx, Op& op, PropertyDescriptor *desc, jsid id,
+                    unsigned attrFlag, JSObject *sandboxProtoProxy)
 {
     if (!op) {
         return true;
@@ -3078,7 +3141,7 @@ bool BindPropertyOp(JSContext *cx, JSObject *targetObj, Op& op,
         if (!func)
             return false;
     }
-    func = JS_BindCallable(cx, func, targetObj);
+    func = WrapCallable(cx, func, sandboxProtoProxy);
     if (!func)
         return false;
     op = JS_DATA_TO_FUNC_PTR(Op, func);
@@ -3122,16 +3185,16 @@ xpc::SandboxProxyHandler::getPropertyDescriptor(JSContext *cx, JSObject *proxy,
     // access to expandos when we're not doing Xrays.
     if (desc->getter != xpc::holder_get &&
         desc->getter != XPC_WN_Helper_GetProperty &&
-        !BindPropertyOp(cx, obj, desc->getter, desc, id, JSPROP_GETTER))
+        !BindPropertyOp(cx, desc->getter, desc, id, JSPROP_GETTER, proxy))
         return false;
     if (desc->setter != xpc::holder_set &&
         desc->setter != XPC_WN_Helper_SetProperty &&
-        !BindPropertyOp(cx, obj, desc->setter, desc, id, JSPROP_SETTER))
+        !BindPropertyOp(cx, desc->setter, desc, id, JSPROP_SETTER, proxy))
         return false;
     if (desc->value.isObject()) {
         JSObject* val = &desc->value.toObject();
         if (JS_ObjectIsCallable(cx, val)) {
-            val = JS_BindCallable(cx, val, obj);
+            val = WrapCallable(cx, val, proxy);
             if (!val)
                 return false;
             desc->value = ObjectValue(*val);
@@ -3339,7 +3402,10 @@ GetPrincipalFromString(JSContext *cx, JSString *codebase, nsIPrincipal **princip
         do_GetService(kScriptSecurityManagerContractID);
     NS_ENSURE_TRUE(secman, NS_ERROR_FAILURE);
 
-    rv = secman->GetCodebasePrincipal(uri, principal);
+    // We could allow passing in the app-id and browser-element info to the
+    // sandbox constructor. But creating a sandbox based on a string is a
+    // deprecated API so no need to add features to it.
+    rv = secman->GetNoAppCodebasePrincipal(uri, principal);
     NS_ENSURE_SUCCESS(rv, rv);
     NS_ENSURE_TRUE(*principal, NS_ERROR_FAILURE);
 
@@ -3630,16 +3696,20 @@ nsXPCComponents_utils_Sandbox::CallOrConstruct(nsIXPConnectWrappedNative *wrappe
     return rv;
 }
 
-class ContextHolder : public nsISupports
+class ContextHolder : public nsIScriptObjectPrincipal
+                    , public nsIScriptContextPrincipal
 {
 public:
-    ContextHolder(JSContext *aOuterCx, JSObject *aSandbox, bool isChrome);
+    ContextHolder(JSContext *aOuterCx, JSObject *aSandbox, nsIPrincipal *aPrincipal);
     virtual ~ContextHolder();
 
     JSContext * GetJSContext()
     {
         return mJSContext;
     }
+
+    nsIScriptObjectPrincipal * GetObjectPrincipal() { return this; }
+    nsIPrincipal * GetPrincipal() { return mPrincipal; }
 
     NS_DECL_ISUPPORTS
 
@@ -3648,17 +3718,23 @@ private:
 
     JSContext* mJSContext;
     JSContext* mOrigCx;
+    nsCOMPtr<nsIPrincipal> mPrincipal;
 };
 
-NS_IMPL_ISUPPORTS0(ContextHolder)
+NS_IMPL_ISUPPORTS2(ContextHolder, nsIScriptObjectPrincipal, nsIScriptContextPrincipal)
 
 ContextHolder::ContextHolder(JSContext *aOuterCx,
                              JSObject *aSandbox,
-                             bool isChrome)
+                             nsIPrincipal *aPrincipal)
     : mJSContext(JS_NewContext(JS_GetRuntime(aOuterCx), 1024)),
-      mOrigCx(aOuterCx)
+      mOrigCx(aOuterCx),
+      mPrincipal(aPrincipal)
 {
     if (mJSContext) {
+        bool isChrome;
+        DebugOnly<nsresult> rv = XPCWrapper::GetSecurityManager()->
+                                   IsSystemPrincipal(mPrincipal, &isChrome);
+        MOZ_ASSERT(NS_SUCCEEDED(rv));
         bool allowXML = Preferences::GetBool(isChrome ?
                                              "javascript.options.xml.chrome" :
                                              "javascript.options.xml.content");
@@ -3816,10 +3892,7 @@ xpc_EvalInSandbox(JSContext *cx, JSObject *sandbox, const nsAString& source,
         }
     }
 
-    bool isChrome;
-    nsresult rv = XPCWrapper::GetSecurityManager()->IsSystemPrincipal(prin, &isChrome);
-    NS_ENSURE_SUCCESS(rv, rv);
-    nsRefPtr<ContextHolder> sandcx = new ContextHolder(cx, sandbox, isChrome);
+    nsRefPtr<ContextHolder> sandcx = new ContextHolder(cx, sandbox, prin);
     if (!sandcx || !sandcx->GetJSContext()) {
         JS_ReportError(cx, "Can't prepare context for evalInSandbox");
         return NS_ERROR_OUT_OF_MEMORY;
@@ -3828,17 +3901,14 @@ xpc_EvalInSandbox(JSContext *cx, JSObject *sandbox, const nsAString& source,
     if (jsVersion != JSVERSION_DEFAULT)
         JS_SetVersion(sandcx->GetJSContext(), jsVersion);
 
-    XPCPerThreadData *data = XPCPerThreadData::GetData(cx);
-    XPCJSContextStack *stack = nsnull;
-    if (data && (stack = data->GetJSContextStack())) {
-        if (!stack->Push(sandcx->GetJSContext())) {
-            JS_ReportError(cx,
-                           "Unable to initialize XPConnect with the sandbox context");
-            return NS_ERROR_FAILURE;
-        }
+    XPCJSContextStack *stack = XPCJSRuntime::Get()->GetJSContextStack();
+    MOZ_ASSERT(stack);
+    if (!stack->Push(sandcx->GetJSContext())) {
+        JS_ReportError(cx, "Unable to initialize XPConnect with the sandbox context");
+        return NS_ERROR_FAILURE;
     }
 
-    rv = NS_OK;
+    nsresult rv = NS_OK;
 
     {
         JSAutoRequest req(sandcx->GetJSContext());
@@ -4082,7 +4152,7 @@ nsXPCComponents_Utils::GetGlobalForObject(const JS::Value& object,
   // a wrapper for the foreign global. So we need to unwrap before getting the
   // parent, enter the compartment for the duration of the call, and wrap the
   // result.
-  JSObject *obj = JSVAL_TO_OBJECT(object);
+  JS::Rooted<JSObject*> obj(cx, JSVAL_TO_OBJECT(object));
   obj = js::UnwrapObject(obj);
   {
     JSAutoEnterCompartment ac;
@@ -4090,12 +4160,12 @@ nsXPCComponents_Utils::GetGlobalForObject(const JS::Value& object,
       return NS_ERROR_FAILURE;
     obj = JS_GetGlobalForObject(cx, obj);
   }
-  JS_WrapObject(cx, &obj);
+  JS_WrapObject(cx, obj.address());
   *retval = OBJECT_TO_JSVAL(obj);
 
   // Outerize if necessary.
   if (JSObjectOp outerize = js::GetObjectClass(obj)->ext.outerObject)
-      *retval = OBJECT_TO_JSVAL(outerize(cx, JS::RootedObject(cx, obj)));
+      *retval = OBJECT_TO_JSVAL(outerize(cx, obj));
 
   return NS_OK;
 }
@@ -4119,6 +4189,35 @@ nsXPCComponents_Utils::CreateObjectIn(const jsval &vobj, JSContext *cx, jsval *r
             return NS_ERROR_FAILURE;
 
         obj = JS_NewObject(cx, nsnull, nsnull, scope);
+        if (!obj)
+            return NS_ERROR_FAILURE;
+    }
+
+    if (!JS_WrapObject(cx, &obj))
+        return NS_ERROR_FAILURE;
+    *rval = OBJECT_TO_JSVAL(obj);
+    return NS_OK;
+}
+
+/* jsval createObjectIn(in jsval vobj); */
+NS_IMETHODIMP
+nsXPCComponents_Utils::CreateArrayIn(const jsval &vobj, JSContext *cx, jsval *rval)
+{
+    if (!cx)
+        return NS_ERROR_FAILURE;
+
+    // first argument must be an object
+    if (JSVAL_IS_PRIMITIVE(vobj))
+        return NS_ERROR_XPC_BAD_CONVERT_JS;
+
+    JSObject *scope = js::UnwrapObject(JSVAL_TO_OBJECT(vobj));
+    JSObject *obj;
+    {
+        JSAutoEnterCompartment ac;
+        if (!ac.enter(cx, scope))
+            return NS_ERROR_FAILURE;
+
+        obj =  JS_NewArrayObject(cx, 0, NULL);
         if (!obj)
             return NS_ERROR_FAILURE;
     }
@@ -4199,6 +4298,35 @@ nsXPCComponents_Utils::MakeObjectPropsNormal(const jsval &vobj, JSContext *cx)
     }
 
     return NS_OK;
+}
+
+NS_IMETHODIMP
+nsXPCComponents_Utils::IsDeadWrapper(const jsval &obj, bool *out)
+{
+    *out = false;
+    if (JSVAL_IS_PRIMITIVE(obj))
+        return NS_ERROR_INVALID_ARG;
+
+    *out = JS_IsDeadWrapper(JSVAL_TO_OBJECT(obj));
+    return NS_OK;
+}
+
+/* void recomputerWrappers(jsval vobj); */
+NS_IMETHODIMP
+nsXPCComponents_Utils::RecomputeWrappers(const jsval &vobj, JSContext *cx)
+{
+    // Determine the compartment of the given object, if any.
+    JSCompartment *c = vobj.isObject()
+                       ? js::GetObjectCompartment(js::UnwrapObject(&vobj.toObject()))
+                       : NULL;
+
+    // If no compartment was given, recompute all.
+    if (!c)
+        return js::RecomputeWrappers(cx, js::AllCompartments(), js::AllCompartments());
+
+    // Otherwise, recompute wrappers for the given compartment.
+    return js::RecomputeWrappers(cx, js::SingleCompartment(c), js::AllCompartments()) &&
+           js::RecomputeWrappers(cx, js::AllCompartments(), js::SingleCompartment(c));
 }
 
 /* string canCreateWrapper (in nsIIDPtr iid); */
@@ -4285,6 +4413,20 @@ nsXPCComponents_Utils::SetGCZeal(PRInt32 aValue, JSContext* cx)
 #ifdef JS_GC_ZEAL
     JS_SetGCZeal(cx, PRUint8(aValue), JS_DEFAULT_ZEAL_FREQ);
 #endif
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsXPCComponents_Utils::NukeSandbox(const JS::Value &obj, JSContext *cx)
+{
+    NS_ENSURE_TRUE(obj.isObject(), NS_ERROR_INVALID_ARG);
+    JSObject *wrapper = &obj.toObject();
+    NS_ENSURE_TRUE(IsWrapper(wrapper), NS_ERROR_INVALID_ARG);
+    JSObject *sb = UnwrapObject(wrapper);
+    NS_ENSURE_TRUE(GetObjectJSClass(sb) == &SandboxClass, NS_ERROR_INVALID_ARG);
+    NukeCrossCompartmentWrappers(cx, AllCompartments(), 
+                                 SingleCompartment(GetObjectCompartment(sb)),
+                                 NukeWindowReferences);
     return NS_OK;
 }
 

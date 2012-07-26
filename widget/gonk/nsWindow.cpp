@@ -1,6 +1,17 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+/* Copyright 2012 Mozilla Foundation and Mozilla contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -26,6 +37,8 @@
 #include "cutils/properties.h"
 
 #define LOG(args...)  __android_log_print(ANDROID_LOG_INFO, "Gonk" , ## args)
+#define LOGW(args...) __android_log_print(ANDROID_LOG_WARN, "Gonk", ## args)
+#define LOGE(args...) __android_log_print(ANDROID_LOG_ERROR, "Gonk", ## args)
 
 #define IS_TOPLEVEL() (mWindowType == eWindowType_toplevel || mWindowType == eWindowType_dialog)
 
@@ -49,10 +62,17 @@ static nsWindow *gFocusedWindow = nsnull;
 static android::FramebufferNativeWindow *gNativeWindow = nsnull;
 static bool sFramebufferOpen;
 static bool sUsingOMTC;
+static bool sScreenInitialized;
 static nsRefPtr<gfxASurface> sOMTCSurface;
 static pthread_t sFramebufferWatchThread;
 
 namespace {
+
+static PRUint32
+EffectiveScreenRotation()
+{
+    return (sScreenRotation + sPhysicalScreenRotation) % (360 / 90);
+}
 
 class ScreenOnOffEvent : public nsRunnable {
 public:
@@ -120,7 +140,7 @@ static void *frameBufferWatcher(void *) {
 
 nsWindow::nsWindow()
 {
-    if (!sGLContext && !sFramebufferOpen && !sUsingOMTC) {
+    if (!sScreenInitialized) {
         // workaround Bug 725143
         hal::SetScreenEnabled(true);
 
@@ -130,36 +150,14 @@ nsWindow::nsWindow()
             NS_RUNTIMEABORT("Failed to create framebufferWatcherThread, aborting...");
         }
 
-        sUsingOMTC = UseOffMainThreadCompositing();
-
         // We (apparently) don't have a way to tell if allocating the
         // fbs succeeded or failed.
         gNativeWindow = new android::FramebufferNativeWindow();
-        if (sUsingOMTC) {
-            nsIntSize screenSize;
-            bool gotFB = Framebuffer::GetSize(&screenSize);
-            MOZ_ASSERT(gotFB);
-            gScreenBounds = nsIntRect(nsIntPoint(0, 0), screenSize);
 
-            sOMTCSurface = new gfxImageSurface(gfxIntSize(1, 1),
-                gfxASurface::ImageFormatRGB24);
-        } else {
-            sGLContext = GLContextProvider::CreateForWindow(this);
-            // CreateForWindow sets up gScreenBounds
-            if (!sGLContext) {
-                LOG("Failed to create GL context for fb, trying /dev/graphics/fb0");
-
-                // We can't delete gNativeWindow.
-
-                nsIntSize screenSize;
-                sFramebufferOpen = Framebuffer::Open(&screenSize);
-                gScreenBounds = nsIntRect(nsIntPoint(0, 0), screenSize);
-                if (!sFramebufferOpen) {
-                    LOG("Failed to mmap fb(?!?), aborting ...");
-                    NS_RUNTIMEABORT("Can't open GL context and can't fall back on /dev/graphics/fb0 ...");
-                }
-            }
-        }
+        nsIntSize screenSize;
+        bool gotFB = Framebuffer::GetSize(&screenSize);
+        MOZ_ASSERT(gotFB);
+        gScreenBounds = nsIntRect(nsIntPoint(0, 0), screenSize);
 
         char propValue[PROPERTY_VALUE_MAX];
         property_get("ro.sf.hwrotation", propValue, "0");
@@ -181,7 +179,23 @@ nsWindow::nsWindow()
         }
         sVirtualBounds = gScreenBounds;
 
+        sScreenInitialized = true;
+
         nsAppShell::NotifyScreenInitialized();
+
+        // This is a hack to force initialization of the compositor
+        // resources, if we're going to use omtc.
+        //
+        // NB: GetPlatform() will create the gfxPlatform, which wants
+        // to know the color depth, which asks our native window.
+        // This has to happen after other init has finished.
+        gfxPlatform::GetPlatform();
+        sUsingOMTC = UseOffMainThreadCompositing();
+
+        if (sUsingOMTC) {
+          sOMTCSurface = new gfxImageSurface(gfxIntSize(1, 1),
+                                             gfxASurface::ImageFormatRGB24);
+        }
     }
 }
 
@@ -207,12 +221,12 @@ nsWindow::DoDraw(void)
     gWindowToRedraw->mDirtyRegion.SetEmpty();
 
     LayerManager* lm = gWindowToRedraw->GetLayerManager();
-    if (LayerManager::LAYERS_OPENGL == lm->GetBackendType()) {
+    if (mozilla::layers::LAYERS_OPENGL == lm->GetBackendType()) {
         LayerManagerOGL* oglm = static_cast<LayerManagerOGL*>(lm);
         oglm->SetClippingRegion(event.region);
         oglm->SetWorldTransform(sRotationMatrix);
         gWindowToRedraw->mEventCallback(&event);
-    } else if (LayerManager::LAYERS_BASIC == lm->GetBackendType()) {
+    } else if (mozilla::layers::LAYERS_BASIC == lm->GetBackendType()) {
         MOZ_ASSERT(sFramebufferOpen || sUsingOMTC);
         nsRefPtr<gfxASurface> targetSurface;
 
@@ -228,7 +242,8 @@ nsWindow::DoDraw(void)
 
             // No double-buffering needed.
             AutoLayerManagerSetup setupLayerManager(
-                gWindowToRedraw, ctx, BasicLayerManager::BUFFER_NONE);
+                gWindowToRedraw, ctx, BasicLayerManager::BUFFER_NONE,
+                ScreenRotation(EffectiveScreenRotation()));
             gWindowToRedraw->mEventCallback(&event);
         }
 
@@ -267,6 +282,7 @@ nsWindow::Create(nsIWidget *aParent,
 
     nsWindow *parent = (nsWindow *)aNativeParent;
     mParent = parent;
+    mVisible = false;
 
     if (!aNativeParent) {
         mBounds = sVirtualBounds;
@@ -321,11 +337,10 @@ nsWindow::Show(bool aState)
     return NS_OK;
 }
 
-NS_IMETHODIMP
-nsWindow::IsVisible(bool & aState)
+bool
+nsWindow::IsVisible() const
 {
-    aState = mVisible;
-    return NS_OK;
+    return mVisible;
 }
 
 NS_IMETHODIMP
@@ -381,11 +396,10 @@ nsWindow::Enable(bool aState)
     return NS_OK;
 }
 
-NS_IMETHODIMP
-nsWindow::IsEnabled(bool *aState)
+bool
+nsWindow::IsEnabled() const
 {
-    *aState = true;
-    return NS_OK;
+    return true;
 }
 
 NS_IMETHODIMP
@@ -491,10 +505,13 @@ nsWindow::GetLayerManager(PLayersChild* aShadowManager,
     if (mLayerManager)
         return mLayerManager;
 
+    // Set mUseAcceleratedRendering here to make it consistent with
+    // nsBaseWidget::GetLayerManager
+    mUseAcceleratedRendering = GetShouldAccelerate();
     nsWindow *topWindow = sTopWindows[0];
 
     if (!topWindow) {
-        LOG(" -- no topwindow\n");
+        LOGW(" -- no topwindow\n");
         return nsnull;
     }
 
@@ -504,17 +521,38 @@ nsWindow::GetLayerManager(PLayersChild* aShadowManager,
             return mLayerManager;
     }
 
-    if (sGLContext) {
-        nsRefPtr<LayerManagerOGL> layerManager = new LayerManagerOGL(this);
+    if (mUseAcceleratedRendering) {
+        DebugOnly<nsIntRect> fbBounds = gScreenBounds;
+        if (!sGLContext) {
+            sGLContext = GLContextProvider::CreateForWindow(this);
+        }
 
-        if (layerManager->Initialize(sGLContext))
-            mLayerManager = layerManager;
-        else
-            LOG("Could not create OGL LayerManager");
-    } else {
-        MOZ_ASSERT(sFramebufferOpen);
-        mLayerManager = new BasicShadowLayerManager(this);
+        MOZ_ASSERT(fbBounds.value == gScreenBounds);
+        if (sGLContext) {
+            nsRefPtr<LayerManagerOGL> layerManager = new LayerManagerOGL(this);
+
+            if (layerManager->Initialize(sGLContext)) {
+                mLayerManager = layerManager;
+                return mLayerManager;
+            } else {
+                LOGW("Could not create OGL LayerManager");
+            }
+        } else {
+            LOGW("GL context was not created");
+        }
     }
+
+    // Fall back to software rendering.
+    sFramebufferOpen = Framebuffer::Open();
+    if (sFramebufferOpen) {
+        LOG("Falling back to framebuffer software rendering");
+    } else {
+        LOGE("Failed to mmap fb(?!?), aborting ...");
+        NS_RUNTIMEABORT("Can't open GL context and can't fall back on /dev/graphics/fb0 ...");
+    }
+
+    mLayerManager = new BasicShadowLayerManager(this);
+    mUseAcceleratedRendering = false;
 
     return mLayerManager;
 }
@@ -555,7 +593,7 @@ nsWindow::UserActivity()
     }
 
     if (mIdleService) {
-        mIdleService->ResetIdleTimeOut();
+        mIdleService->ResetIdleTimeOut(0);
     }
 }
 
@@ -563,12 +601,18 @@ PRUint32
 nsWindow::GetGLFrameBufferFormat()
 {
     if (mLayerManager &&
-        mLayerManager->GetBackendType() == LayerManager::LAYERS_OPENGL) {
+        mLayerManager->GetBackendType() == mozilla::layers::LAYERS_OPENGL) {
         // We directly map the hardware fb on Gonk.  The hardware fb
         // has RGB format.
         return LOCAL_GL_RGB;
     }
     return LOCAL_GL_NONE;
+}
+
+nsIntRect
+nsWindow::GetNaturalBounds()
+{
+    return gScreenBounds;
 }
 
 // nsScreenGonk.cpp
@@ -604,7 +648,13 @@ nsScreenGonk::GetAvailRect(PRInt32 *outLeft,  PRInt32 *outTop,
 static uint32_t
 ColorDepth()
 {
-    return gNativeWindow->getDevice()->format == GGL_PIXEL_FORMAT_RGB_565 ? 16 : 24;
+    switch (gNativeWindow->getDevice()->format) {
+    case GGL_PIXEL_FORMAT_RGB_565:
+        return 16;
+    case GGL_PIXEL_FORMAT_RGBA_8888:
+        return 32;
+    }
+    return 24; // GGL_PIXEL_FORMAT_RGBX_8888
 }
 
 NS_IMETHODIMP
@@ -639,32 +689,16 @@ nsScreenGonk::SetRotation(PRUint32 aRotation)
         return NS_OK;
 
     sScreenRotation = aRotation;
-    sRotationMatrix.Reset();
-    switch ((aRotation + sPhysicalScreenRotation) % (360 / 90)) {
-    case nsIScreen::ROTATION_0_DEG:
-        sVirtualBounds = gScreenBounds;
-        break;
-    case nsIScreen::ROTATION_90_DEG:
-        sRotationMatrix.Translate(gfxPoint(gScreenBounds.width, 0));
-        sRotationMatrix.Rotate(M_PI / 2);
+    sRotationMatrix =
+        ComputeGLTransformForRotation(gScreenBounds,
+                                      ScreenRotation(EffectiveScreenRotation()));
+    PRUint32 rotation = EffectiveScreenRotation();
+    if (rotation == nsIScreen::ROTATION_90_DEG ||
+        rotation == nsIScreen::ROTATION_270_DEG) {
         sVirtualBounds = nsIntRect(0, 0, gScreenBounds.height,
-                                         gScreenBounds.width);
-        break;
-    case nsIScreen::ROTATION_180_DEG:
-        sRotationMatrix.Translate(gfxPoint(gScreenBounds.width,
-                                           gScreenBounds.height));
-        sRotationMatrix.Rotate(M_PI);
+                                   gScreenBounds.width);
+    } else {
         sVirtualBounds = gScreenBounds;
-        break;
-    case nsIScreen::ROTATION_270_DEG:
-        sRotationMatrix.Translate(gfxPoint(0, gScreenBounds.height));
-        sRotationMatrix.Rotate(M_PI * 3 / 2);
-        sVirtualBounds = nsIntRect(0, 0, gScreenBounds.height,
-                                         gScreenBounds.width);
-        break;
-    default:
-        MOZ_NOT_REACHED("Unknown rotation");
-        break;
     }
 
     for (unsigned int i = 0; i < sTopWindows.Length(); i++)

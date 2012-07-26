@@ -18,6 +18,7 @@
 
   importScripts("resource://gre/modules/osfile/osfile_shared.jsm");
   importScripts("resource://gre/modules/osfile/osfile_win_back.jsm");
+  importScripts("resource://gre/modules/osfile/ospath_win_back.jsm");
 
   (function(exports) {
      "use strict";
@@ -44,6 +45,10 @@
      let gBytesReadPtr = gBytesRead.address();
      let gBytesWritten = new ctypes.int32_t(-1);
      let gBytesWrittenPtr = gBytesWritten.address();
+
+     // Same story for GetFileInformationByHandle
+     let gFileInfo = new OS.Shared.Type.FILE_INFORMATION.implementation();
+     let gFileInfoPtr = gFileInfo.address();
 
      /**
       * Representation of a file.
@@ -120,7 +125,7 @@
         */
        read: function read(buffer, nbytes, options) {
          // |gBytesReadPtr| is a pointer to |gBytesRead|.
-         throw_on_zero(
+         throw_on_zero("read",
            WinFile.ReadFile(this.fd, buffer, nbytes, gBytesReadPtr, null)
          );
          return gBytesRead.value;
@@ -141,7 +146,7 @@
         */
        write: function write(buffer, nbytes, options) {
          // |gBytesWrittenPtr| is a pointer to |gBytesWritten|.
-         throw_on_zero(
+         throw_on_zero("write",
            WinFile.WriteFile(this.fd, buffer, nbytes, gBytesWrittenPtr, null)
          );
          return gBytesWritten.value;
@@ -177,7 +182,19 @@
          // OS.File.POS_CURRENT == OS.Constants.Win.FILE_CURRENT
          // OS.File.POS_END == OS.Constants.Win.FILE_END
          whence = (whence == undefined)?Const.FILE_BEGIN:whence;
-         return throw_on_negative(WinFile.SetFilePointer(this.fd, pos, null, whence));
+         return throw_on_negative("setPosition",
+           WinFile.SetFilePointer(this.fd, pos, null, whence));
+       },
+
+       /**
+        * Fetch the information on the file.
+        *
+        * @return File.Info The information on |this| file.
+        */
+       stat: function stat() {
+         throw_on_zero("stat",
+           WinFile.GetFileInformationByHandle(this.fd, gFileInfoPtr));
+         return new File.Info(gFileInfo);
        }
      };
 
@@ -319,7 +336,7 @@
       */
      File.open = function Win_open(path, mode, options) {
        options = options || noOptions;
-
+       mode = mode || noOptions;
        let share = options.winShare || DEFAULT_SHARE;
        let security = options.winSecurity || null;
        let flags = options.winFlags || DEFAULT_FLAGS;
@@ -370,7 +387,8 @@
        }
        // Now, perform manual truncation
        file.setPosition(0, File.POS_START);
-       throw_on_zero(WinFile.SetEndOfFile(file.fd));
+       throw_on_zero("open",
+         WinFile.SetEndOfFile(file.fd));
        return file;
      };
 
@@ -381,7 +399,8 @@
       * @throws {OS.File.Error} In case of I/O error.
       */
      File.remove = function remove(path) {
-       throw_on_zero(WinFile.DeleteFile(path));
+       throw_on_zero("remove",
+         WinFile.DeleteFile(path));
      };
 
      /**
@@ -409,7 +428,7 @@
      */
      File.copy = function copy(sourcePath, destPath, options) {
        options = options || noOptions;
-       throw_on_zero(
+       throw_on_zero("copy",
          WinFile.CopyFile(sourcePath, destPath, options.noOverwrite || false)
        );
      };
@@ -445,9 +464,354 @@
        } else {
          flags = Const.MOVEFILE_COPY_ALLOWED | Const.MOVEFILE_REPLACE_EXISTING;
        }
-       throw_on_zero(
+       throw_on_zero("move",
          WinFile.MoveFileEx(sourcePath, destPath, flags)
        );
+     };
+
+     /**
+      * A global value used to receive data during a
+      * |FindFirstFile|/|FindNextFile|.
+      */
+     let gFindData = new OS.Shared.Type.FindData.implementation();
+     let gFindDataPtr = gFindData.address();
+
+     /**
+      * A global value used to receive data during time conversions.
+      */
+     let gSystemTime = new OS.Shared.Type.SystemTime.implementation();
+     let gSystemTimePtr = gSystemTime.address();
+
+     /**
+      * Utility function: convert a FILETIME to a JavaScript Date.
+      */
+     let FILETIME_to_Date = function FILETIME_to_Date(fileTime) {
+       if (fileTime == null) {
+         throw new TypeError("Expecting a non-null filetime");
+       }
+       throw_on_zero("FILETIME_to_Date",
+                     WinFile.FileTimeToSystemTime(fileTime.address(),
+                                                  gSystemTimePtr));
+       // Windows counts hours, minutes, seconds from UTC,
+       // JS counts from local time, so we need to go through UTC.
+       let utc = Date.UTC(gSystemTime.wYear,
+                          gSystemTime.wMonth - 1
+                          /*Windows counts months from 1, JS from 0*/,
+                          gSystemTime.wDay, gSystemTime.wHour,
+                          gSystemTime.wMinute, gSystemTime.wSecond,
+                          gSystemTime.wMilliSeconds);
+       return new Date(utc);
+     };
+
+     /**
+      * Iterate on one directory.
+      *
+      * This iterator will not enter subdirectories.
+      *
+      * @param {string} path The directory upon which to iterate.
+      * @param {*=} options Ignored in this implementation.
+      *
+      * @throws {File.Error} If |path| does not represent a directory or
+      * if the directory cannot be iterated.
+      * @constructor
+      */
+     File.DirectoryIterator = function DirectoryIterator(path, options) {
+       if (options && options.winPattern) {
+         this._pattern = path + "\\" + options.winPattern;
+       } else {
+         this._pattern = path + "\\*";
+       }
+       this._handle = null;
+       this._path = path;
+       this._started = false;
+     };
+     File.DirectoryIterator.prototype = {
+       __iterator__: function __iterator__() {
+         return this;
+       },
+
+       /**
+        * Fetch the next entry in the directory.
+        *
+        * @return null If we have reached the end of the directory.
+        */
+       _next: function _next() {
+         // Iterator is not fully initialized yet. Finish
+         // initialization.
+         if (!this._started) {
+            this._started = true;
+            this._handle = WinFile.FindFirstFile(this._pattern, gFindDataPtr);
+            if (this._handle == null) {
+              let error = ctypes.winLastError;
+              if (error == Const.ERROR_FILE_NOT_FOUND) {
+                this.close();
+                return null;
+              } else {
+                throw new File.Error("iter (FindFirstFile)", error);
+              }
+            }
+            return gFindData;
+         }
+
+         // We have closed this iterator already.
+         if (!this._handle) {
+           return null;
+         }
+
+         if (WinFile.FindNextFile(this._handle, gFindDataPtr)) {
+           return gFindData;
+         } else {
+           let error = ctypes.winLastError;
+           this.close();
+           if (error == Const.ERROR_NO_MORE_FILES) {
+              return null;
+           } else {
+              throw new File.Error("iter (FindNextFile)", error);
+           }
+         }
+       },
+       /**
+        * Return the next entry in the directory, if any such entry is
+        * available.
+        *
+        * Skip special directories "." and "..".
+        *
+        * @return {File.Entry} The next entry in the directory.
+        * @throws {StopIteration} Once all files in the directory have been
+        * encountered.
+        */
+       next: function next() {
+         // FIXME: If we start supporting "\\?\"-prefixed paths, do not forget
+         // that "." and ".." are absolutely normal file names if _path starts
+         // with such prefix
+         for (let entry = this._next(); entry != null; entry = this._next()) {
+           let name = entry.cFileName.readString();
+           if (name == "." || name == "..") {
+             continue;
+           }
+           return new File.DirectoryIterator.Entry(entry, this._path);
+         }
+         throw StopIteration;
+       },
+       close: function close() {
+         if (!this._handle) {
+           return;
+         }
+         WinFile.FindClose(this._handle);
+         this._handle = null;
+       }
+     };
+     File.DirectoryIterator.Entry = function Entry(win_entry, parent) {
+       // Copy the relevant part of |win_entry| to ensure that
+       // our data is not overwritten prematurely.
+       if (!win_entry.dwFileAttributes) {
+         throw new TypeError();
+       }
+       this._dwFileAttributes = win_entry.dwFileAttributes;
+       this._name = win_entry.cFileName.readString();
+       if (!this._name) {
+         throw new TypeError("Empty name");
+       }
+       this._ftCreationTime = win_entry.ftCreationTime;
+       if (!win_entry.ftCreationTime) {
+         throw new TypeError();
+       }
+       this._ftLastAccessTime = win_entry.ftLastAccessTime;
+       if (!win_entry.ftLastAccessTime) {
+         throw new TypeError();
+       }
+       this._ftLastWriteTime = win_entry.ftLastWriteTime;
+       if (!win_entry.ftLastWriteTime) {
+         throw new TypeError();
+       }
+       if (!parent) {
+         throw new TypeError("Empty parent");
+       }
+       this._parent = parent;
+     };
+     File.DirectoryIterator.Entry.prototype = {
+       /**
+        * |true| if the entry is a directory, |false| otherwise
+        */
+       get isDir() {
+         return !!(this._dwFileAttributes & Const.FILE_ATTRIBUTE_DIRECTORY);
+       },
+       /**
+        * |true| if the entry is a symbolic link, |false| otherwise
+        */
+       get isSymLink() {
+         return !!(this._dwFileAttributes & Const.FILE_ATTRIBUTE_REPARSE_POINT);
+       },
+       /**
+        * The name of the entry.
+        * @type {string}
+        */
+       get name() {
+         return this._name;
+       },
+       /**
+        * The creation time of this file.
+        * @type {Date}
+        */
+       get winCreationTime() {
+         let date = FILETIME_to_Date(this._ftCreationTime);
+         delete this.winCreationTime;
+         Object.defineProperty(this, "winCreationTime", {value: date});
+         return date;
+       },
+       /**
+        * The last modification time of this file.
+        * @type {Date}
+        */
+       get winLastWriteTime() {
+         let date = FILETIME_to_Date(this._ftLastWriteTime);
+         delete this.winLastWriteTime;
+         Object.defineProperty(this, "winLastWriteTime", {value: date});
+         return date;
+       },
+       /**
+        * The last access time of this file.
+        * @type {Date}
+        */
+       get winLastAccessTime() {
+         let date = FILETIME_to_Date(this._ftLastAccessTime);
+         delete this.winLastAccessTime;
+         Object.defineProperty(this, "winLastAccessTime", {value: date});
+         return date;
+       },
+       /**
+        * The full path to the entry.
+        * @type {string}
+        */
+       get path() {
+         delete this.path;
+         let path = OS.Win.Path.join(this._parent, this.name);
+         Object.defineProperty(this, "path", {value: path});
+         return path;
+       }
+     };
+
+     /**
+      * Information on a file.
+      *
+      * To obtain the latest information on a file, use |File.stat|
+      * (for an unopened file) or |File.prototype.stat| (for an
+      * already opened file).
+      *
+      * @constructor
+      */
+     File.Info = function Info(stat) {
+       this._dwFileAttributes = stat.dwFileAttributes;
+       this._ftCreationTime = stat.ftCreationTime;
+       this._ftLastAccessTime = stat.ftLastAccessTime;
+       this._ftLastWriteTime = stat.ftLastAccessTime;
+       this._nFileSizeHigh = stat.nFileSizeHigh;
+       this._nFileSizeLow = stat.nFileSizeLow;
+     };
+     File.Info.prototype = {
+       /**
+        * |true| if this file is a directory, |false| otherwise
+        */
+       get isDir() {
+         return !!(this._dwFileAttributes & Const.FILE_ATTRIBUTE_DIRECTORY);
+       },
+       /**
+        * |true| if this file is a symbolink link, |false| otherwise
+        */
+       get isSymLink() {
+         return !!(this._dwFileAttributes & Const.FILE_ATTRIBUTE_REPARSE_POINT);
+       },
+       /**
+        * The size of the file, in bytes.
+        *
+        * Note that the result may be |NaN| if the size of the file cannot be
+        * represented in JavaScript.
+        *
+        * @type {number}
+        */
+       get size() {
+         try {
+           return OS.Shared.projectValue(
+             ctypes.uint64_t("" +
+             this._nFileSizeHigh +
+             this._nFileSizeLow));
+         } catch (x) {
+           return NaN;
+         }
+       },
+       /**
+        * The date of creation of this file
+        *
+        * @type {Date}
+        */
+       get creationDate() {
+         delete this.creationDate;
+         let date = FILETIME_to_Date(this._ftCreationTime);
+         Object.defineProperty(this, "creationDate", { value: date });
+         return date;
+       },
+       /**
+        * The date of last access to this file.
+        *
+        * Note that the definition of last access may depend on the
+        * underlying operating system and file system.
+        *
+        * @type {Date}
+        */
+       get lastAccessDate() {
+         delete this.lastAccess;
+         let date = FILETIME_to_Date(this._ftLastAccessTime);
+         Object.defineProperty(this, "lastAccessDate", { value: date });
+         return date;
+       },
+       /**
+        * Return the date of last modification of this file.
+        *
+        * Note that the definition of last access may depend on the
+        * underlying operating system and file system.
+        *
+        * @type {Date}
+        */
+       get lastModificationDate() {
+         delete this.lastModification;
+         let date = FILETIME_to_Date(this._ftLastWriteTime);
+         Object.defineProperty(this, "lastModificationDate", { value: date });
+         return date;
+       }
+     };
+
+     /**
+      * Fetch the information on a file.
+      *
+      * Performance note: if you have opened the file already,
+      * method |File.prototype.stat| is generally much faster
+      * than method |File.stat|.
+      *
+      * Platform-specific note: under Windows, if the file is
+      * already opened without sharing of the read capability,
+      * this function will fail.
+      *
+      * @return {File.Information}
+      */
+     File.stat = function stat(path) {
+       let file = File.open(path, FILE_STAT_MODE, FILE_STAT_OPTIONS);
+       try {
+         return file.stat();
+       } finally {
+         file.close();
+       }
+     };
+     // All of the following is required to ensure that File.stat
+     // also works on directories.
+     const FILE_STAT_MODE = {
+       read:true
+     };
+     const FILE_STAT_OPTIONS = {
+       // Directories can be opened neither for reading(!) nor for writing
+       winAccess: 0,
+       // Directories can only be opened with backup semantics(!)
+       winFlags: OS.Constants.Win.FILE_FLAG_BACKUP_SEMANTICS,
+       winDisposition: OS.Constants.Win.OPEN_EXISTING
      };
 
      /**
@@ -455,7 +819,8 @@
       */
      Object.defineProperty(File, "curDir", {
          set: function(path) {
-           WinFile.SetCurrentDirectory(path);
+           throw_on_zero("set curDir",
+             WinFile.SetCurrentDirectory(path));
          },
          get: function() {
            // This function is more complicated than one could hope.
@@ -474,11 +839,11 @@
            let buffer_size = 4096;
            while (true) {
              let array = new (ctypes.ArrayType(ctypes.jschar, buffer_size))();
-             let expected_size = throw_on_zero(
+             let expected_size = throw_on_zero("get curDir",
                WinFile.GetCurrentDirectory(buffer_size, array)
              );
              if (expected_size <= buffer_size) {
-               return array;
+               return array.readString();
              }
              // At this point, we are in a case in which our buffer was not
              // large enough to hold the name of the current directory.
@@ -499,20 +864,26 @@
        }
        return new File(maybe);
      }
-     function throw_on_zero(result, operation) {
+     function throw_on_zero(operation, result) {
        if (result == 0) {
-         operation = operation || throw_on_zero.caller.name;
          throw new File.Error(operation);
        }
        return result;
      }
-     function throw_on_negative(result, operation) {
+     function throw_on_negative(operation, result) {
        if (result < 0) {
-         operation = operation || throw_on_negative.caller.name;
          throw new File.Error(operation);
        }
        return result;
      }
+     function throw_on_null(operation, result) {
+       if (result == null || (result.isNull && result.isNull())) {
+         throw new File.Error(operation);
+       }
+       return result;
+     }
+
+
 
 
      // Constants

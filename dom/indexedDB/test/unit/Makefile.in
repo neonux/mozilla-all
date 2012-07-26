@@ -9,14 +9,14 @@ VPATH = @srcdir@
 relativesrcdir = dom/indexedDB/test/unit
 
 include $(DEPTH)/config/autoconf.mk
-include $(topsrcdir)/config/rules.mk
 
-TEST_FILES = \
+MOCHITEST_FILES = \
   test_add_put.js \
   test_add_twice_failure.js \
   test_advance.js \
   test_autoIncrement_indexes.js \
   test_clear.js \
+  test_complex_keyPaths.js \
   test_count.js \
   test_create_index.js \
   test_create_index_with_integer_keys.js \
@@ -38,6 +38,7 @@ TEST_FILES = \
   test_key_requirements.js \
   test_keys.js \
   test_multientry.js \
+  test_names_sorted.js \
   test_object_identity.js \
   test_objectCursors.js \
   test_objectStore_inline_autoincrement_key_added_on_put.js \
@@ -62,10 +63,7 @@ TEST_FILES = \
   test_transaction_lifetimes.js \
   test_transaction_lifetimes_nested.js \
   test_transaction_ordering.js \
-  test_writer_starvation.js \
   $(NULL)
 
-
-libs:: $(TEST_FILES)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
+include $(topsrcdir)/config/rules.mk
 

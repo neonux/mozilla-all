@@ -13,6 +13,7 @@
 #include "nsISVGGlyphFragmentNode.h"
 #include "nsSVGGlyphFrame.h"
 #include "nsSVGGraphicElement.h"
+#include "nsSVGIntegrationUtils.h"
 #include "nsSVGPathElement.h"
 #include "nsSVGTextPathFrame.h"
 #include "nsSVGUtils.h"
@@ -55,14 +56,14 @@ nsSVGTextFrame::AttributeChanged(PRInt32         aNameSpaceID,
     return NS_OK;
 
   if (aAttribute == nsGkAtoms::transform) {
-
+    nsSVGUtils::InvalidateAndScheduleReflowSVG(this);
     NotifySVGChanged(TRANSFORM_CHANGED);
-   
   } else if (aAttribute == nsGkAtoms::x ||
              aAttribute == nsGkAtoms::y ||
              aAttribute == nsGkAtoms::dx ||
              aAttribute == nsGkAtoms::dy ||
              aAttribute == nsGkAtoms::rotate) {
+    nsSVGUtils::InvalidateAndScheduleReflowSVG(this);
     NotifyGlyphMetricsChange();
   }
 
@@ -73,6 +74,15 @@ nsIAtom *
 nsSVGTextFrame::GetType() const
 {
   return nsGkAtoms::svgTextFrame;
+}
+
+NS_IMETHODIMP
+nsSVGTextFrame::BuildDisplayList(nsDisplayListBuilder*   aBuilder,
+                                 const nsRect&           aDirtyRect,
+                                 const nsDisplayListSet& aLists)
+{
+  UpdateGlyphPositioning(true);
+  return nsSVGTextFrameBase::BuildDisplayList(aBuilder, aDirtyRect, aLists);
 }
 
 //----------------------------------------------------------------------
@@ -147,10 +157,6 @@ nsSVGTextFrame::GetRotationOfChar(PRUint32 charnum, float *_retval)
 void
 nsSVGTextFrame::NotifySVGChanged(PRUint32 aFlags)
 {
-  NS_ABORT_IF_FALSE(!(aFlags & DO_NOT_NOTIFY_RENDERING_OBSERVERS) ||
-                    (GetStateBits() & NS_STATE_SVG_NONDISPLAY_CHILD),
-                    "Must be NS_STATE_SVG_NONDISPLAY_CHILD!");
-
   NS_ABORT_IF_FALSE(aFlags & (TRANSFORM_CHANGED | COORD_CONTEXT_CHANGED),
                     "Invalidation logic may need adjusting");
 
@@ -167,6 +173,16 @@ nsSVGTextFrame::NotifySVGChanged(PRUint32 aFlags)
     }
     // make sure our cached transform matrix gets (lazily) updated
     mCanvasTM = nsnull;
+  }
+
+  if (updateGlyphMetrics) {
+    // Ancestor changes can't affect how we render from the perspective of
+    // any rendering observers that we may have, so we don't need to
+    // invalidate them. We also don't need to invalidate ourself, since our
+    // changed ancestor will have invalidated its entire area, which includes
+    // our area.
+    // For perf reasons we call this before calling NotifySVGChanged() below.
+    nsSVGUtils::ScheduleReflowSVG(this);
   }
 
   nsSVGTextFrameBase::NotifySVGChanged(aFlags);
@@ -186,6 +202,11 @@ NS_IMETHODIMP
 nsSVGTextFrame::PaintSVG(nsRenderingContext* aContext,
                          const nsIntRect *aDirtyRect)
 {
+  NS_ASSERTION(!NS_SVGDisplayListPaintingEnabled() ||
+               (mState & NS_STATE_SVG_NONDISPLAY_CHILD),
+               "If display lists are enabled, only painting of non-display "
+               "SVG should take this code path");
+
   UpdateGlyphPositioning(true);
   
   return nsSVGTextFrameBase::PaintSVG(aContext, aDirtyRect);
@@ -194,21 +215,26 @@ nsSVGTextFrame::PaintSVG(nsRenderingContext* aContext,
 NS_IMETHODIMP_(nsIFrame*)
 nsSVGTextFrame::GetFrameForPoint(const nsPoint &aPoint)
 {
+  NS_ASSERTION(!NS_SVGDisplayListHitTestingEnabled() ||
+               (mState & NS_STATE_SVG_NONDISPLAY_CHILD),
+               "If display lists are enabled, only hit-testing of non-display "
+               "SVG should take this code path");
+
   UpdateGlyphPositioning(true);
   
   return nsSVGTextFrameBase::GetFrameForPoint(aPoint);
 }
 
 void
-nsSVGTextFrame::UpdateBounds()
+nsSVGTextFrame::ReflowSVG()
 {
-  NS_ASSERTION(nsSVGUtils::OuterSVGIsCallingUpdateBounds(this),
-               "This call is probaby a wasteful mistake");
+  NS_ASSERTION(nsSVGUtils::OuterSVGIsCallingReflowSVG(this),
+               "This call is probably a wasteful mistake");
 
   NS_ABORT_IF_FALSE(!(GetStateBits() & NS_STATE_SVG_NONDISPLAY_CHILD),
-                    "UpdateBounds mechanism not designed for this");
+                    "ReflowSVG mechanism not designed for this");
 
-  if (!nsSVGUtils::NeedsUpdatedBounds(this)) {
+  if (!nsSVGUtils::NeedsReflowSVG(this)) {
     NS_ASSERTION(!mPositioningDirty, "How did this happen?");
     return;
   }
@@ -220,12 +246,23 @@ nsSVGTextFrame::UpdateBounds()
 
   UpdateGlyphPositioning(false);
 
+  // We only invalidate if we are dirty, if our outer-<svg> has already had its
+  // initial reflow (since if it hasn't, its entire area will be invalidated
+  // when it gets that initial reflow), and if our parent is not dirty (since
+  // if it is, then it will invalidate its entire new area, which will include
+  // our new area).
+  bool invalidate = (mState & NS_FRAME_IS_DIRTY) &&
+    !(GetParent()->GetStateBits() &
+       (NS_FRAME_FIRST_REFLOW | NS_FRAME_IS_DIRTY));
+
   // With glyph positions updated, our descendants can invalidate their new
   // areas correctly:
-  nsSVGTextFrameBase::UpdateBounds();
+  nsSVGTextFrameBase::ReflowSVG();
 
-  // XXXSDL once we store bounds on containers, call
-  // nsSVGUtils::InvalidateBounds(this) if not first reflow.
+  if (invalidate) {
+    // XXXSDL Let FinishAndStoreOverflow do this.
+    nsSVGUtils::InvalidateBounds(this, true);
+  }
 }
 
 SVGBBox
@@ -241,15 +278,23 @@ nsSVGTextFrame::GetBBoxContribution(const gfxMatrix &aToBBoxUserspace,
 // nsSVGContainerFrame methods:
 
 gfxMatrix
-nsSVGTextFrame::GetCanvasTM()
+nsSVGTextFrame::GetCanvasTM(PRUint32 aFor)
 {
+  if (!(GetStateBits() & NS_STATE_SVG_NONDISPLAY_CHILD)) {
+    if ((aFor == FOR_PAINTING && NS_SVGDisplayListPaintingEnabled()) ||
+        (aFor == FOR_HIT_TESTING && NS_SVGDisplayListHitTestingEnabled())) {
+      return nsSVGIntegrationUtils::GetCSSPxToDevPxMatrix(this);
+    }
+  }
+
   if (!mCanvasTM) {
     NS_ASSERTION(mParent, "null parent");
 
     nsSVGContainerFrame *parent = static_cast<nsSVGContainerFrame*>(mParent);
     nsSVGGraphicElement *content = static_cast<nsSVGGraphicElement*>(mContent);
 
-    gfxMatrix tm = content->PrependLocalTransformsTo(parent->GetCanvasTM());
+    gfxMatrix tm =
+      content->PrependLocalTransformsTo(parent->GetCanvasTM(aFor));
 
     mCanvasTM = new gfxMatrix(tm);
   }
@@ -260,10 +305,35 @@ nsSVGTextFrame::GetCanvasTM()
 //----------------------------------------------------------------------
 //
 
+static void
+MarkDirtyBitsOnDescendants(nsIFrame *aFrame)
+{
+  // Do not skip marking of aFrame or any of its descendants if they have
+  // the NS_FRAME_IS_DIRTY set, because some of their descendants may not
+  // have it set, and we need all descendants to be dirty.
+  if (aFrame->GetStateBits() & (NS_FRAME_FIRST_REFLOW)) {
+    // Nothing to do if our outer-<svg> hasn't yet had its initial reflow.
+    return;
+  }
+  nsIFrame* kid = aFrame->GetFirstPrincipalChild();
+  while (kid) {
+    nsISVGChildFrame* svgkid = do_QueryFrame(kid);
+    if (svgkid) {
+      MarkDirtyBitsOnDescendants(kid);
+      kid->AddStateBits(NS_FRAME_IS_DIRTY);
+    }
+    kid = kid->GetNextSibling();
+  }
+}
+
 void
 nsSVGTextFrame::NotifyGlyphMetricsChange()
 {
-  nsSVGUtils::InvalidateAndScheduleBoundsUpdate(this);
+  // NotifySVGChanged isn't appropriate here, so we just mark our descendants
+  // as fully dirty to get ReflowSVG() called on them:
+  MarkDirtyBitsOnDescendants(this);
+
+  nsSVGUtils::InvalidateAndScheduleReflowSVG(this);
 
   mPositioningDirty = true;
 }

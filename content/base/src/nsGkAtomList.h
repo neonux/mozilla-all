@@ -3,6 +3,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+// IWYU pragma: private, include "nsGkAtoms.h"
+
 /*
   This file contains the list of all atoms used by gklayout;
   see nsGkAtoms for access to the atoms.
@@ -31,6 +33,7 @@
 
 GK_ATOM(_empty, "")
 GK_ATOM(moz, "_moz")
+GK_ATOM(mozframetype, "mozframetype")
 GK_ATOM(mozallowfullscreen, "mozallowfullscreen")
 GK_ATOM(moztype, "_moz-type")
 GK_ATOM(mozdirty, "_moz_dirty")
@@ -201,13 +204,14 @@ GK_ATOM(commandupdater, "commandupdater")
 GK_ATOM(comment, "comment")
 GK_ATOM(compact, "compact")
 GK_ATOM(concat, "concat")
-GK_ATOM(contenteditable, "contenteditable")
 GK_ATOM(conditions, "conditions")
 GK_ATOM(constructor, "constructor")
+GK_ATOM(consumeoutsideclicks, "consumeoutsideclicks")
 GK_ATOM(container, "container")
 GK_ATOM(containment, "containment")
 GK_ATOM(contains, "contains")
 GK_ATOM(content, "content")
+GK_ATOM(contenteditable, "contenteditable")
 GK_ATOM(headerContentDisposition, "content-disposition")
 GK_ATOM(headerContentLanguage, "content-language")
 GK_ATOM(contentLocation, "content-location")
@@ -919,6 +923,7 @@ GK_ATOM(statedatasource, "statedatasource")
 GK_ATOM(staticHint, "staticHint")
 GK_ATOM(statusbar, "statusbar")
 GK_ATOM(statustext, "statustext")
+GK_ATOM(step, "step")
 GK_ATOM(stop, "stop")
 GK_ATOM(stretch, "stretch")
 GK_ATOM(strike, "strike")
@@ -1683,6 +1688,7 @@ GK_ATOM(comboboxControlFrame, "ComboboxControlFrame")
 GK_ATOM(comboboxDisplayFrame, "ComboboxDisplayFrame")
 GK_ATOM(deckFrame, "DeckFrame")
 GK_ATOM(fieldSetFrame, "FieldSetFrame")
+GK_ATOM(flexContainerFrame, "FlexContainerFrame")
 GK_ATOM(formControlFrame, "FormControlFrame") // radio or checkbox
 GK_ATOM(frameSetFrame, "FrameSetFrame")
 GK_ATOM(gfxButtonControlFrame, "gfxButtonControlFrame")
@@ -1746,6 +1752,7 @@ GK_ATOM(svgLinearGradientFrame, "SVGLinearGradientFrame")
 GK_ATOM(svgMarkerFrame, "SVGMarkerFrame")
 GK_ATOM(svgMaskFrame, "SVGMaskFrame")
 GK_ATOM(svgOuterSVGFrame, "SVGOuterSVGFrame")
+GK_ATOM(svgOuterSVGAnonChildFrame, "SVGOuterSVGAnonChildFrame")
 GK_ATOM(svgPathGeometryFrame, "SVGPathGeometryFrame")
 GK_ATOM(svgPatternFrame, "SVGPatternFrame")
 GK_ATOM(svgRadialGradientFrame, "SVGRadialGradientFrame")

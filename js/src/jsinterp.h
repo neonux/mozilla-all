@@ -81,6 +81,25 @@ enum MaybeConstruct {
     CONSTRUCT = INITIAL_CONSTRUCT
 };
 
+extern bool
+ReportIsNotFunction(JSContext *cx, const Value &v, MaybeConstruct construct = NO_CONSTRUCT);
+
+extern bool
+ReportIsNotFunction(JSContext *cx, const Value *vp, MaybeConstruct construct = NO_CONSTRUCT);
+
+extern JSObject *
+ValueToCallable(JSContext *cx, const Value *vp, MaybeConstruct construct = NO_CONSTRUCT);
+
+inline JSFunction *
+ReportIfNotFunction(JSContext *cx, const Value &v, MaybeConstruct construct = NO_CONSTRUCT)
+{
+    if (v.isObject() && v.toObject().isFunction())
+        return v.toObject().toFunction();
+
+    ReportIsNotFunction(cx, v, construct);
+    return NULL;
+}
+
 /*
  * InvokeKernel assumes that the given args have been pushed on the top of the
  * VM stack. Additionally, if 'args' is contained in a CallArgsList, that they
@@ -124,7 +143,7 @@ InvokeGetterOrSetter(JSContext *cx, JSObject *obj, const Value &fval, unsigned a
  * (e.g. 'new') handling the the creation of the new 'this' object.
  */
 extern bool
-InvokeConstructorKernel(JSContext *cx, const CallArgs &args);
+InvokeConstructorKernel(JSContext *cx, CallArgs args);
 
 /* See the InvokeArgsGuard overload of Invoke. */
 inline bool
@@ -215,7 +234,7 @@ class InterpreterFrames {
   public:
     class InterruptEnablerBase {
       public:
-        virtual void enableInterrupts() const = 0;
+        virtual void enable() const = 0;
     };
 
     InterpreterFrames(JSContext *cx, FrameRegs *regs, const InterruptEnablerBase &enabler);
@@ -223,6 +242,7 @@ class InterpreterFrames {
 
     /* If this js::Interpret frame is running |script|, enable interrupts. */
     inline void enableInterruptsIfRunning(JSScript *script);
+    inline void enableInterruptsUnconditionally() { enabler.enable(); }
 
     InterpreterFrames *older;
 

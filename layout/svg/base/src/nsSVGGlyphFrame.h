@@ -15,6 +15,7 @@
 
 class CharacterIterator;
 class gfxContext;
+class nsDisplaySVGGlyphs;
 class nsIDOMSVGRect;
 class nsRenderingContext;
 class nsSVGGlyphFrame;
@@ -31,6 +32,9 @@ class nsSVGGlyphFrame : public nsSVGGlyphFrameBase,
                         public nsISVGGlyphFragmentNode,
                         public nsISVGChildFrame
 {
+  class AutoCanvasTMForMarker;
+  friend class AutoCanvasTMForMarker;
+  friend class CharacterIterator;
   friend nsIFrame*
   NS_NewSVGGlyphFrame(nsIPresShell* aPresShell, nsStyleContext* aContext);
 protected:
@@ -38,6 +42,7 @@ protected:
     : nsSVGGlyphFrameBase(aContext),
       mTextRun(nsnull),
       mStartIndex(0),
+      mGetCanvasTMForFlag(nsISVGChildFrame::FOR_OUTERSVG_TM),
       mCompressWhitespace(true),
       mTrimLeadingWhitespace(false),
       mTrimTrailingWhitespace(false)
@@ -140,6 +145,10 @@ public:
   }
 #endif
 
+  NS_IMETHOD BuildDisplayList(nsDisplayListBuilder*   aBuilder,
+                              const nsRect&           aDirtyRect,
+                              const nsDisplayListSet& aLists);
+
   // nsISVGChildFrame interface:
   // These four always use the global transform, even if NS_STATE_NONDISPLAY_CHILD
   NS_IMETHOD PaintSVG(nsRenderingContext *aContext,
@@ -149,12 +158,12 @@ public:
                                       PRUint32 aFlags);
 
   NS_IMETHOD_(nsRect) GetCoveredRegion();
-  virtual void UpdateBounds();
+  virtual void ReflowSVG();
   virtual void NotifySVGChanged(PRUint32 aFlags);
   NS_IMETHOD_(bool) IsDisplayContainer() { return false; }
 
   // nsSVGGeometryFrame methods
-  gfxMatrix GetCanvasTM();
+  gfxMatrix GetCanvasTM(PRUint32 aFor);
 
   // nsISVGGlyphFragmentNode interface:
   // These do not use the global transform if NS_STATE_NONDISPLAY_CHILD
@@ -171,8 +180,30 @@ public:
     }
   }
 
-protected:
-  friend class CharacterIterator;
+private:
+
+  /**
+   * This class exists purely because it would be too messy to pass the "for"
+   * flag for GetCanvasTM through the call chains to the GetCanvasTM() call in
+   * EnsureTextRun.
+   */
+  class AutoCanvasTMForMarker {
+  public:
+    AutoCanvasTMForMarker(nsSVGGlyphFrame *aFrame, PRUint32 aFor)
+      : mFrame(aFrame)
+    {
+      mOldFor = mFrame->mGetCanvasTMForFlag;
+      mFrame->mGetCanvasTMForFlag = aFor;
+    }
+    ~AutoCanvasTMForMarker()
+    {
+      // Default
+      mFrame->mGetCanvasTMForFlag = mOldFor;
+    }
+  private:
+    nsSVGGlyphFrame *mFrame;
+    PRUint32 mOldFor;
+  };
 
   // Use a power of 2 here. It's not so important to match
   // nsDeviceContext::AppUnitsPerDevPixel, but since we do a lot of
@@ -208,7 +239,7 @@ protected:
                       gfxPattern *aStrokePattern = nsnull);
 
   void NotifyGlyphMetricsChange();
-  void SetupGlobalTransform(gfxContext *aContext);
+  void SetupGlobalTransform(gfxContext *aContext, PRUint32 aFor);
   nsresult GetHighlight(PRUint32 *charnum, PRUint32 *nchars,
                         nscolor *foreground, nscolor *background);
   float GetSubStringAdvance(PRUint32 charnum, PRUint32 fragmentChars,
@@ -227,6 +258,7 @@ protected:
   gfxPoint mPosition;
   // The start index into the position and rotation data
   PRUint32 mStartIndex;
+  PRUint32 mGetCanvasTMForFlag;
   bool mCompressWhitespace;
   bool mTrimLeadingWhitespace;
   bool mTrimTrailingWhitespace;

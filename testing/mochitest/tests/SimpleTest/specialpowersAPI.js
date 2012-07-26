@@ -938,10 +938,10 @@ SpecialPowersAPI.prototype = {
       return aDocument.documentURIObject;
   },
 
-  copyString: function(str) {
+  copyString: function(str, doc) {
     Components.classes["@mozilla.org/widget/clipboardhelper;1"].
       getService(Components.interfaces.nsIClipboardHelper).
-      copyString(str);
+      copyString(str, doc);
   },
 
   openDialog: function(win, args) {
@@ -996,6 +996,8 @@ SpecialPowersAPI.prototype = {
 
     var xferable = Components.classes["@mozilla.org/widget/transferable;1"].
                    createInstance(Components.interfaces.nsITransferable);
+    xferable.init(this._getDocShell(content.window)
+                      .QueryInterface(Components.interfaces.nsILoadContext));
     xferable.addDataFlavor(flavor);
     this._cb.getData(xferable, this._cb.kGlobalClipboard);
     var data = {};
@@ -1009,10 +1011,10 @@ SpecialPowersAPI.prototype = {
     return data.QueryInterface(Components.interfaces.nsISupportsString).data;
   },
 
-  clipboardCopyString: function(preExpectedVal) {  
+  clipboardCopyString: function(preExpectedVal, doc) {
     var cbHelperSvc = Components.classes["@mozilla.org/widget/clipboardhelper;1"].
                       getService(Components.interfaces.nsIClipboardHelper);
-    cbHelperSvc.copyString(preExpectedVal);
+    cbHelperSvc.copyString(preExpectedVal, doc);
   },
 
   supportsSelectionClipboard: function() {
@@ -1093,8 +1095,7 @@ SpecialPowersAPI.prototype = {
   
   setFullscreenAllowed: function(document) {
     var pm = Cc["@mozilla.org/permissionmanager;1"].getService(Ci.nsIPermissionManager);
-    var uri = this.getDocumentURIObject(document);
-    pm.add(uri, "fullscreen", Ci.nsIPermissionManager.ALLOW_ACTION);
+    pm.addFromPrincipal(document.nodePrincipal, "fullscreen", Ci.nsIPermissionManager.ALLOW_ACTION);
     var obsvc = Cc['@mozilla.org/observer-service;1']
                    .getService(Ci.nsIObserverService);
     obsvc.notifyObservers(document, "fullscreen-approved", null);
@@ -1102,8 +1103,7 @@ SpecialPowersAPI.prototype = {
   
   removeFullscreenAllowed: function(document) {
     var pm = Cc["@mozilla.org/permissionmanager;1"].getService(Ci.nsIPermissionManager);
-    var uri = this.getDocumentURIObject(document);
-    pm.remove(uri.host, "fullscreen");
+    pm.removeFromPrincipal(document.nodePrincipal, "fullscreen");
   },
 
   _getURI: function(urlOrDocument) {

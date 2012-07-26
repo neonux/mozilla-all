@@ -26,7 +26,6 @@
 #include "nsIInterfaceRequestorUtils.h"
 #include "nsIWindowMediator.h"
 #include "nsPIDOMWindow.h"
-#include "nsIDOMDocument.h"
 #include "nsIConsoleService.h"
 #include "nsXPIDLString.h"
 #include "prprf.h"
@@ -178,7 +177,7 @@ nsresult nsJSThunk::EvaluateScript(nsIChannel *aChannel,
 		  csp->LogViolationDetails(nsIContentSecurityPolicy::VIOLATION_TYPE_INLINE_SCRIPT,
 								   NS_ConvertUTF8toUTF16(asciiSpec),
 								   NS_ConvertUTF8toUTF16(mURL),
-                                   nsnull);
+                                   0);
           return NS_ERROR_DOM_RETVAL_UNDEFINED;
       }
     }

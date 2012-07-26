@@ -7,6 +7,7 @@
 
 #include "RenderFrameChild.h"
 #include "mozilla/layers/ShadowLayersChild.h"
+#include "LayersBackend.h"
 
 using mozilla::layers::PLayersChild;
 using mozilla::layers::ShadowLayersChild;
@@ -33,7 +34,7 @@ RenderFrameChild::Destroy()
 }
 
 PLayersChild*
-RenderFrameChild::AllocPLayers(LayerManager::LayersBackend* aBackendType, int* aMaxTextureSize)
+RenderFrameChild::AllocPLayers()
 {
   return new ShadowLayersChild();
 }

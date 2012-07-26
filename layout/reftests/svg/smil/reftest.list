@@ -14,6 +14,9 @@
 #   - Some more "anim-retarget" tests, with attributeType being changed/cleared.
 #     (after we've got support for SVG/SMIL animation of CSS properties)
 
+# animateMotion tests
+include motion/reftest.list
+
 # animation sort-order tests
 include sort/reftest.list
 
@@ -227,7 +230,7 @@ random == anim-text-x-y-dx-dy-01.svg anim-text-x-y-dx-dy-01-ref.svg # bug 579588
 == anim-pattern-attr-presence-01.svg anim-pattern-attr-presence-01-ref.svg
 fails == anim-pattern-attr-presence-02.svg anim-pattern-attr-presence-02-ref.svg
 # ^ bug 621651
-== anim-gradient-attr-presence-01.svg anim-gradient-attr-presence-01-ref.svg
+fuzzy-if(cocoaWidget&&layersGPUAccelerated,1,2) == anim-gradient-attr-presence-01.svg anim-gradient-attr-presence-01-ref.svg
 
 == api-sanity-1.svg lime.svg
 

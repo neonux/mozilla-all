@@ -47,6 +47,15 @@ var SettingsListener = {
 
 SettingsListener.init();
 
+// =================== Audio ====================
+SettingsListener.observe('audio.volume.master', 0.5, function(value) {
+  let audioManager = Services.audioManager;
+  if (!audioManager)
+    return;
+
+  audioManager.masterVolume = Math.max(0.0, Math.min(value, 1.0));
+});
+
 
 // =================== Languages ====================
 SettingsListener.observe('language.current', 'en-US', function(value) {
@@ -65,29 +74,34 @@ SettingsListener.observe('language.current', 'en-US', function(value) {
   let strPrefs = ['ril.data.apn', 'ril.data.user', 'ril.data.passwd',
                   'ril.data.mmsc', 'ril.data.mmsproxy'];
   strPrefs.forEach(function(key) {
-    SettingsListener.observe(key, false, function(value) {
+    SettingsListener.observe(key, "", function(value) {
       Services.prefs.setCharPref(key, value);
     });
   });
 
   ['ril.data.mmsport'].forEach(function(key) {
-    SettingsListener.observe(key, false, function(value) {
-      Services.prefs.setIntPref(key, value);
+    SettingsListener.observe(key, null, function(value) {
+      if (value != null) {
+        Services.prefs.setIntPref(key, value);
+      }
     });
   });
 })();
 
 
 // =================== Debugger ====================
-SettingsListener.observe('devtools.debugger.enabled', false, function(enabled) {
-  Services.prefs.setBoolPref('devtools.debugger.enabled', value);
+SettingsListener.observe('devtools.debugger.remote-enabled', false, function(enabled) {
+  Services.prefs.setBoolPref('devtools.debugger.remote-enabled', value);
 });
 
 SettingsListener.observe('devtools.debugger.log', false, function(value) {
   Services.prefs.setBoolPref('devtools.debugger.log', value);
 });
 
-SettingsListener.observe('devtools.debugger.port', 6000, function(value) {
-  Services.prefs.setIntPref('devtools.debugger.port', value);
+SettingsListener.observe('devtools.debugger.remote-port', 6000, function(value) {
+  Services.prefs.setIntPref('devtools.debugger.remote-port', value);
 });
 
+SettingsListener.observe('devtools.debugger.force-local', true, function(value) {
+  Services.prefs.setBoolPref('devtools.debugger.force-local', value);
+});

@@ -35,6 +35,7 @@
 #include "nsXBLProtoImpl.h"
 #include "nsCRT.h"
 #include "nsContentUtils.h"
+#include "nsTextFragment.h"
 
 #include "nsIScriptContext.h"
 #include "nsIScriptError.h"
@@ -227,7 +228,7 @@ private:
 PRUint32 nsXBLInsertionPointEntry::gRefCnt = 0;
 nsFixedSizeAllocator* nsXBLInsertionPointEntry::kPool;
 
-NS_IMPL_CYCLE_COLLECTION_CLASS(nsXBLInsertionPointEntry)
+NS_IMPL_CYCLE_COLLECTION_NATIVE_CLASS(nsXBLInsertionPointEntry)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_NATIVE(nsXBLInsertionPointEntry)
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mInsertionParent)
   if (tmp->mDefaultContent) {
@@ -1847,12 +1848,6 @@ nsXBLPrototypeBinding::ReadContentNode(nsIObjectInputStream* aStream,
 
     prototype->mNodeInfo = nodeInfo;
 
-    nsCOMPtr<Element> result;
-    nsresult rv =
-      nsXULElement::Create(prototype, aDocument, false, getter_AddRefs(result));
-    NS_ENSURE_SUCCESS(rv, rv);
-    content = result;
-
     nsXULPrototypeAttribute* attrs = nsnull;
     if (attrCount > 0) {
       attrs = new nsXULPrototypeAttribute[attrCount];
@@ -1891,6 +1886,12 @@ nsXBLPrototypeBinding::ReadContentNode(nsIObjectInputStream* aStream,
       rv = prototype->SetAttrAt(i, val, documentURI);
       NS_ENSURE_SUCCESS(rv, rv);
     }
+
+    nsCOMPtr<Element> result;
+    nsresult rv =
+      nsXULElement::Create(prototype, aDocument, false, getter_AddRefs(result));
+    NS_ENSURE_SUCCESS(rv, rv);
+    content = result;
   }
   else {
 #endif

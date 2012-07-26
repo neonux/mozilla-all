@@ -8,29 +8,23 @@
 #include "Compatibility.h"
 #include "DocAccessible-inl.h"
 #include "EnumVariant.h"
+#include "ia2AccessibleRelation.h"
 #include "nsAccUtils.h"
 #include "nsCoreUtils.h"
+#include "nsIAccessibleEvent.h"
+#include "nsIAccessibleRelation.h"
 #include "nsWinUtils.h"
 #include "Relation.h"
 #include "Role.h"
-#include "States.h"
-
-#include "ia2AccessibleRelation.h"
-
-#include "nsIAccessibleEvent.h"
-#include "nsIAccessibleRelation.h"
-
-#include "Accessible2_i.c"
-#include "AccessibleRole.h"
-#include "AccessibleStates.h"
 #include "RootAccessible.h"
+#include "States.h"
+#include "uiaRawElmProvider.h"
 
 #ifdef DEBUG
 #include "Logging.h"
 #endif
 
 #include "nsIMutableArray.h"
-#include "nsIDOMDocument.h"
 #include "nsIFrame.h"
 #include "nsIScrollableFrame.h"
 #include "nsINameSpaceManager.h"
@@ -41,7 +35,11 @@
 #include "nsIViewManager.h"
 #include "nsEventMap.h"
 #include "nsArrayUtils.h"
+#include "mozilla/Preferences.h"
 
+#include "Accessible2_i.c"
+#include "AccessibleRole.h"
+#include "AccessibleStates.h"
 #include "OLEACC.H"
 
 using namespace mozilla;
@@ -103,7 +101,7 @@ __try {
   }
 
   if (NULL == *ppv) {
-    HRESULT hr = CAccessibleHyperlink::QueryInterface(iid, ppv);
+    HRESULT hr = ia2AccessibleHyperlink::QueryInterface(iid, ppv);
     if (SUCCEEDED(hr))
       return hr;
   }
@@ -121,6 +119,32 @@ __try {
 } __except(FilterA11yExceptions(::GetExceptionCode(), GetExceptionInformation())) { }
 
   return S_OK;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// IServiceProvider
+
+STDMETHODIMP
+AccessibleWrap::QueryService(REFGUID aGuidService, REFIID aIID,
+                             void** aInstancePtr)
+{
+  if (!aInstancePtr)
+    return E_INVALIDARG;
+
+  *aInstancePtr = NULL;
+
+  // UIA IAccessibleEx
+  if (aGuidService == IID_IAccessibleEx &&
+      Preferences::GetBool("accessibility.uia.enable")) {
+    IAccessibleEx* accEx = new uiaRawElmProvider(this);
+    HRESULT hr = accEx->QueryInterface(aIID, aInstancePtr);
+    if (FAILED(hr))
+      delete accEx;
+
+    return hr;
+  }
+
+  return nsAccessNodeWrap::QueryService(aGuidService, aIID, aInstancePtr);
 }
 
 //-----------------------------------------------------
@@ -346,7 +370,8 @@ __try {
   a11y::role geckoRole = xpAccessible->Role();
   PRUint32 msaaRole = 0;
 
-#define ROLE(_geckoRole, stringRole, atkRole, macRole, _msaaRole, ia2Role) \
+#define ROLE(_geckoRole, stringRole, atkRole, macRole, \
+             _msaaRole, ia2Role, nameRule) \
   case roles::_geckoRole: \
     msaaRole = _msaaRole; \
     break;
@@ -1111,7 +1136,8 @@ __try {
   if (IsDefunct())
     return CO_E_OBJNOTCONNECTED;
 
-#define ROLE(_geckoRole, stringRole, atkRole, macRole, msaaRole, ia2Role) \
+#define ROLE(_geckoRole, stringRole, atkRole, macRole, \
+             msaaRole, ia2Role, nameRule) \
   case roles::_geckoRole: \
     *aRole = ia2Role; \
     break;
@@ -1602,21 +1628,17 @@ AccessibleWrap::GetHWNDFor(Accessible* aAccessible)
     nsIFrame* frame = aAccessible->GetFrame();
     if (frame) {
       nsIWidget* widget = frame->GetNearestWidget();
-      if (widget) {
-        bool isVisible = false;
-        widget->IsVisible(isVisible);
-        if (isVisible) {
-          nsIPresShell* shell = document->PresShell();
-          nsIViewManager* vm = shell->GetViewManager();
-          if (vm) {
-            nsCOMPtr<nsIWidget> rootWidget;
-            vm->GetRootWidget(getter_AddRefs(rootWidget));
-            // Make sure the accessible belongs to popup. If not then use
-            // document HWND (which might be different from root widget in the
-            // case of window emulation).
-            if (rootWidget != widget)
-              return static_cast<HWND>(widget->GetNativeData(NS_NATIVE_WINDOW));
-          }
+      if (widget && widget->IsVisible()) {
+        nsIPresShell* shell = document->PresShell();
+        nsIViewManager* vm = shell->GetViewManager();
+        if (vm) {
+          nsCOMPtr<nsIWidget> rootWidget;
+          vm->GetRootWidget(getter_AddRefs(rootWidget));
+          // Make sure the accessible belongs to popup. If not then use
+          // document HWND (which might be different from root widget in the
+          // case of window emulation).
+          if (rootWidget != widget)
+            return static_cast<HWND>(widget->GetNativeData(NS_NATIVE_WINDOW));
         }
       }
     }

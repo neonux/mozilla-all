@@ -50,7 +50,9 @@ public:
   NS_DECL_FRAMEARENA_HELPERS
 
   // Returns the transform to our gfxContext (to device pixels, not CSS px)
-  virtual gfxMatrix GetCanvasTM() { return gfxMatrix(); }
+  virtual gfxMatrix GetCanvasTM(PRUint32 aFor) {
+    return gfxMatrix();
+  }
 
   /**
    * Returns true if the frame's content has a transform that applies only to
@@ -76,6 +78,12 @@ public:
   {
     return nsSVGContainerFrameBase::IsFrameOfType(
             aFlags & ~(nsIFrame::eSVG | nsIFrame::eSVGContainer));
+  }
+
+  NS_IMETHOD BuildDisplayList(nsDisplayListBuilder*   aBuilder,
+                              const nsRect&           aDirtyRect,
+                              const nsDisplayListSet& aLists) {
+    return NS_OK;
   }
 
   virtual bool UpdateOverflow();
@@ -110,6 +118,10 @@ public:
                   nsIFrame*        aParent,
                   nsIFrame*        aPrevInFlow);
 
+  NS_IMETHOD BuildDisplayList(nsDisplayListBuilder*   aBuilder,
+                              const nsRect&           aDirtyRect,
+                              const nsDisplayListSet& aLists);
+
   virtual bool IsSVGTransformed(gfxMatrix *aOwnTransform = nsnull,
                                 gfxMatrix *aFromParentTransform = nsnull) const;
 
@@ -118,7 +130,7 @@ public:
                       const nsIntRect *aDirtyRect);
   NS_IMETHOD_(nsIFrame*) GetFrameForPoint(const nsPoint &aPoint);
   NS_IMETHOD_(nsRect) GetCoveredRegion();
-  virtual void UpdateBounds();
+  virtual void ReflowSVG();
   virtual void NotifySVGChanged(PRUint32 aFlags);
   virtual SVGBBox GetBBoxContribution(const gfxMatrix &aToBBoxUserspace,
                                       PRUint32 aFlags);

@@ -39,6 +39,7 @@
 #include "jsapi.h"
 #include "prenv.h"
 #include "nsAppDirectoryServiceDefs.h"
+#include "mozilla/mozPoisonWrite.h"
 
 #if defined(XP_WIN)
 #include <windows.h>
@@ -90,6 +91,10 @@ static NS_DEFINE_CID(kAppShellCID, NS_APPSHELL_CID);
 #define NS_SESSION_STORE_WINDOW_RESTORED_EVENT_CID \
   { 0x917B96B1, 0xECAD, 0x4DAB, \
   { 0xA7, 0x60, 0x8D, 0x49, 0x02, 0x77, 0x48, 0xAE} }
+// {26D1E091-0AE7-4F49-A554-4214445C505C}
+#define NS_XPCOM_SHUTDOWN_EVENT_CID \
+  { 0x26D1E091, 0x0AE7, 0x4F49, \
+  { 0xA5, 0x54, 0x42, 0x14, 0x44, 0x5C, 0x50, 0x5C} }
 
 static NS_DEFINE_CID(kApplicationTracingCID,
   NS_APPLICATION_TRACING_CID);
@@ -97,6 +102,8 @@ static NS_DEFINE_CID(kPlacesInitCompleteCID,
   NS_PLACES_INIT_COMPLETE_EVENT_CID);
 static NS_DEFINE_CID(kSessionStoreWindowRestoredCID,
   NS_SESSION_STORE_WINDOW_RESTORED_EVENT_CID);
+static NS_DEFINE_CID(kXPCOMShutdownCID,
+  NS_XPCOM_SHUTDOWN_EVENT_CID);  
 #endif //defined(XP_WIN)
 
 using namespace mozilla;
@@ -163,6 +170,7 @@ nsAppStartup::Init()
   os->AddObserver(this, "xul-window-destroyed", true);
 
 #if defined(XP_WIN)
+  os->AddObserver(this, "xpcom-shutdown", true);
   os->AddObserver(this, "places-init-complete", true);
   // This last event is only interesting to us for xperf-based measures
 
@@ -188,6 +196,13 @@ nsAppStartup::Init()
                NS_LITERAL_CSTRING("sessionstore-windows-restored"));
     NS_WARN_IF_FALSE(mSessionWindowRestoredProbe,
                      "Cannot initialize probe 'sessionstore-windows-restored'");
+                     
+    mXPCOMShutdownProbe =
+      mProbesManager->
+      GetProbe(kXPCOMShutdownCID,
+               NS_LITERAL_CSTRING("xpcom-shutdown"));
+    NS_WARN_IF_FALSE(mXPCOMShutdownProbe,
+                     "Cannot initialize probe 'xpcom-shutdown'");
 
     rv = mProbesManager->StartSession();
     NS_WARN_IF_FALSE(NS_SUCCEEDED(rv),
@@ -285,7 +300,8 @@ RecordShutdownStartTimeStamp() {
   gRecordedShutdownTimeFileName = PL_strdup(nativePath.get());
 }
 
-static void
+namespace mozilla {
+void
 RecordShutdownEndTimeStamp() {
   if (!gRecordedShutdownTimeFileName)
     return;
@@ -296,35 +312,30 @@ RecordShutdownEndTimeStamp() {
 
   nsCString tmpName = name;
   tmpName += ".tmp";
-  PRFileDesc *f = PR_Open(tmpName.get(), PR_CREATE_FILE | PR_WRONLY,
-                          PR_IRUSR | PR_IWUSR);
+  FILE *f = fopen(tmpName.get(), "w");
   if (!f)
     return;
+  // On a normal release build this should be called just before
+  // calling _exit, but on a debug build or when the user forces a full
+  // shutdown this is called as late as possible, so we have to
+  // white list this write as write poisoning will be enabled.
+  int fd = fileno(f);
+  MozillaRegisterDebugFD(fd);
 
   TimeStamp now = TimeStamp::Now();
   MOZ_ASSERT(now >= gRecordedShutdownStartTime);
   TimeDuration diff = now - gRecordedShutdownStartTime;
   uint32_t diff2 = diff.ToMilliseconds();
-  uint32_t written = PR_fprintf(f, "%d\n", diff2);
-  PRStatus rv = PR_Close(f);
-  if (written == static_cast<uint32_t>(-1) || rv != PR_SUCCESS) {
+  int written = fprintf(f, "%d\n", diff2);
+  int rv = fclose(f);
+  MozillaUnRegisterDebugFD(fd);
+  if (written < 0 || rv != 0) {
     PR_Delete(tmpName.get());
     return;
   }
   PR_Rename(tmpName.get(), name.get());
 }
-
-// For now firefox runs static destructors during shutdown on release builds
-// too, so we just use one to run RecordShutdownEndTimeStamp. Once we are
-// exiting earlier in release builds we just move the call.
-class RecordShutdownEndTimeStampHelper {
-public:
-  ~RecordShutdownEndTimeStampHelper() {
-    RecordShutdownEndTimeStamp();
-  }
-};
-
-static RecordShutdownEndTimeStampHelper gHelper;
+}
 
 NS_IMETHODIMP
 nsAppStartup::Quit(uint32_t aMode)
@@ -669,6 +680,10 @@ nsAppStartup::Observe(nsISupports *aSubject,
   } else if (!strcmp(aTopic, "places-init-complete")) {
     if (mPlacesInitCompleteProbe) {
       mPlacesInitCompleteProbe->Trigger();
+    }
+  } else if (!strcmp(aTopic, "xpcom-shutdown")) {
+    if (mXPCOMShutdownProbe) {
+      mXPCOMShutdownProbe->Trigger();
     }
 #endif //defined(XP_WIN)
   } else {

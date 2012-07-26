@@ -55,9 +55,8 @@ public class AccountAuthenticator {
       abort(AuthenticationResult.FAILURE_OTHER, e);
       return;
     }
-    Logger.debug(LOG_TAG, "username:" + username);
-
-    Logger.debug(LOG_TAG, "running first stage.");
+    Logger.pii(LOG_TAG, "Username:" + username);
+    Logger.debug(LOG_TAG, "Running first stage.");
     // Start first stage of authentication.
     runNextStage();
   }
@@ -86,10 +85,10 @@ public class AccountAuthenticator {
   /**
    * Abort authentication.
    *
+   * @param result
+   *    returned to callback.
    * @param e
    *    Exception causing abort.
-   * @param reason
-   *    Reason for abort.
    */
   public void abort(AuthenticationResult result, Exception e) {
     if (isCanceled) {

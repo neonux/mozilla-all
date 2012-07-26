@@ -4,7 +4,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#ifdef MOZ_WIDGET_GTK2
+#ifdef MOZ_WIDGET_GTK
 #include <gtk/gtk.h>
 #endif
 
@@ -26,6 +26,8 @@
 #include "mozilla/ipc/TestShellChild.h"
 #include "mozilla/ipc/XPCShellEnvironment.h"
 #include "mozilla/jsipc/PContextWrapperChild.h"
+#include "mozilla/layers/CompositorChild.h"
+#include "mozilla/layers/PCompositorChild.h"
 #include "mozilla/net/NeckoChild.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/Attributes.h"
@@ -51,6 +53,7 @@
 #include "nsNetUtil.h"
 
 #include "base/message_loop.h"
+#include "base/process_util.h"
 #include "base/task.h"
 
 #include "nsChromeRegistryContent.h"
@@ -79,13 +82,18 @@
 #endif
 
 #include "mozilla/dom/sms/SmsChild.h"
+#include "mozilla/dom/devicestorage/DeviceStorageRequestChild.h"
+#include "mozilla/dom/indexedDB/PIndexedDBChild.h"
 
+using namespace mozilla::docshell;
+using namespace mozilla::dom::devicestorage;
+using namespace mozilla::dom::sms;
+using namespace mozilla::dom::indexedDB;
 using namespace mozilla::hal_sandbox;
 using namespace mozilla::ipc;
+using namespace mozilla::layers;
 using namespace mozilla::net;
 using namespace mozilla::places;
-using namespace mozilla::docshell;
-using namespace mozilla::dom::sms;
 
 namespace mozilla {
 namespace dom {
@@ -218,7 +226,7 @@ ContentChild::Init(MessageLoop* aIOLoop,
                    base::ProcessHandle aParentHandle,
                    IPC::Channel* aChannel)
 {
-#ifdef MOZ_WIDGET_GTK2
+#ifdef MOZ_WIDGET_GTK
     // sigh
     gtk_init(NULL, NULL);
 #endif
@@ -381,10 +389,19 @@ ContentChild::DeallocPMemoryReportRequest(PMemoryReportRequestChild* actor)
     return true;
 }
 
-PBrowserChild*
-ContentChild::AllocPBrowser(const PRUint32& aChromeFlags)
+PCompositorChild*
+ContentChild::AllocPCompositor(ipc::Transport* aTransport,
+                               base::ProcessId aOtherProcess)
 {
-    nsRefPtr<TabChild> iframe = new TabChild(aChromeFlags);
+    return CompositorChild::Create(aTransport, aOtherProcess);
+}
+
+PBrowserChild*
+ContentChild::AllocPBrowser(const PRUint32& aChromeFlags,
+                            const bool& aIsBrowserElement,
+                            const PRUint32& aAppId)
+{
+    nsRefPtr<TabChild> iframe = new TabChild(aChromeFlags, aIsBrowserElement, aAppId);
     return NS_SUCCEEDED(iframe->Init()) ? iframe.forget().get() : NULL;
 }
 
@@ -425,6 +442,20 @@ ContentChild::DeallocPHal(PHalChild* aHal)
 {
     delete aHal;
     return true;
+}
+
+PIndexedDBChild*
+ContentChild::AllocPIndexedDB()
+{
+  NS_NOTREACHED("Should never get here!");
+  return NULL;
+}
+
+bool
+ContentChild::DeallocPIndexedDB(PIndexedDBChild* aActor)
+{
+  delete aActor;
+  return true;
 }
 
 PTestShellChild*
@@ -468,6 +499,19 @@ ContentChild::DeallocPAudio(PAudioChild* doomed)
     AudioChild *child = static_cast<AudioChild*>(doomed);
     NS_RELEASE(child);
 #endif
+    return true;
+}
+
+PDeviceStorageRequestChild*
+ContentChild::AllocPDeviceStorageRequest(const DeviceStorageParams& aParams)
+{
+    return new DeviceStorageRequestChild();
+}
+
+bool
+ContentChild::DeallocPDeviceStorageRequest(PDeviceStorageRequestChild* aDeviceStorage)
+{
+    delete aDeviceStorage;
     return true;
 }
 
@@ -744,14 +788,14 @@ ContentChild::RecvActivateA11y()
 bool
 ContentChild::RecvGarbageCollect()
 {
-    nsJSContext::GarbageCollectNow(js::gcreason::DOM_IPC, nsGCNormal, true);
+    nsJSContext::GarbageCollectNow(js::gcreason::DOM_IPC);
     return true;
 }
 
 bool
 ContentChild::RecvCycleCollect()
 {
-    nsJSContext::GarbageCollectNow(js::gcreason::DOM_IPC, nsGCNormal, true);
+    nsJSContext::GarbageCollectNow(js::gcreason::DOM_IPC);
     nsJSContext::CycleCollectNow();
     return true;
 }

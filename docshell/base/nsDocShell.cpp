@@ -5,6 +5,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "mozilla/dom/ContentChild.h"
+#include "mozilla/dom/TabChild.h"
 #include "mozilla/Util.h"
 
 #ifdef MOZ_LOGGING
@@ -78,6 +79,7 @@
 #include "mozilla/Preferences.h"
 #include "mozilla/Telemetry.h"
 #include "mozilla/AutoRestore.h"
+#include "mozilla/Attributes.h"
 
 // we want to explore making the document own the load group
 // so we can associate the document URI with the load group.
@@ -200,6 +202,7 @@ static NS_DEFINE_CID(kAppShellCID, NS_APPSHELL_CID);
 #endif
 
 using namespace mozilla;
+using namespace mozilla::dom;
 
 // Number of documents currently loading
 static PRInt32 gNumberOfDocumentsLoading = 0;
@@ -408,9 +411,9 @@ IsSameHost(nsIURI *uri1, nsIURI *uri2)
   return host1.Equals(host2);
 }
 
-class nsPingListener : public nsIStreamListener
-                     , public nsIInterfaceRequestor
-                     , public nsIChannelEventSink
+class nsPingListener MOZ_FINAL : public nsIStreamListener
+                               , public nsIInterfaceRequestor
+                               , public nsIChannelEventSink
 {
 public:
   NS_DECL_ISUPPORTS
@@ -638,7 +641,7 @@ ConvertLoadTypeToNavigationType(PRUint32 aLoadType)
     aLoadType = LOAD_NORMAL;
   }
 
-  nsDOMPerformanceNavigationType result = nsIDOMPerformanceNavigation::TYPE_RESERVED;
+  nsDOMPerformanceNavigationType result = dom::PerformanceNavigation::TYPE_RESERVED;
   switch (aLoadType) {
     case LOAD_NORMAL:
     case LOAD_NORMAL_EXTERNAL:
@@ -648,28 +651,29 @@ ConvertLoadTypeToNavigationType(PRUint32 aLoadType)
     case LOAD_NORMAL_REPLACE:
     case LOAD_LINK:
     case LOAD_STOP_CONTENT:
-        result = nsIDOMPerformanceNavigation::TYPE_NAVIGATE;
+    case LOAD_REPLACE_BYPASS_CACHE:
+        result = dom::PerformanceNavigation::TYPE_NAVIGATE;
         break;
     case LOAD_HISTORY:
-        result = nsIDOMPerformanceNavigation::TYPE_BACK_FORWARD;
+        result = dom::PerformanceNavigation::TYPE_BACK_FORWARD;
         break;
     case LOAD_RELOAD_NORMAL:
     case LOAD_RELOAD_CHARSET_CHANGE:
     case LOAD_RELOAD_BYPASS_CACHE:
     case LOAD_RELOAD_BYPASS_PROXY:
     case LOAD_RELOAD_BYPASS_PROXY_AND_CACHE:
-        result = nsIDOMPerformanceNavigation::TYPE_RELOAD;
+        result = dom::PerformanceNavigation::TYPE_RELOAD;
         break;
     case LOAD_STOP_CONTENT_AND_REPLACE:
     case LOAD_REFRESH:
     case LOAD_BYPASS_HISTORY:
     case LOAD_ERROR_PAGE:
     case LOAD_PUSHSTATE:
-        result = nsIDOMPerformanceNavigation::TYPE_RESERVED;
+        result = dom::PerformanceNavigation::TYPE_RESERVED;
         break;
     default:
         // NS_NOTREACHED("Unexpected load type value");
-        result = nsIDOMPerformanceNavigation::TYPE_RESERVED;
+        result = dom::PerformanceNavigation::TYPE_RESERVED;
         break;
   }
 
@@ -761,6 +765,7 @@ nsDocShell::nsDocShell():
 #ifdef DEBUG
     mInEnsureScriptEnv(false),
 #endif
+    mAppId(nsIScriptSecurityManager::NO_APP_ID),
     mParentCharsetSource(0)
 {
     mHistoryID = ++gDocshellIDCounter;
@@ -786,7 +791,7 @@ nsDocShell::nsDocShell():
   // We're counting the number of |nsDocShells| to help find leaks
   ++gNumberOfDocShells;
   if (!PR_GetEnv("MOZ_QUIET")) {
-      printf("++DOCSHELL %p == %ld [id = %ld]\n", (void*) this,
+      printf("++DOCSHELL %p == %ld [id = %llu]\n", (void*) this,
              gNumberOfDocShells, mHistoryID);
   }
 #endif
@@ -815,7 +820,7 @@ nsDocShell::~nsDocShell()
     // We're counting the number of |nsDocShells| to help find leaks
     --gNumberOfDocShells;
     if (!PR_GetEnv("MOZ_QUIET")) {
-        printf("--DOCSHELL %p == %ld [id = %ld]\n", (void*) this,
+        printf("--DOCSHELL %p == %ld [id = %llu]\n", (void*) this,
                gNumberOfDocShells, mHistoryID);
     }
 #endif
@@ -1141,6 +1146,9 @@ ConvertDocShellLoadInfoToLoadType(nsDocShellInfoLoadType aDocShellLoadType)
     case nsIDocShellLoadInfo::loadPushState:
         loadType = LOAD_PUSHSTATE;
         break;
+    case nsIDocShellLoadInfo::loadReplaceBypassCache:
+        loadType = LOAD_REPLACE_BYPASS_CACHE;
+        break;
     default:
         NS_NOTREACHED("Unexpected nsDocShellInfoLoadType value");
     }
@@ -1208,6 +1216,9 @@ nsDocShell::ConvertLoadTypeToDocShellLoadInfo(PRUint32 aLoadType)
         break;
     case LOAD_PUSHSTATE:
         docShellLoadType = nsIDocShellLoadInfo::loadPushState;
+        break;
+    case LOAD_REPLACE_BYPASS_CACHE:
+        docShellLoadType = nsIDocShellLoadInfo::loadReplaceBypassCache;
         break;
     default:
         NS_NOTREACHED("Unexpected load type value");
@@ -2499,40 +2510,6 @@ nsDocShell::GetSessionStorageForPrincipal(nsIPrincipal* aPrincipal,
     return NS_OK;
 }
 
-NS_IMETHODIMP
-nsDocShell::GetSessionStorageForURI(nsIURI* aURI,
-                                    const nsAString& aDocumentURI,
-                                    nsIDOMStorage** aStorage)
-{
-    return GetSessionStorageForURI(aURI, aDocumentURI, true, aStorage);
-}
-
-nsresult
-nsDocShell::GetSessionStorageForURI(nsIURI* aURI,
-                                    const nsSubstring& aDocumentURI,
-                                    bool aCreate,
-                                    nsIDOMStorage** aStorage)
-{
-    NS_ENSURE_ARG(aURI);
-    NS_ENSURE_ARG_POINTER(aStorage);
-
-    *aStorage = nsnull;
-
-    nsresult rv;
-
-    nsCOMPtr<nsIScriptSecurityManager> securityManager =
-        do_GetService(NS_SCRIPTSECURITYMANAGER_CONTRACTID, &rv);
-    NS_ENSURE_SUCCESS(rv, rv);
-
-    // This is terrible hack and should go away along with this whole method.
-    nsCOMPtr<nsIPrincipal> principal;
-    rv = securityManager->GetCodebasePrincipal(aURI, getter_AddRefs(principal));
-    if (NS_FAILED(rv))
-        return rv;
-
-    return GetSessionStorageForPrincipal(principal, aDocumentURI, aCreate, aStorage);
-}
-
 nsresult
 nsDocShell::AddSessionStorage(nsIPrincipal* aPrincipal,
                               nsIDOMStorage* aStorage)
@@ -2574,6 +2551,37 @@ nsDocShell::AddSessionStorage(nsIPrincipal* aPrincipal,
         }
     }
 
+    return NS_OK;
+}
+
+static PLDHashOperator
+CloneSessionStorages(nsCStringHashKey::KeyType aKey, nsIDOMStorage* aStorage,
+                     void* aUserArg)
+{
+    nsIDocShell *docShell = static_cast<nsIDocShell*>(aUserArg);
+    nsCOMPtr<nsPIDOMStorage> pistorage = do_QueryInterface(aStorage);
+
+    if (pistorage) {
+        nsCOMPtr<nsIDOMStorage> storage = pistorage->Clone();
+        docShell->AddSessionStorage(pistorage->Principal(), storage);
+    }
+
+    return PL_DHASH_NEXT;
+}
+
+NS_IMETHODIMP
+nsDocShell::CloneSessionStoragesTo(nsIDocShell* aDocShell)
+{
+    aDocShell->ClearSessionStorages();
+    mStorages.EnumerateRead(CloneSessionStorages, aDocShell);
+
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocShell::ClearSessionStorages()
+{
+    mStorages.Clear();
     return NS_OK;
 }
 
@@ -2739,6 +2747,10 @@ nsDocShell::GetSameTypeParent(nsIDocShellTreeItem ** aParent)
     NS_ENSURE_ARG_POINTER(aParent);
     *aParent = nsnull;
 
+    if (mIsBrowserFrame) {
+        return NS_OK;
+    }
+
     nsCOMPtr<nsIDocShellTreeItem> parent =
         do_QueryInterface(GetAsSupports(mParent));
     if (!parent)
@@ -2749,6 +2761,27 @@ nsDocShell::GetSameTypeParent(nsIDocShellTreeItem ** aParent)
 
     if (parentType == mItemType) {
         parent.swap(*aParent);
+    }
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocShell::GetParentIgnoreBrowserFrame(nsIDocShell** aParent)
+{
+    NS_ENSURE_ARG_POINTER(aParent);
+    *aParent = nsnull;
+
+    nsCOMPtr<nsIDocShellTreeItem> parent =
+        do_QueryInterface(GetAsSupports(mParent));
+    if (!parent)
+        return NS_OK;
+
+    PRInt32 parentType;
+    NS_ENSURE_SUCCESS(parent->GetItemType(&parentType), NS_ERROR_FAILURE);
+
+    if (parentType == mItemType) {
+        nsCOMPtr<nsIDocShell> parentDS = do_QueryInterface(parent);
+        parentDS.forget(aParent);
     }
     return NS_OK;
 }
@@ -4869,6 +4902,13 @@ nsDocShell::SetParentNativeWindow(nativeWindow parentNativeWindow)
 }
 
 NS_IMETHODIMP
+nsDocShell::GetNativeHandle(nsAString& aNativeHandle)
+{
+    // the nativeHandle should be accessed from nsIXULWindow
+    return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
 nsDocShell::GetVisibility(bool * aVisibility)
 {
     NS_ENSURE_ARG_POINTER(aVisibility);
@@ -4984,12 +5024,20 @@ nsDocShell::SetIsActive(bool aIsActive)
       }
   }
 
-  // Recursively tell all of our children
+  // Recursively tell all of our children, but don't tell <iframe mozbrowser>
+  // children; they handle their state separately.
   PRInt32 n = mChildList.Count();
   for (PRInt32 i = 0; i < n; ++i) {
       nsCOMPtr<nsIDocShell> docshell = do_QueryInterface(ChildAt(i));
-      if (docshell)
-        docshell->SetIsActive(aIsActive);
+      if (!docshell) {
+          continue;
+      }
+
+      bool isContentBoundary = false;
+      docshell->GetIsContentBoundary(&isContentBoundary);
+      if (!isContentBoundary) {
+          docshell->SetIsActive(aIsActive);
+      }
   }
 
   return NS_OK;
@@ -5489,6 +5537,7 @@ nsDocShell::ForceRefreshURI(nsIURI * aURI,
 
 nsresult
 nsDocShell::SetupRefreshURIFromHeader(nsIURI * aBaseURI,
+                                      nsIPrincipal* aPrincipal,
                                       const nsACString & aHeader)
 {
     // Refresh headers are parsed with the following format in mind
@@ -5530,6 +5579,8 @@ nsDocShell::SetupRefreshURIFromHeader(nsIURI * aBaseURI,
 
     // when done, seconds is 0 or the given number of seconds
     //            uriAttrib is empty or the URI specified
+    MOZ_ASSERT(aPrincipal);
+
     nsCAutoString uriAttrib;
     PRInt32 seconds = 0;
     bool specifiesSeconds = false;
@@ -5694,9 +5745,8 @@ nsDocShell::SetupRefreshURIFromHeader(nsIURI * aBaseURI,
                             (NS_SCRIPTSECURITYMANAGER_CONTRACTID, &rv));
         if (NS_SUCCEEDED(rv)) {
             rv = securityManager->
-                CheckLoadURI(aBaseURI, uri,
-                             nsIScriptSecurityManager::
-                             LOAD_IS_AUTOMATIC_DOCUMENT_REPLACEMENT);
+                CheckLoadURIWithPrincipal(aPrincipal, uri,
+                                          nsIScriptSecurityManager::LOAD_IS_AUTOMATIC_DOCUMENT_REPLACEMENT);
 
             if (NS_SUCCEEDED(rv)) {
                 bool isjs = true;
@@ -5732,8 +5782,16 @@ NS_IMETHODIMP nsDocShell::SetupRefreshURI(nsIChannel * aChannel)
                                             refreshHeader);
 
         if (!refreshHeader.IsEmpty()) {
+            nsCOMPtr<nsIScriptSecurityManager> secMan =
+                do_GetService(NS_SCRIPTSECURITYMANAGER_CONTRACTID, &rv);
+            NS_ENSURE_SUCCESS(rv, rv);
+
+            nsCOMPtr<nsIPrincipal> principal;
+            rv = secMan->GetChannelPrincipal(aChannel, getter_AddRefs(principal));
+            NS_ENSURE_SUCCESS(rv, rv);
+
             SetupReferrerFromChannel(aChannel);
-            rv = SetupRefreshURIFromHeader(mCurrentURI, refreshHeader);
+            rv = SetupRefreshURIFromHeader(mCurrentURI, principal, refreshHeader);
             if (NS_SUCCEEDED(rv)) {
                 return NS_REFRESHURI_HEADER_FOUND;
             }
@@ -5923,6 +5981,7 @@ nsDocShell::Embed(nsIContentViewer * aContentViewer,
     case LOAD_RELOAD_BYPASS_CACHE:
     case LOAD_RELOAD_BYPASS_PROXY:
     case LOAD_RELOAD_BYPASS_PROXY_AND_CACHE:
+    case LOAD_REPLACE_BYPASS_CACHE:
         updateHistory = false;
         break;
     default:
@@ -7956,7 +8015,7 @@ namespace
 
 // Callback used by CopyFavicon to inform the favicon service that one URI
 // (mNewURI) has the same favicon URI (OnComplete's aFaviconURI) as another.
-class nsCopyFaviconCallback : public nsIFaviconDataCallback
+class nsCopyFaviconCallback MOZ_FINAL : public nsIFaviconDataCallback
 {
 public:
     NS_DECL_ISUPPORTS
@@ -8154,16 +8213,16 @@ nsDocShell::InternalLoad(nsIURI * aURI,
     }
 
     // XXXbz would be nice to know the loading principal here... but we don't
-    nsCOMPtr<nsIPrincipal> loadingPrincipal;
-    if (aReferrer) {
+    nsCOMPtr<nsIPrincipal> loadingPrincipal = do_QueryInterface(aOwner);
+    if (!loadingPrincipal && aReferrer) {
         nsCOMPtr<nsIScriptSecurityManager> secMan =
             do_GetService(NS_SCRIPTSECURITYMANAGER_CONTRACTID, &rv);
         NS_ENSURE_SUCCESS(rv, rv);
 
-        rv = secMan->GetCodebasePrincipal(aReferrer,
-                                          getter_AddRefs(loadingPrincipal));
+        rv = secMan->GetSimpleCodebasePrincipal(aReferrer,
+                                                getter_AddRefs(loadingPrincipal));
     }
-    
+
     rv = NS_CheckContentLoadPolicy(contentType,
                                    aURI,
                                    loadingPrincipal,
@@ -9226,6 +9285,7 @@ nsresult nsDocShell::DoChannelLoad(nsIChannel * aChannel,
     case LOAD_RELOAD_BYPASS_CACHE:
     case LOAD_RELOAD_BYPASS_PROXY:
     case LOAD_RELOAD_BYPASS_PROXY_AND_CACHE:
+    case LOAD_REPLACE_BYPASS_CACHE:
         loadFlags |= nsIRequest::LOAD_BYPASS_CACHE |
                      nsIRequest::LOAD_FRESH_CONNECTION;
         break;
@@ -9850,17 +9910,6 @@ nsDocShell::AddState(nsIVariant *aData, const nsAString& aTitle,
 
     } // end of same-origin check
 
-    nsCOMPtr<nsISHistory> sessionHistory = mSessionHistory;
-    if (!sessionHistory) {
-        // Get the handle to SH from the root docshell
-        GetRootSessionHistory(getter_AddRefs(sessionHistory));
-    }
-    NS_ENSURE_TRUE(sessionHistory, NS_ERROR_FAILURE);
-
-    nsCOMPtr<nsISHistoryInternal> shInternal =
-        do_QueryInterface(sessionHistory, &rv);
-    NS_ENSURE_SUCCESS(rv, rv);
-
     // Step 3: Create a new entry in the session history. This will erase
     // all SHEntries after the new entry and make this entry the current
     // one.  This operation may modify mOSHE, which we need later, so we
@@ -9989,7 +10038,7 @@ nsDocShell::ShouldAddToSessionHistory(nsIURI * aURI)
     // should just do a spec compare, rather than two gets of the scheme and
     // then the path.  -Gagan
     nsresult rv;
-    nsCAutoString buf;
+    nsCAutoString buf, pref;
 
     rv = aURI->GetScheme(buf);
     if (NS_FAILED(rv))
@@ -10004,7 +10053,14 @@ nsDocShell::ShouldAddToSessionHistory(nsIURI * aURI)
             return false;
         }
     }
-    return true;
+
+    rv = aURI->GetSpec(buf);
+    NS_ENSURE_SUCCESS(rv, true);
+
+    rv = Preferences::GetDefaultCString("browser.newtab.url", &pref);
+    NS_ENSURE_SUCCESS(rv, true);
+
+    return !buf.Equals(pref);
 }
 
 nsresult
@@ -10566,7 +10622,7 @@ nsDocShell::SetHistoryEntry(nsCOMPtr<nsISHEntry> *aPtr, nsISHEntry *aEntry)
                 nsDocShell *rootDocShell = static_cast<nsDocShell*>
                                                       (rootIDocShell);
 
-#ifdef NS_DEBUG
+#ifdef DEBUG
                 nsresult rv =
 #endif
                 SetChildHistoryEntry(oldRootEntry, rootDocShell,
@@ -11074,16 +11130,9 @@ NS_IMETHODIMP nsDocShell::EnsureFind()
 bool
 nsDocShell::IsFrame()
 {
-    nsCOMPtr<nsIDocShellTreeItem> parent =
-        do_QueryInterface(GetAsSupports(mParent));
-    if (parent) {
-        PRInt32 parentType = ~mItemType;        // Not us
-        parent->GetItemType(&parentType);
-        if (parentType == mItemType)    // This is a frame
-            return true;
-    }
-
-    return false;
+    nsCOMPtr<nsIDocShellTreeItem> parent;
+    GetSameTypeParent(getter_AddRefs(parent));
+    return !!parent;
 }
 
 /* boolean IsBeingDestroyed (); */
@@ -11318,6 +11367,20 @@ nsDocShell::GetIsContent(bool *aIsContent)
     *aIsContent = (mItemType == typeContent);
     return NS_OK;
 }
+
+NS_IMETHODIMP
+nsDocShell::GetExtendedOrigin(nsIURI *aUri, nsACString &aResult)
+{
+    bool isInBrowserElement;
+    GetIsInBrowserElement(&isInBrowserElement);
+
+    nsCOMPtr<nsIScriptSecurityManager> ssmgr =
+      do_GetService(NS_SCRIPTSECURITYMANAGER_CONTRACTID);
+    NS_ENSURE_TRUE(ssmgr, false);
+
+    return ssmgr->GetExtendedOrigin(aUri, mAppId, isInBrowserElement, aResult);
+}
+
 
 bool
 nsDocShell::IsOKToLoadURI(nsIURI* aURI)
@@ -11976,52 +12039,155 @@ nsDocShell::GetCanExecuteScripts(bool *aResult)
 }
 
 NS_IMETHODIMP
-nsDocShell::GetIsBrowserFrame(bool *aOut)
+nsDocShell::SetIsBrowserElement()
 {
-  NS_ENSURE_ARG_POINTER(aOut);
-  *aOut = mIsBrowserFrame;
-  return NS_OK;
-}
+    if (mIsBrowserFrame) {
+        NS_ERROR("You should not call SetIsBrowserElement() more than once.");
+        return NS_OK;
+    }
 
-NS_IMETHODIMP
-nsDocShell::SetIsBrowserFrame(bool aValue)
-{
-  // Disallow transitions from browser frame to not-browser-frame.  Once a
-  // browser frame, always a browser frame.  (Otherwise, observers of
-  // docshell-marked-as-browser-frame would have to distinguish between
-  // newly-created browser frames and frames which went from true to false back
-  // to true.)
-  NS_ENSURE_STATE(!mIsBrowserFrame || aValue);
+    mIsBrowserFrame = true;
 
-  bool wasBrowserFrame = mIsBrowserFrame;
-  mIsBrowserFrame = aValue;
-  if (aValue && !wasBrowserFrame) {
     nsCOMPtr<nsIObserverService> os = services::GetObserverService();
     if (os) {
-      os->NotifyObservers(GetAsSupports(this),
-                          "docshell-marked-as-browser-frame", NULL);
+        os->NotifyObservers(GetAsSupports(this),
+                            "docshell-marked-as-browser-frame", NULL);
     }
-  }
-  return NS_OK;
+
+    return NS_OK;
 }
 
-NS_IMETHODIMP
-nsDocShell::GetContainedInBrowserFrame(bool *aOut)
+nsDocShell::FrameType
+nsDocShell::GetInheritedFrameType()
 {
-    *aOut = false;
+    FrameType type = GetFrameType();
 
-    if (mIsBrowserFrame) {
-        *aOut = true;
-        return NS_OK;
+    if (type != eFrameTypeRegular) {
+        return type;
     }
 
     nsCOMPtr<nsIDocShellTreeItem> parentAsItem;
     GetSameTypeParent(getter_AddRefs(parentAsItem));
 
     nsCOMPtr<nsIDocShell> parent = do_QueryInterface(parentAsItem);
-    if (parent) {
-        return parent->GetContainedInBrowserFrame(aOut);
+    if (!parent) {
+        return eFrameTypeRegular;
     }
 
+    return static_cast<nsDocShell*>(parent.get())->GetInheritedFrameType();
+}
+
+nsDocShell::FrameType
+nsDocShell::GetFrameType()
+{
+    if (mAppId != nsIScriptSecurityManager::NO_APP_ID) {
+        return eFrameTypeApp;
+    }
+
+    return mIsBrowserFrame ? eFrameTypeBrowser : eFrameTypeRegular;
+}
+
+NS_IMETHODIMP
+nsDocShell::GetIsBrowserElement(bool* aIsBrowser)
+{
+    *aIsBrowser = (GetFrameType() == eFrameTypeBrowser);
+
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocShell::GetIsApp(bool* aIsApp)
+{
+    *aIsApp = (GetFrameType() == eFrameTypeApp);
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocShell::GetIsContentBoundary(bool* aIsContentBoundary)
+{
+    switch (GetFrameType()) {
+        case eFrameTypeRegular:
+            *aIsContentBoundary = false;
+            break;
+        case eFrameTypeBrowser:
+        case eFrameTypeApp:
+            *aIsContentBoundary = true;
+            break;
+    }
+
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocShell::GetIsInBrowserElement(bool* aIsInBrowserElement)
+{
+    *aIsInBrowserElement = (GetInheritedFrameType() == eFrameTypeBrowser);
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocShell::GetIsInApp(bool* aIsInApp)
+{
+    *aIsInApp = (GetInheritedFrameType() == eFrameTypeApp);
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocShell::GetIsBelowContentBoundary(bool* aIsInContentBoundary)
+{
+    switch (GetInheritedFrameType()) {
+        case eFrameTypeRegular:
+            *aIsInContentBoundary = false;
+            break;
+        case eFrameTypeBrowser:
+        case eFrameTypeApp:
+            *aIsInContentBoundary = true;
+            break;
+    }
+
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocShell::SetAppId(PRUint32 aAppId)
+{
+    MOZ_ASSERT(mAppId == nsIScriptSecurityManager::NO_APP_ID);
+    MOZ_ASSERT(aAppId != nsIScriptSecurityManager::UNKNOWN_APP_ID);
+
+    mAppId = aAppId;
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocShell::GetAppId(PRUint32* aAppId)
+{
+    if (mAppId != nsIScriptSecurityManager::NO_APP_ID) {
+        MOZ_ASSERT(GetFrameType() == eFrameTypeApp);
+
+        *aAppId = mAppId;
+        return NS_OK;
+    }
+
+    MOZ_ASSERT(GetFrameType() != eFrameTypeApp);
+
+    nsCOMPtr<nsIDocShell> parent;
+    GetParentIgnoreBrowserFrame(getter_AddRefs(parent));
+
+    if (!parent) {
+        *aAppId = nsIScriptSecurityManager::NO_APP_ID;
+        return NS_OK;
+    }
+
+    return parent->GetAppId(aAppId);
+}
+
+NS_IMETHODIMP
+nsDocShell::GetAsyncPanZoomEnabled(bool* aOut)
+{
+    if (TabChild* tabChild = GetTabChildFrom(this)) {
+        *aOut = tabChild->IsAsyncPanZoomEnabled();
+        return NS_OK;
+    }
+    *aOut = false;
     return NS_OK;
 }

@@ -127,6 +127,11 @@ public:
   // Public methods
 
   /**
+   * Initialize the accessible.
+   */
+  virtual bool Init();
+
+  /**
    * Get the description of this accessible.
    */
   virtual void Description(nsString& aDescription);
@@ -508,6 +513,8 @@ public:
   inline bool IsXULTree() const { return mFlags & eXULTreeAccessible; }
   mozilla::a11y::XULTreeAccessible* AsXULTree();
 
+  inline bool IsXULDeck() const { return mFlags & eXULDeckAccessible; }
+
   inline bool IsListControl() const { return mFlags & eListControlAccessible; }
 
   inline bool IsMenuButton() const { return mFlags & eMenuButtonAccessible; }
@@ -766,7 +773,8 @@ protected:
     eMenuPopupAccessible = 1 << 16,
     eRootAccessible = 1 << 17,
     eTextLeafAccessible = 1 << 18,
-    eXULTreeAccessible = 1 << 19
+    eXULDeckAccessible = 1 << 19,
+    eXULTreeAccessible = 1 << 20
   };
 
   //////////////////////////////////////////////////////////////////////////////
@@ -910,6 +918,7 @@ public:
   static const PRUint32 kControl = 2;
   static const PRUint32 kAlt = 4;
   static const PRUint32 kMeta = 8;
+  static const PRUint32 kOS = 16;
 
   KeyBinding() : mKey(0), mModifierMask(0) {}
   KeyBinding(PRUint32 aKey, PRUint32 aModifierMask) :

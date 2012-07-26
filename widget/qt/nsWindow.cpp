@@ -7,6 +7,8 @@
 
 #include "mozilla/Util.h"
 
+#include <QtOpenGL/QGLWidget>
+#include <QtOpenGL/QGLContext>
 #include <QApplication>
 #include <QDesktopWidget>
 #include <QtGui/QCursor>
@@ -98,8 +100,6 @@ static Atom sPluginIMEAtom = nsnull;
 #endif
 #endif //MOZ_X11
 
-#include <QtOpenGL/QGLWidget>
-#include <QtOpenGL/QGLContext>
 #define GLdouble_defined 1
 #include "Layers.h"
 #include "LayerManagerOGL.h"
@@ -475,11 +475,10 @@ nsWindow::SetModal(bool aModal)
     return NS_OK;
 }
 
-NS_IMETHODIMP
-nsWindow::IsVisible(bool & aState)
+bool
+nsWindow::IsVisible() const
 {
-    aState = mIsShown;
-    return NS_OK;
+    return mIsShown;
 }
 
 NS_IMETHODIMP
@@ -546,7 +545,7 @@ nsWindow::Move(PRInt32 aX, PRInt32 aY)
     mBounds.x = pos.x();
     mBounds.y = pos.y();
 
-
+    NotifyRollupGeometryChange(gRollupListener);
     return NS_OK;
 }
 
@@ -1040,7 +1039,7 @@ nsWindow::DoPaint(QPainter* aPainter, const QStyleOptionGraphicsItem* aOption, Q
         startup->RemoveFakeLayout();
     }
 
-    if (GetLayerManager(nsnull)->GetBackendType() == LayerManager::LAYERS_OPENGL) {
+    if (GetLayerManager(nsnull)->GetBackendType() == mozilla::layers::LAYERS_OPENGL) {
         aPainter->beginNativePainting();
         nsPaintEvent event(true, NS_PAINT, this);
         event.willSendDidPaint = true;
@@ -3011,6 +3010,7 @@ nsWindow::Resize(PRInt32 aWidth, PRInt32 aHeight, bool aRepaint)
         DispatchResizeEvent(rect, status);
     }
 
+    NotifyRollupGeometryChange(gRollupListener);
     return NS_OK;
 }
 
@@ -3074,6 +3074,7 @@ nsWindow::Resize(PRInt32 aX, PRInt32 aY, PRInt32 aWidth, PRInt32 aHeight,
     if (aRepaint)
         mWidget->update();
 
+    NotifyRollupGeometryChange(gRollupListener);
     return NS_OK;
 }
 
@@ -3085,12 +3086,10 @@ nsWindow::Enable(bool aState)
     return NS_OK;
 }
 
-NS_IMETHODIMP
-nsWindow::IsEnabled(bool *aState)
+bool
+nsWindow::IsEnabled() const
 {
-    *aState = mEnabled;
-
-    return NS_OK;
+    return mEnabled;
 }
 
 void
@@ -3298,7 +3297,7 @@ nsWindow::UserActivity()
   }
 
   if (mIdleService) {
-    mIdleService->ResetIdleTimeOut();
+    mIdleService->ResetIdleTimeOut(0);
   }
 }
 
@@ -3306,7 +3305,7 @@ PRUint32
 nsWindow::GetGLFrameBufferFormat()
 {
     if (mLayerManager &&
-        mLayerManager->GetBackendType() == LayerManager::LAYERS_OPENGL) {
+        mLayerManager->GetBackendType() == mozilla::layers::LAYERS_OPENGL) {
         // On maemo the hardware fb has RGB format.
 #ifdef MOZ_PLATFORM_MAEMO
         return LOCAL_GL_RGB;

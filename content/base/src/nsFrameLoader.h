@@ -19,8 +19,9 @@
 #include "nsIURI.h"
 #include "nsAutoPtr.h"
 #include "nsFrameMessageManager.h"
-#include "Layers.h"
 #include "mozilla/dom/Element.h"
+#include "mozilla/Attributes.h"
+#include "Layers.h"
 
 class nsIURI;
 class nsSubDocumentFrame;
@@ -56,7 +57,7 @@ class QX11EmbedContainer;
  * Used to support asynchronous re-paints of content pixels; see
  * nsIContentView.
  */
-class nsContentView : public nsIContentView
+class nsContentView MOZ_FINAL : public nsIContentView
 {
 public:
   typedef mozilla::layers::FrameMetrics::ViewID ViewID;
@@ -133,8 +134,8 @@ private:
 };
 
 
-class nsFrameLoader : public nsIFrameLoader,
-                      public nsIContentViewManager
+class nsFrameLoader MOZ_FINAL : public nsIFrameLoader,
+                                public nsIContentViewManager
 {
   friend class AutoResetInShow;
   typedef mozilla::dom::PBrowserParent PBrowserParent;
@@ -274,10 +275,23 @@ private:
   bool ShouldUseRemoteProcess();
 
   /**
-   * Is this a frameloader for a bona fide <iframe mozbrowser>?  (I.e., does
-   * the frame return true for nsIMozBrowserFrame::GetReallyIsBrowser()?)
+   * Is this a frameloader for a bona fide <iframe mozbrowser> or
+   * <iframe mozapp>?  (I.e., does the frame return true for
+   * nsIMozBrowserFrame::GetReallyIsBrowser()?)
    */
   bool OwnerIsBrowserFrame();
+
+  /**
+   * Is this a frameloader for a bona fide <iframe mozapp>?  (I.e., does the
+   * frame return true for nsIMozBrowserFrame::GetReallyIsApp()?)
+   */
+  bool OwnerIsAppFrame();
+
+  /**
+   * Get our owning element's app manifest URL, or return the empty string if
+   * our owning element doesn't have an app manifest URL.
+   */
+  void GetOwnerAppManifestURL(nsAString& aOut);
 
   /**
    * If we are an IPC frame, set mRemoteFrame. Otherwise, create and
@@ -329,6 +343,7 @@ private:
   bool mRemoteFrame : 1;
   bool mClipSubdocument : 1;
   bool mClampScrollPosition : 1;
+  bool mRemoteBrowserInitialized : 1;
 
   // XXX leaking
   nsCOMPtr<nsIObserver> mChildHost;

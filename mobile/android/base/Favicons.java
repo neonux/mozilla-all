@@ -19,7 +19,6 @@ import android.os.AsyncTask;
 import android.util.Log;
 
 import java.io.InputStream;
-import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URI;
@@ -320,7 +319,7 @@ public class Favicons {
                     faviconUrl = new URL(mFaviconUrl);
                 }
             } catch (MalformedURLException e) {
-                Log.d(LOGTAG, "The provided favicon URL is not valid: " + e);
+                Log.d(LOGTAG, "The provided favicon URL is not valid", e);
                 return null;
             }
 

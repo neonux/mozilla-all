@@ -79,10 +79,6 @@ LOCAL_INCLUDES += -I$(topsrcdir)/widget/windows
 LOCAL_INCLUDES += -I$(topsrcdir)/xpcom/base
 endif
 
-ifneq (,$(filter WINNT OS2,$(OS_ARCH)))
-DEFINES += -DZLIB_DLL=1
-endif
-
 ifeq ($(OS_ARCH),OS2)
 
 CPPSRCS += \
@@ -148,6 +144,7 @@ COMPONENT_LIBS += \
   startupcache \
   pref \
   htmlpars \
+  identity \
   imglib2 \
   gkgfx \
   gklayout \
@@ -348,16 +345,14 @@ EXTRA_DSO_LDOPTS += \
   $(NULL)
 
 ifdef MOZ_NATIVE_JPEG
-EXTRA_DSO_LDOPTS += $(JPEG_LIBS)
+EXTRA_DSO_LDOPTS += $(MOZ_JPEG_LIBS)
 endif
 
 ifdef MOZ_NATIVE_PNG
-EXTRA_DSO_LDOPTS += $(PNG_LIBS)
+EXTRA_DSO_LDOPTS += $(MOZ_PNG_LIBS)
 endif
 
-ifdef MOZ_NATIVE_ZLIB
-EXTRA_DSO_LDOPTS += $(ZLIB_LIBS)
-else
+ifneq (WINNT,$(OS_ARCH))
 EXTRA_DSO_LDOPTS += $(MOZ_ZLIB_LIBS)
 endif
 
@@ -457,7 +452,7 @@ ifeq ($(MOZ_WIDGET_TOOLKIT),cocoa)
 CXXFLAGS += $(TK_CFLAGS)
 OS_LIBS += \
   -framework SystemConfiguration \
-  -framework QuickTime \
+  -framework QTKit \
   -framework IOKit \
   -F/System/Library/PrivateFrameworks -framework CoreUI \
   $(TK_LIBS) \
@@ -474,6 +469,7 @@ OS_LIBS += \
   -framework IOKit \
   -framework Foundation \
   -framework AppKit \
+  -framework Security \
   $(NULL)
 endif
 endif

@@ -304,6 +304,8 @@ def write_getter(a, iface, fd):
         fd.write("    JSBool b;\n")
         fd.write("    MOZ_ALWAYS_TRUE(JS_ValueToBoolean(aCx, v, &b));\n")
         fd.write("    aDict.%s = b;\n" % a.name)
+    elif realtype.count("PRUint32"):
+        fd.write("    NS_ENSURE_STATE(JS_ValueToECMAUint32(aCx, v, &aDict.%s));\n" % a.name)
     elif realtype.count("PRInt32"):
         fd.write("    NS_ENSURE_STATE(JS_ValueToECMAInt32(aCx, v, &aDict.%s));\n" % a.name)
     elif realtype.count("double"):
@@ -408,7 +410,9 @@ def write_cpp(iface, fd):
              "  if (!aCx || !aVal) {\n"
              "    return NS_OK;\n"
              "  }\n"
-             "  NS_ENSURE_STATE(aVal->isObject());\n\n"
+             "  if (!aVal->isObject()) {\n"
+             "    return aVal->isNullOrUndefined() ? NS_OK : NS_ERROR_TYPE_ERR;\n"
+             "  }\n\n"
              "  JSObject* obj = &aVal->toObject();\n"
              "  Maybe<nsCxPusher> pusher;\n"
              "  if (NS_IsMainThread()) {\n"
@@ -438,8 +442,8 @@ if __name__ == '__main__':
     o.add_option('--cachedir', dest='cachedir', default=None,
                  help="Directory in which to cache lex/parse tables.")
     (options, filenames) = o.parse_args()
-    if len(filenames) != 1:
-        o.error("Exactly one config filename is needed.")
+    if len(filenames) < 1:
+        o.error("At least one config filename is needed.")
     filename = filenames[0]
 
     if options.cachedir is not None:
@@ -451,6 +455,16 @@ if __name__ == '__main__':
     p = xpidl.IDLParser(outputdir=options.cachedir)
 
     conf = readConfigFile(filename)
+
+    if (len(filenames) > 1):
+        eventconfig = {}
+        execfile(filenames[1], eventconfig)
+        simple_events = eventconfig.get('simple_events', [])
+        for e in simple_events:
+            eventdict = ("%sInit" % e)
+            eventidl = ("nsIDOM%s.idl" % e)
+            conf.dictionaries.append([eventdict, eventidl]);
+
 
     if options.header_output is not None:
         outfd = open(options.header_output, 'w')

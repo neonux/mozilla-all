@@ -32,15 +32,13 @@ public:
   NS_DECL_CYCLE_COLLECTION_SKIPPABLE_CLASS_AMBIGUOUS(nsComputedDOMStyle,
                                                      nsICSSDeclaration)
 
-  NS_IMETHOD Init(nsIDOMElement *aElement,
-                  const nsAString& aPseudoElt,
-                  nsIPresShell *aPresShell);
-
   NS_DECL_NSICSSDECLARATION
 
   NS_DECL_NSIDOMCSSSTYLEDECLARATION
 
-  nsComputedDOMStyle();
+  nsComputedDOMStyle(mozilla::dom::Element* aElement,
+                     const nsAString& aPseudoElt,
+                     nsIPresShell* aPresShell);
   virtual ~nsComputedDOMStyle();
 
   static void Shutdown();
@@ -357,6 +355,18 @@ private:
   nsIDOMCSSValue* DoGetAnimationIterationCount();
   nsIDOMCSSValue* DoGetAnimationPlayState();
 
+#ifdef MOZ_FLEXBOX
+  /* CSS Flexbox properties */
+  nsIDOMCSSValue* DoGetAlignItems();
+  nsIDOMCSSValue* DoGetAlignSelf();
+  nsIDOMCSSValue* DoGetFlexBasis();
+  nsIDOMCSSValue* DoGetFlexDirection();
+  nsIDOMCSSValue* DoGetFlexGrow();
+  nsIDOMCSSValue* DoGetFlexShrink();
+  nsIDOMCSSValue* DoGetOrder();
+  nsIDOMCSSValue* DoGetJustifyContent();
+#endif // MOZ_FLEXBOX
+
   /* SVG properties */
   nsIDOMCSSValue* DoGetFill();
   nsIDOMCSSValue* DoGetStroke();
@@ -499,10 +509,10 @@ private:
 #endif
 };
 
-nsresult
-NS_NewComputedDOMStyle(nsIDOMElement *aElement, const nsAString &aPseudoElt,
-                       nsIPresShell *aPresShell,
-                       nsComputedDOMStyle **aComputedStyle);
+already_AddRefed<nsComputedDOMStyle>
+NS_NewComputedDOMStyle(mozilla::dom::Element* aElement,
+                       const nsAString& aPseudoElt,
+                       nsIPresShell* aPresShell);
 
 #endif /* nsComputedDOMStyle_h__ */
 

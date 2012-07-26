@@ -15,6 +15,12 @@
 
 JS_BEGIN_EXTERN_C
 
+/*
+ * Only save the source of scripts that are compileAndGo or are created with
+ * JS_CompileFunction*.
+ */
+#define JSOPTION_ONLY_CNG_SOURCE JS_BIT(20)
+
 extern JS_FRIEND_API(void)
 JS_SetGrayGCRootsTracer(JSRuntime *rt, JSTraceDataOp traceOp, void *data);
 
@@ -53,6 +59,15 @@ JS_GetCustomIteratorCount(JSContext *cx);
 
 extern JS_FRIEND_API(JSBool)
 JS_NondeterministicGetWeakMapKeys(JSContext *cx, JSObject *obj, JSObject **ret);
+
+/*
+ * Determine whether the given object is backed by a DeadObjectProxy.
+ *
+ * Such objects hold no other objects (they have no outgoing reference edges)
+ * and will throw if you touch them (e.g. by reading/writing a property).
+ */
+extern JS_FRIEND_API(JSBool)
+JS_IsDeadWrapper(JSObject *obj);
 
 /*
  * Used by the cycle collector to trace through the shape and all
@@ -160,6 +175,11 @@ JS_END_EXTERN_C
 
 #ifdef __cplusplus
 
+typedef bool (* JS_SourceHook)(JSContext *cx, JSScript *script, jschar **src, uint32_t *length);
+
+extern JS_FRIEND_API(void)
+JS_SetSourceHook(JSRuntime *rt, JS_SourceHook hook);
+
 namespace js {
 
 struct RuntimeFriendFields {
@@ -255,6 +275,15 @@ TraceWeakMaps(WeakMapTracer *trc);
 
 extern JS_FRIEND_API(bool)
 GCThingIsMarkedGray(void *thing);
+
+extern JS_FRIEND_API(JSCompartment*)
+GetGCThingCompartment(void *thing);
+
+typedef void
+(GCThingCallback)(void *closure, void *gcthing);
+
+extern JS_FRIEND_API(void)
+VisitGrayWrapperTargets(JSCompartment *comp, GCThingCallback *callback, void *closure);
 
 /*
  * Shadow declarations of JS internal structures, for access by inline access
@@ -515,6 +544,34 @@ GetPCCountScriptSummary(JSContext *cx, size_t script);
 JS_FRIEND_API(JSString *)
 GetPCCountScriptContents(JSContext *cx, size_t script);
 
+/*
+ * A call stack can be specified to the JS engine such that all JS entry/exits
+ * to functions push/pop an entry to/from the specified stack.
+ *
+ * For more detailed information, see vm/SPSProfiler.h
+ */
+struct ProfileEntry {
+    /*
+     * These two fields are marked as 'volatile' so that the compiler doesn't
+     * re-order instructions which modify them. The operation in question is:
+     *
+     *    stack[i].string = str;
+     *    (*size)++;
+     *
+     * If the size increment were re-ordered before the store of the string,
+     * then if sampling occurred there would be a bogus entry on the stack.
+     */
+    const char * volatile string;
+    void * volatile sp;
+};
+
+JS_FRIEND_API(void)
+SetRuntimeProfilingStack(JSRuntime *rt, ProfileEntry *stack, uint32_t *size,
+                         uint32_t max);
+
+JS_FRIEND_API(void)
+EnableRuntimeProfilingStack(JSRuntime *rt, bool enabled);
+
 #ifdef JS_THREADSAFE
 JS_FRIEND_API(void *)
 GetOwnerThread(const JSContext *cx);
@@ -574,7 +631,8 @@ SizeOfJSContext();
     D(ALLOC_TRIGGER)                            \
     D(DEBUG_GC)                                 \
     D(DEBUG_MODE_GC)                            \
-    D(UNUSED3) /* was REFILL */                 \
+    D(TRANSPLANT)                               \
+    D(RESET)                                    \
                                                 \
     /* Reasons from Firefox */                  \
     D(DOM_WINDOW_UTILS)                         \
@@ -593,7 +651,8 @@ SizeOfJSContext();
     D(DOM_WORKER)                               \
     D(INTER_SLICE_GC)                           \
     D(REFRESH_FRAME)                            \
-    D(FULL_GC_TIMER)
+    D(FULL_GC_TIMER)                            \
+    D(SHUTDOWN_CC)
 
 namespace gcreason {
 
@@ -603,7 +662,15 @@ enum Reason {
     GCREASONS(MAKE_REASON)
 #undef MAKE_REASON
     NO_REASON,
-    NUM_REASONS
+    NUM_REASONS,
+
+    /*
+     * For telemetry, we want to keep a fixed max bucket size over time so we
+     * don't have to switch histograms. 100 is conservative; as of this writing
+     * there are 26. But the cost of extra buckets seems to be low while the
+     * cost of switching histograms is high.
+     */
+    NUM_TELEMETRY_REASONS = 100
 };
 
 } /* namespace gcreason */
@@ -613,6 +680,9 @@ PrepareCompartmentForGC(JSCompartment *comp);
 
 extern JS_FRIEND_API(void)
 PrepareForFullGC(JSRuntime *rt);
+
+extern JS_FRIEND_API(void)
+PrepareForIncrementalGC(JSRuntime *rt);
 
 extern JS_FRIEND_API(bool)
 IsGCScheduled(JSRuntime *rt);
@@ -637,7 +707,7 @@ extern JS_FRIEND_API(void)
 IncrementalGC(JSRuntime *rt, gcreason::Reason reason);
 
 extern JS_FRIEND_API(void)
-SetGCSliceTimeBudget(JSContext *cx, int64_t millis);
+FinishIncrementalGC(JSRuntime *rt, gcreason::Reason reason);
 
 enum GCProgress {
     /*
@@ -760,21 +830,59 @@ CastToJSFreeOp(FreeOp *fop)
 /* Implemented in jsexn.cpp. */
 
 /*
- * Get an error type name from a number.
- * If no exception is associated, return NULL.
+ * Get an error type name from a JSExnType constant.
+ * Returns NULL for invalid arguments and JSEXN_INTERNALERR
  */
 extern JS_FRIEND_API(const jschar*)
-GetErrorTypeNameFromNumber(JSContext* cx, const unsigned errorNumber);
+GetErrorTypeName(JSContext* cx, int16_t exnType);
 
 /* Implemented in jswrapper.cpp. */
-typedef enum NukedGlobalHandling {
-    NukeForGlobalObject,
-    DontNukeForGlobalObject
-} NukedGlobalHandling;
+typedef enum NukeReferencesToWindow {
+    NukeWindowReferences,
+    DontNukeWindowReferences
+} NukeReferencesToWindow;
+
+// These filters are designed to be ephemeral stack classes, and thus don't
+// do any rooting or holding of their members.
+struct CompartmentFilter {
+    virtual bool match(JSCompartment *c) const = 0;
+};
+
+struct AllCompartments : public CompartmentFilter {
+    virtual bool match(JSCompartment *c) const { return true; }
+};
+
+struct ContentCompartmentsOnly : public CompartmentFilter {
+    virtual bool match(JSCompartment *c) const {
+        return !IsSystemCompartment(c);
+    }
+};
+
+struct ChromeCompartmentsOnly : public CompartmentFilter {
+    virtual bool match(JSCompartment *c) const {
+        return IsSystemCompartment(c);
+    }
+};
+
+struct SingleCompartment : public CompartmentFilter {
+    JSCompartment *ours;
+    SingleCompartment(JSCompartment *c) : ours(c) {}
+    virtual bool match(JSCompartment *c) const { return c == ours; }
+};
+
+struct CompartmentsWithPrincipals : public CompartmentFilter {
+    JSPrincipals *principals;
+    CompartmentsWithPrincipals(JSPrincipals *p) : principals(p) {}
+    virtual bool match(JSCompartment *c) const {
+        return JS_GetCompartmentPrincipals(c) == principals;
+    }
+};
 
 extern JS_FRIEND_API(JSBool)
-NukeChromeCrossCompartmentWrappersForGlobal(JSContext *cx, JSObject *obj,
-                                            NukedGlobalHandling nukeGlobal);
+NukeCrossCompartmentWrappers(JSContext* cx,
+                             const CompartmentFilter& sourceFilter,
+                             const CompartmentFilter& targetFilter,
+                             NukeReferencesToWindow nukeReferencesToWindow);
 
 } /* namespace js */
 

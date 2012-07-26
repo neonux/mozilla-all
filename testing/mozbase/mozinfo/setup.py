@@ -1,12 +1,12 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# License, v. 2.0. If a copy of the MPL was not distributed with this file,
+# You can obtain one at http://mozilla.org/MPL/2.0/.
 
 
 import os
 from setuptools import setup, find_packages
 
-version = '0.3.3'
+PACKAGE_VERSION = '0.3.3'
 
 # get documentation from the README
 try:
@@ -23,7 +23,7 @@ except ImportError:
     deps = ['simplejson']
 
 setup(name='mozinfo',
-      version=version,
+      version=PACKAGE_VERSION,
       description="file for interface to transform introspected system information to a format pallatable to Mozilla",
       long_description=description,
       classifiers=[], # Get strings from http://pypi.python.org/pypi?%3Aaction=list_classifiers

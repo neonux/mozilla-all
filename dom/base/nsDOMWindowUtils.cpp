@@ -50,7 +50,7 @@
 #include "nsIMarkupDocumentViewer.h"
 #include "nsClientRect.h"
 
-#if defined(MOZ_X11) && defined(MOZ_WIDGET_GTK2)
+#if defined(MOZ_X11) && defined(MOZ_WIDGET_GTK)
 #include <gdk/gdk.h>
 #include <gdk/gdkx.h>
 #endif
@@ -64,6 +64,7 @@
 #include "sampler.h"
 #include "nsDOMBlobBuilder.h"
 #include "nsIDOMFileHandle.h"
+#include "nsIDOMApplicationRegistry.h"
 
 using namespace mozilla;
 using namespace mozilla::dom;
@@ -213,8 +214,8 @@ nsDOMWindowUtils::Redraw(PRUint32 aCount, PRUint32 *aDurationOut)
       for (PRUint32 i = 0; i < aCount; i++)
         rootFrame->InvalidateWithFlags(r, nsIFrame::INVALIDATE_IMMEDIATE);
 
-#if defined(MOZ_X11) && defined(MOZ_WIDGET_GTK2)
-      XSync(GDK_DISPLAY(), False);
+#if defined(MOZ_X11) && defined(MOZ_WIDGET_GTK)
+      XSync(GDK_DISPLAY_XDISPLAY(gdk_display_get_default()), False);
 #endif
 
       *aDurationOut = PR_IntervalToMilliseconds(PR_IntervalNow() - iStart);
@@ -458,14 +459,14 @@ nsDOMWindowUtils::GetWidgetModifiers(PRInt32 aModifiers)
   if (aModifiers & nsIDOMWindowUtils::MODIFIER_NUMLOCK) {
     result |= widget::MODIFIER_NUMLOCK;
   }
-  if (aModifiers & nsIDOMWindowUtils::MODIFIER_SCROLL) {
-    result |= widget::MODIFIER_SCROLL;
+  if (aModifiers & nsIDOMWindowUtils::MODIFIER_SCROLLLOCK) {
+    result |= widget::MODIFIER_SCROLLLOCK;
   }
   if (aModifiers & nsIDOMWindowUtils::MODIFIER_SYMBOLLOCK) {
     result |= widget::MODIFIER_SYMBOLLOCK;
   }
-  if (aModifiers & nsIDOMWindowUtils::MODIFIER_WIN) {
-    result |= widget::MODIFIER_WIN;
+  if (aModifiers & nsIDOMWindowUtils::MODIFIER_OS) {
+    result |= widget::MODIFIER_OS;
   }
   return result;
 }
@@ -492,6 +493,7 @@ nsDOMWindowUtils::SendMouseEventToWindow(const nsAString& aType,
                                          PRInt32 aModifiers,
                                          bool aIgnoreRootScrollFrame)
 {
+  SAMPLE_LABEL("nsDOMWindowUtils", "SendMouseEventToWindow");
   return SendMouseEventCommon(aType, aX, aY, aButton, aClickCount, aModifiers,
                               aIgnoreRootScrollFrame, true);
 }
@@ -976,10 +978,10 @@ nsDOMWindowUtils::GarbageCollect(nsICycleCollectorListener *aListener,
 #endif
 
   for (int i = 0; i < 3; i++) {
-    nsJSContext::GarbageCollectNow(js::gcreason::DOM_UTILS, nsGCNormal, true);
+    nsJSContext::GarbageCollectNow(js::gcreason::DOM_UTILS);
     nsJSContext::CycleCollectNow(aListener, aExtraForgetSkippableCalls);
   }
-  nsJSContext::GarbageCollectNow(js::gcreason::DOM_UTILS, nsGCNormal, true);
+  nsJSContext::GarbageCollectNow(js::gcreason::DOM_UTILS);
 
   return NS_OK;
 }
@@ -1825,13 +1827,13 @@ nsDOMWindowUtils::GetParent(const JS::Value& aObject,
     return NS_ERROR_XPC_BAD_CONVERT_JS;
   }
 
-  JSObject* parent = JS_GetParent(JSVAL_TO_OBJECT(aObject));
+  JS::Rooted<JSObject*> parent(aCx, JS_GetParent(JSVAL_TO_OBJECT(aObject)));
   *aParent = OBJECT_TO_JSVAL(parent);
 
   // Outerize if necessary.
   if (parent) {
     if (JSObjectOp outerize = js::GetObjectClass(parent)->ext.outerObject) {
-      *aParent = OBJECT_TO_JSVAL(outerize(aCx, JS::RootedObject(aCx, parent)));
+      *aParent = OBJECT_TO_JSVAL(outerize(aCx, parent));
     }
   }
 
@@ -1928,7 +1930,7 @@ nsDOMWindowUtils::StartFrameTimeRecording()
 }
 
 NS_IMETHODIMP
-nsDOMWindowUtils::StopFrameTimeRecording(PRUint32 *frameCount NS_OUTPARAM, float **frames NS_OUTPARAM)
+nsDOMWindowUtils::StopFrameTimeRecording(PRUint32 *frameCount, float **frames)
 {
   NS_ENSURE_ARG_POINTER(frameCount);
   NS_ENSURE_ARG_POINTER(frames);
@@ -2024,7 +2026,8 @@ nsDOMWindowUtils::ComputeAnimationDistance(nsIDOMElement* aElement,
 
   // Convert direction-dependent properties as appropriate, e.g.,
   // border-left to border-left-value.
-  nsCSSProperty property = nsCSSProps::LookupProperty(aProperty);
+  nsCSSProperty property = nsCSSProps::LookupProperty(aProperty,
+                                                      nsCSSProps::eAny);
   if (property != eCSSProperty_UNKNOWN && nsCSSProps::IsShorthand(property)) {
     nsCSSProperty subprop0 = *nsCSSProps::SubpropertyEntryFor(property);
     if (nsCSSProps::PropHasFlags(subprop0, CSS_PROPERTY_REPORT_OTHER_NAME) &&
@@ -2576,4 +2579,17 @@ nsDOMWindowUtils::SetApp(const nsAString& aManifestURL)
   NS_ENSURE_TRUE(window, NS_ERROR_FAILURE);
 
   return static_cast<nsGlobalWindow*>(window.get())->SetApp(aManifestURL);
+}
+
+NS_IMETHODIMP
+nsDOMWindowUtils::GetApp(mozIDOMApplication** aApplication)
+{
+  if (!IsUniversalXPConnectCapable()) {
+    return NS_ERROR_DOM_SECURITY_ERR;
+  }
+
+  nsCOMPtr<nsPIDOMWindow> window = do_QueryReferent(mWindow);
+  NS_ENSURE_TRUE(window, NS_ERROR_FAILURE);
+
+  return static_cast<nsGlobalWindow*>(window.get())->GetApp(aApplication);
 }

@@ -90,6 +90,7 @@ function startListeners() {
   addMessageListenerId("Marionette:setSearchTimeout", setSearchTimeout);
   addMessageListenerId("Marionette:goUrl", goUrl);
   addMessageListenerId("Marionette:getUrl", getUrl);
+  addMessageListenerId("Marionette:getTitle", getTitle);
   addMessageListenerId("Marionette:goBack", goBack);
   addMessageListenerId("Marionette:goForward", goForward);
   addMessageListenerId("Marionette:refresh", refresh);
@@ -148,6 +149,7 @@ function deleteSession(msg) {
   removeMessageListenerId("Marionette:executeJSScript", executeJSScript);
   removeMessageListenerId("Marionette:setSearchTimeout", setSearchTimeout);
   removeMessageListenerId("Marionette:goUrl", goUrl);
+  removeMessageListenerId("Marionette:getTitle", getTitle);
   removeMessageListenerId("Marionette:getUrl", getUrl);
   removeMessageListenerId("Marionette:goBack", goBack);
   removeMessageListenerId("Marionette:goForward", goForward);
@@ -343,7 +345,7 @@ function executeScript(msg, directInject) {
           msg.json.args, curWindow);
       }
       catch(e) {
-        sendError(e.message, e.num, e.stack);
+        sendError(e.message, e.code, e.stack);
         return;
       }
 
@@ -446,7 +448,7 @@ function executeWithCallback(msg, timeout) {
         msg.json.args, curWindow);
     }
     catch(e) {
-      sendError(e.message, e.num, e.stack);
+      sendError(e.message, e.code, e.stack);
       return;
     }
 
@@ -479,7 +481,7 @@ function setSearchTimeout(msg) {
     elementManager.setSearchTimeout(msg.json.value);
   }
   catch (e) {
-    sendError(e.message, e.num, e.stack);
+    sendError(e.message, e.code, e.stack);
     return;
   }
   sendOk();
@@ -508,6 +510,13 @@ function goUrl(msg) {
  */
 function getUrl(msg) {
   sendResponse({value: curWindow.location.href});
+}
+
+/**
+ * Get the current Title of the window
+ */
+function getTitle(msg) {
+  sendResponse({value: curWindow.top.document.title});
 }
 
 /**
@@ -545,7 +554,7 @@ function findElementContent(msg) {
     id = elementManager.find(curWindow, msg.json, notify, false);
   }
   catch (e) {
-    sendError(e.message, e.num, e.stack);
+    sendError(e.message, e.code, e.stack);
   }
 }
 
@@ -559,7 +568,7 @@ function findElementsContent(msg) {
     id = elementManager.find(curWindow, msg.json, notify, true);
   }
   catch (e) {
-    sendError(e.message, e.num, e.stack);
+    sendError(e.message, e.code, e.stack);
   }
 }
 
@@ -574,7 +583,7 @@ function clickElement(msg) {
     sendOk();
   }
   catch (e) {
-    sendError(e.message, e.num, e.stack);
+    sendError(e.message, e.code, e.stack);
   }
 }
 
@@ -587,7 +596,7 @@ function getElementAttribute(msg) {
     sendResponse({value: utils.getElementAttribute(el, msg.json.name)});
   }
   catch (e) {
-    sendError(e.message, e.num, e.stack);
+    sendError(e.message, e.code, e.stack);
   }
 }
 
@@ -600,7 +609,7 @@ function getElementText(msg) {
     sendResponse({value: utils.getElementText(el)});
   }
   catch (e) {
-    sendError(e.message, e.num, e.stack);
+    sendError(e.message, e.code, e.stack);
   }
 }
 
@@ -613,7 +622,7 @@ function isElementDisplayed(msg) {
     sendResponse({value: utils.isElementDisplayed(el)});
   }
   catch (e) {
-    sendError(e.message, e.num, e.stack);
+    sendError(e.message, e.code, e.stack);
   }
 }
 
@@ -626,7 +635,7 @@ function isElementEnabled(msg) {
     sendResponse({value: utils.isElementEnabled(el)});
   }
   catch (e) {
-    sendError(e.message, e.num, e.stack);
+    sendError(e.message, e.code, e.stack);
   }
 }
 
@@ -639,7 +648,7 @@ function isElementSelected(msg) {
     sendResponse({value: utils.isElementSelected(el)});
   }
   catch (e) {
-    sendError(e.message, e.num, e.stack);
+    sendError(e.message, e.code, e.stack);
   }
 }
 
@@ -653,7 +662,7 @@ function sendKeysToElement(msg) {
     sendOk();
   }
   catch (e) {
-    sendError(e.message, e.num, e.stack);
+    sendError(e.message, e.code, e.stack);
   }
 }
 
@@ -667,7 +676,7 @@ function clearElement(msg) {
     sendOk();
   }
   catch (e) {
-    sendError(e.message, e.num, e.stack);
+    sendError(e.message, e.code, e.stack);
   }
 }
 
@@ -759,7 +768,7 @@ function emulatorCmdResult(msg) {
     cb(message.result);
   }
   catch(e) {
-    sendError(e.message, e.num, e.stack);
+    sendError(e.message, e.code, e.stack);
     return;
   }
 }

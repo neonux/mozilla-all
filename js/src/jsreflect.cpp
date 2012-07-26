@@ -34,6 +34,7 @@
 
 using namespace mozilla;
 using namespace js;
+using namespace js::frontend;
 
 namespace js {
 
@@ -496,6 +497,9 @@ class NodeBuilder
     bool forInStatement(Value var, Value expr, Value stmt,
                         bool isForEach, TokenPos *pos, Value *dst);
 
+    bool forOfStatement(Value var, Value expr, Value stmt, TokenPos *pos, Value *dst);
+
+
     bool withStatement(Value expr, Value stmt, TokenPos *pos, Value *dst);
 
     bool whileStatement(Value test, Value stmt, TokenPos *pos, Value *dst);
@@ -641,7 +645,7 @@ NodeBuilder::newArray(NodeVector &elts, Value *dst)
         js_ReportAllocationOverflow(cx);
         return false;
     }
-    JSObject *array = NewDenseAllocatedArray(cx, uint32_t(len));
+    Rooted<JSObject*> array(cx, NewDenseAllocatedArray(cx, uint32_t(len)));
     if (!array)
         return false;
 
@@ -654,7 +658,7 @@ NodeBuilder::newArray(NodeVector &elts, Value *dst)
         if (val.isMagic(JS_SERIALIZE_NO_NODE))
             continue;
 
-        if (!array->setElement(cx, i, &val, false))
+        if (!array->setElement(cx, array, i, &val, false))
             return false;
     }
 
@@ -836,6 +840,20 @@ NodeBuilder::forInStatement(Value var, Value expr, Value stmt, bool isForEach,
                    "right", expr,
                    "body", stmt,
                    "each", BooleanValue(isForEach),
+                   dst);
+}
+
+bool
+NodeBuilder::forOfStatement(Value var, Value expr, Value stmt, TokenPos *pos, Value *dst)
+{
+    Value cb = callbacks[AST_FOR_OF_STMT];
+    if (!cb.isNull())
+        return callback(cb, var, expr, stmt, pos, dst);
+
+    return newNode(AST_FOR_OF_STMT, pos,
+                   "left", var,
+                   "right", expr,
+                   "body", stmt,
                    dst);
 }
 
@@ -1612,6 +1630,7 @@ class ASTSerializer
     }
 
     bool forInit(ParseNode *pn, Value *dst);
+    bool forOfOrIn(ParseNode *loop, ParseNode *head, Value var, Value stmt, Value *dst);
     bool statement(ParseNode *pn, Value *dst);
     bool blockStatement(ParseNode *pn, Value *dst);
     bool switchStatement(ParseNode *pn, Value *dst);
@@ -2073,6 +2092,19 @@ ASTSerializer::forInit(ParseNode *pn, Value *dst)
 }
 
 bool
+ASTSerializer::forOfOrIn(ParseNode *loop, ParseNode *head, Value var, Value stmt, Value *dst)
+{
+    Value expr;
+    bool isForEach = loop->pn_iflags & JSITER_FOREACH;
+    bool isForOf = loop->pn_iflags & JSITER_FOR_OF;
+    JS_ASSERT(!isForOf || !isForEach);
+
+    return expression(head->pn_kid3, &expr) &&
+        (isForOf ? builder.forOfStatement(var, expr, stmt, &loop->pn_pos, dst) :
+         builder.forInStatement(var, expr, stmt, isForEach, &loop->pn_pos, dst));
+}
+
+bool
 ASTSerializer::statement(ParseNode *pn, Value *dst)
 {
     JS_CHECK_RECURSION(cx, return false);
@@ -2153,18 +2185,14 @@ ASTSerializer::statement(ParseNode *pn, Value *dst)
         if (!statement(pn->pn_right, &stmt))
             return false;
 
-        bool isForEach = pn->pn_iflags & JSITER_FOREACH;
-
         if (head->isKind(PNK_FORIN)) {
-            Value var, expr;
-
+            Value var;
             return (!head->pn_kid1
                     ? pattern(head->pn_kid2, NULL, &var)
                     : head->pn_kid1->isKind(PNK_LEXICALSCOPE)
-                      ? variableDeclaration(head->pn_kid1->pn_expr, true, &var)
-                      : variableDeclaration(head->pn_kid1, false, &var)) &&
-                   expression(head->pn_kid3, &expr) &&
-                   builder.forInStatement(var, expr, stmt, isForEach, &pn->pn_pos, dst);
+                    ? variableDeclaration(head->pn_kid1->pn_expr, true, &var)
+                    : variableDeclaration(head->pn_kid1, false, &var)) &&
+                forOfOrIn(pn, head, var, stmt, dst);
         }
 
         Value init, test, update;
@@ -2192,13 +2220,9 @@ ASTSerializer::statement(ParseNode *pn, Value *dst)
         ParseNode *head = loop->pn_left;
         JS_ASSERT(head->isKind(PNK_FORIN));
 
-        bool isForEach = loop->pn_iflags & JSITER_FOREACH;
+        Value stmt;
 
-        Value expr, stmt;
-
-        return expression(head->pn_kid3, &expr) &&
-               statement(loop->pn_right, &stmt) &&
-               builder.forInStatement(var, expr, stmt, isForEach, &pn->pn_pos, dst);
+        return statement(loop->pn_right, &stmt) && forOfOrIn(loop, head, var, stmt, dst);
       }
 
       case PNK_BREAK:
@@ -2577,7 +2601,7 @@ ASTSerializer::expression(ParseNode *pn, Value *dst)
       {
         /* The parser notes any uninitialized properties by setting the PNX_DESTRUCT flag. */
         if (pn->pn_xflags & PNX_DESTRUCT) {
-            parser->reportErrorNumber(pn, JSREPORT_ERROR, JSMSG_BAD_OBJECT_INIT);
+            parser->reportError(pn, JSMSG_BAD_OBJECT_INIT);
             return false;
         }
         NodeVector elts(cx);
@@ -2838,7 +2862,7 @@ ASTSerializer::literal(ParseNode *pn, Value *dst)
         JSObject *re1 = pn->pn_objbox ? pn->pn_objbox->object : NULL;
         LOCAL_ASSERT(re1 && re1->isRegExp());
 
-        JSObject *proto;
+        RootedObject proto(cx);
         if (!js_GetClassPrototype(cx, cx->fp()->scopeChain(), JSProto_RegExp, &proto))
             return false;
 
@@ -3173,7 +3197,7 @@ reflect_parse(JSContext *cx, uint32_t argc, jsval *vp)
         if (!baseops::GetPropertyDefault(cx, config, locId, BooleanValue(true), &prop))
             return JS_FALSE;
 
-        loc = js_ValueToBoolean(prop);
+        loc = ToBoolean(prop);
 
         if (loc) {
             /* config.source */
@@ -3230,9 +3254,9 @@ reflect_parse(JSContext *cx, uint32_t argc, jsval *vp)
     if (!chars)
         return JS_FALSE;
 
-    Parser parser(cx, /* prin = */ NULL, /* originPrin = */ NULL,
-                  chars, length, filename, lineno, cx->findVersion(), 
-                  /* cfp = */ NULL, /* foldConstants = */ false, /* compileAndGo = */ false);
+    CompileOptions options(cx);
+    options.setFileAndLine(filename, lineno);
+    Parser parser(cx, options, chars, length, /* foldConstants = */ false);
     if (!parser.init())
         return JS_FALSE;
 

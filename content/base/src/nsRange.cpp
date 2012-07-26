@@ -649,7 +649,47 @@ nsRange::ComparePoint(nsIDOMNode* aParent, PRInt32 aOffset, PRInt16* aResult)
   
   return NS_OK;
 }
-  
+
+NS_IMETHODIMP
+nsRange::IntersectsNode(nsIDOMNode* aNode, bool* aResult)
+{
+  *aResult = false;
+
+  nsCOMPtr<nsINode> node = do_QueryInterface(aNode);
+  // TODO: This should throw a TypeError.
+  NS_ENSURE_ARG(node);
+
+  NS_ENSURE_TRUE(mIsPositioned, NS_ERROR_NOT_INITIALIZED);
+
+  // Step 3.
+  nsINode* parent = node->GetNodeParent();
+  if (!parent) {
+    // Steps 2 and 4. 
+    // |parent| is null, so |node|'s root is |node| itself.
+    *aResult = (GetRoot() == node);
+    return NS_OK;
+  }
+
+  // Step 5.
+  PRInt32 nodeIndex = parent->IndexOf(node);
+
+  // Steps 6-7.
+  // Note: if disconnected is true, ComparePoints returns 1.
+  bool disconnected = false;
+  *aResult = nsContentUtils::ComparePoints(mStartParent, mStartOffset,
+                                           parent, nodeIndex + 1,
+                                           &disconnected) < 0 &&
+             nsContentUtils::ComparePoints(parent, nodeIndex,
+                                           mEndParent, mEndOffset,
+                                           &disconnected) < 0;
+
+  // Step 2.
+  if (disconnected) {
+    *aResult = false;
+  }
+  return NS_OK;
+}
+
 /******************************************************
  * Private helper routines
  ******************************************************/
@@ -1446,6 +1486,26 @@ PrependChild(nsIDOMNode* aParent, nsIDOMNode* aChild)
   return aParent->InsertBefore(aChild, first, getter_AddRefs(tmpNode));
 }
 
+// Helper function for CutContents, making sure that the current node wasn't
+// removed by mutation events (bug 766426)
+static bool
+ValidateCurrentNode(nsRange* aRange, RangeSubtreeIterator& aIter)
+{
+  bool before, after;
+  nsCOMPtr<nsIDOMNode> domNode = aIter.GetCurrentNode();
+  if (!domNode) {
+    // We don't have to worry that the node was removed if it doesn't exist,
+    // e.g., the iterator is done.
+    return true;
+  }
+  nsCOMPtr<nsINode> node = do_QueryInterface(domNode);
+  MOZ_ASSERT(node);
+
+  nsresult res = nsRange::CompareNodeToRange(node, aRange, &before, &after);
+
+  return NS_SUCCEEDED(res) && !before && !after;
+}
+
 nsresult nsRange::CutContents(nsIDOMDocumentFragment** aFragment)
 { 
   if (aFragment) {
@@ -1573,8 +1633,11 @@ nsresult nsRange::CutContents(nsIDOMDocumentFragment** aFragment)
               nodeToResult = clone;
             }
 
+            nsMutationGuard guard;
             rv = charData->DeleteData(startOffset, endOffset - startOffset);
             NS_ENSURE_SUCCESS(rv, rv);
+            NS_ENSURE_STATE(!guard.Mutated(0) ||
+                            ValidateCurrentNode(this, iter));
           }
 
           handled = true;
@@ -1588,9 +1651,12 @@ nsresult nsRange::CutContents(nsIDOMDocumentFragment** aFragment)
 
           if (dataLength >= (PRUint32)startOffset)
           {
+            nsMutationGuard guard;
             nsCOMPtr<nsIDOMCharacterData> cutNode;
             rv = SplitDataNode(charData, startOffset, getter_AddRefs(cutNode));
             NS_ENSURE_SUCCESS(rv, rv);
+            NS_ENSURE_STATE(!guard.Mutated(1) ||
+                            ValidateCurrentNode(this, iter));
             nodeToResult = cutNode;
           }
 
@@ -1603,6 +1669,7 @@ nsresult nsRange::CutContents(nsIDOMDocumentFragment** aFragment)
 
         if (endOffset >= 0)
         {
+          nsMutationGuard guard;
           nsCOMPtr<nsIDOMCharacterData> cutNode;
           /* The Range spec clearly states clones get cut and original nodes
              remain behind, so use false as the last parameter.
@@ -1610,6 +1677,8 @@ nsresult nsRange::CutContents(nsIDOMDocumentFragment** aFragment)
           rv = SplitDataNode(charData, endOffset, getter_AddRefs(cutNode),
                              false);
           NS_ENSURE_SUCCESS(rv, rv);
+          NS_ENSURE_STATE(!guard.Mutated(1) ||
+                          ValidateCurrentNode(this, iter));
           nodeToResult = cutNode;
         }
 
@@ -1681,12 +1750,20 @@ nsresult nsRange::CutContents(nsIDOMDocumentFragment** aFragment)
         NS_ENSURE_SUCCESS(rv, rv);
       }
 
+      nsMutationGuard guard;
+      nsCOMPtr<nsIDOMNode> parent;
+      nodeToResult->GetParentNode(getter_AddRefs(parent));
       rv = closestAncestor ? PrependChild(closestAncestor, nodeToResult)
                            : PrependChild(commonCloneAncestor, nodeToResult);
       NS_ENSURE_SUCCESS(rv, rv);
+      NS_ENSURE_STATE(!guard.Mutated(parent ? 2 : 1) ||
+                      ValidateCurrentNode(this, iter));
     } else if (nodeToResult) {
+      nsMutationGuard guard;
       rv = RemoveNode(nodeToResult);
       NS_ENSURE_SUCCESS(rv, rv);
+      NS_ENSURE_STATE(!guard.Mutated(1) ||
+                      ValidateCurrentNode(this, iter));
     }
 
     if (!iter.IsDone() && retval) {
@@ -2017,30 +2094,23 @@ nsRange::CloneContents(nsIDOMDocumentFragment** aReturn)
   return NS_OK;
 }
 
-nsresult
-nsRange::CloneRange(nsRange** aReturn) const
+already_AddRefed<nsRange>
+nsRange::CloneRange() const
 {
-  if (aReturn == 0)
-    return NS_ERROR_NULL_POINTER;
-
   nsRefPtr<nsRange> range = new nsRange();
 
   range->SetMaySpanAnonymousSubtrees(mMaySpanAnonymousSubtrees);
 
   range->DoSetRange(mStartParent, mStartOffset, mEndParent, mEndOffset, mRoot);
 
-  range.forget(aReturn);
-
-  return NS_OK;
+  return range.forget();
 }
 
 NS_IMETHODIMP
 nsRange::CloneRange(nsIDOMRange** aReturn)
 {
-  nsRefPtr<nsRange> range;
-  nsresult rv = CloneRange(getter_AddRefs(range));
-  range.forget(aReturn);
-  return rv;
+  *aReturn = CloneRange().get();
+  return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -2081,28 +2151,29 @@ nsRange::InsertNode(nsIDOMNode* aNode)
     NS_ENSURE_SUCCESS(res, res);
   }
 
-  // We might need to update the end to include the new node (bug 433662)
+  // We might need to update the end to include the new node (bug 433662).
+  // Ideally we'd only do this if needed, but it's tricky to know when it's
+  // needed in advance (bug 765799).
   PRInt32 newOffset;
 
-  if (Collapsed()) {
-    if (referenceNode) {
-      newOffset = IndexOf(referenceNode);
-    } else {
-      PRUint32 length;
-      res = tChildList->GetLength(&length);
-      NS_ENSURE_SUCCESS(res, res);
-      newOffset = length;
-    }
-
-    nsCOMPtr<nsINode> node = do_QueryInterface(aNode);
-    NS_ENSURE_STATE(node);
-    if (node->NodeType() == nsIDOMNode::DOCUMENT_FRAGMENT_NODE) {
-      newOffset += node->GetChildCount();
-    } else {
-      newOffset++;
-    }
+  if (referenceNode) {
+    newOffset = IndexOf(referenceNode);
+  } else {
+    PRUint32 length;
+    res = tChildList->GetLength(&length);
+    NS_ENSURE_SUCCESS(res, res);
+    newOffset = length;
   }
 
+  nsCOMPtr<nsINode> node = do_QueryInterface(aNode);
+  NS_ENSURE_STATE(node);
+  if (node->NodeType() == nsIDOMNode::DOCUMENT_FRAGMENT_NODE) {
+    newOffset += node->GetChildCount();
+  } else {
+    newOffset++;
+  }
+
+  // Now actually insert the node
   nsCOMPtr<nsIDOMNode> tResultNode;
   res = referenceParentNode->InsertBefore(aNode, referenceNode, getter_AddRefs(tResultNode));
   NS_ENSURE_SUCCESS(res, res);

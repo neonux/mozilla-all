@@ -423,7 +423,7 @@ Dump(JSContext *cx, unsigned argc, jsval *vp)
         return false;
 
 #ifdef ANDROID
-    __android_log_print(ANDROID_LOG_INFO, "Gecko", bytes.ptr());
+    __android_log_print(ANDROID_LOG_INFO, "Gecko", "%s", bytes.ptr());
 #endif
     fputs(bytes.ptr(), gOutFile);
     fflush(gOutFile);
@@ -901,7 +901,7 @@ env_enumerate(JSContext *cx, JSHandleObject obj)
 
 static JSBool
 env_resolve(JSContext *cx, JSHandleObject obj, JSHandleId id, unsigned flags,
-            JSObject **objp)
+            JSMutableHandleObject objp)
 {
     JSString *idstr, *valstr;
 
@@ -927,7 +927,7 @@ env_resolve(JSContext *cx, JSHandleObject obj, JSHandleId id, unsigned flags,
                                    NULL, NULL, JSPROP_ENUMERATE)) {
             return false;
         }
-        *objp = obj;
+        objp.set(obj);
     }
     return true;
 }
@@ -1188,20 +1188,6 @@ ProcessArgs(JSContext *cx, JSObject *obj, char **argv, int argc)
         case 'd':
             xpc_ActivateDebugMode();
             break;
-        case 'P':
-            if (JS_GetClass(JS_GetPrototype(obj)) != &global_class) {
-                JSObject *gobj;
-
-                if (!JS_DeepFreezeObject(cx, obj))
-                    return false;
-                gobj = JS_NewGlobalObject(cx, &global_class);
-                if (!gobj || !JS_SplicePrototype(cx, gobj, obj))
-                    return false;
-                JS_SetParent(cx, gobj, NULL);
-                JS_SetGlobalObject(cx, gobj);
-                obj = gobj;
-            }
-            break;
         case 'f':
             if (++i == argc) {
                 return usage();
@@ -1346,26 +1332,11 @@ FullTrustSecMan::CheckLoadURIWithPrincipal(nsIPrincipal *aPrincipal,
     return NS_OK;
 }
 
-/* void checkLoadURI (in nsIURI from, in nsIURI uri, in unsigned long flags); */
-NS_IMETHODIMP
-FullTrustSecMan::CheckLoadURI(nsIURI *from, nsIURI *uri, PRUint32 flags)
-{
-    return NS_OK;
-}
-
 /* void checkLoadURIStrWithPrincipal (in nsIPrincipal aPrincipal, in AUTF8String uri, in unsigned long flags); */
 NS_IMETHODIMP
 FullTrustSecMan::CheckLoadURIStrWithPrincipal(nsIPrincipal *aPrincipal,
                                               const nsACString & uri,
                                               PRUint32 flags)
-{
-    return NS_OK;
-}
-
-/* void checkLoadURIStr (in AUTF8String from, in AUTF8String uri, in unsigned long flags); */
-NS_IMETHODIMP
-FullTrustSecMan::CheckLoadURIStr(const nsACString & from,
-                                 const nsACString & uri, PRUint32 flags)
 {
     return NS_OK;
 }
@@ -1395,20 +1366,6 @@ FullTrustSecMan::GetSubjectPrincipal(nsIPrincipal **_retval)
     return *_retval ? NS_OK : NS_ERROR_FAILURE;
 }
 
-/* [noscript] void pushContextPrincipal (in JSContextPtr cx, in JSStackFramePtr fp, in nsIPrincipal principal); */
-NS_IMETHODIMP
-FullTrustSecMan::PushContextPrincipal(JSContext * cx, JSStackFrame * fp, nsIPrincipal *principal)
-{
-    return NS_OK;
-}
-
-/* [noscript] void popContextPrincipal (in JSContextPtr cx); */
-NS_IMETHODIMP
-FullTrustSecMan::PopContextPrincipal(JSContext * cx)
-{
-    return NS_OK;
-}
-
 /* [noscript] nsIPrincipal getSystemPrincipal (); */
 NS_IMETHODIMP
 FullTrustSecMan::GetSystemPrincipal(nsIPrincipal **_retval)
@@ -1429,12 +1386,33 @@ FullTrustSecMan::GetCertificatePrincipal(const nsACString & aCertFingerprint,
     return *_retval ? NS_OK : NS_ERROR_FAILURE;
 }
 
-/* [noscript] nsIPrincipal getCodebasePrincipal (in nsIURI aURI); */
+/* [noscript] nsIPrincipal getSimpleCodebasePrincipal (in nsIURI aURI); */
 NS_IMETHODIMP
-FullTrustSecMan::GetCodebasePrincipal(nsIURI *aURI, nsIPrincipal **_retval)
+FullTrustSecMan::GetSimpleCodebasePrincipal(nsIURI *aURI, nsIPrincipal **_retval)
 {
     NS_IF_ADDREF(*_retval = mSystemPrincipal);
     return *_retval ? NS_OK : NS_ERROR_FAILURE;
+}
+
+/* [noscript] nsIPrincipal getNoAppCodebasePrincipal (in nsIURI aURI); */
+NS_IMETHODIMP
+FullTrustSecMan::GetNoAppCodebasePrincipal(nsIURI *aURI, nsIPrincipal **_retval)
+{
+    return GetSimpleCodebasePrincipal(aURI, _retval);
+}
+
+/* [noscript] nsIPrincipal getAppCodebasePrincipal (in nsIURI aURI, unsigned long appid, bool inMozBrowser); */
+NS_IMETHODIMP
+FullTrustSecMan::GetAppCodebasePrincipal(nsIURI *aURI, PRUint32 aAppId, bool aInMozBrowser, nsIPrincipal **_retval)
+{
+    return GetSimpleCodebasePrincipal(aURI, _retval);
+}
+
+/* [noscript] nsIPrincipal getDocShellCodebasePrincipal (in nsIURI aURI, nsIDocShell docShell); */
+NS_IMETHODIMP
+FullTrustSecMan::GetDocShellCodebasePrincipal(nsIURI *aURI, nsIDocShell* aDocShell, nsIPrincipal **_retval)
+{
+    return GetSimpleCodebasePrincipal(aURI, _retval);
 }
 
 /* [noscript] short requestCapability (in nsIPrincipal principal, in string capability); */
@@ -1528,6 +1506,15 @@ FullTrustSecMan::GetCxSubjectPrincipalAndFrame(JSContext *cx, JSStackFrame **fp)
 {
     *fp = nsnull;
     return mSystemPrincipal;
+}
+
+NS_IMETHODIMP
+FullTrustSecMan::GetExtendedOrigin(nsIURI* aURI, PRUint32 aAppId,
+                                   bool aInMozBrowser,
+                                   nsACString& aExtendedOrigin)
+{
+  aExtendedOrigin.Truncate();
+  return NS_OK;
 }
 
 /***************************************************************************/
@@ -2060,18 +2047,27 @@ XPCShellDirProvider::GetFile(const char *prop, bool *persistent,
             FAILED(SHGetPathFromIDListA(pItemIDList, appData))) {
             return NS_ERROR_FAILURE;
         }
-#ifdef MOZ_APP_PROFILE
-        sprintf(path, "%s\\%s", appData, MOZ_APP_PROFILE);
-#else
-        sprintf(path, "%s\\%s\\%s\\%s", appData, MOZ_APP_VENDOR, MOZ_APP_BASENAME, MOZ_APP_NAME);
-#endif
         nsAutoString pathName;
-        pathName.AssignASCII(path);
+        pathName.AssignASCII(appData);
         nsCOMPtr<nsIFile> localFile;
         nsresult rv = NS_NewLocalFile(pathName, true, getter_AddRefs(localFile));
         if (NS_FAILED(rv)) {
             return rv;
         }
+
+#ifdef MOZ_APP_PROFILE
+        localFile->AppendNative(NS_LITERAL_CSTRING(MOZ_APP_PROFILE));
+#else
+        // MOZ_APP_VENDOR and MOZ_APP_BASENAME are optional.
+#ifdef MOZ_APP_VENDOR
+        localFile->AppendNative(NS_LITERAL_CSTRING(MOZ_APP_VENDOR));
+#endif
+#ifdef MOZ_APP_BASENAME
+        localFile->AppendNative(NS_LITERAL_CSTRING(MOZ_APP_BASENAME));
+#endif
+        // However app name is always appended.
+        localFile->AppendNative(NS_LITERAL_CSTRING(MOZ_APP_NAME));
+#endif
         return localFile->Clone(result);
 #else
         // Fail on non-Windows platforms, the caller is supposed to fal back on

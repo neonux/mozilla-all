@@ -52,7 +52,6 @@
 #include "jsstrinlines.h"
 #include "jsautooplen.h"        // generated headers last
 
-#include "vm/MethodGuard-inl.h"
 #include "vm/RegExpObject-inl.h"
 #include "vm/RegExpStatics-inl.h"
 #include "vm/StringObject-inl.h"
@@ -378,7 +377,7 @@ str_enumerate(JSContext *cx, HandleObject obj)
 
 static JSBool
 str_resolve(JSContext *cx, HandleObject obj, HandleId id, unsigned flags,
-            JSObject **objp)
+            MutableHandleObject objp)
 {
     if (!JSID_IS_INT(id))
         return JS_TRUE;
@@ -394,7 +393,7 @@ str_resolve(JSContext *cx, HandleObject obj, HandleId id, unsigned flags,
                                 STRING_ELEMENT_ATTRS)) {
             return JS_FALSE;
         }
-        *objp = obj;
+        objp.set(obj);
     }
     return JS_TRUE;
 }
@@ -428,15 +427,13 @@ ThisToStringForStringProto(JSContext *cx, CallReceiver call)
 
     if (call.thisv().isObject()) {
         RootedObject obj(cx, &call.thisv().toObject());
-        if (obj->isString() &&
-            ClassMethodIsNative(cx, obj,
-                                &StringClass,
-                                RootedId(cx, NameToId(cx->runtime->atomState.toStringAtom)),
-                                js_str_toString))
-        {
-            JSString *str = obj->asString().unbox();
-            call.thisv().setString(str);
-            return str;
+        if (obj->isString()) {
+            Rooted<jsid> id(cx, NameToId(cx->runtime->atomState.toStringAtom));
+            if (ClassMethodIsNative(cx, obj, &StringClass, id, js_str_toString)) {
+                JSString *str = obj->asString().unbox();
+                call.thisv().setString(str);
+                return str;
+            }
         }
     } else if (call.thisv().isNullOrUndefined()) {
         JS_ReportErrorNumber(cx, js_GetErrorMessage, NULL, JSMSG_CANT_CONVERT_TO,
@@ -450,6 +447,12 @@ ThisToStringForStringProto(JSContext *cx, CallReceiver call)
 
     call.thisv().setString(str);
     return str;
+}
+
+static bool
+IsString(const Value &v)
+{
+    return v.isString() || (v.isObject() && v.toObject().hasClass(&StringClass));
 }
 
 #if JS_HAS_TOSOURCE
@@ -472,15 +475,14 @@ str_quote(JSContext *cx, unsigned argc, Value *vp)
     return true;
 }
 
-static JSBool
-str_toSource(JSContext *cx, unsigned argc, Value *vp)
+static bool
+str_toSource_impl(JSContext *cx, CallArgs args)
 {
-    CallArgs args = CallArgsFromVp(argc, vp);
+    JS_ASSERT(IsString(args.thisv()));
 
-    JSString *str;
-    bool ok;
-    if (!BoxedPrimitiveMethodGuard(cx, args, str_toSource, &str, &ok))
-        return ok;
+    Rooted<JSString*> str(cx, ToString(cx, args.thisv()));
+    if (!str)
+        return false;
 
     str = js_QuoteString(cx, str, '"');
     if (!str)
@@ -497,20 +499,31 @@ str_toSource(JSContext *cx, unsigned argc, Value *vp)
     return true;
 }
 
+static JSBool
+str_toSource(JSContext *cx, unsigned argc, Value *vp)
+{
+    CallArgs args = CallArgsFromVp(argc, vp);
+    return CallNonGenericMethod(cx, IsString, str_toSource_impl, args);
+}
+
 #endif /* JS_HAS_TOSOURCE */
+
+static bool
+str_toString_impl(JSContext *cx, CallArgs args)
+{
+    JS_ASSERT(IsString(args.thisv()));
+
+    args.rval() = StringValue(args.thisv().isString()
+                              ? args.thisv().toString()
+                              : args.thisv().toObject().asString().unbox());
+    return true;
+}
 
 JSBool
 js_str_toString(JSContext *cx, unsigned argc, Value *vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
-
-    JSString *str;
-    bool ok;
-    if (!BoxedPrimitiveMethodGuard(cx, args, js_str_toString, &str, &ok))
-        return ok;
-
-    args.rval() = StringValue(str);
-    return true;
+    return CallNonGenericMethod(cx, IsString, str_toString_impl, args);
 }
 
 /*
@@ -723,7 +736,7 @@ static JSBool
 str_localeCompare(JSContext *cx, unsigned argc, Value *vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
-    JSString *str = ThisToStringForStringProto(cx, args);
+    RootedString str(cx, ThisToStringForStringProto(cx, args));
     if (!str)
         return false;
 
@@ -759,7 +772,7 @@ js_str_charAt(JSContext *cx, unsigned argc, Value *vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
-    JSString *str;
+    RootedString str(cx);
     size_t i;
     if (args.thisv().isString() && args.length() != 0 && args[0].isInt32()) {
         str = args.thisv().toString();
@@ -796,7 +809,7 @@ js_str_charCodeAt(JSContext *cx, unsigned argc, Value *vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
-    JSString *str;
+    RootedString str(cx);
     size_t i;
     if (args.thisv().isString() && args.length() != 0 && args[0].isInt32()) {
         str = args.thisv().toString();
@@ -1108,7 +1121,7 @@ static JSBool
 str_indexOf(JSContext *cx, unsigned argc, Value *vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
-    JSString *str = ThisToStringForStringProto(cx, args);
+    RootedString str(cx, ThisToStringForStringProto(cx, args));
     if (!str)
         return false;
 
@@ -1963,8 +1976,7 @@ BuildFlatReplacement(JSContext *cx, HandleString textstr, HandleString repstr,
                      * the first character in the pattern, so we include the
                      * replacement string here.
                      */
-                    RootedString leftSide(cx);
-                    leftSide = js_NewDependentString(cx, str, 0, match - pos);
+                    RootedString leftSide(cx, js_NewDependentString(cx, str, 0, match - pos));
                     if (!leftSide ||
                         !builder.append(leftSide) ||
                         !builder.append(repstr)) {
@@ -1977,14 +1989,13 @@ BuildFlatReplacement(JSContext *cx, HandleString textstr, HandleString repstr,
                  * last part of str.
                  */
                 if (strEnd > matchEnd) {
-                    RootedString rightSide(cx);
-                    rightSide = js_NewDependentString(cx, str, matchEnd - pos,
-                                                      strEnd - matchEnd);
+                    RootedString rightSide(cx, js_NewDependentString(cx, str, matchEnd - pos,
+                                                                     strEnd - matchEnd));
                     if (!rightSide || !builder.append(rightSide))
                         return false;
                 }
             } else {
-                if (!builder.append(RootedString(cx, str)))
+                if (!builder.append(str))
                     return false;
             }
             pos += str->length();
@@ -1992,8 +2003,7 @@ BuildFlatReplacement(JSContext *cx, HandleString textstr, HandleString repstr,
                 return false;
         }
     } else {
-        RootedString leftSide(cx);
-        leftSide = js_NewDependentString(cx, textstr, 0, match);
+        RootedString leftSide(cx, js_NewDependentString(cx, textstr, 0, match));
         if (!leftSide)
             return false;
         RootedString rightSide(cx);
@@ -2203,27 +2213,19 @@ LambdaIsGetElem(JSObject &lambda, JSContext *cx)
     JSScript *script = fun->script();
     jsbytecode *pc = script->code;
 
-    /* Look for an access to 'b' in the enclosing scope. */
-    if (JSOp(*pc) != JSOP_NAME)
-        return NULL;
-    PropertyName *bname;
-    GET_NAME_FROM_BYTECODE(script, pc, 0, bname);
-    pc += JSOP_NAME_LENGTH;
-
     /*
-     * Do a conservative search for 'b' in the enclosing scope. Avoid using a
-     * real name lookup since this can trigger observable effects.
+     * JSOP_GETALIASEDVAR tells us exactly where to find the base object 'b'.
+     * Rule out the (unlikely) possibility of a heavyweight function since it
+     * would make our scope walk off by 1.
      */
-    Value b;
-    RootedObject scope(cx);
-    scope = cx->stack.currentScriptedScopeChain();
-    while (true) {
-        if (!scope->isCall() && !scope->isBlock())
-            return NULL;
-        if (HasDataProperty(cx, scope, bname, &b))
-            break;
-        scope = &scope->asScope().enclosingScope();
-    }
+    if (JSOp(*pc) != JSOP_GETALIASEDVAR || fun->isHeavyweight())
+        return NULL;
+    ScopeCoordinate sc(pc);
+    ScopeObject *scope = &fun->environment()->asScope();
+    for (unsigned i = 0; i < sc.hops; ++i)
+        scope = &scope->enclosingScope().asScope();
+    Value b = scope->aliasedVar(sc);
+    pc += JSOP_GETALIASEDVAR_LENGTH;
 
     /* Look for 'a' to be the lambda's first argument. */
     if (JSOp(*pc) != JSOP_GETARG || GET_SLOTNO(pc) != 0)
@@ -2723,7 +2725,7 @@ str_slice(JSContext *cx, unsigned argc, Value *vp)
         }
     }
 
-    JSString *str = ThisToStringForStringProto(cx, args);
+    RootedString str(cx, ThisToStringForStringProto(cx, args));
     if (!str)
         return false;
 
@@ -2977,6 +2979,7 @@ static JSFunctionSpec string_methods[] = {
     JS_FN("sub",               str_sub,               0,0),
 #endif
 
+    JS_FN("iterator",          JS_ArrayIterator,      0,0),
     JS_FS_END
 };
 
@@ -3065,13 +3068,13 @@ js_InitStringClass(JSContext *cx, JSObject *obj)
 
     Rooted<GlobalObject*> global(cx, &obj->asGlobal());
 
+    Rooted<JSString*> empty(cx, cx->runtime->emptyString);
     RootedObject proto(cx, global->createBlankPrototype(cx, &StringClass));
-    if (!proto || !proto->asString().init(cx, RootedString(cx, cx->runtime->emptyString)))
+    if (!proto || !proto->asString().init(cx, empty))
         return NULL;
 
     /* Now create the String function. */
-    RootedFunction ctor(cx);
-    ctor = global->createConstructor(cx, js_String, CLASS_NAME(cx, String), 1);
+    RootedFunction ctor(cx, global->createConstructor(cx, js_String, CLASS_NAME(cx, String), 1));
     if (!ctor)
         return NULL;
 
@@ -3286,10 +3289,11 @@ js_ValueToSource(JSContext *cx, const Value &v)
     Value rval = NullValue();
     Value fval;
     RootedId id(cx, NameToId(cx->runtime->atomState.toSourceAtom));
-    if (!GetMethod(cx, RootedObject(cx, &v.toObject()), id, 0, &fval))
+    Rooted<JSObject*> obj(cx, &v.toObject());
+    if (!GetMethod(cx, obj, id, 0, &fval))
         return NULL;
     if (js_IsCallable(fval)) {
-        if (!Invoke(cx, v, fval, 0, NULL, &rval))
+        if (!Invoke(cx, ObjectValue(*obj), fval, 0, NULL, &rval))
             return NULL;
     }
 
@@ -3432,6 +3436,9 @@ InflateString(JSContext *cx, const char *bytes, size_t *lengthp, FlationCoding f
     size_t nchars;
     jschar *chars;
     size_t nbytes = *lengthp;
+
+    // Malformed UTF8 chars could trigger errors and hence GC
+    MaybeCheckStackRoots(cx);
 
     if (js_CStringsAreUTF8 || fc == CESU8Encoding) {
         if (!InflateUTF8StringToBuffer(cx, bytes, nbytes, NULL, &nchars, fc))

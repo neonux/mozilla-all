@@ -9,13 +9,23 @@
 #define mozilla_layers_ShadowLayers_h 1
 
 #include "gfxASurface.h"
+#include "GLDefs.h"
 
 #include "ImageLayers.h"
-#include "Layers.h"
+#include "LayersBackend.h"
+#include "mozilla/ipc/SharedMemory.h"
+#include "mozilla/WidgetUtils.h"
 
 class gfxSharedImageSurface;
 
 namespace mozilla {
+
+namespace gl {
+class GLContext;
+class TextureImage;
+}
+using namespace gl;
+
 namespace layers {
 
 class Edit;
@@ -30,6 +40,7 @@ class ShadowContainerLayer;
 class ShadowImageLayer;
 class ShadowColorLayer;
 class ShadowCanvasLayer;
+class ShadowRefLayer;
 class SurfaceDescriptor;
 class ThebesBuffer;
 class TiledLayerComposer;
@@ -37,6 +48,20 @@ class Transaction;
 class SharedImage;
 class CanvasSurface;
 class BasicTiledLayerBuffer;
+
+enum BufferCapabilities {
+  DEFAULT_BUFFER_CAPS = 0,
+  /** 
+   * The allocated buffer must be efficiently mappable as a
+   * gfxImageSurface.
+   */
+  MAP_AS_IMAGE_SURFACE = 1 << 0
+};
+
+enum OpenMode {
+  OPEN_READ_ONLY,
+  OPEN_READ_WRITE
+};
 
 /**
  * We want to share layer trees across thread contexts and address
@@ -81,8 +106,10 @@ class BasicTiledLayerBuffer;
 
 class ShadowLayerForwarder
 {
+  friend class AutoOpenSurface;
+
 public:
-  typedef LayerManager::LayersBackend LayersBackend;
+  typedef gfxASurface::gfxContentType gfxContentType;
 
   virtual ~ShadowLayerForwarder();
 
@@ -90,7 +117,8 @@ public:
    * Begin recording a transaction to be forwarded atomically to a
    * ShadowLayerManager.
    */
-  void BeginTransaction();
+  void BeginTransaction(const nsIntRect& aTargetBounds,
+                        ScreenRotation aRotation);
 
   /**
    * The following methods may only be called after BeginTransaction()
@@ -108,6 +136,7 @@ public:
   void CreatedImageLayer(ShadowableLayer* aImage);
   void CreatedColorLayer(ShadowableLayer* aColor);
   void CreatedCanvasLayer(ShadowableLayer* aCanvas);
+  void CreatedRefLayer(ShadowableLayer* aRef);
 
   /**
    * The specified layer is destroying its buffers.
@@ -227,8 +256,8 @@ public:
    * The basic lifecycle is
    *
    *  - a Layer needs a buffer.  Its ShadowableLayer subclass calls
-   *    AllocDoubleBuffer(), then calls one of the Created*Buffer()
-   *    methods above to transfer the (temporary) front buffer to its
+   *    AllocBuffer(), then calls one of the Created*Buffer() methods
+   *    above to transfer the (temporary) front buffer to its
    *    ShadowLayer in the other process.  The Layer needs a
    *    gfxASurface to paint, so the ShadowableLayer uses
    *    OpenDescriptor(backBuffer) to get that surface, and hands it
@@ -255,34 +284,17 @@ public:
    * Shmem (gfxSharedImageSurface) buffers are available on all
    * platforms, but they may not be optimal.
    *
-   * NB: this interface is being deprecated in favor of the
-   * SurfaceDescriptor variant below.
-   */
-  bool AllocDoubleBuffer(const gfxIntSize& aSize,
-                           gfxASurface::gfxContentType aContent,
-                           gfxSharedImageSurface** aFrontBuffer,
-                           gfxSharedImageSurface** aBackBuffer);
-  void DestroySharedSurface(gfxSharedImageSurface* aSurface);
-
-  bool AllocBuffer(const gfxIntSize& aSize,
-                     gfxASurface::gfxContentType aContent,
-                     gfxSharedImageSurface** aBuffer);
-
-  /**
    * In the absence of platform-specific buffers these fall back to
    * Shmem/gfxSharedImageSurface.
    */
-  bool AllocDoubleBuffer(const gfxIntSize& aSize,
-                           gfxASurface::gfxContentType aContent,
-                           SurfaceDescriptor* aFrontBuffer,
-                           SurfaceDescriptor* aBackBuffer);
-
   bool AllocBuffer(const gfxIntSize& aSize,
-                     gfxASurface::gfxContentType aContent,
-                     SurfaceDescriptor* aBuffer);
+                   gfxASurface::gfxContentType aContent,
+                   SurfaceDescriptor* aBuffer);
 
-  static already_AddRefed<gfxASurface>
-  OpenDescriptor(const SurfaceDescriptor& aSurface);
+  bool AllocBufferWithCaps(const gfxIntSize& aSize,
+                           gfxASurface::gfxContentType aContent,
+                           uint32_t aCaps,
+                           SurfaceDescriptor* aBuffer);
 
   void DestroySharedSurface(SurfaceDescriptor* aSurface);
 
@@ -311,17 +323,57 @@ protected:
   PLayersChild* mShadowManager;
 
 private:
-  bool PlatformAllocDoubleBuffer(const gfxIntSize& aSize,
-                                   gfxASurface::gfxContentType aContent,
-                                   SurfaceDescriptor* aFrontBuffer,
-                                   SurfaceDescriptor* aBackBuffer);
+  bool AllocBuffer(const gfxIntSize& aSize,
+                   gfxASurface::gfxContentType aContent,
+                   gfxSharedImageSurface** aBuffer);
 
   bool PlatformAllocBuffer(const gfxIntSize& aSize,
-                             gfxASurface::gfxContentType aContent,
-                             SurfaceDescriptor* aBuffer);
+                           gfxASurface::gfxContentType aContent,
+                           uint32_t aCaps,
+                           SurfaceDescriptor* aBuffer);
+
+  /**
+   * Try to query the content type efficiently, but at worst map the
+   * surface and return it in *aSurface.
+   */
+  static gfxContentType
+  GetDescriptorSurfaceContentType(const SurfaceDescriptor& aDescriptor,
+                                  OpenMode aMode,
+                                  gfxASurface** aSurface);
+  /**
+   * It can be expensive to open a descriptor just to query its
+   * content type.  If the platform impl can do this cheaply, it will
+   * set *aContent and return true.
+   */
+  static bool
+  PlatformGetDescriptorSurfaceContentType(const SurfaceDescriptor& aDescriptor,
+                                          OpenMode aMode,
+                                          gfxContentType* aContent,
+                                          gfxASurface** aSurface);
+  // (Same as above, but for surface size.)
+  static gfxIntSize
+  GetDescriptorSurfaceSize(const SurfaceDescriptor& aDescriptor,
+                           OpenMode aMode,
+                           gfxASurface** aSurface);
+  static bool
+  PlatformGetDescriptorSurfaceSize(const SurfaceDescriptor& aDescriptor,
+                                   OpenMode aMode,
+                                   gfxIntSize* aSize,
+                                   gfxASurface** aSurface);
 
   static already_AddRefed<gfxASurface>
-  PlatformOpenDescriptor(const SurfaceDescriptor& aDescriptor);
+  OpenDescriptor(OpenMode aMode, const SurfaceDescriptor& aSurface);
+
+  static already_AddRefed<gfxASurface>
+  PlatformOpenDescriptor(OpenMode aMode, const SurfaceDescriptor& aDescriptor);
+
+  /** Make this descriptor unusable for gfxASurface clients.  A
+   * private interface with AutoOpenSurface. */
+  static void
+  CloseDescriptor(const SurfaceDescriptor& aDescriptor);
+
+  static bool
+  PlatformCloseDescriptor(const SurfaceDescriptor& aDescriptor);
 
   bool PlatformDestroySharedSurface(SurfaceDescriptor* aSurface);
 
@@ -333,7 +385,6 @@ private:
 
   bool mIsFirstPaint;
 };
-
 
 class ShadowLayerManager : public LayerManager
 {
@@ -358,13 +409,37 @@ public:
   virtual already_AddRefed<ShadowColorLayer> CreateShadowColorLayer() = 0;
   /** CONSTRUCTION PHASE ONLY */
   virtual already_AddRefed<ShadowCanvasLayer> CreateShadowCanvasLayer() = 0;
+  /** CONSTRUCTION PHASE ONLY */
+  virtual already_AddRefed<ShadowRefLayer> CreateShadowRefLayer() { return nsnull; }
+
+  /**
+   * Try to open |aDescriptor| for direct texturing.  If the
+   * underlying surface supports direct texturing, a non-null
+   * TextureImage is returned.  Otherwise null is returned.
+   */
+  static already_AddRefed<TextureImage>
+  OpenDescriptorForDirectTexturing(GLContext* aContext,
+                                   const SurfaceDescriptor& aDescriptor,
+                                   GLenum aWrapMode);
 
   static void PlatformSyncBeforeReplyUpdate();
 
+  void SetCompositorID(PRUint32 aID)
+  {
+    NS_ASSERTION(mCompositorID==0, "The compositor ID must be set only once.");
+    mCompositorID = aID;
+  }
+  PRUint32 GetCompositorID() const
+  {
+    return mCompositorID;
+  }
+
 protected:
-  ShadowLayerManager() {}
+  ShadowLayerManager()
+  : mCompositorID(0) {}
 
   bool PlatformDestroySharedSurface(SurfaceDescriptor* aSurface);
+  PRUint32 mCompositorID;
 };
 
 
@@ -408,7 +483,7 @@ public:
   virtual void DestroySharedSurface(gfxSharedImageSurface* aSurface) = 0;
   virtual void DestroySharedSurface(SurfaceDescriptor* aSurface) = 0;
 protected:
-  ~ISurfaceDeAllocator() {};
+  ~ISurfaceDeAllocator() {}
 };
 
 /**
@@ -435,7 +510,7 @@ public:
     mAllocator = aAllocator;
   }
 
-  virtual void DestroyFrontBuffer() { };
+  virtual void DestroyFrontBuffer() { }
 
   /**
    * The following methods are
@@ -588,8 +663,14 @@ public:
 
 protected:
   ShadowImageLayer(LayerManager* aManager, void* aImplData)
-    : ImageLayer(aManager, aImplData)
+    : ImageLayer(aManager, aImplData), 
+      mImageContainerID(0),
+      mImageVersion(0)
   {}
+
+  // ImageBridge protocol:
+  PRUint32 mImageContainerID;
+  PRUint32 mImageVersion;
 };
 
 
@@ -607,7 +688,24 @@ protected:
   {}
 };
 
+class ShadowRefLayer : public ShadowLayer,
+                       public RefLayer
+{
+public:
+  virtual ShadowLayer* AsShadowLayer() { return this; }
+
+  MOZ_LAYER_DECL_NAME("ShadowRefLayer", TYPE_SHADOW)
+
+protected:
+  ShadowRefLayer(LayerManager* aManager, void* aImplData)
+    : RefLayer(aManager, aImplData)
+  {}
+};
+
 bool IsSurfaceDescriptorValid(const SurfaceDescriptor& aSurface);
+
+ipc::SharedMemory::SharedMemoryType OptimalShmemType();
+
 
 } // namespace layers
 } // namespace mozilla

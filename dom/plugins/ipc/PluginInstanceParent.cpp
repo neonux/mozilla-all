@@ -36,7 +36,7 @@ extern const PRUnichar* kOOPPPluginFocusEventId;
 UINT gOOPPPluginFocusEvent =
     RegisterWindowMessage(kOOPPPluginFocusEventId);
 extern const PRUnichar* kFlashFullscreenClass;
-#elif defined(MOZ_WIDGET_GTK2)
+#elif defined(MOZ_WIDGET_GTK)
 #include <gdk/gdk.h>
 #elif defined(XP_MACOSX)
 #include <ApplicationServices/ApplicationServices.h>
@@ -1268,7 +1268,7 @@ PluginInstanceParent::NPP_HandleEvent(void* event)
         // Release any active pointer grab so that the plugin X client can
         // grab the pointer if it wishes.
         Display *dpy = DefaultXDisplay();
-#  ifdef MOZ_WIDGET_GTK2
+#  ifdef MOZ_WIDGET_GTK
         // GDK attempts to (asynchronously) track whether there is an active
         // grab so ungrab through GDK.
         gdk_pointer_ungrab(npevent->xbutton.time);
@@ -1922,7 +1922,7 @@ bool
 PluginInstanceParent::SharedSurfaceSetWindow(const NPWindow* aWindow,
                                              NPRemoteWindow& aRemoteWindow)
 {
-    aRemoteWindow.window = nsnull;
+    aRemoteWindow.window = 0;
     aRemoteWindow.x      = aWindow->x;
     aRemoteWindow.y      = aWindow->y;
     aRemoteWindow.width  = aWindow->width;

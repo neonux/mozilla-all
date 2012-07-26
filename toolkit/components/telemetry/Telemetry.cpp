@@ -11,7 +11,8 @@
 #include "mozilla/ModuleUtils.h"
 #include "nsIXPConnect.h"
 #include "mozilla/Services.h"
-#include "jsapi.h" 
+#include "jsapi.h"
+#include "jsfriendapi.h"
 #include "nsStringGlue.h"
 #include "nsITelemetry.h"
 #include "nsIFile.h"
@@ -24,6 +25,7 @@
 #include "mozilla/Mutex.h"
 #include "mozilla/FileUtils.h"
 #include "mozilla/Preferences.h"
+#include "mozilla/Attributes.h"
 
 namespace {
 
@@ -84,7 +86,7 @@ AutoHashtable<EntryType>::ReflectIntoJS(ReflectEntryFunc entryFunc,
   return num == this->Count();
 }
 
-class TelemetryImpl : public nsITelemetry
+class TelemetryImpl MOZ_FINAL : public nsITelemetry
 {
   NS_DECL_ISUPPORTS
   NS_DECL_NSITELEMETRY

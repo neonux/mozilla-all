@@ -6,8 +6,6 @@
 package org.mozilla.gecko;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.IOException;
 import java.net.URL;
@@ -23,6 +21,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.mozilla.gecko.db.BrowserDB;
 import org.mozilla.gecko.db.BrowserDB.URLColumns;
+import org.mozilla.gecko.sync.setup.SyncAccounts;
 import org.mozilla.gecko.sync.setup.activities.SetupSyncActivity;
 
 import android.accounts.Account;
@@ -41,17 +40,14 @@ import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
 import android.text.SpannableString;
 import android.text.style.StyleSpan;
-import android.text.style.UnderlineSpan;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
-import android.widget.FrameLayout;
 import android.widget.GridView;
 import android.widget.ImageView;
-import android.widget.ListView;
 import android.widget.RelativeLayout;
 import android.widget.ScrollView;
 import android.widget.SimpleCursorAdapter;
@@ -94,6 +90,7 @@ public class AboutHomeContent extends ScrollView
     protected AboutHomeSection mRemoteTabs;
 
     private View.OnClickListener mRemoteTabClickListener;
+    private OnInterceptTouchListener mOnInterceptTouchListener;
 
     public interface UriLoadCallback {
         public void callback(String uriSpec);
@@ -108,7 +105,7 @@ public class AboutHomeContent extends ScrollView
     }
 
     public void init() {
-        Context context = getContext();
+        final Context context = getContext();
         mInflater = (LayoutInflater) context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
         mInflater.inflate(R.layout.abouthome_content, this);
 
@@ -118,7 +115,7 @@ public class AboutHomeContent extends ScrollView
         mAccountManager.addOnAccountsUpdatedListener(mAccountListener = new OnAccountsUpdateListener() {
             public void onAccountsUpdated(Account[] accounts) {
                 final GeckoApp.StartupMode startupMode = GeckoApp.mAppContext.getStartupMode();
-                final boolean syncIsSetup = isSyncSetup();
+                final boolean syncIsSetup = SyncAccounts.syncAccountsExist(context);
 
                 GeckoApp.mAppContext.mMainHandler.post(new Runnable() {
                     public void run() {
@@ -263,11 +260,6 @@ public class AboutHomeContent extends ScrollView
         syncContainer.setBackgroundResource(background);
     }
 
-    private boolean isSyncSetup() {
-        Account[] accounts = mAccountManager.getAccountsByType("org.mozilla.firefox_sync");
-        return accounts.length > 0;
-    }
-
     private void updateLayout(GeckoApp.StartupMode startupMode, boolean syncIsSetup) {
         // The idea here is that we only show the sync invitation
         // on the very first run. Show sync banner below the top
@@ -295,9 +287,9 @@ public class AboutHomeContent extends ScrollView
         // the top sites section layout in main thread.
         final GeckoApp.StartupMode startupMode = GeckoApp.mAppContext.getStartupMode();
 
-        // The isSyncSetup method should not be called on
+        // The SyncAccounts.syncAccountsExist method should not be called on
         // UI thread as it touches disk to access a sqlite DB.
-        final boolean syncIsSetup = isSyncSetup();
+        final boolean syncIsSetup = SyncAccounts.syncAccountsExist(activity);
 
         final ContentResolver resolver = GeckoApp.mAppContext.getContentResolver();
         final Cursor oldCursor = mCursor;
@@ -361,6 +353,24 @@ public class AboutHomeContent extends ScrollView
             mTopSitesAdapter.notifyDataSetChanged();
 
         super.onConfigurationChanged(newConfig);
+    }
+
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent event) {
+        if (mOnInterceptTouchListener != null && mOnInterceptTouchListener.onInterceptTouchEvent(this, event))
+            return true;
+        return super.onInterceptTouchEvent(event);
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (mOnInterceptTouchListener != null && mOnInterceptTouchListener.onTouch(this, event))
+            return true;
+        return super.onTouchEvent(event);
+    }
+
+    public void setOnInterceptTouchListener(OnInterceptTouchListener listener) {
+        mOnInterceptTouchListener = listener;
     }
 
     private String readFromZipFile(Activity activity, String filename) {
@@ -480,7 +490,7 @@ public class AboutHomeContent extends ScrollView
                             }
                         });
 
-                        Favicons favicons = GeckoApp.mAppContext.mFavicons;
+                        Favicons favicons = GeckoApp.mAppContext.getFavicons();
                         favicons.loadFavicon(pageUrl, iconUrl,
                                     new Favicons.OnFaviconLoadedListener() {
                             public void onFaviconLoaded(String url, Drawable favicon) {
@@ -557,7 +567,7 @@ public class AboutHomeContent extends ScrollView
                     if (favicon != null)
                         ((ImageView) container.findViewById(R.id.last_tab_favicon)).setImageDrawable(favicon);
 
-                    container.findViewById(R.id.last_tab_row).setOnClickListener(new View.OnClickListener() {
+                    container.setOnClickListener(new View.OnClickListener() {
                         public void onClick(View v) {
                             GeckoApp.mAppContext.loadUrlInTab(url);
                         }
@@ -589,7 +599,7 @@ public class AboutHomeContent extends ScrollView
     }
 
     private void loadRemoteTabs(final Activity activity) {
-        if (!isSyncSetup()) {
+        if (!SyncAccounts.syncAccountsExist(activity)) {
             GeckoApp.mAppContext.mMainHandler.post(new Runnable() {
                 public void run() {
                     mRemoteTabs.hide();
@@ -619,8 +629,8 @@ public class AboutHomeContent extends ScrollView
             else if (!TextUtils.equals(client, tab.name))
                 break;
 
-            final TextView row = (TextView) mInflater.inflate(R.layout.abouthome_remote_tab_row, mRemoteTabs.getItemsContainer(), false);
-            row.setText(TextUtils.isEmpty(tab.title) ? tab.url : tab.title);
+            final RelativeLayout row = (RelativeLayout) mInflater.inflate(R.layout.abouthome_remote_tab_row, mRemoteTabs.getItemsContainer(), false);
+            ((TextView) row.findViewById(R.id.remote_tab_title)).setText(TextUtils.isEmpty(tab.title) ? tab.url : tab.title);
             row.setTag(tab.url);
             mRemoteTabs.addItem(row);
             row.setOnClickListener(mRemoteTabClickListener);

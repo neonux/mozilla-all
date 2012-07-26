@@ -6,8 +6,12 @@
 #include "mozilla/ipc/Shmem.h"
 #include "mozilla/ipc/CrossProcessMutex.h"
 #include "ImageLayers.h"
+#include "SharedTextureImage.h"
 #include "gfxImageSurface.h"
+#include "gfxSharedImageSurface.h"
 #include "yuv_convert.h"
+#include "mozilla/layers/ImageBridgeChild.h"
+#include "mozilla/layers/ImageContainerChild.h"
 
 #ifdef XP_MACOSX
 #include "nsCoreAnimationSupport.h"
@@ -40,9 +44,15 @@ ImageFactory::CreateImage(const Image::Format *aFormats,
     img = new PlanarYCbCrImage(aRecycleBin);
   } else if (FormatInList(aFormats, aNumFormats, Image::CAIRO_SURFACE)) {
     img = new CairoImage();
+  } else if (FormatInList(aFormats, aNumFormats, Image::SHARED_TEXTURE)) {
+    img = new SharedTextureImage();
 #ifdef XP_MACOSX
   } else if (FormatInList(aFormats, aNumFormats, Image::MAC_IO_SURFACE)) {
     img = new MacIOSurfaceImage();
+#endif
+#ifdef MOZ_WIDGET_GONK
+  } else if (FormatInList(aFormats, aNumFormats, Image::GONK_IO_SURFACE)) {
+    img = new GonkIOSurfaceImage();
 #endif
   }
   return img.forget();
@@ -79,8 +89,28 @@ BufferRecycleBin::GetBuffer(PRUint32 aSize)
   return result;
 }
 
+ImageContainer::ImageContainer(int flag) 
+: mReentrantMonitor("ImageContainer.mReentrantMonitor"),
+  mPaintCount(0),
+  mPreviousImagePainted(false),
+  mImageFactory(new ImageFactory()),
+  mRecycleBin(new BufferRecycleBin()),
+  mRemoteData(nsnull),
+  mRemoteDataMutex(nsnull),
+  mCompositionNotifySink(nsnull),
+  mImageContainerChild(nsnull)
+{
+  if (flag == ENABLE_ASYNC && ImageBridgeChild::IsCreated()) {
+    mImageContainerChild = 
+      ImageBridgeChild::GetSingleton()->CreateImageContainerChild();
+  }
+}
+
 ImageContainer::~ImageContainer()
 {
+  if (mImageContainerChild) {
+    mImageContainerChild->DispatchStop();
+  }
 }
 
 already_AddRefed<Image>
@@ -91,8 +121,8 @@ ImageContainer::CreateImage(const Image::Format *aFormats,
   return mImageFactory->CreateImage(aFormats, aNumFormats, mScaleHint, mRecycleBin);
 }
 
-void
-ImageContainer::SetCurrentImage(Image *aImage)
+void 
+ImageContainer::SetCurrentImageInternal(Image *aImage)
 {
   ReentrantMonitorAutoEnter mon(mReentrantMonitor);
 
@@ -108,6 +138,45 @@ ImageContainer::SetCurrentImage(Image *aImage)
 
   if (mRemoteData) {
     mRemoteDataMutex->Unlock();
+  }
+}
+
+void
+ImageContainer::SetCurrentImage(Image *aImage)
+{
+  ReentrantMonitorAutoEnter mon(mReentrantMonitor);
+
+  if (mImageContainerChild) {
+    if (aImage) {
+      mImageContainerChild->SendImageAsync(this, aImage);
+    } else {
+      mImageContainerChild->DispatchSetIdle();
+    }
+  }
+  
+  SetCurrentImageInternal(aImage);
+}
+
+void
+ImageContainer::SetCurrentImageInTransaction(Image *aImage)
+{
+  NS_ASSERTION(NS_IsMainThread(), "Should be on main thread.");
+  NS_ASSERTION(!mImageContainerChild, "Should use async image transfer with ImageBridge.");
+  
+  SetCurrentImageInternal(aImage);
+}
+
+bool ImageContainer::IsAsync() const {
+  return mImageContainerChild != nsnull;
+}
+
+PRUint64 ImageContainer::GetAsyncContainerID() const
+{
+  NS_ASSERTION(IsAsync(),"Shared image ID is only relevant to async ImageContainers");
+  if (IsAsync()) {
+    return mImageContainerChild->GetID();
+  } else {
+    return 0; // zero is always an invalid SharedImageID
   }
 }
 

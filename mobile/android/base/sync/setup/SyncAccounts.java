@@ -4,20 +4,29 @@
 
 package org.mozilla.gecko.sync.setup;
 
+import java.io.File;
+
 import org.mozilla.gecko.db.BrowserContract;
+import org.mozilla.gecko.sync.ExtendedJSONObject;
+import org.mozilla.gecko.sync.GlobalConstants;
 import org.mozilla.gecko.sync.Logger;
 import org.mozilla.gecko.sync.SyncConfiguration;
 import org.mozilla.gecko.sync.Utils;
+import org.mozilla.gecko.sync.config.AccountPickler;
 import org.mozilla.gecko.sync.repositories.android.RepoUtils;
 import org.mozilla.gecko.sync.syncadapter.SyncAdapter;
 
 import android.accounts.Account;
 import android.accounts.AccountManager;
+import android.content.ActivityNotFoundException;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager.NameNotFoundException;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.util.Log;
 
 /**
@@ -27,17 +36,36 @@ import android.util.Log;
  * Do not break these APIs without correcting upstream code!
  */
 public class SyncAccounts {
-
-  public final static String DEFAULT_SERVER = "https://auth.services.mozilla.com/";
   private static final String LOG_TAG = "SyncAccounts";
 
+  private static final String MOTO_BLUR_SETTINGS_ACTIVITY = "com.motorola.blur.settings.AccountsAndServicesPreferenceActivity";
+  private static final String MOTO_BLUR_PACKAGE           = "com.motorola.blur.setup";
+
+  public final static String DEFAULT_SERVER = "https://auth.services.mozilla.com/";
+
   /**
-   * Returns true if a Sync account is set up.
+   * Returns true if a Sync account is set up, or we have a pickled Sync account
+   * on disk that should be un-pickled (Bug 769745). If we have a pickled Sync
+   * account, try to un-pickle it and create the corresponding Sync account.
    * <p>
    * Do not call this method from the main thread.
    */
   public static boolean syncAccountsExist(Context c) {
-    return AccountManager.get(c).getAccountsByType(Constants.ACCOUNTTYPE_SYNC).length > 0;
+    final boolean accountsExist = AccountManager.get(c).getAccountsByType(GlobalConstants.ACCOUNTTYPE_SYNC).length > 0;
+    if (accountsExist) {
+      return true;
+    }
+
+    final File file = c.getFileStreamPath(Constants.ACCOUNT_PICKLE_FILENAME);
+    if (!file.exists()) {
+      return false;
+    }
+
+    // There is a small race window here: if the user creates a new Sync account
+    // between our checks, this could erroneously report that no Sync accounts
+    // exist.
+    final Account account = AccountPickler.unpickle(c, Constants.ACCOUNT_PICKLE_FILENAME);
+    return (account != null);
   }
 
   /**
@@ -128,6 +156,29 @@ public class SyncAccounts {
         String username, String syncKey, String password, String serverURL) {
       this(context, accountManager, username, syncKey, password, serverURL, null, null, null);
     }
+
+    public SyncAccountParameters(final Context context, final AccountManager accountManager, final ExtendedJSONObject o) {
+      this(context, accountManager,
+          o.getString(Constants.JSON_KEY_ACCOUNT),
+          o.getString(Constants.JSON_KEY_SYNCKEY),
+          o.getString(Constants.JSON_KEY_PASSWORD),
+          o.getString(Constants.JSON_KEY_SERVER),
+          o.getString(Constants.JSON_KEY_CLUSTER),
+          o.getString(Constants.JSON_KEY_CLIENT_NAME),
+          o.getString(Constants.JSON_KEY_CLIENT_GUID));
+    }
+
+    public ExtendedJSONObject asJSON() {
+      final ExtendedJSONObject o = new ExtendedJSONObject();
+      o.put(Constants.JSON_KEY_ACCOUNT, username);
+      o.put(Constants.JSON_KEY_PASSWORD, password);
+      o.put(Constants.JSON_KEY_SERVER, serverURL);
+      o.put(Constants.JSON_KEY_SYNCKEY, syncKey);
+      o.put(Constants.JSON_KEY_CLUSTER, clusterURL);
+      o.put(Constants.JSON_KEY_CLIENT_NAME, clientName);
+      o.put(Constants.JSON_KEY_CLIENT_GUID, clientGuid);
+      return o;
+    }
   }
 
   /**
@@ -139,11 +190,21 @@ public class SyncAccounts {
    * occurred and the account could not be added.
    */
   public static class CreateSyncAccountTask extends AsyncTask<SyncAccountParameters, Void, Account> {
+    protected final boolean syncAutomatically;
+
+    public CreateSyncAccountTask() {
+      this(true);
+    }
+
+    public CreateSyncAccountTask(final boolean syncAutomically) {
+      this.syncAutomatically = syncAutomically;
+    }
+
     @Override
     protected Account doInBackground(SyncAccountParameters... params) {
       SyncAccountParameters syncAccount = params[0];
       try {
-        return createSyncAccount(syncAccount);
+        return createSyncAccount(syncAccount, syncAutomatically);
       } catch (Exception e) {
         Log.e(Logger.GLOBAL_LOG_TAG, "Unable to create account.", e);
         return null;
@@ -152,16 +213,66 @@ public class SyncAccounts {
   }
 
   /**
-   * Create a sync account.
+   * Create a sync account, clearing any existing preferences, and set it to
+   * sync automatically.
    * <p>
    * Do not call this method from the main thread.
    *
    * @param syncAccount
-   *        The parameters of the account to be created.
-   * @return The created <code>Account</code>, or null if an error occurred and
-   *         the account could not be added.
+   *          parameters of the account to be created.
+   * @return created <code>Account</code>, or null if an error occurred and the
+   *         account could not be added.
    */
   public static Account createSyncAccount(SyncAccountParameters syncAccount) {
+    return createSyncAccount(syncAccount, true, true);
+  }
+
+  /**
+   * Create a sync account, clearing any existing preferences.
+   * <p>
+   * Do not call this method from the main thread.
+   * <p>
+   * Intended for testing; use
+   * <code>createSyncAccount(SyncAccountParameters)</code> instead.
+   *
+   * @param syncAccount
+   *          parameters of the account to be created.
+   * @param syncAutomatically
+   *          whether to start syncing this Account automatically (
+   *          <code>false</code> for test accounts).
+   * @return created Android <code>Account</code>, or null if an error occurred
+   *         and the account could not be added.
+   */
+  public static Account createSyncAccount(SyncAccountParameters syncAccount,
+      boolean syncAutomatically) {
+    return createSyncAccount(syncAccount, syncAutomatically, true);
+  }
+
+  public static Account createSyncAccountPreservingExistingPreferences(SyncAccountParameters syncAccount,
+      boolean syncAutomatically) {
+    return createSyncAccount(syncAccount, syncAutomatically, false);
+  }
+
+  /**
+   * Create a sync account.
+   * <p>
+   * Do not call this method from the main thread.
+   * <p>
+   * Intended for testing; use
+   * <code>createSyncAccount(SyncAccountParameters)</code> instead.
+   *
+   * @param syncAccount
+   *          parameters of the account to be created.
+   * @param syncAutomatically
+   *          whether to start syncing this Account automatically (
+   *          <code>false</code> for test accounts).
+   * @param clearPreferences
+   *          <code>true</code> to clear existing preferences before creating.
+   * @return created Android <code>Account</code>, or null if an error occurred
+   *         and the account could not be added.
+   */
+  protected static Account createSyncAccount(SyncAccountParameters syncAccount,
+      boolean syncAutomatically, boolean clearPreferences) {
     final Context context = syncAccount.context;
     final AccountManager accountManager = (syncAccount.accountManager == null) ?
           AccountManager.get(syncAccount.context) : syncAccount.accountManager;
@@ -176,13 +287,13 @@ public class SyncAccounts {
       Logger.info(LOG_TAG, "Setting explicit server URL: " + serverURL);
     }
 
-    final Account account = new Account(username, Constants.ACCOUNTTYPE_SYNC);
+    final Account account = new Account(username, GlobalConstants.ACCOUNTTYPE_SYNC);
     final Bundle userbundle = new Bundle();
 
     // Add sync key and server URL.
     userbundle.putString(Constants.OPTION_SYNCKEY, syncKey);
     userbundle.putString(Constants.OPTION_SERVER, serverURL);
-    Logger.debug(LOG_TAG, "Adding account for " + Constants.ACCOUNTTYPE_SYNC);
+    Logger.debug(LOG_TAG, "Adding account for " + GlobalConstants.ACCOUNTTYPE_SYNC);
     boolean result = false;
     try {
       result = accountManager.addAccountExplicitly(account, password, userbundle);
@@ -206,7 +317,10 @@ public class SyncAccounts {
     }
     Logger.debug(LOG_TAG, "Account " + account + " added successfully.");
 
-    setSyncAutomatically(account);
+    setSyncAutomatically(account, syncAutomatically);
+    setIsSyncable(account, syncAutomatically);
+    Logger.debug(LOG_TAG, "Set account to sync automatically? " + syncAutomatically + ".");
+
     setClientRecord(context, accountManager, account, syncAccount.clientName, syncAccount.clientGuid);
 
     // TODO: add other ContentProviders as needed (e.g. passwords)
@@ -215,12 +329,17 @@ public class SyncAccounts {
 
     // Purging global prefs assumes we have only a single Sync account at one time.
     // TODO: Bug 761682: don't do anything with global prefs here.
-    Logger.info(LOG_TAG, "Clearing global prefs.");
-    SyncAdapter.purgeGlobalPrefs(context);
+    if (clearPreferences) {
+      Logger.info(LOG_TAG, "Clearing global prefs.");
+      SyncAdapter.purgeGlobalPrefs(context);
+    }
 
     try {
-      Logger.info(LOG_TAG, "Clearing preferences path " + Utils.getPrefsPath(username, serverURL) + " for this account.");
-      SharedPreferences.Editor editor = Utils.getSharedPreferences(context, username, serverURL).edit().clear();
+      SharedPreferences.Editor editor = Utils.getSharedPreferences(context, username, serverURL).edit();
+      if (clearPreferences) {
+        Logger.info(LOG_TAG, "Clearing preferences path " + Utils.getPrefsPath(username, serverURL) + " for this account.");
+        editor.clear();
+      }
       if (syncAccount.clusterURL != null) {
         editor.putString(SyncConfiguration.PREF_CLUSTER_URL, syncAccount.clusterURL);
       }
@@ -247,9 +366,71 @@ public class SyncAccounts {
     ContentResolver.setSyncAutomatically(account, authority, syncAutomatically);
   }
 
-  public static void setSyncAutomatically(Account account) {
-    setSyncAutomatically(account, true);
-    setIsSyncable(account, true);
+  /**
+   * Bug 721760: try to start a vendor-specific Accounts & Sync activity on Moto
+   * Blur devices.
+   * <p>
+   * Bug 773562: actually start and catch <code>ActivityNotFoundException</code>,
+   * rather than just returning the <code>Intent</code> only, because some
+   * Moto devices fail to start the activity.
+   *
+   * @param context
+   *          current Android context.
+   * @param vendorPackage
+   *          vendor specific package name.
+   * @param vendorClass
+   *          vendor specific class name.
+   * @return null on failure, otherwise the <code>Intent</code> started.
+   */
+  protected static Intent openVendorSyncSettings(Context context, final String vendorPackage, final String vendorClass) {
+    try {
+      final int contextFlags = Context.CONTEXT_INCLUDE_CODE | Context.CONTEXT_IGNORE_SECURITY;
+      Context foreignContext = context.createPackageContext(vendorPackage, contextFlags);
+      Class<?> klass = foreignContext.getClassLoader().loadClass(vendorClass);
+
+      final Intent intent = new Intent(foreignContext, klass);
+      context.startActivity(intent);
+      Logger.info(LOG_TAG, "Vendor package " + vendorPackage + " and class " +
+          vendorClass + " found, and activity launched.");
+      return intent;
+    } catch (NameNotFoundException e) {
+      Logger.debug(LOG_TAG, "Vendor package " + vendorPackage + " not found. Skipping.");
+    } catch (ClassNotFoundException e) {
+      Logger.debug(LOG_TAG, "Vendor package " + vendorPackage + " found but class " +
+          vendorClass + " not found. Skipping.", e);
+    } catch (ActivityNotFoundException e) {
+      // Bug 773562 - android.content.ActivityNotFoundException on Motorola devices.
+      Logger.warn(LOG_TAG, "Vendor package " + vendorPackage + " and class " +
+          vendorClass + " found, but activity not launched. Skipping.", e);
+    } catch (Exception e) {
+      // Just in case.
+      Logger.warn(LOG_TAG, "Caught exception launching activity from vendor package " + vendorPackage +
+          " and class " + vendorClass + ". Ignoring.", e);
+    }
+    return null;
+  }
+
+  /**
+   * Start Sync settings activity.
+   *
+   * @param context
+   *          current Android context.
+   * @return the <code>Intent</code> started.
+   */
+  public static Intent openSyncSettings(Context context) {
+    // Bug 721760 - opening Sync settings takes user to Battery & Data Manager
+    // on a variety of Motorola devices. This work around tries to load the
+    // correct Intent by hand. Oh, Android.
+    Intent intent = openVendorSyncSettings(context, MOTO_BLUR_PACKAGE, MOTO_BLUR_SETTINGS_ACTIVITY);
+    if (intent != null) {
+      return intent;
+    }
+
+    // Open default Sync settings activity.
+    intent = new Intent(Settings.ACTION_SYNC_SETTINGS);
+    // Bug 774233: do not start activity as a new task (second run fails on some HTC devices).
+    context.startActivity(intent); // We should always find this Activity.
+    return intent;
   }
 
   protected static void setClientRecord(Context context, AccountManager accountManager, Account account,

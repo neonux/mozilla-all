@@ -5,6 +5,7 @@
 #ifndef nsBaseWidget_h__
 #define nsBaseWidget_h__
 
+#include "mozilla/WidgetUtils.h"
 #include "nsRect.h"
 #include "nsIWidget.h"
 #include "nsWidgetsCID.h"
@@ -14,6 +15,8 @@
 #include "nsGUIEvent.h"
 #include "nsAutoPtr.h"
 #include "BasicLayers.h"
+#include "nsIRollupListener.h"
+#include "LayersBackend.h"
 
 class nsIContent;
 class nsAutoRollup;
@@ -44,10 +47,11 @@ class nsBaseWidget : public nsIWidget
   friend class nsAutoRollup;
 
 protected:
+  typedef base::Thread Thread;
   typedef mozilla::layers::BasicLayerManager BasicLayerManager;
   typedef mozilla::layers::CompositorChild CompositorChild;
   typedef mozilla::layers::CompositorParent CompositorParent;
-  typedef base::Thread Thread;
+  typedef mozilla::ScreenRotation ScreenRotation;
 
 public:
   nsBaseWidget();
@@ -97,7 +101,7 @@ public:
   NS_IMETHOD              MakeFullScreen(bool aFullScreen);
   virtual nsDeviceContext* GetDeviceContext();
   virtual LayerManager*   GetLayerManager(PLayersChild* aShadowManager = nsnull,
-                                          LayersBackend aBackendHint = LayerManager::LAYERS_NONE,
+                                          LayersBackend aBackendHint = mozilla::layers::LAYERS_NONE,
                                           LayerManagerPersistence aPersistence = LAYER_MANAGER_CURRENT,
                                           bool* aAllowRetaining = nsnull);
 
@@ -180,11 +184,17 @@ public:
    * Use this when GetLayerManager() returns a BasicLayerManager
    * (nsBaseWidget::GetLayerManager() does). This sets up the widget's
    * layer manager to temporarily render into aTarget.
+   *
+   * |aNaturalWidgetBounds| is the un-rotated bounds of |aWidget|.
+   * |aRotation| is the "virtual rotation" to apply when rendering to
+   * the target.  When |aRotation| is ROTATION_0,
+   * |aNaturalWidgetBounds| is not used.
    */
   class AutoLayerManagerSetup {
   public:
     AutoLayerManagerSetup(nsBaseWidget* aWidget, gfxContext* aTarget,
-                          BasicLayerManager::BufferMode aDoubleBuffering);
+                          BasicLayerManager::BufferMode aDoubleBuffering,
+                          ScreenRotation aRotation = mozilla::ROTATION_0);
     ~AutoLayerManagerSetup();
   private:
     nsBaseWidget* mWidget;
@@ -265,6 +275,15 @@ protected:
 
   BasicLayerManager* CreateBasicLayerManager();
 
+  nsPopupType PopupType() const { return mPopupType; }
+
+  void NotifyRollupGeometryChange(nsIRollupListener* aRollupListener)
+  {
+    if (aRollupListener) {
+      aRollupListener->NotifyGeometryChange();
+    }
+  }
+
 protected:
   /**
    * Starts the OMTC compositor destruction sequence.
@@ -286,7 +305,6 @@ protected:
   nsRefPtr<LayerManager> mBasicLayerManager;
   nsRefPtr<CompositorChild> mCompositorChild;
   nsRefPtr<CompositorParent> mCompositorParent;
-  Thread*           mCompositorThread;
   nscolor           mBackground;
   nscolor           mForeground;
   nsCursor          mCursor;
@@ -304,6 +322,7 @@ protected:
   PRInt32           mZIndex;
   nsSizeMode        mSizeMode;
   nsPopupLevel      mPopupLevel;
+  nsPopupType       mPopupType;
 
   // the last rolled up popup. Only set this when an nsAutoRollup is in scope,
   // so it can be cleared automatically.

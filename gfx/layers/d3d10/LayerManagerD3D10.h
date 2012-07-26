@@ -55,8 +55,6 @@ extern cairo_user_data_key_t gKeyD3D10Texture;
 class THEBES_API LayerManagerD3D10 : public ShadowLayerManager,
                                      public ShadowLayerForwarder {
 public:
-  typedef LayerManager::LayersBackend LayersBackend;
-
   LayerManagerD3D10(nsIWidget *aWidget);
   virtual ~LayerManagerD3D10();
 
@@ -138,8 +136,8 @@ public:
     CreateOptimalSurface(const gfxIntSize &aSize,
                          gfxASurface::gfxImageFormat imageFormat);
 
-  virtual gfxASurface::gfxImageFormat MaskImageFormat() 
-  { return gfxASurface::ImageFormatARGB32; }
+  virtual already_AddRefed<gfxASurface>
+    CreateOptimalMaskSurface(const gfxIntSize &aSize);
 
   virtual TemporaryRef<mozilla::gfx::DrawTarget>
     CreateDrawTarget(const mozilla::gfx::IntSize &aSize,
@@ -157,7 +155,10 @@ public:
   ID3D10Device1 *device() const { return mDevice; }
 
   ID3D10Effect *effect() const { return mEffect; }
-
+  IDXGISwapChain *SwapChain() const
+  {
+    return mSwapChain;
+  }
   ReadbackManagerD3D10 *readbackManager();
 
   void SetupInputAssembler();

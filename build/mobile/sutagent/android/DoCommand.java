@@ -18,6 +18,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.io.RandomAccessFile;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -83,6 +84,7 @@ import android.os.Debug;
 import android.os.Environment;
 import android.os.StatFs;
 import android.os.SystemClock;
+import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Surface;
@@ -105,7 +107,7 @@ public class DoCommand {
     String ffxProvider = "org.mozilla.ffxcp";
     String fenProvider = "org.mozilla.fencp";
 
-    private final String prgVersion = "SUTAgentAndroid Version 1.08";
+    private final String prgVersion = "SUTAgentAndroid Version 1.11";
 
     public enum Command
         {
@@ -119,6 +121,7 @@ public class DoCommand {
         OS ("os"),
         ID ("id"),
         UPTIME ("uptime"),
+        UPTIMEMILLIS ("uptimemillis"),
         SETTIME ("settime"),
         SYSTIME ("systime"),
         SCREEN ("screen"),
@@ -162,6 +165,7 @@ public class DoCommand {
         INST ("inst"),
         UPDT ("updt"),
         UNINST ("uninst"),
+        UNINSTALL ("uninstall"),
         TEST ("test"),
         DBG ("dbg"),
         TRACE ("trace"),
@@ -169,6 +173,7 @@ public class DoCommand {
         TZGET ("tzget"),
         TZSET ("tzset"),
         ADB ("adb"),
+        CHMOD ("chmod"),
         UNKNOWN ("unknown");
 
         private final String theCmd;
@@ -355,9 +360,16 @@ public class DoCommand {
 
             case UNINST:
                 if (Argc >= 2)
-                    strReturn = UnInstallApp(Argv[1], cmdOut);
+                    strReturn = UnInstallApp(Argv[1], cmdOut, true);
                 else
-                    strReturn = sErrorPrefix + "Wrong number of arguments for inst command!";
+                    strReturn = sErrorPrefix + "Wrong number of arguments for uninst command!";
+                break;
+
+            case UNINSTALL:
+                if (Argc >= 2)
+                    strReturn = UnInstallApp(Argv[1], cmdOut, false);
+                else
+                    strReturn = sErrorPrefix + "Wrong number of arguments for uninstall command!";
                 break;
 
             case ALRT:
@@ -410,6 +422,8 @@ public class DoCommand {
                     strReturn += "\n";
                     strReturn += GetUptime();
                     strReturn += "\n";
+                    strReturn += GetUptimeMillis();
+                    strReturn += "\n";
                     strReturn += GetScreenInfo();
                     strReturn += "\n";
                     strReturn += GetRotationInfo();
@@ -451,6 +465,10 @@ public class DoCommand {
 
                         case UPTIME:
                             strReturn = GetUptime();
+                            break;
+
+                        case UPTIMEMILLIS:
+                            strReturn = GetUptimeMillis();
                             break;
 
                         case MEMORY:
@@ -730,6 +748,13 @@ public class DoCommand {
 
             case ZIP:
                 strReturn = Zip(Argv[1], (Argc == 3 ? Argv[2] : ""));
+                break;
+
+            case CHMOD:
+                if (Argc == 2)
+                    strReturn = ChmodDir(Argv[1]);
+                else
+                    strReturn = sErrorPrefix + "Wrong number of arguments for chmod command!";
                 break;
 
             case HELP:
@@ -1910,14 +1935,6 @@ private void CancelNotification()
             if (dstFile != null) {
                 dstFile.flush();
                 dstFile.close();
-                // set the new file's permissions to rwxrwxrwx, if possible
-                Process pProc = Runtime.getRuntime().exec("chmod 777 "+sTmpFileName);
-                RedirOutputThread outThrd = new RedirOutputThread(pProc, null);
-                outThrd.start();
-                try {
-                    outThrd.join(5000);
-                } catch (InterruptedException e) {
-                }
             }
 
             if (lRead == lSize)    {
@@ -2258,18 +2275,6 @@ private void CancelNotification()
             File dir = new File(sTmpDir);
 
             if (dir.mkdirs()) {
-                // set the new dir's permissions to rwxrwxrwx, if possible
-                try {
-                    Process pProc = Runtime.getRuntime().exec("chmod 777 "+sTmpDir);
-                    RedirOutputThread outThrd = new RedirOutputThread(pProc, null);
-                    outThrd.start();
-                    try {
-                        outThrd.join(5000);
-                    } catch (InterruptedException e) {
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
                 sRet = sDir + " successfully created";
             }
         }
@@ -2574,7 +2579,7 @@ private void CancelNotification()
 
     public String GetMemoryInfo()
         {
-        String sRet = "PA:" + GetMemoryConfig();
+        String sRet = "PA:" + GetMemoryConfig() + ", FREE: " + GetMemoryUsage();
         return (sRet);
         }
 
@@ -2586,6 +2591,33 @@ private void CancelNotification()
         long lMem = outInfo.availMem;
 
         return (lMem);
+        }
+
+    public long GetMemoryUsage()
+        {
+
+        String load = "";
+        try {
+            RandomAccessFile reader = new RandomAccessFile("/proc/meminfo", "r");
+            load = reader.readLine(); // Read in the MemTotal
+            load = reader.readLine(); // Read in the MemFree
+        } catch (IOException ex) {
+            return (0);
+        }
+
+        String[] toks = load.split(" ");
+        int i = 1;
+        for (i=1; i < toks.length; i++) {
+            String val = toks[i].trim();
+            if (!val.equals("")) {
+                break;
+            }
+        }
+        if (i <= toks.length) {
+            long lMem = Long.parseLong(toks[i].trim());
+            return (lMem * 1024);
+        }
+        return (0);
         }
 
     public String UpdateCallBack(String sFileName)
@@ -2899,6 +2931,11 @@ private void CancelNotification()
         return (sRet);
         }
 
+    public String GetUptimeMillis()
+        {
+        return Long.toString(SystemClock.uptimeMillis());
+        }
+ 
     public String NewKillProc(String sProcId, OutputStream out)
         {
         String sRet = "";
@@ -3127,13 +3164,17 @@ private void CancelNotification()
         return theArgs;
         }
 
-    public String UnInstallApp(String sApp, OutputStream out)
+    public String UnInstallApp(String sApp, OutputStream out, boolean reboot)
         {
         String sRet = "";
 
         try
             {
-            pProc = Runtime.getRuntime().exec(this.getSuArgs("pm uninstall " + sApp + ";reboot;exit"));
+            if (reboot == true) {
+                pProc = Runtime.getRuntime().exec(this.getSuArgs("pm uninstall " + sApp + ";reboot;exit"));
+            } else {
+                pProc = Runtime.getRuntime().exec(this.getSuArgs("pm uninstall " + sApp + ";exit"));
+            }
 
             RedirOutputThread outThrd = new RedirOutputThread(pProc, out);
             outThrd.start();
@@ -3484,7 +3525,7 @@ private void CancelNotification()
 
         try
             {
-            pProc = Runtime.getRuntime().exec(progArray);
+            pProc = Runtime.getRuntime().exec(this.getSuArgs(TextUtils.join(" ", progArray)));
             RedirOutputThread outThrd = new RedirOutputThread(pProc, out);
             outThrd.start();
             while (lcv < 30) {
@@ -3672,6 +3713,63 @@ private void CancelNotification()
         return (sRet);
         }
 
+    public String ChmodDir(String sDir)
+        {
+        String sRet = "";
+        int nFiles = 0;
+        String sSubDir = null;
+        String sTmpDir = fixFileName(sDir);
+
+        File dir = new File(sTmpDir);
+
+        if (dir.isDirectory()) {
+            sRet = "Changing permissions for " + sTmpDir;
+
+            File [] files = dir.listFiles();
+            if (files != null) {
+                if ((nFiles = files.length) > 0) {
+                    for (int lcv = 0; lcv < nFiles; lcv++) {
+                        if (files[lcv].isDirectory()) {
+                            sSubDir = files[lcv].getAbsolutePath();
+                            sRet += "\n" + ChmodDir(sSubDir);
+                        }
+                        else {
+                            // set the new file's permissions to rwxrwxrwx, if possible
+                            try {
+                                Process pProc = Runtime.getRuntime().exec("chmod 777 "+files[lcv]);
+                                RedirOutputThread outThrd = new RedirOutputThread(pProc, null);
+                                outThrd.start();
+                                outThrd.join(5000);
+                                sRet += "\n\tchmod " + files[lcv].getName() + " ok";
+                            } catch (InterruptedException e) {
+                                sRet += "\n\ttimeout waiting for chmod " + files[lcv].getName();
+                            } catch (IOException e) {
+                                sRet += "\n\tunable to chmod " + files[lcv].getName();
+                            }
+                        }
+                    }
+                }
+                else
+                    sRet += "\n\t<empty>";
+                }
+            }
+
+        // set the new directory's (or file's) permissions to rwxrwxrwx, if possible
+        try {
+            Process pProc = Runtime.getRuntime().exec("chmod 777 "+sTmpDir);
+            RedirOutputThread outThrd = new RedirOutputThread(pProc, null);
+            outThrd.start();
+            outThrd.join(5000);
+            sRet += "\n\tchmod " + sTmpDir + " ok";
+        } catch (InterruptedException e) {
+            sRet += "\n\ttimeout waiting for chmod " + sTmpDir;
+        } catch (IOException e) {
+            sRet += "\n\tunable to chmod " + sTmpDir;
+        }
+
+        return(sRet);
+        }
+
     private String PrintUsage()
         {
         String sRet =
@@ -3685,6 +3783,7 @@ private void CancelNotification()
             "        [os]                 - os version for device\n" +
             "        [id]                 - unique identifier for device\n" +
             "        [uptime]             - uptime for device\n" +
+            "        [uptimemillis]       - uptime for device in milliseconds\n" +
             "        [systime]            - current system time\n" +
             "        [screen]             - width, height and bits per pixel for device\n" +
             "        [memory]             - physical, free, available, storage memory\n" +
@@ -3706,6 +3805,7 @@ private void CancelNotification()
             "mkdr directory               - create directory\n" +
             "dirw directory               - tests whether the directory is writable\n" +
             "isdir directory              - test whether the directory exists\n" +
+            "chmod directory|file         - change permissions of directory and contents (or file) to 777\n" +
             "stat processid               - stat process\n" +
             "dead processid               - print whether the process is alive or hung\n" +
             "mems                         - dump memory stats\n" +
@@ -3716,7 +3816,8 @@ private void CancelNotification()
             "zip zipfile src              - zip the source file/dir into zipfile\n" +
             "rebt                         - reboot device\n" +
             "inst /path/filename.apk      - install the referenced apk file\n" +
-            "uninst packagename           - uninstall the referenced package\n" +
+            "uninst packagename           - uninstall the referenced package and reboot\n" +
+            "uninstall packagename        - uninstall the referenced package without a reboot\n" +
             "updt pkgname pkgfile         - unpdate the referenced package\n" +
             "clok                         - the current device time expressed as the" +
             "                               number of millisecs since epoch\n" +

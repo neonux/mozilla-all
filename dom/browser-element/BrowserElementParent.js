@@ -13,6 +13,7 @@ Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 
 const NS_PREFBRANCH_PREFCHANGE_TOPIC_ID = "nsPref:changed";
 const BROWSER_FRAMES_ENABLED_PREF = "dom.mozBrowserFramesEnabled";
+const TOUCH_EVENTS_ENABLED_PREF = "dom.w3c_touch_events.enabled";
 
 function debug(msg) {
   //dump("BrowserElementParent - " + msg + "\n");
@@ -120,8 +121,8 @@ BrowserElementParentFactory.prototype = {
 
 function BrowserElementParent(frameLoader) {
   debug("Creating new BrowserElementParent object for " + frameLoader);
-  this._screenshotListeners = {};
-  this._screenshotReqCounter = 0;
+  this._domRequestCounter = 0;
+  this._pendingDOMRequests = {};
 
   this._frameElement = frameLoader.QueryInterface(Ci.nsIFrameLoader).ownerElement;
   if (!this._frameElement) {
@@ -136,34 +137,81 @@ function BrowserElementParent(frameLoader) {
 
   let self = this;
   function addMessageListener(msg, handler) {
-    self._mm.addMessageListener('browser-element-api:' + msg, handler.bind(self));
+    function checkedHandler() {
+      if (self._isAlive()) {
+        return handler.apply(self, arguments);
+      }
+    }
+    self._mm.addMessageListener('browser-element-api:' + msg, checkedHandler);
   }
 
   addMessageListener("hello", this._recvHello);
+  addMessageListener("contextmenu", this._fireCtxMenuEvent);
   addMessageListener("locationchange", this._fireEventFromMsg);
   addMessageListener("loadstart", this._fireEventFromMsg);
   addMessageListener("loadend", this._fireEventFromMsg);
   addMessageListener("titlechange", this._fireEventFromMsg);
   addMessageListener("iconchange", this._fireEventFromMsg);
   addMessageListener("close", this._fireEventFromMsg);
+  addMessageListener("securitychange", this._fireEventFromMsg);
+  addMessageListener("error", this._fireEventFromMsg);
+  addMessageListener("scroll", this._fireEventFromMsg);
   addMessageListener("get-mozapp-manifest-url", this._sendMozAppManifestURL);
   addMessageListener("keyevent", this._fireKeyEvent);
   addMessageListener("showmodalprompt", this._handleShowModalPrompt);
-  addMessageListener('got-screenshot', this._recvGotScreenshot);
+  addMessageListener('got-screenshot', this._gotDOMRequestResult);
+  addMessageListener('got-can-go-back', this._gotDOMRequestResult);
+  addMessageListener('got-can-go-forward', this._gotDOMRequestResult);
 
   function defineMethod(name, fn) {
-    XPCNativeWrapper.unwrap(self._frameElement)[name] = fn.bind(self);
+    XPCNativeWrapper.unwrap(self._frameElement)[name] = function() {
+      if (self._isAlive()) {
+        return fn.apply(self, arguments);
+      }
+    };
+  }
+
+  function defineDOMRequestMethod(domName, msgName) {
+    XPCNativeWrapper.unwrap(self._frameElement)[domName] = function() {
+      if (self._isAlive()) {
+        return self._sendDOMRequest(msgName);
+      }
+    };
   }
 
   // Define methods on the frame element.
-  defineMethod('getScreenshot', this._getScreenshot);
   defineMethod('setVisible', this._setVisible);
+  defineMethod('sendMouseEvent', this._sendMouseEvent);
+  if (Services.prefs.getBoolPref(TOUCH_EVENTS_ENABLED_PREF)) {
+    defineMethod('sendTouchEvent', this._sendTouchEvent);
+  }
+  defineMethod('goBack', this._goBack);
+  defineMethod('goForward', this._goForward);
+  defineMethod('reload', this._reload);
+  defineMethod('stop', this._stop);
+  defineDOMRequestMethod('getScreenshot', 'get-screenshot');
+  defineDOMRequestMethod('getCanGoBack', 'get-can-go-back');
+  defineDOMRequestMethod('getCanGoForward', 'get-can-go-forward');
 
-  self._mm.loadFrameScript("chrome://global/content/BrowserElementChild.js",
-                           /* allowDelayedLoad = */ true);
+  // Listen to mozvisibilitychange on the iframe's owner window, and forward it
+  // down to the child.
+  this._window.addEventListener('mozvisibilitychange',
+                                this._ownerVisibilityChange.bind(this),
+                                /* useCapture = */ false,
+                                /* wantsUntrusted = */ false);
 }
 
 BrowserElementParent.prototype = {
+  /**
+   * You shouldn't touch this._frameElement or this._window if _isAlive is
+   * false.  (You'll likely get an exception if you do.)
+   */
+  _isAlive: function() {
+    return !Cu.isDeadWrapper(this._frameElement) &&
+           !Cu.isDeadWrapper(this._frameElement.ownerDocument) &&
+           !Cu.isDeadWrapper(this._frameElement.ownerDocument.defaultView);
+  },
+
   get _window() {
     return this._frameElement.ownerDocument.defaultView;
   },
@@ -177,6 +225,33 @@ BrowserElementParent.prototype = {
 
   _recvHello: function(data) {
     debug("recvHello");
+
+    // Inform our child if our owner element's document is invisible.  Note
+    // that we must do so here, rather than in the BrowserElementParent
+    // constructor, because the BrowserElementChild may not be initialized when
+    // we run our constructor.
+    if (this._window.document.mozHidden) {
+      this._ownerVisibilityChange();
+    }
+  },
+
+  _fireCtxMenuEvent: function(data) {
+    let evtName = data.name.substring('browser-element-api:'.length);
+    let detail = data.json;
+
+    debug('fireCtxMenuEventFromMsg: ' + evtName + ' ' + detail);
+    let evt = this._createEvent(evtName, detail);
+
+    if (detail.contextmenu) {
+      var self = this;
+      XPCNativeWrapper.unwrap(evt.detail).contextMenuItemSelected = function(id) {
+        self._sendAsyncMsg('fire-ctx-callback', {menuitem: id});
+      };
+    }
+    // The embedder may have default actions on context menu events, so
+    // we fire a context menu event even if the child didn't define a
+    // custom context menu
+    this._frameElement.dispatchEvent(evt);
   },
 
   /**
@@ -264,23 +339,83 @@ BrowserElementParent.prototype = {
     return this._frameElement.getAttribute('mozapp');
   },
 
-
-  _getScreenshot: function() {
-    let id = 'req_' + this._screenshotReqCounter++;
+  /**
+   * Kick off a DOMRequest in the child process.
+   *
+   * We'll fire an event called |msgName| on the child process, passing along
+   * an object with a single field, id, containing the ID of this request.
+   *
+   * We expect the child to pass the ID back to us upon completion of the
+   * request; see _gotDOMRequestResult.
+   */
+  _sendDOMRequest: function(msgName) {
+    let id = 'req_' + this._domRequestCounter++;
     let req = Services.DOMRequest.createRequest(this._window);
-    this._screenshotListeners[id] = req;
-    this._sendAsyncMsg('get-screenshot', {id: id});
+    this._pendingDOMRequests[id] = req;
+    this._sendAsyncMsg(msgName, {id: id});
     return req;
   },
 
-  _recvGotScreenshot: function(data) {
-    var req = this._screenshotListeners[data.json.id];
-    delete this._screenshotListeners[data.json.id];
-    Services.DOMRequest.fireSuccess(req, data.json.screenshot);
+  /**
+   * Called when the child process finishes handling a DOMRequest.  We expect
+   * data.json to have two fields:
+   *
+   *  - id: the ID of the DOM request (see _sendDOMRequest), and
+   *  - rv: the request's return value.
+   *
+   */
+  _gotDOMRequestResult: function(data) {
+    let req = this._pendingDOMRequests[data.json.id];
+    delete this._pendingDOMRequests[data.json.id];
+    Services.DOMRequest.fireSuccess(req, data.json.rv);
   },
 
   _setVisible: function(visible) {
     this._sendAsyncMsg('set-visible', {visible: visible});
+  },
+
+  _sendMouseEvent: function(type, x, y, button, clickCount, modifiers) {
+    this._sendAsyncMsg("send-mouse-event", {
+      "type": type,
+      "x": x,
+      "y": y,
+      "button": button,
+      "clickCount": clickCount,
+      "modifiers": modifiers
+    });
+  },
+
+  _sendTouchEvent: function(type, identifiers, touchesX, touchesY,
+                            radiisX, radiisY, rotationAngles, forces,
+                            count, modifiers) {
+    this._sendAsyncMsg("send-touch-event", {
+      "type": type,
+      "identifiers": identifiers,
+      "touchesX": touchesX,
+      "touchesY": touchesY,
+      "radiisX": radiisX,
+      "radiisY": radiisY,
+      "rotationAngles": rotationAngles,
+      "forces": forces,
+      "count": count,
+      "modifiers": modifiers
+    });
+  },
+
+  _goBack: function() {
+    this._sendAsyncMsg('go-back');
+  },
+
+  _goForward: function() {
+    this._sendAsyncMsg('go-forward');
+  },
+
+  _reload: function(hardReload) {
+    this._sendAsyncMsg('reload', {hardReload: hardReload});
+  },
+
+  _stop: function() {
+    this._sendAsyncMsg('stop');
   },
 
   _fireKeyEvent: function(data) {
@@ -291,6 +426,14 @@ BrowserElementParent.prototype = {
                      data.json.charCode);
 
     this._frameElement.dispatchEvent(evt);
+  },
+
+  /**
+   * Called when the visibility of the window which owns this iframe changes.
+   */
+  _ownerVisibilityChange: function() {
+    this._sendAsyncMsg('owner-visibility-change',
+                       {visible: !this._window.document.mozHidden});
   },
 };
 

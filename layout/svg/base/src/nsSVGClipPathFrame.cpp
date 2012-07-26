@@ -61,7 +61,6 @@ nsSVGClipPathFrame::ClipPaint(nsRenderingContext* aContext,
       gfx->Rectangle(gfxRect());
     } else {
       singleClipPathChild->NotifySVGChanged(
-                             nsISVGChildFrame::DO_NOT_NOTIFY_RENDERING_OBSERVERS | 
                              nsISVGChildFrame::TRANSFORM_CHANGED);
       singleClipPathChild->PaintSVG(aContext, nsnull);
     }
@@ -94,9 +93,7 @@ nsSVGClipPathFrame::ClipPaint(nsRenderingContext* aContext,
     nsISVGChildFrame* SVGFrame = do_QueryFrame(kid);
     if (SVGFrame) {
       // The CTM of each frame referencing us can be different.
-      SVGFrame->NotifySVGChanged(
-                          nsISVGChildFrame::DO_NOT_NOTIFY_RENDERING_OBSERVERS | 
-                          nsISVGChildFrame::TRANSFORM_CHANGED);
+      SVGFrame->NotifySVGChanged(nsISVGChildFrame::TRANSFORM_CHANGED);
 
       bool isOK = true;
       nsSVGClipPathFrame *clipPathFrame =
@@ -283,6 +280,7 @@ nsSVGClipPathFrame::AttributeChanged(PRInt32         aNameSpaceID,
 {
   if (aNameSpaceID == kNameSpaceID_None) {
     if (aAttribute == nsGkAtoms::transform) {
+      nsSVGEffects::InvalidateDirectRenderingObservers(this);
       nsSVGUtils::NotifyChildrenOfSVGChange(this,
                                             nsISVGChildFrame::TRANSFORM_CHANGED);
     }
@@ -316,7 +314,7 @@ nsSVGClipPathFrame::GetType() const
 }
 
 gfxMatrix
-nsSVGClipPathFrame::GetCanvasTM()
+nsSVGClipPathFrame::GetCanvasTM(PRUint32 aFor)
 {
   nsSVGClipPathElement *content = static_cast<nsSVGClipPathElement*>(mContent);
 

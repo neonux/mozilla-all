@@ -55,6 +55,9 @@
 using namespace mozilla;
 using namespace js;
 using namespace js::gc;
+using js::frontend::IsIdentifier;
+using js::frontend::LetDataToGroupAssign;
+using js::frontend::LetDataToOffset;
 
 /*
  * Index limit must stay within 32 bits.
@@ -404,7 +407,7 @@ ToDisassemblySource(JSContext *cx, jsval v, JSAutoByteString *bytes)
         return true;
     }
 
-    if (cx->runtime->gcRunning || cx->runtime->noGCOrAllocationCheck) {
+    if (cx->runtime->isHeapBusy() || cx->runtime->noGCOrAllocationCheck) {
         char *source = JS_sprintf_append(NULL, "<value>");
         if (!source)
             return false;
@@ -423,7 +426,7 @@ ToDisassemblySource(JSContext *cx, jsval v, JSAutoByteString *bytes)
             Shape::Range::AutoRooter root(cx, &r);
 
             while (!r.empty()) {
-                Rooted<const Shape*> shape(cx, &r.front());
+                Rooted<Shape*> shape(cx, &r.front());
                 JSAtom *atom = JSID_IS_INT(shape->propid())
                                ? cx->runtime->atomState.emptyAtom
                                : JSID_TO_ATOM(shape->propid());
@@ -1059,7 +1062,7 @@ struct JSPrinter
     jsbytecode      *dvgfence;      /* DecompileExpression fencepost */
     jsbytecode      **pcstack;      /* DecompileExpression modeled stack */
     JSFunction      *fun;           /* interpreted function */
-    BindingNames    *localNames;    /* argument and variable names */
+    BindingVector   *localNames;    /* argument and variable names */
     Vector<DecompiledOpcode> *decompiledOpcodes; /* optional state for decompiled ops */
 
     DecompiledOpcode &decompiled(jsbytecode *pc) {
@@ -1090,8 +1093,8 @@ js_NewPrinter(JSContext *cx, const char *name, JSFunction *fun,
     jp->localNames = NULL;
     jp->decompiledOpcodes = NULL;
     if (fun && fun->isInterpreted() && fun->script()->bindings.count() > 0) {
-        jp->localNames = cx->new_<BindingNames>(cx);
-        if (!jp->localNames || !fun->script()->bindings.getLocalNameArray(cx, jp->localNames)) {
+        jp->localNames = cx->new_<BindingVector>(cx);
+        if (!jp->localNames || !GetOrderedBindings(cx, fun->script()->bindings, jp->localNames)) {
             js_DestroyPrinter(jp);
             return NULL;
         }
@@ -1749,7 +1752,7 @@ GetArgOrVarAtom(JSPrinter *jp, unsigned slot)
 {
     LOCAL_ASSERT_RV(jp->fun, NULL);
     LOCAL_ASSERT_RV(slot < jp->fun->script()->bindings.count(), NULL);
-    JSAtom *name = (*jp->localNames)[slot].maybeAtom;
+    JSAtom *name = (*jp->localNames)[slot].maybeName;
 #if !JS_HAS_DESTRUCTURING
     LOCAL_ASSERT_RV(name, NULL);
 #endif
@@ -1762,7 +1765,7 @@ static const char *
 GetLocalInSlot(SprintStack *ss, int i, int slot, JSObject *obj)
 {
     for (Shape::Range r(obj->lastProperty()); !r.empty(); r.popFront()) {
-        const Shape &shape = r.front();
+        Shape &shape = r.front();
 
         if (shape.shortid() == slot) {
             /* Ignore the empty destructuring dummy. */
@@ -1849,6 +1852,8 @@ GetLocal(SprintStack *ss, int i)
 static bool
 IsVarSlot(JSPrinter *jp, jsbytecode *pc, JSAtom **varAtom, int *localSlot)
 {
+    *localSlot = -1;
+
     if (JOF_OPTYPE(*pc) == JOF_SCOPECOORD) {
         *varAtom = ScopeCoordinateName(jp->sprinter.context->runtime, jp->script, pc);
         LOCAL_ASSERT_RV(*varAtom, false);
@@ -2319,7 +2324,7 @@ GetBlockNames(JSContext *cx, StaticBlockObject &blockObj, AtomVector *atoms)
 
     unsigned i = numAtoms;
     for (Shape::Range r = blockObj.lastProperty()->all(); !r.empty(); r.popFront()) {
-        const Shape &shape = r.front();
+        Shape &shape = r.front();
         LOCAL_ASSERT(shape.hasShortID());
         --i;
         LOCAL_ASSERT((unsigned)shape.shortid() == i);
@@ -4648,8 +4653,8 @@ Decompile(SprintStack *ss, jsbytecode *pc, int nb)
 #if JS_HAS_GENERATOR_EXPRS
                 sn = js_GetSrcNote(jp->script, pc);
                 if (sn && SN_TYPE(sn) == SRC_GENEXP) {
-                    BindingNames *innerLocalNames;
-                    BindingNames *outerLocalNames;
+                    BindingVector *innerLocalNames;
+                    BindingVector *outerLocalNames;
                     JSScript *inner, *outer;
                     Vector<DecompiledOpcode> *decompiledOpcodes;
                     SprintStack ss2(cx);
@@ -4665,9 +4670,9 @@ Decompile(SprintStack *ss, jsbytecode *pc, int nb)
                      */
                     LifoAllocScope las(&cx->tempLifoAlloc());
                     if (fun->script()->bindings.count() > 0) {
-                        innerLocalNames = cx->new_<BindingNames>(cx);
+                        innerLocalNames = cx->new_<BindingVector>(cx);
                         if (!innerLocalNames ||
-                            !fun->script()->bindings.getLocalNameArray(cx, innerLocalNames))
+                            !GetOrderedBindings(cx, fun->script()->bindings, innerLocalNames))
                         {
                             return NULL;
                         }
@@ -4848,7 +4853,8 @@ Decompile(SprintStack *ss, jsbytecode *pc, int nb)
                     len = GET_JUMP_OFFSET(pc);
                     if (jp->fun->hasRest()) {
                         // Jump over rest parameter things.
-                        len += GetBytecodeLength(pc + len);
+                        if (pc[len] == JSOP_SETARG || pc[len] == JSOP_SETALIASEDVAR)
+                            len += GetBytecodeLength(pc + len);
                         LOCAL_ASSERT(pc[len] == JSOP_POP);
                         len += GetBytecodeLength(pc + len);
                     }
@@ -5091,7 +5097,7 @@ Decompile(SprintStack *ss, jsbytecode *pc, int nb)
                 sn = js_GetSrcNote(jp->script, pc);
 
                 /* Skip any #n= prefix to find the opening bracket. */
-                for (xval = rval; *xval != '[' && *xval != '{'; xval++)
+                for (xval = rval; *xval != '[' && *xval != '{' && *xval; xval++)
                     continue;
                 inArray = (*xval == '[');
                 if (inArray)
@@ -5361,10 +5367,13 @@ Decompile(SprintStack *ss, jsbytecode *pc, int nb)
                 pc += GetBytecodeLength(pc);
                 if (*pc == JSOP_UNDEFINED)
                     pc += GetBytecodeLength(pc);
-                LOCAL_ASSERT(*pc == JSOP_SETALIASEDVAR || *pc == JSOP_SETARG);
-                pc += GetBytecodeLength(pc);
-                LOCAL_ASSERT(*pc == JSOP_POP);
-                len = GetBytecodeLength(pc);
+                if (*pc == JSOP_SETALIASEDVAR || *pc == JSOP_SETARG) {
+                    pc += GetBytecodeLength(pc);
+                    LOCAL_ASSERT(*pc == JSOP_POP);
+                    len = GetBytecodeLength(pc);
+                } else {
+                    len = 0;
+                }
                 todo = -2;
                 break;
 
@@ -5419,7 +5428,7 @@ Decompile(SprintStack *ss, jsbytecode *pc, int nb)
 
 static JSBool
 DecompileCode(JSPrinter *jp, JSScript *script, jsbytecode *pc, unsigned len,
-              unsigned pcdepth)
+              unsigned pcdepth, unsigned initialStackDepth = 0)
 {
     JSContext *cx = jp->sprinter.context;
 
@@ -5451,6 +5460,11 @@ DecompileCode(JSPrinter *jp, JSScript *script, jsbytecode *pc, unsigned len,
         }
     }
 
+    for (unsigned i = 0; i < initialStackDepth; i++) {
+        if (!PushStr(&ss, "", JSOP_NOP))
+            return false;
+    }
+
     /* Call recursive subroutine to do the hard work. */
     JSScript *oldscript = jp->script;
     jp->script = script;
@@ -5458,11 +5472,11 @@ DecompileCode(JSPrinter *jp, JSScript *script, jsbytecode *pc, unsigned len,
     jp->script = oldscript;
 
     /* If the given code didn't empty the stack, do it now. */
-    if (ok && ss.top) {
+    if (ok && ss.top - initialStackDepth) {
         const char *last;
         do {
             last = ss.sprinter.stringAt(PopOff(&ss, JSOP_POP));
-        } while (ss.top > pcdepth);
+        } while (ss.top - initialStackDepth > pcdepth);
         js_printf(jp, "%s", last);
     }
 
@@ -5659,7 +5673,7 @@ js_DecompileFunction(JSPrinter *jp)
                 jsbytecode *caseend = defbegin + ((i < nformal - 1) ? TABLE_OFF(i - defstart + 1) : deflen);
 #undef TABLE_OFF
                 unsigned exprlength = caseend - casestart - js_CodeSpec[JSOP_POP].length;
-                if (!DecompileCode(jp, script, casestart, exprlength, 0))
+                if (!DecompileCode(jp, script, casestart, exprlength, 0, fun->hasRest()))
                     return JS_FALSE;
             } else if (!QuoteString(&jp->sprinter, param, 0)) {
                 ok = JS_FALSE;
@@ -6372,7 +6386,7 @@ GetPCCountScriptContents(JSContext *cx, size_t index)
 
     {
         JSAutoEnterCompartment ac;
-        if (!ac.enter(cx, script->function() ? (JSObject *) script->function() : script->global()))
+        if (!ac.enter(cx, &script->global()))
             return NULL;
 
         if (!GetPCCountJSON(cx, sac, buf))

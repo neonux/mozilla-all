@@ -249,7 +249,7 @@ interface nsIXMLHttpRequest : nsISupports
    *             Type header via the setRequestHeader method before
    *             calling send.
    */
-  [implicit_jscontext] void   send([optional] in nsIVariant body);
+  void   send([optional] in nsIVariant body);
 
   /**
    * A variant of the send() method used to send binary data.
@@ -258,7 +258,7 @@ interface nsIXMLHttpRequest : nsISupports
    *             converted to a single-byte string by truncation (i.e., the
    *             high-order byte of each character will be discarded).
    */
-  [implicit_jscontext] void   sendAsBinary(in DOMString body);
+  void   sendAsBinary(in DOMString body);
 
   /**
    * Sets a HTTP request header for HTTP requests. You must call open
@@ -395,22 +395,8 @@ interface nsIXHRSendable : nsISupports {
 /**
  * @deprecated
  */
-[deprecated, scriptable, uuid(423fdd3d-41c9-4149-8fe5-b14a1d3912a0)]
+[deprecated, scriptable, uuid(8ae70a39-edf1-40b4-a992-472d23421c25)]
 interface nsIJSXMLHttpRequest : nsISupports {
-  /**
-   * Meant to be a script-only mechanism for setting an upload progress event
-   * listener.
-   * This attribute should not be used from native code!!
-   * This event listener may be called multiple times during the upload..
-   *
-   * After the initial response, all event listeners will be cleared.
-   * // XXXbz what does that mean, exactly?
-   *
-   * This event listener must be set BEFORE calling open().
-   *
-   * Mozilla only.
-   */
-  attribute nsIDOMEventListener onuploadprogress;
 };
 
 %{ C++

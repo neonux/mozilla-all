@@ -5,8 +5,6 @@
 
 package org.mozilla.gecko;
 
-import java.lang.Math;
-
 import android.util.Log;
 
 import android.content.BroadcastReceiver;
@@ -186,12 +184,17 @@ public class GeckoNetworkManager
   private static NetworkType getNetworkType() {
     ConnectivityManager cm =
       (ConnectivityManager)GeckoApp.mAppContext.getSystemService(Context.CONNECTIVITY_SERVICE);
-
-    if (cm.getActiveNetworkInfo() == null) {
+    if (cm == null) {
+      Log.e("GeckoNetworkManager", "Connectivity service does not exist");
       return NetworkType.NETWORK_NONE;
     }
 
-    switch (cm.getActiveNetworkInfo().getType()) {
+    NetworkInfo ni = cm.getActiveNetworkInfo();
+    if (ni == null) {
+      return NetworkType.NETWORK_NONE;
+    }
+
+    switch (ni.getType()) {
       case ConnectivityManager.TYPE_ETHERNET:
         return NetworkType.NETWORK_ETHERNET;
       case ConnectivityManager.TYPE_WIFI:
@@ -207,6 +210,10 @@ public class GeckoNetworkManager
 
     TelephonyManager tm =
       (TelephonyManager)GeckoApp.mAppContext.getSystemService(Context.TELEPHONY_SERVICE);
+    if (tm == null) {
+      Log.e("GeckoNetworkManager", "Telephony service does not exist");
+      return NetworkType.NETWORK_UNKNOWN;
+    }
 
     switch (tm.getNetworkType()) {
       case TelephonyManager.NETWORK_TYPE_IDEN:

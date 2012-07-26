@@ -8,7 +8,7 @@
 #include "XrayWrapper.h"
 #include "AccessCheck.h"
 #include "FilteringWrapper.h"
-#include "CrossOriginWrapper.h"
+#include "WaiveXrayWrapper.h"
 #include "WrapperFactory.h"
 
 #include "nsINode.h"
@@ -215,7 +215,7 @@ EnsureExpandoObject(JSContext *cx, JSObject *wrapper, JSObject *target)
     // Expando objects live in the target compartment.
     JSAutoEnterCompartment ac;
     if (!ac.enter(cx, target))
-        return false;
+        return nsnull;
 
     JSObject *expandoObject = LookupExpandoObject(cx, target, wrapper);
     if (!expandoObject) {
@@ -458,7 +458,7 @@ static inline JSObject *
 FindWrapper(JSObject *wrapper)
 {
     while (!js::IsWrapper(wrapper) ||
-           !(AbstractWrapper::wrapperHandler(wrapper)->flags() &
+           !(Wrapper::wrapperHandler(wrapper)->flags() &
              WrapperFactory::IS_XRAY_WRAPPER_FLAG)) {
         if (js::IsWrapper(wrapper) &&
             js::GetProxyHandler(wrapper) == &sandboxProxyHandler) {
@@ -767,7 +767,7 @@ ContentScriptHasUniversalXPConnect()
         // Double-check that the subject principal according to CAPS is a content
         // principal rather than the system principal. If it is, this check is
         // meaningless.
-        MOZ_ASSERT(!AccessCheck::callerIsChrome());
+        NS_ASSERTION(!AccessCheck::callerIsChrome(), "About to do a meaningless security check!");
 
         bool privileged;
         if (NS_SUCCEEDED(ssm->IsCapabilityEnabled("UniversalXPConnect", &privileged)) && privileged)
@@ -775,24 +775,6 @@ ContentScriptHasUniversalXPConnect()
     }
     return false;
 }
-
-class AutoLeaveHelper
-{
-  public:
-    AutoLeaveHelper(js::Wrapper &xray, JSContext *cx, JSObject *wrapper)
-      : xray(xray), cx(cx), wrapper(wrapper)
-    {
-    }
-    ~AutoLeaveHelper()
-    {
-        xray.leave(cx, wrapper);
-    }
-
-  private:
-    js::Wrapper &xray;
-    JSContext *cx;
-    JSObject *wrapper;
-};
 
 bool
 XPCWrappedNativeXrayTraits::resolveOwnProperty(JSContext *cx, js::Wrapper &jsWrapper,
@@ -815,8 +797,6 @@ XPCWrappedNativeXrayTraits::resolveOwnProperty(JSContext *cx, js::Wrapper &jsWra
         desc->obj = NULL; // default value
         if (!jsWrapper.enter(cx, wrapper, id, action, &status))
             return status;
-
-        AutoLeaveHelper helper(jsWrapper, cx, wrapper);
 
         desc->obj = wrapper;
         desc->attrs = JSPROP_ENUMERATE|JSPROP_SHARED;
@@ -1175,10 +1155,7 @@ IsTransparent(JSContext *cx, JSObject *wrapper)
     // Redirect access straight to the wrapper if UniversalXPConnect is enabled.
     // We don't need to check for system principal here, because only content
     // scripts have Partially Transparent wrappers.
-    if (ContentScriptHasUniversalXPConnect())
-        return true;
-
-    return AccessCheck::documentDomainMakesSameOrigin(cx, UnwrapObject(wrapper));
+    return ContentScriptHasUniversalXPConnect();
 }
 
 JSObject *
@@ -1263,8 +1240,6 @@ XrayWrapper<Base, Traits>::getPropertyDescriptor(JSContext *cx, JSObject *wrappe
     if (!this->enter(cx, wrapper, id, action, &status))
         return status;
 
-    AutoLeaveHelper helper(*this, cx, wrapper);
-
     typename Traits::ResolvingId resolving(wrapper, id);
 
     // Redirect access straight to the wrapper if we should be transparent.
@@ -1300,8 +1275,6 @@ XrayWrapper<Base, Traits>::getPropertyDescriptor(JSContext *cx, JSObject *wrappe
         desc->obj = NULL; // default value
         if (!this->enter(cx, wrapper, id, action, &status))
             return status;
-
-        AutoLeaveHelper helper(*this, cx, wrapper);
 
         desc->obj = wrapper;
         desc->attrs = JSPROP_ENUMERATE|JSPROP_SHARED;
@@ -1368,8 +1341,6 @@ XrayWrapper<Base, Traits>::getOwnPropertyDescriptor(JSContext *cx, JSObject *wra
     desc->obj = NULL; // default value
     if (!this->enter(cx, wrapper, id, action, &status))
         return status;
-
-    AutoLeaveHelper helper(*this, cx, wrapper);
 
     typename Traits::ResolvingId resolving(wrapper, id);
 
@@ -1643,6 +1614,23 @@ template class XRAY;
 #undef XRAY
 
 #define XRAY XrayWrapper<CrossCompartmentWrapper, DOMXrayTraits >
+template <> XRAY XRAY::singleton(0);
+template class XRAY;
+#undef XRAY
+
+/* Same-compartment non-filtering versions. */
+
+#define XRAY XrayWrapper<DirectWrapper, XPCWrappedNativeXrayTraits >
+template <> XRAY XRAY::singleton(0);
+template class XRAY;
+#undef XRAY
+
+#define XRAY XrayWrapper<DirectWrapper, ProxyXrayTraits >
+template <> XRAY XRAY::singleton(0);
+template class XRAY;
+#undef XRAY
+
+#define XRAY XrayWrapper<DirectWrapper, DOMXrayTraits >
 template <> XRAY XRAY::singleton(0);
 template class XRAY;
 #undef XRAY

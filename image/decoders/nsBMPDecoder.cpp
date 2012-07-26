@@ -38,7 +38,7 @@ nsBMPDecoder::nsBMPDecoder(RasterImage &aImage, imgIDecoderObserver* aObserver)
   mOldLine = mCurLine = 1; // Otherwise decoder will never start
   mState = eRLEStateInitial;
   mStateData = 0;
-  mLOH = WIN_HEADER_LENGTH;
+  mLOH = WIN_V3_HEADER_LENGTH;
   mUseAlphaData = mHaveAlphaData = false;
 }
 
@@ -71,11 +71,11 @@ nsBMPDecoder::GetWidth() const
   return mBIH.width; 
 }
 
-// Obtains the height from the internal BIH header
+// Obtains the abs-value of the height from the internal BIH header
 PRInt32 
 nsBMPDecoder::GetHeight() const
 {
-  return mBIH.height; 
+  return abs(mBIH.height);
 }
 
 // Obtains the internal output image buffer
@@ -104,7 +104,7 @@ nsBMPDecoder::GetCompressedImageSize() const
 
   // The height should be the absolute value of what the height is in the BIH.
   // If positive the bitmap is stored bottom to top, otherwise top to bottom
-  PRInt32 pixelArraySize = rowSize * abs(mBIH.height); 
+  PRInt32 pixelArraySize = rowSize * GetHeight();
   return pixelArraySize;
 }
 
@@ -130,7 +130,7 @@ nsBMPDecoder::FinishInternal()
     if (!IsSizeDecode() && (GetFrameCount() == 1)) {
 
         // Invalidate
-        nsIntRect r(0, 0, mBIH.width, mBIH.height);
+        nsIntRect r(0, 0, mBIH.width, GetHeight());
         PostInvalidation(r);
 
         PostFrameStop();
@@ -238,7 +238,7 @@ nsBMPDecoder::WriteInternal(const char* aBuffer, PRUint32 aCount)
             return;
         }
 
-        PRUint32 real_height = (mBIH.height > 0) ? mBIH.height : -mBIH.height;
+        PRUint32 real_height = GetHeight();
 
         // Post our size to the superclass
         PostSize(mBIH.width, real_height);
@@ -379,18 +379,18 @@ nsBMPDecoder::WriteInternal(const char* aBuffer, PRUint32 aCount)
         }
       }
     }
-    else if (aCount && mBIH.compression == BI_BITFIELDS && mPos < (WIN_HEADER_LENGTH + BITFIELD_LENGTH)) {
+    else if (aCount && mBIH.compression == BI_BITFIELDS && mPos < (WIN_V3_HEADER_LENGTH + BITFIELD_LENGTH)) {
         // If compression is used, this is a windows bitmap, hence we can
         // use WIN_HEADER_LENGTH instead of mLOH
-        PRUint32 toCopy = (WIN_HEADER_LENGTH + BITFIELD_LENGTH) - mPos;
+        PRUint32 toCopy = (WIN_V3_HEADER_LENGTH + BITFIELD_LENGTH) - mPos;
         if (toCopy > aCount)
             toCopy = aCount;
-        memcpy(mRawBuf + (mPos - WIN_HEADER_LENGTH), aBuffer, toCopy);
+        memcpy(mRawBuf + (mPos - WIN_V3_HEADER_LENGTH), aBuffer, toCopy);
         mPos += toCopy;
         aBuffer += toCopy;
         aCount -= toCopy;
     }
-    if (mPos == WIN_HEADER_LENGTH + BITFIELD_LENGTH && 
+    if (mPos == WIN_V3_HEADER_LENGTH + BITFIELD_LENGTH && 
         mBIH.compression == BI_BITFIELDS) {
         mBitFields.red = LITTLE_TO_NATIVE32(*(PRUint32*)mRawBuf);
         mBitFields.green = LITTLE_TO_NATIVE32(*(PRUint32*)(mRawBuf + 4));
@@ -480,9 +480,12 @@ nsBMPDecoder::WriteInternal(const char* aBuffer, PRUint32 aCount)
                               // 4 has been right all along.  And we know it
                               // has been set to 0 the whole time, so that 
                               // means that everything is transparent so far.
-                              memset(mImageData + (mCurLine - 1) * GetWidth(), 0, 
-                                     (GetHeight() - mCurLine + 1) * 
-                                     GetWidth() * sizeof(PRUint32));
+                              PRUint32* start = mImageData + GetWidth() * (mCurLine - 1);
+                              PRUint32 heightDifference = GetHeight() - mCurLine + 1;
+                              PRUint32 pixelCount = GetWidth() * heightDifference;
+
+                              memset(start, 0, pixelCount * sizeof(PRUint32));
+
                               mHaveAlphaData = true;
                             }
                             SetPixel(d, p[2], p[1], p[0], mHaveAlphaData ? p[3] : 0xFF);

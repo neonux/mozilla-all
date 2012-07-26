@@ -21,17 +21,15 @@ function SyncWithCacheThread(aFunc) {
   do_check_eq(sync_with_cache_IO_thread_cb.listener, null);
   sync_with_cache_IO_thread_cb.listener = aFunc;
 
-  var cache = Cc["@mozilla.org/network/cache-service;1"].
-                 getService(Ci.nsICacheService);
+  var cache = get_cache_service();
   var session = cache.createSession(
                   "HTTP",
                   Ci.nsICache.STORE_ANYWHERE,
                   Ci.nsICache.STREAM_BASED);
 
-  var cacheEntry = session.asyncOpenCacheEntry(
-                     "nonexistententry",
-                     Ci.nsICache.ACCESS_READ,
-                     sync_with_cache_IO_thread_cb);
+  session.asyncOpenCacheEntry("nonexistententry",
+                              Ci.nsICache.ACCESS_READ,
+                              sync_with_cache_IO_thread_cb);
 }
 var sync_with_cache_IO_thread_cb = {
   listener: null,
@@ -43,12 +41,6 @@ var sync_with_cache_IO_thread_cb = {
     do_execute_soon(cb);
   }
 };
-
-function clearCache() {
-    var service = Components.classes["@mozilla.org/network/cache-service;1"]
-        .getService(Ci.nsICacheService);
-    service.evictEntries(Ci.nsICache.STORE_ANYWHERE);
-}
 
 function setupChannel(suffix, value) {
     var ios = Components.classes["@mozilla.org/network/io-service;1"]
@@ -88,7 +80,7 @@ function nextTest() {
     // We really want each test to be self-contained. Make sure cache is
     // cleared and also let all operations finish before starting a new test
     SyncWithCacheThread(function() {
-        clearCache();
+        evict_cache_entries();
         SyncWithCacheThread(runNextTest);
     });
 }

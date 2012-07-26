@@ -1147,9 +1147,9 @@ public:
   MainThreadRun()
   {
     nsCOMPtr<nsIVariant> variant;
-    RuntimeService::AutoSafeJSContext cx;
 
     if (mBody.data()) {
+      RuntimeService::AutoSafeJSContext cx;
       nsIXPConnect* xpc = nsContentUtils::XPConnect();
       NS_ASSERTION(xpc, "This should never be null!");
 
@@ -1203,7 +1203,7 @@ public:
 
     mProxy->mInnerChannelId++;
 
-    nsresult rv = mProxy->mXHR->Send(variant, cx);
+    nsresult rv = mProxy->mXHR->Send(variant);
 
     if (NS_SUCCEEDED(rv)) {
       mProxy->mOutstandingSendCount++;
@@ -1466,7 +1466,7 @@ XMLHttpRequest::_finalize(JSFreeOp* aFop)
 XMLHttpRequest*
 XMLHttpRequest::Constructor(JSContext* aCx,
                             JSObject* aGlobal,
-                            const Optional<jsval>& aParams,
+                            const MozXMLHttpRequestParametersWorkers& aParams,
                             ErrorResult& aRv)
 {
   WorkerPrivate* workerPrivate = GetWorkerPrivateFromContext(aCx);
@@ -1604,9 +1604,13 @@ XMLHttpRequest::DispatchPrematureAbortEvent(JSObject* aTarget,
                                             ErrorResult& aRv)
 {
   mWorkerPrivate->AssertIsOnWorkerThread();
-  MOZ_ASSERT(mProxy);
   MOZ_ASSERT(aTarget);
   MOZ_ASSERT(aEventType <= STRING_COUNT);
+
+  if (!mProxy) {
+    aRv.Throw(NS_ERROR_FAILURE);
+    return;
+  }
 
   JSContext* cx = GetJSContext();
 

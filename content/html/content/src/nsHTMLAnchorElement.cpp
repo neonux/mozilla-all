@@ -11,8 +11,6 @@
 
 #include "nsCOMPtr.h"
 #include "nsContentUtils.h"
-#include "nsReadableUtils.h"
-#include "nsUnicharUtils.h"
 #include "nsGkAtoms.h"
 #include "nsIPresShell.h"
 #include "nsIDocument.h"
@@ -44,19 +42,19 @@ public:
 
   // nsIDOMHTMLElement
   NS_FORWARD_NSIDOMHTMLELEMENT_BASIC(nsGenericHTMLElement::)
-  NS_SCRIPTABLE NS_IMETHOD Click() {
+  NS_IMETHOD Click() {
     return nsGenericHTMLElement::Click();
   }
-  NS_SCRIPTABLE NS_IMETHOD GetTabIndex(PRInt32* aTabIndex);
-  NS_SCRIPTABLE NS_IMETHOD SetTabIndex(PRInt32 aTabIndex);
-  NS_SCRIPTABLE NS_IMETHOD Focus() {
+  NS_IMETHOD GetTabIndex(PRInt32* aTabIndex);
+  NS_IMETHOD SetTabIndex(PRInt32 aTabIndex);
+  NS_IMETHOD Focus() {
     return nsGenericHTMLElement::Focus();
   }
-  NS_SCRIPTABLE NS_IMETHOD GetDraggable(bool* aDraggable);
-  NS_SCRIPTABLE NS_IMETHOD GetInnerHTML(nsAString& aInnerHTML) {
+  NS_IMETHOD GetDraggable(bool* aDraggable);
+  NS_IMETHOD GetInnerHTML(nsAString& aInnerHTML) {
     return nsGenericHTMLElement::GetInnerHTML(aInnerHTML);
   }
-  NS_SCRIPTABLE NS_IMETHOD SetInnerHTML(const nsAString& aInnerHTML) {
+  NS_IMETHOD SetInnerHTML(const nsAString& aInnerHTML) {
     return nsGenericHTMLElement::SetInnerHTML(aInnerHTML);
   }
 

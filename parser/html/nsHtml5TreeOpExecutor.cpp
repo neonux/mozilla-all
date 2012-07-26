@@ -27,7 +27,9 @@
 #include "mozilla/Util.h" // DebugOnly
 #include "sampler.h"
 #include "nsIScriptError.h"
+#include "nsIScriptContext.h"
 #include "mozilla/Preferences.h"
+#include "nsIHTMLDocument.h"
 
 using namespace mozilla;
 
@@ -77,9 +79,8 @@ nsHtml5TreeOpExecutor::nsHtml5TreeOpExecutor(bool aRunsToCompletion)
 
 nsHtml5TreeOpExecutor::~nsHtml5TreeOpExecutor()
 {
-  NS_ASSERTION(mOpQueue.IsEmpty(), "Somehow there's stuff in the op queue.");
-  
   if (gBackgroundFlushList && isInList()) {
+    mOpQueue.Clear();
     remove();
     if (gBackgroundFlushList->isEmpty()) {
       delete gBackgroundFlushList;
@@ -90,6 +91,7 @@ nsHtml5TreeOpExecutor::~nsHtml5TreeOpExecutor()
       }
     }
   }
+  NS_ASSERTION(mOpQueue.IsEmpty(), "Somehow there's stuff in the op queue.");
 }
 
 // nsIContentSink
@@ -757,6 +759,13 @@ nsHtml5TreeOpExecutor::StartLayout() {
 void
 nsHtml5TreeOpExecutor::RunScript(nsIContent* aScriptElement)
 {
+  if (mRunsToCompletion) {
+    // We are in createContextualFragment() or in the upcoming document.parse().
+    // Do nothing. Let's not even mark scripts malformed here, because that
+    // could cause serialization weirdness later.
+    return;
+  }
+
   NS_ASSERTION(aScriptElement, "No script to run");
   nsCOMPtr<nsIScriptElement> sele = do_QueryInterface(aScriptElement);
   
@@ -768,13 +777,6 @@ nsHtml5TreeOpExecutor::RunScript(nsIContent* aScriptElement)
     return;
   }
   
-  if (mPreventScriptExecution) {
-    sele->PreventExecution();
-  }
-  if (mRunsToCompletion) {
-    return;
-  }
-
   if (sele->GetScriptDeferred() || sele->GetScriptAsync()) {
     DebugOnly<bool> block = sele->AttemptToExecute();
     NS_ASSERTION(!block, "Defer or async script tried to block.");

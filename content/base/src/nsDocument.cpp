@@ -160,7 +160,6 @@
 #include "nsHTMLCSSStyleSheet.h"
 
 #include "mozilla/dom/Link.h"
-#include "nsIHTMLDocument.h"
 #include "nsXULAppAPI.h"
 #include "nsDOMTouchEvent.h"
 
@@ -408,6 +407,15 @@ nsIdentifierMapEntry::RemoveNameElement(Element* aElement)
   if (mNameContentList) {
     mNameContentList->RemoveElement(aElement);
   }
+}
+
+// static
+size_t
+nsIdentifierMapEntry::SizeOfExcludingThis(nsIdentifierMapEntry* aEntry,
+                                          nsMallocSizeOfFun aMallocSizeOf,
+                                          void*)
+{
+  return aEntry->GetKey().SizeOfExcludingThisIfUnshared(aMallocSizeOf);
 }
 
 // Helper structs for the content->subdoc map
@@ -1169,8 +1177,7 @@ nsExternalResourceMap::ExternalResource::~ExternalResource()
 // If we ever have an nsIDocumentObserver notification for stylesheet title
 // changes, we could make this inherit from nsDOMStringList instead of
 // reimplementing nsIDOMDOMStringList.
-class nsDOMStyleSheetSetList : public nsIDOMDOMStringList
-                          
+class nsDOMStyleSheetSetList MOZ_FINAL : public nsIDOMDOMStringList
 {
 public:
   NS_DECL_ISUPPORTS
@@ -1487,9 +1494,29 @@ nsDOMImplementation::CreateHTMLDocument(const nsAString& aTitle,
 // ==================================================================
 // =
 // ==================================================================
+nsIDocument::nsIDocument()
+  : nsINode(nsnull),
+    mCharacterSet(NS_LITERAL_CSTRING("ISO-8859-1")),
+    mNodeInfoManager(nsnull),
+    mCompatMode(eCompatibility_FullStandards),
+    mIsInitialDocumentInWindow(false),
+    mMayStartLayout(true),
+    mVisible(true),
+    mRemovedFromDocShell(false),
+    // mAllowDNSPrefetch starts true, so that we can always reliably && it
+    // with various values that might disable it.  Since we never prefetch
+    // unless we get a window, and in that case the docshell value will get
+    // &&-ed in, this is safe.
+    mAllowDNSPrefetch(true),
+    mIsBeingUsedAsImage(false),
+    mHasLinksToUpdate(false),
+    mPartID(0)
+{
+  SetInDocument();
+}
 
-  // NOTE! nsDocument::operator new() zeroes out all members, so don't
-  // bother initializing members to 0.
+// NOTE! nsDocument::operator new() zeroes out all members, so don't
+// bother initializing members to 0.
 
 nsDocument::nsDocument(const char* aContentType)
   : nsIDocument()
@@ -1497,7 +1524,7 @@ nsDocument::nsDocument(const char* aContentType)
   , mVisibilityState(eHidden)
 {
   SetContentTypeInternal(nsDependentCString(aContentType));
-  
+
 #ifdef PR_LOGGING
   if (!gDocumentLeakPRLog)
     gDocumentLeakPRLog = PR_NewLogModule("DocumentLeak");
@@ -1512,7 +1539,7 @@ nsDocument::nsDocument(const char* aContentType)
 
   // Start out mLastStyleSheetSet as null, per spec
   SetDOMStringToNull(mLastStyleSheetSet);
-  
+
   mLinksToUpdate.Init();
 }
 
@@ -1524,6 +1551,14 @@ ClearAllBoxObjects(nsIContent* aKey, nsPIBoxObject* aBoxObject, void* aUserArg)
   }
   return PL_DHASH_NEXT;
 }
+
+nsIDocument::~nsIDocument()
+{
+  if (mNodeInfoManager) {
+    mNodeInfoManager->DropDocumentReference();
+  }
+}
+
 
 nsDocument::~nsDocument()
 {
@@ -1606,12 +1641,6 @@ nsDocument::~nsDocument()
   if (mCSSLoader) {
     // Could be null here if Init() failed
     mCSSLoader->DropDocumentReference();
-    NS_RELEASE(mCSSLoader);
-  }
-
-  // XXX Ideally we'd do this cleanup in the nsIDocument destructor.
-  if (mNodeInfoManager) {
-    mNodeInfoManager->DropDocumentReference();
   }
 
   delete mHeaderData;
@@ -1903,7 +1932,7 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN(nsDocument)
 
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMARRAY(mPreloadingImages)
 
-  
+
   if (tmp->mBoxObjectTable) {
    tmp->mBoxObjectTable->EnumerateRead(ClearAllBoxObjects, nsnull);
    delete tmp->mBoxObjectTable;
@@ -1924,7 +1953,7 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN(nsDocument)
   tmp->mFrameRequestCallbacks.Clear();
 
   tmp->mRadioGroups.Clear();
-  
+
   // nsDocument has a pretty complex destructor, so we're going to
   // assume that *most* cycles you actually want to break somewhere
   // else, and not unlink an awful lot here.
@@ -1936,7 +1965,7 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN(nsDocument)
   }
 
   tmp->mPendingTitleChangeEvent.Revoke();
-  
+
   tmp->mInUnlinkOrDeletion = false;
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 
@@ -1954,7 +1983,6 @@ nsDocument::Init()
 
   // Force initialization.
   nsINode::nsSlots* slots = GetSlots();
-  NS_ENSURE_TRUE(slots,NS_ERROR_OUT_OF_MEMORY);
 
   // Prepend self as mutation-observer whether we need it or not (some
   // subclasses currently do, other don't). This is because the code in
@@ -1965,17 +1993,11 @@ nsDocument::Init()
 
 
   mOnloadBlocker = new nsOnloadBlocker();
-  NS_ENSURE_TRUE(mOnloadBlocker, NS_ERROR_OUT_OF_MEMORY);
-
   mCSSLoader = new mozilla::css::Loader(this);
-  NS_ENSURE_TRUE(mCSSLoader, NS_ERROR_OUT_OF_MEMORY);
-  NS_ADDREF(mCSSLoader);
   // Assume we're not quirky, until we know otherwise
   mCSSLoader->SetCompatibilityMode(eCompatibility_FullStandards);
 
   mNodeInfoManager = new nsNodeInfoManager();
-  NS_ENSURE_TRUE(mNodeInfoManager, NS_ERROR_OUT_OF_MEMORY);
-
   nsresult  rv = mNodeInfoManager->Init(this);
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -1988,7 +2010,6 @@ nsDocument::Init()
   NS_ASSERTION(OwnerDoc() == this, "Our nodeinfo is busted!");
 
   mScriptLoader = new nsScriptLoader(this);
-  NS_ENSURE_TRUE(mScriptLoader, NS_ERROR_OUT_OF_MEMORY);
 
   mImageTracker.Init();
   mPlugins.Init();
@@ -1996,7 +2017,7 @@ nsDocument::Init()
   return NS_OK;
 }
 
-void 
+void
 nsIDocument::DeleteAllProperties()
 {
   for (PRUint32 i = 0; i < GetPropertyTableCount(); ++i) {
@@ -2170,10 +2191,21 @@ nsDocument::ResetToURI(nsIURI *aURI, nsILoadGroup *aLoadGroup,
     nsIScriptSecurityManager *securityManager =
       nsContentUtils::GetSecurityManager();
     if (securityManager) {
+      nsCOMPtr<nsIDocShell> docShell = do_QueryReferent(mDocumentContainer);
+
+      if (!docShell && aLoadGroup) {
+        nsCOMPtr<nsIInterfaceRequestor> cbs;
+        aLoadGroup->GetNotificationCallbacks(getter_AddRefs(cbs));
+        docShell = do_GetInterface(cbs);
+      }
+
+      MOZ_ASSERT(docShell,
+                 "must be in a docshell or pass in an explicit principal");
+
       nsCOMPtr<nsIPrincipal> principal;
-      nsresult rv =
-        securityManager->GetCodebasePrincipal(mDocumentURI,
-                                              getter_AddRefs(principal));
+      nsresult rv = securityManager->
+        GetDocShellCodebasePrincipal(mDocumentURI, docShell,
+                                     getter_AddRefs(principal));
       if (NS_SUCCEEDED(rv)) {
         SetPrincipal(principal);
       }
@@ -2822,7 +2854,10 @@ nsDocument::ElementFromPointHelper(float aX, float aY,
   if (elem && !elem->IsElement()) {
     elem = elem->GetParent();
   }
-  return CallQueryInterface(elem, aReturn);
+  if (elem) {
+    CallQueryInterface(elem, aReturn);
+  }
+  return NS_OK;
 }
 
 nsresult
@@ -2872,12 +2907,12 @@ nsDocument::NodesFromRectHelper(float aX, float aY,
   // Used to filter out repeated elements in sequence.
   nsIContent* lastAdded = nsnull;
 
-  for (PRInt32 i = 0; i < outFrames.Length(); i++) {
+  for (PRUint32 i = 0; i < outFrames.Length(); i++) {
     nsIContent* node = GetContentInThisDocument(outFrames[i]);
 
     if (node && !node->IsElement() && !node->IsNodeOfType(nsINode::eTEXT)) {
-      // If we have a node that isn't an element or a text node,
-      // replace it with the first parent node.
+      // We have a node that isn't an element or a text node,
+      // use its parent content instead.
       node = node->GetParent();
     }
     if (node && node != lastAdded) {
@@ -3063,7 +3098,7 @@ nsDocument::SetHeaderData(nsIAtom* aHeaderField, const nsAString& aData)
       // should really be the same thing).  Note that this code can run
       // before the current URI of the webnavigation has been updated, so we
       // can't assert equality here.
-      refresher->SetupRefreshURIFromHeader(mDocumentURI,
+      refresher->SetupRefreshURIFromHeader(mDocumentURI, NodePrincipal(),
                                            NS_ConvertUTF16toUTF8(aData));
     }
   }
@@ -6087,7 +6122,7 @@ nsDocument::AdoptNode(nsIDOMNode *aAdoptedNode, nsIDOMNode **aResult)
     }
   }
 
-  nsIDocument *oldDocument = adoptedNode->OwnerDoc();
+  nsCOMPtr<nsIDocument> oldDocument = adoptedNode->OwnerDoc();
   bool sameDocument = oldDocument == this;
 
   JSContext *cx = nsnull;
@@ -7161,12 +7196,12 @@ nsDocument::GetContentInThisDocument(nsIFrame* aFrame) const
 {
   for (nsIFrame* f = aFrame; f;
        f = nsLayoutUtils::GetParentOrPlaceholderForCrossDoc(f)) {
-    nsIContent* ptContent = f->GetContent();
-    if (!ptContent || ptContent->IsInAnonymousSubtree())
+    nsIContent* content = f->GetContent();
+    if (!content || content->IsInAnonymousSubtree())
       continue;
 
-    if (ptContent->OwnerDoc() == this) {
-      return ptContent;
+    if (content->OwnerDoc() == this) {
+      return content;
     }
     // We must be in a subdocument so jump directly to the root frame.
     // GetParentOrPlaceholderForCrossDoc gets called immediately to jump up to
@@ -7687,7 +7722,7 @@ namespace {
  * Stub for LoadSheet(), since all we want is to get the sheet into
  * the CSSLoader's style cache
  */
-class StubCSSLoaderObserver : public nsICSSLoaderObserver {
+class StubCSSLoaderObserver MOZ_FINAL : public nsICSSLoaderObserver {
 public:
   NS_IMETHOD
   StyleSheetLoaded(nsCSSStyleSheet*, bool, nsresult)
@@ -8980,6 +9015,7 @@ nsDocument::RequestFullScreen(Element* aElement, bool aWasCallerChrome)
   // to the document's principal's host, if it has one.
   if (!mIsApprovedForFullscreen) {
     mIsApprovedForFullscreen =
+      GetWindow()->IsPartOfApp() ||
       nsContentUtils::IsSitePermAllow(NodePrincipal(), "fullscreen");
   }
 
@@ -9531,7 +9567,8 @@ nsDocument::UpdateVisibilityState()
   if (oldState != mVisibilityState) {
     nsContentUtils::DispatchTrustedEvent(this, static_cast<nsIDocument*>(this),
                                          NS_LITERAL_STRING("mozvisibilitychange"),
-                                         false, false);
+                                         /* bubbles = */ true,
+                                         /* cancelable = */ false);
   }
 }
 
@@ -9680,7 +9717,8 @@ nsDocument::DocSizeOfExcludingThis(nsWindowSizes* aWindowSizes) const
     mStyledLinks.SizeOfExcludingThis(NULL, aWindowSizes->mMallocSizeOf);
 
   aWindowSizes->mDOMOther +=
-    mIdentifierMap.SizeOfExcludingThis(NULL, aWindowSizes->mMallocSizeOf);
+    mIdentifierMap.SizeOfExcludingThis(nsIdentifierMapEntry::SizeOfExcludingThis,
+                                       aWindowSizes->mMallocSizeOf);
 
   // Measurement of the following members may be added later if DMD finds it
   // is worthwhile:

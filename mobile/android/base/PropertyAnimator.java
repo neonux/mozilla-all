@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.Timer;
 import java.util.TimerTask;
 
-import android.os.Handler;
 import android.view.animation.Interpolator;
 import android.view.animation.DecelerateInterpolator;
 import android.view.View;
@@ -142,6 +141,9 @@ public class PropertyAnimator extends TimerTask {
     }
 
     private void invalidate(final ElementHolder element, final int delta) {
+        if (element == null || element.view == null)
+            return;
+
         // Post the layout changes on the view's UI thread.
         element.view.getHandler().post(new Runnable() {
             @Override

@@ -18,6 +18,9 @@
 #include "nsXPCOMGlue.h"
 #include "nsXPCOMPrivate.h"     // for MAXPATHLEN and XPCOM_DLL
 #include "nsXULAppAPI.h"
+#include "mozilla/AppData.h"
+
+using namespace mozilla;
 
 XRE_GetFileFromPathType XRE_GetFileFromPath;
 XRE_CreateAppDataType XRE_CreateAppData;
@@ -38,21 +41,9 @@ namespace {
   wchar_t backupFilePath[MAXPATHLEN];
   wchar_t iconPath[MAXPATHLEN];
   char profile[MAXPATHLEN];
+  bool isProfileOverridden = false;
   int* pargc;
   char*** pargv;
-
-  // Copied from toolkit/xre/nsAppData.cpp.
-  void
-  SetAllocatedString(const char *&str, const char *newvalue)
-  {
-    NS_Free(const_cast<char*>(str));
-    if (newvalue) {
-      str = NS_strdup(newvalue);
-    }
-    else {
-      str = nsnull;
-    }
-  }
 
   nsresult
   joinPath(char* const dest,
@@ -144,7 +135,7 @@ namespace {
     wchar_t msg[1024];
     _vsnwprintf_s(msg, _countof(msg), _countof(msg), fmt, ap);
 
-    MessageBoxW(NULL, msg, L"WebappRT", MB_OK);
+    MessageBoxW(NULL, msg, L"Web Runtime", MB_OK);
 
     va_end(ap);
   }
@@ -287,8 +278,10 @@ namespace {
       rv = webShellAppData.create(rtINI);
       NS_ENSURE_SUCCESS(rv, false);
 
-      SetAllocatedString(webShellAppData->profile, profile);
-      SetAllocatedString(webShellAppData->name, profile);
+      if (!isProfileOverridden) {
+        SetAllocatedString(webShellAppData->profile, profile);
+        SetAllocatedString(webShellAppData->name, profile);
+      }
 
       nsCOMPtr<nsIFile> directory;
       rv = XRE_GetFileFromPath(rtPath, getter_AddRefs(directory));
@@ -451,6 +444,21 @@ main(int argc, char* argv[])
     return 255;
   }
 
+  // Check if the runtime was executed with the "-profile" argument
+  for (int i = 1; i < argc; i++) {
+    if (!strcmp(argv[i], "-profile")) {
+      isProfileOverridden = true;
+      break;
+    }
+  }
+
+  // First attempt at loading Firefox binaries:
+  //   Check if the webapprt is in the same directory as the Firefox binary.
+  //   This is the case during WebappRT chrome and content tests.
+  if (AttemptLoadFromDir(buffer)) {
+    return 0;
+  }
+
   // Set up appIniPath with path to webapp.ini.
   // This should be in the same directory as the running executable.
   char appIniPath[MAXPATHLEN];
@@ -476,18 +484,20 @@ main(int argc, char* argv[])
     return 255;
   }
 
-  // Get profile dir from webapp.ini
-  if (NS_FAILED(parser.GetString("Webapp",
-                                 "Profile",
-                                 profile,
-                                 MAXPATHLEN))) {
-    Output("Unable to retrieve profile from web app INI file");
-    return 255;
+  if (!isProfileOverridden) {
+    // Get profile dir from webapp.ini
+    if (NS_FAILED(parser.GetString("Webapp",
+                                   "Profile",
+                                   profile,
+                                   MAXPATHLEN))) {
+      Output("Unable to retrieve profile from web app INI file");
+      return 255;
+    }
   }
 
   char firefoxDir[MAXPATHLEN];
 
-  // First attempt at loading Firefox binaries:
+  // Second attempt at loading Firefox binaries:
   //   Get the location of Firefox from our webapp.ini
 
   // XXX: This string better be UTF-8...
@@ -501,7 +511,7 @@ main(int argc, char* argv[])
     }
   }
 
-  // Second attempt at loading Firefox binaries:
+  // Third attempt at loading Firefox binaries:
   //   Get the location of Firefox from the registry
   if (GetFirefoxDirFromRegistry(firefoxDir)) {
     if (AttemptLoadFromDir(firefoxDir)) {
@@ -511,7 +521,7 @@ main(int argc, char* argv[])
   }
 
   // We've done all we know how to do to try to find and launch FF
-  Output("This app requires that Firefox version 15 or above is installed."
-         " Firefox 15+ has not been detected.");
+  Output("This app requires that Firefox version 16 or above is installed."
+         " Firefox 16+ has not been detected.");
   return 255;
 }

@@ -21,7 +21,9 @@
 #endif
 
 #include "mozilla/dom/Element.h"
+#include "mozilla/Telemetry.h"
 
+using namespace mozilla;
 using namespace mozilla::a11y;
 
 // Defines the number of selection add/remove events in the queue when they
@@ -56,7 +58,7 @@ NotificationController::~NotificationController()
 NS_IMPL_ADDREF(NotificationController)
 NS_IMPL_RELEASE(NotificationController)
 
-NS_IMPL_CYCLE_COLLECTION_CLASS(NotificationController)
+NS_IMPL_CYCLE_COLLECTION_NATIVE_CLASS(NotificationController)
 
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_NATIVE(NotificationController)
   if (tmp->mDocument)
@@ -174,6 +176,8 @@ NotificationController::IsUpdatePending()
 void
 NotificationController::WillRefresh(mozilla::TimeStamp aTime)
 {
+  Telemetry::AutoTimer<Telemetry::A11Y_UPDATE_TIME> updateTimer();
+
   // If the document accessible that notification collector was created for is
   // now shut down, don't process notifications anymore.
   NS_ASSERTION(mDocument,
@@ -812,7 +816,7 @@ NotificationController::ContentInsertion::
   return haveToUpdate;
 }
 
-NS_IMPL_CYCLE_COLLECTION_CLASS(NotificationController::ContentInsertion)
+NS_IMPL_CYCLE_COLLECTION_NATIVE_CLASS(NotificationController::ContentInsertion)
 
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_NATIVE(NotificationController::ContentInsertion)
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mContainer)

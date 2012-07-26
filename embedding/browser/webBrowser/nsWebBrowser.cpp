@@ -13,9 +13,7 @@
 //Interfaces Needed
 #include "nsReadableUtils.h"
 #include "nsIComponentManager.h"
-#include "nsIDocument.h"
 #include "nsIDOMDocument.h"
-#include "nsIDOMXULDocument.h"
 #include "nsIDOMWindow.h"
 #include "nsIDOMElement.h"
 #include "nsIInterfaceRequestor.h"
@@ -1380,6 +1378,12 @@ NS_IMETHODIMP nsWebBrowser::SetParentNativeWindow(nativeWindow aParentNativeWind
    return NS_OK;
 }
 
+NS_IMETHODIMP nsWebBrowser::GetNativeHandle(nsAString& aNativeHandle)
+{
+   // the nativeHandle should be accessed from nsIXULWindow
+   return NS_ERROR_NOT_IMPLEMENTED;
+}
+
 NS_IMETHODIMP nsWebBrowser::GetVisibility(bool* visibility)
 {
    NS_ENSURE_ARG_POINTER(visibility);
@@ -1406,10 +1410,13 @@ NS_IMETHODIMP nsWebBrowser::SetVisibility(bool aVisibility)
    return NS_OK;
 }
 
-NS_IMETHODIMP nsWebBrowser::GetEnabled(bool *aEnabled)
+NS_IMETHODIMP nsWebBrowser::GetEnabled(bool* aEnabled)
 {
-  if (mInternalWidget)
-    return mInternalWidget->IsEnabled(aEnabled);
+  if (mInternalWidget) {
+    *aEnabled = mInternalWidget->IsEnabled();
+    return NS_OK;
+  }
+
   return NS_ERROR_FAILURE;
 }
 

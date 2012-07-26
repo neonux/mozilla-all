@@ -3,13 +3,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "nsITransaction.h"
+#include "nsAutoPtr.h"
+#include "nsCOMPtr.h"
+#include "nsCycleCollectionParticipant.h"
+#include "nsISupportsUtils.h"
 #include "nsTransactionItem.h"
 #include "nsTransactionStack.h"
-#include "nsCOMPtr.h"
-#include "nsAutoPtr.h"
-#include "nsCycleCollectionParticipant.h"
-#include "mozilla/Util.h"
+#include "nscore.h"
 
 nsTransactionStack::nsTransactionStack(nsTransactionStack::Type aType)
   : mQue(0)
@@ -95,7 +95,7 @@ nsTransactionStack::DoTraverse(nsCycleCollectionTraversalCallback &cb)
       static_cast<nsTransactionItem*>(mQue.ObjectAt(i));
     if (item) {
       NS_CYCLE_COLLECTION_NOTE_EDGE_NAME(cb, "transaction stack mQue[i]");
-      cb.NoteNativeChild(item, &NS_CYCLE_COLLECTION_NAME(nsTransactionItem));
+      cb.NoteNativeChild(item, NS_CYCLE_COLLECTION_PARTICIPANT(nsTransactionItem));
     }
   }
 }

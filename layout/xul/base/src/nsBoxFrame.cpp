@@ -47,12 +47,10 @@
 #include "nsIServiceManager.h"
 #include "nsBoxLayout.h"
 #include "nsSprocketLayout.h"
-#include "nsIDocument.h"
 #include "nsIScrollableFrame.h"
 #include "nsWidgetsCID.h"
 #include "nsCSSAnonBoxes.h"
 #include "nsContainerFrame.h"
-#include "nsIDOMDocument.h"
 #include "nsIDOMElement.h"
 #include "nsITheme.h"
 #include "nsTransform2D.h"
@@ -690,7 +688,7 @@ nsBoxFrame::Reflow(nsPresContext*          aPresContext,
     computedSize.height -= outsideBoxSizing;
     // Note: might be negative now, but that's OK because min-width is
     // never negative.
-    aReflowState.ApplyMinMaxConstraints(nsnull, &computedSize.height);
+    computedSize.height = aReflowState.ApplyMinMaxHeight(computedSize.height);
     computedSize.height += outsideBoxSizing;
   } else {
     computedSize.height += m.top + m.bottom;

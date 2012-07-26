@@ -11,8 +11,6 @@
 #include "nsCOMPtr.h"
 #include "nsCOMArray.h"
 #include "nsIURI.h"
-#include "nsWeakPtr.h"
-#include "nsIWeakReferenceUtils.h"
 #include "nsILoadGroup.h"
 #include "nsCRT.h"
 #include "mozFlushType.h"
@@ -21,8 +19,6 @@
 #include "nsTObserverArray.h"
 #include "nsTHashtable.h"
 #include "nsHashKeys.h"
-#include "nsNodeInfoManager.h"
-#include "nsIStreamListener.h"
 #include "nsIVariant.h"
 #include "nsIObserver.h"
 #include "nsGkAtoms.h"
@@ -34,8 +30,12 @@
 #include "nsIFrameRequestCallback.h"
 #include "nsEventStates.h"
 #include "nsIStructuredCloneContainer.h"
-#include "nsIBFCacheEntry.h"
+#include "nsILoadContext.h"
 
+class nsIRequest;
+class nsPIDOMWindow;
+class nsIStreamListener;
+class nsIBFCacheEntry;
 class nsIContent;
 class nsPresContext;
 class nsIPresShell;
@@ -125,28 +125,9 @@ public:
   NS_DECL_AND_IMPL_ZEROING_OPERATOR_NEW
 
 #ifdef MOZILLA_INTERNAL_API
-  nsIDocument()
-    : nsINode(nsnull),
-      mCharacterSet(NS_LITERAL_CSTRING("ISO-8859-1")),
-      mNodeInfoManager(nsnull),
-      mCompatMode(eCompatibility_FullStandards),
-      mIsInitialDocumentInWindow(false),
-      mMayStartLayout(true),
-      mVisible(true),
-      mRemovedFromDocShell(false),
-      // mAllowDNSPrefetch starts true, so that we can always reliably && it
-      // with various values that might disable it.  Since we never prefetch
-      // unless we get a window, and in that case the docshell value will get
-      // &&-ed in, this is safe.
-      mAllowDNSPrefetch(true),
-      mIsBeingUsedAsImage(false),
-      mHasLinksToUpdate(false),
-      mPartID(0)
-  {
-    SetInDocument();
-  }
+  nsIDocument();
 #endif
-  
+
   /**
    * Let the document know that we're starting to load data into it.
    * @param aCommand The parser command. Must not be null.
@@ -888,6 +869,19 @@ public:
   }
 
   /**
+   * Get the container's load context for this document.
+   */
+  nsILoadContext* GetLoadContext() const
+  {
+    nsCOMPtr<nsISupports> container = GetContainer();
+    if (container) {
+      nsCOMPtr<nsILoadContext> loadContext = do_QueryInterface(container);
+      return loadContext;
+    }
+    return nsnull;
+  }
+
+  /**
    * Set and get XML declaration. If aVersion is null there is no declaration.
    * aStandalone takes values -1, 0 and 1 indicating respectively that there
    * was no standalone parameter in the declaration, that it was given as no,
@@ -1189,6 +1183,11 @@ public:
   bool IsLoadedAsData()
   {
     return mLoadedAsData;
+  }
+
+  bool IsLoadedAsInteractiveData()
+  {
+    return mLoadedAsInteractiveData;
   }
 
   bool MayStartLayout()
@@ -1669,14 +1668,7 @@ private:
   PRUint64 mWarnedAbout;
 
 protected:
-  ~nsIDocument()
-  {
-    // XXX The cleanup of mNodeInfoManager (calling DropDocumentReference and
-    //     releasing it) happens in the nsDocument destructor. We'd prefer to
-    //     do it here but nsNodeInfoManager is a concrete class that we don't
-    //     want to expose to users of the nsIDocument API outside of Gecko.
-  }
-
+  ~nsIDocument();
   nsPropertyTable* GetExtraPropertyTable(PRUint16 aCategory);
 
   // Never ever call this. Only call GetWindow!
@@ -1733,11 +1725,9 @@ protected:
   // A reference to the element last returned from GetRootElement().
   mozilla::dom::Element* mCachedRootElement;
 
-  // We'd like these to be nsRefPtrs, but that'd require us to include
-  // additional headers that we don't want to expose.
-  // The cleanup is handled by the nsDocument destructor.
+  // We hold a strong reference to mNodeInfoManager through mNodeInfo
   nsNodeInfoManager* mNodeInfoManager; // [STRONG]
-  mozilla::css::Loader* mCSSLoader; // [STRONG]
+  nsRefPtr<mozilla::css::Loader> mCSSLoader;
   nsHTMLStyleSheet* mAttrStyleSheet;
 
   // The set of all object, embed, applet, video and audio elements for
@@ -1745,7 +1735,7 @@ protected:
   // These are non-owning pointers, the elements are responsible for removing
   // themselves when they go away.
   nsAutoPtr<nsTHashtable<nsPtrHashKey<nsIContent> > > mFreezableElements;
-  
+
   // The set of all links that need their status resolved.  Links must add themselves
   // to this set by calling RegisterPendingLinkUpdate when added to a document and must
   // remove themselves by calling UnregisterPendingLinkUpdate when removed from a document.
@@ -1784,6 +1774,11 @@ protected:
   // True if we're loaded as data and therefor has any dangerous stuff, such
   // as scripts and plugins, disabled.
   bool mLoadedAsData;
+
+  // This flag is only set in nsXMLDocument, for e.g. documents used in XBL. We
+  // don't want animations to play in such documents, so we need to store the
+  // flag here so that we can check it in nsDocument::GetAnimationController.
+  bool mLoadedAsInteractiveData;
 
   // If true, whoever is creating the document has gotten it to the
   // point where it's safe to start layout on it.

@@ -1602,6 +1602,7 @@ fails-if(!haveTestPlugin) == 599476.html 599476-ref.html
 == 604737.html 604737-ref.html
 == 605138-1.html 605138-1-ref.html
 == 605157-1.xhtml 605157-1-ref.xhtml
+== 607267-1.html 607267-1-ref.html
 == 608756-1a.html 608756-1-ref.html
 == 608756-1b.html 608756-1-ref.html
 == 608756-2.html 608756-2-ref.html
@@ -1622,8 +1623,8 @@ HTTP(..) != 615121-2.html 615121-2-notref.html
 == 617242-1.html 617242-1-ref.html
 != 618071.html 618071-notref.html
 == 619117-1.html 619117-1-ref.html
-skip-if(Android) HTTP(..) == 621253-1-externalFilter.html 621253-1-ref.html # XXX update reference case after bug 541270 is fixed
-skip-if(Android) == 621253-1-internalFilter.html 621253-1-ref.html # XXX update reference case after bug 541270 is fixed
+skip-if(Android) HTTP(..) == 621253-1-externalFilter.html 621253-1-ref.html
+skip-if(Android) == 621253-1-internalFilter.html 621253-1-ref.html
 HTTP(..) == 621253-2-externalFilter.html 621253-2-ref.html
 == 621253-2-internalFilter.html 621253-2-ref.html
 fails-if(Android) HTTP(..) == 619511-1.html 619511-1-ref.html

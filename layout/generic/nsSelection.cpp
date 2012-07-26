@@ -37,6 +37,7 @@
 #include "nsCCUncollectableMarker.h"
 #include "nsIContentIterator.h"
 #include "nsIDocumentEncoder.h"
+#include "nsTextFragment.h"
 
 // for IBMBIDI
 #include "nsFrameTraversal.h"
@@ -54,6 +55,7 @@ static NS_DEFINE_CID(kFrameTraversalCID, NS_FRAMETRAVERSAL_CID);
 #include "nsContentUtils.h"
 #include "nsThreadUtils.h"
 #include "mozilla/Preferences.h"
+#include "nsDOMClassInfoID.h"
 
 //included for desired x position;
 #include "nsPresContext.h"
@@ -85,7 +87,6 @@ using namespace mozilla;
 //#define DEBUG_TABLE 1
 
 static NS_DEFINE_IID(kCContentIteratorCID, NS_CONTENTITERATOR_CID);
-static NS_DEFINE_IID(kCSubtreeIteratorCID, NS_SUBTREEITERATOR_CID);
 
 //PROTOTYPES
 class nsFrameSelection;
@@ -1270,7 +1271,8 @@ nsFrameSelection::MaintainSelection(nsSelectionAmount aAmount)
   const nsRange* anchorFocusRange =
     mDomSelections[index]->GetAnchorFocusRange();
   if (anchorFocusRange) {
-    return anchorFocusRange->CloneRange(getter_AddRefs(mMaintainRange));
+    mMaintainRange = anchorFocusRange->CloneRange();
+    return NS_OK;
   }
 
   mMaintainRange = nsnull;
@@ -3473,9 +3475,12 @@ Selection::AddItem(nsRange* aItem, PRInt32* aOutIndex)
   }
 
   PRInt32 startIndex, endIndex;
-  GetIndicesForInterval(aItem->GetStartParent(), aItem->StartOffset(),
-                        aItem->GetEndParent(), aItem->EndOffset(),
-                        false, &startIndex, &endIndex);
+  nsresult rv = GetIndicesForInterval(aItem->GetStartParent(),
+                                      aItem->StartOffset(),
+                                      aItem->GetEndParent(),
+                                      aItem->EndOffset(), false,
+                                      &startIndex, &endIndex);
+  NS_ENSURE_SUCCESS(rv, rv);
 
   if (endIndex == -1) {
     // All ranges start after the given range. We can insert our range at
@@ -3539,10 +3544,9 @@ Selection::AddItem(nsRange* aItem, PRInt32* aOutIndex)
 
   // Insert the new element into our "leftovers" array
   PRInt32 insertionPoint;
-  nsresult rv = FindInsertionPoint(&temp, aItem->GetStartParent(),
-                                   aItem->StartOffset(),
-                                   CompareToRangeStart,
-                                   &insertionPoint);
+  rv = FindInsertionPoint(&temp, aItem->GetStartParent(),
+                          aItem->StartOffset(), CompareToRangeStart,
+                          &insertionPoint);
   NS_ENSURE_SUCCESS(rv, rv);
 
   if (!temp.InsertElementAt(insertionPoint, RangeData(aItem)))
@@ -3737,8 +3741,11 @@ Selection::GetRangesForIntervalArray(nsINode* aBeginNode, PRInt32 aBeginOffset,
 {
   aRanges->Clear();
   PRInt32 startIndex, endIndex;
-  GetIndicesForInterval(aBeginNode, aBeginOffset, aEndNode, aEndOffset,
-                        aAllowAdjacent, &startIndex, &endIndex);
+  nsresult res = GetIndicesForInterval(aBeginNode, aBeginOffset,
+                                       aEndNode, aEndOffset, aAllowAdjacent,
+                                       &startIndex, &endIndex);
+  NS_ENSURE_SUCCESS(res, res);
+
   if (startIndex == -1 || endIndex == -1)
     return NS_OK;
 
@@ -3756,7 +3763,7 @@ Selection::GetRangesForIntervalArray(nsINode* aBeginNode, PRInt32 aBeginOffset,
 //    instead this returns the indices into mRanges between which the
 //    overlapping ranges lie.
 
-void
+nsresult
 Selection::GetIndicesForInterval(nsINode* aBeginNode, PRInt32 aBeginOffset,
                                  nsINode* aEndNode, PRInt32 aEndOffset,
                                  bool aAllowAdjacent,
@@ -3774,7 +3781,7 @@ Selection::GetIndicesForInterval(nsINode* aBeginNode, PRInt32 aBeginOffset,
   *aEndIndex = -1;
 
   if (mRanges.Length() == 0)
-    return;
+    return NS_OK;
 
   bool intervalIsCollapsed = aBeginNode == aEndNode &&
     aBeginOffset == aEndOffset;
@@ -3785,7 +3792,7 @@ Selection::GetIndicesForInterval(nsINode* aBeginNode, PRInt32 aBeginOffset,
   if (NS_FAILED(FindInsertionPoint(&mRanges, aEndNode, aEndOffset,
                                    &CompareToRangeStart,
                                    &endsBeforeIndex))) {
-    return;
+    return NS_OK;
   }
 
   if (endsBeforeIndex == 0) {
@@ -3794,7 +3801,7 @@ Selection::GetIndicesForInterval(nsINode* aBeginNode, PRInt32 aBeginOffset,
     // If the interval is strictly before the range at index 0, we can optimize
     // by returning now - all ranges start after the given interval
     if (!RangeMatchesBeginPoint(endRange, aEndNode, aEndOffset))
-      return;
+      return NS_OK;
 
     // We now know that the start point of mRanges[0].mRange equals the end of
     // the interval. Thus, when aAllowadjacent is true, the caller is always
@@ -3802,7 +3809,7 @@ Selection::GetIndicesForInterval(nsINode* aBeginNode, PRInt32 aBeginOffset,
     // remember to include the range when both it and the given interval are
     // collapsed to the same point
     if (!aAllowAdjacent && !(endRange->Collapsed() && intervalIsCollapsed))
-      return;
+      return NS_OK;
   }
   *aEndIndex = endsBeforeIndex;
 
@@ -3810,10 +3817,10 @@ Selection::GetIndicesForInterval(nsINode* aBeginNode, PRInt32 aBeginOffset,
   if (NS_FAILED(FindInsertionPoint(&mRanges, aBeginNode, aBeginOffset,
                                    &CompareToRangeEnd,
                                    &beginsAfterIndex))) {
-    return;
+    return NS_OK;
   }
   if (beginsAfterIndex == (PRInt32) mRanges.Length())
-    return; // optimization: all ranges are strictly before us
+    return NS_OK; // optimization: all ranges are strictly before us
 
   if (aAllowAdjacent) {
     // At this point, one of the following holds:
@@ -3873,9 +3880,13 @@ Selection::GetIndicesForInterval(nsINode* aBeginNode, PRInt32 aBeginOffset,
      }
   }
 
+  NS_ASSERTION(beginsAfterIndex <= endsBeforeIndex,
+               "Is mRanges not ordered?");
+  NS_ENSURE_STATE(beginsAfterIndex <= endsBeforeIndex);
+
   *aStartIndex = beginsAfterIndex;
   *aEndIndex = endsBeforeIndex;
-  return;
+  return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -3979,97 +3990,79 @@ Selection::SelectAllFramesForContent(nsIContentIterator* aInnerIter,
   return NS_ERROR_FAILURE;
 }
 
-//the idea of this helper method is to select, deselect "top to bottom" traversing through the frames
+/**
+ * The idea of this helper method is to select or deselect "top to bottom",
+ * traversing through the frames
+ */
 nsresult
 Selection::selectFrames(nsPresContext* aPresContext, nsRange* aRange,
-                        bool aFlags)
+                        bool aSelect)
 {
   if (!mFrameSelection || !aPresContext || !aPresContext->GetPresShell()) {
-    return NS_OK; // nothing to do
+    // nothing to do
+    return NS_OK;
   }
-  if (!aRange) {
-    return NS_ERROR_NULL_POINTER;
-  }
+  MOZ_ASSERT(aRange);
 
   if (mFrameSelection->GetTableCellSelection()) {
     nsINode* node = aRange->GetCommonAncestor();
-    nsCOMPtr<nsIContent> content = do_QueryInterface(node);
-    nsIFrame* frame = content ? content->GetPrimaryFrame()
-                              : aPresContext->FrameManager()->GetRootFrame();
+    nsIFrame* frame = node->IsContent() ? node->AsContent()->GetPrimaryFrame()
+                                : aPresContext->FrameManager()->GetRootFrame();
     if (frame) {
       frame->InvalidateFrameSubtree();
     }
     return NS_OK;
   }
 
-  nsresult result;
-  nsCOMPtr<nsIContentIterator> iter = do_CreateInstance(
-                                              kCSubtreeIteratorCID,
-                                              &result);
-  if (NS_FAILED(result))
-    return result;
+  nsCOMPtr<nsIContentIterator> iter = NS_NewContentSubtreeIterator();
+  iter->Init(aRange);
 
-  nsCOMPtr<nsIContentIterator> inneriter = do_CreateInstance(
-                                              kCContentIteratorCID,
-                                              &result);
+  // Loop through the content iterator for each content node; for each text
+  // node, call SetSelected on it:
+  nsCOMPtr<nsIContent> content = do_QueryInterface(aRange->GetStartParent());
+  NS_ENSURE_STATE(content);
 
-  if ((NS_SUCCEEDED(result)) && iter) {
-    result = iter->Init(aRange);
+  // We must call first one explicitly
+  if (content->IsNodeOfType(nsINode::eTEXT)) {
+    nsIFrame* frame = content->GetPrimaryFrame();
+    // The frame could be an SVG text frame, in which case we'll ignore it.
+    if (frame && frame->GetType() == nsGkAtoms::textFrame) {
+      nsTextFrame* textFrame = static_cast<nsTextFrame*>(frame);
+      PRUint32 startOffset = aRange->StartOffset();
+      PRUint32 endOffset;
+      if (aRange->GetEndParent() == content) {
+        endOffset = aRange->EndOffset();
+      } else {
+        endOffset = content->Length();
+      }
+      textFrame->SetSelectedRange(startOffset, endOffset, aSelect, mType);
+    }
+  }
 
-    // loop through the content iterator for each content node
-    // for each text node, call SetSelected on it:
-    nsCOMPtr<nsIContent> content = do_QueryInterface(aRange->GetStartParent());
+  iter->First();
+  nsCOMPtr<nsIContentIterator> inneriter = NS_NewContentIterator();
+  for (iter->First(); !iter->IsDone(); iter->Next()) {
+    content = do_QueryInterface(iter->GetCurrentNode());
+    SelectAllFramesForContent(inneriter, content, aSelect);
+  }
 
-    // we must call first one explicitly
-    if (!content)
-      return NS_ERROR_UNEXPECTED;
+  // We must now do the last one if it is not the same as the first
+  if (aRange->GetEndParent() != aRange->GetStartParent()) {
+    nsresult res;
+    content = do_QueryInterface(aRange->GetEndParent(), &res);
+    NS_ENSURE_SUCCESS(res, res);
+    NS_ENSURE_TRUE(content, res);
 
     if (content->IsNodeOfType(nsINode::eTEXT)) {
       nsIFrame* frame = content->GetPrimaryFrame();
-      // The frame could be an SVG text frame, in which case we'll ignore
-      // it.
-      if (frame && frame->GetType() == nsGkAtoms::textFrame)
-      {
+      // The frame could be an SVG text frame, in which case we'll ignore it.
+      if (frame && frame->GetType() == nsGkAtoms::textFrame) {
         nsTextFrame* textFrame = static_cast<nsTextFrame*>(frame);
-        PRUint32 startOffset = aRange->StartOffset();
-        PRUint32 endOffset;
-        if (aRange->GetEndParent() == content) {
-          endOffset = aRange->EndOffset();
-        } else {
-          endOffset = content->GetText()->GetLength();
-        }
-        textFrame->SetSelectedRange(startOffset, endOffset, aFlags, mType);
-      }
-    }
-
-    iter->First();
-    while (!iter->IsDone()) {
-      content = do_QueryInterface(iter->GetCurrentNode());
-      SelectAllFramesForContent(inneriter, content, aFlags);
-      iter->Next();
-    }
-
-    //we must now do the last one  if it is not the same as the first
-    if (aRange->GetEndParent() != aRange->GetStartParent())
-    {
-      content = do_QueryInterface(aRange->GetEndParent(), &result);
-      if (NS_FAILED(result) || !content)
-        return result;
-
-      if (content->IsNodeOfType(nsINode::eTEXT))
-      {
-        nsIFrame* frame = content->GetPrimaryFrame();
-        // The frame could be an SVG text frame, in which case we'll
-        // ignore it.
-        if (frame && frame->GetType() == nsGkAtoms::textFrame)
-        {
-          nsTextFrame* textFrame = static_cast<nsTextFrame*>(frame);
-          textFrame->SetSelectedRange(0, aRange->EndOffset(), aFlags, mType);
-        }
+        textFrame->SetSelectedRange(0, aRange->EndOffset(), aSelect, mType);
       }
     }
   }
-  return result;
+  return NS_OK;
 }
 
 
@@ -4720,6 +4713,7 @@ Selection::SetAnchorFocusToRange(nsRange* aRange)
 void
 Selection::ReplaceAnchorFocusRange(nsRange* aRange)
 {
+  NS_ENSURE_TRUE(mAnchorFocusRange, );
   nsRefPtr<nsPresContext> presContext;
   GetPresContext(getter_AddRefs(presContext));
   if (presContext) {
@@ -4795,11 +4789,7 @@ Selection::Extend(nsINode* aParentNode, PRInt32 aOffset)
   PRInt32 anchorOffset = GetAnchorOffset();
   PRInt32 focusOffset = GetFocusOffset();
 
-  nsRefPtr<nsRange> range;
-  res = mAnchorFocusRange->CloneRange(getter_AddRefs(range));
-  if (NS_FAILED(res))
-    return res;
-  //range = mAnchorFocusRange;
+  nsRefPtr<nsRange> range = mAnchorFocusRange->CloneRange();
 
   nsINode* startNode = range->GetStartParent();
   nsINode* endNode = range->GetEndParent();

@@ -288,6 +288,15 @@ typedef PRUint64 nsFrameState;
 // Is this frame allowed to have generated (::before/::after) content?
 #define NS_FRAME_MAY_HAVE_GENERATED_CONTENT         NS_FRAME_STATE_BIT(44)
 
+// This bit is set on frames that create ContainerLayers with component
+// alpha children. With BasicLayers we avoid creating these, so we mark
+// the frames for future reference.
+#define NS_FRAME_NO_COMPONENT_ALPHA                 NS_FRAME_STATE_BIT(45)
+
+// Frame has a cached rasterization of anV
+// nsDisplayBackground display item
+#define NS_FRAME_HAS_CACHED_BACKGROUND              NS_FRAME_STATE_BIT(46)
+
 // Box layout bits
 #define NS_STATE_IS_HORIZONTAL                      NS_FRAME_STATE_BIT(22)
 #define NS_STATE_IS_DIRECTION_NORMAL                NS_FRAME_STATE_BIT(31)
@@ -623,7 +632,7 @@ public:
    *            name,
    *          NS_ERROR_UNEXPECTED if the frame is an atomic frame,
    *          NS_OK otherwise.  In this case, AppendFrames empties out
-   *            aChildList in the process of moving the frames over to its own
+   *            aFrameList in the process of moving the frames over to its own
    *            child list.
    */
   NS_IMETHOD AppendFrames(ChildListID     aListID,
@@ -642,7 +651,7 @@ public:
    *            name,
    *          NS_ERROR_UNEXPECTED if the frame is an atomic frame,
    *          NS_OK otherwise.  In this case, InsertFrames empties out
-   *            aChildList in the process of moving the frames over to its own
+   *            aFrameList in the process of moving the frames over to its own
    *            child list.
    */
   NS_IMETHOD InsertFrames(ChildListID     aListID,
@@ -868,6 +877,11 @@ public:
     delete static_cast<nsOverflowAreas*>(aPropertyValue);
   }
 
+  static void DestroySurface(void* aPropertyValue)
+  {
+    static_cast<gfxASurface*>(aPropertyValue)->Release();
+  }
+
 #ifdef _MSC_VER
 // XXX Workaround MSVC issue by making the static FramePropertyDescriptor
 // non-const.  See bug 555727.
@@ -901,7 +915,7 @@ public:
   // The initial overflow area passed to FinishAndStoreOverflow. This is only set
   // on frames that Preserve3D(), and when at least one of the overflow areas
   // differs from the frame bound rect.
-  NS_DECLARE_FRAME_PROPERTY(InitialOverflowProperty, DestroyOverflowAreas);
+  NS_DECLARE_FRAME_PROPERTY(InitialOverflowProperty, DestroyOverflowAreas)
 
   NS_DECLARE_FRAME_PROPERTY(UsedMarginProperty, DestroyMargin)
   NS_DECLARE_FRAME_PROPERTY(UsedPaddingProperty, DestroyMargin)
@@ -910,6 +924,8 @@ public:
   NS_DECLARE_FRAME_PROPERTY(ScrollLayerCount, nsnull)
 
   NS_DECLARE_FRAME_PROPERTY(LineBaselineOffset, nsnull)
+
+  NS_DECLARE_FRAME_PROPERTY(CachedBackgroundImage, DestroySurface)
 
   /**
    * Return the distance between the border edge of the frame and the
@@ -1388,7 +1404,7 @@ public:
    *
    * @param aStates the changed states
    */
-  virtual void ContentStatesChanged(nsEventStates aStates) { };
+  virtual void ContentStatesChanged(nsEventStates aStates) { }
 
   /**
    * Return how your frame can be split.
@@ -2299,6 +2315,13 @@ public:
   nsRect GetVisualOverflowRectRelativeToSelf() const;
 
   /**
+   * Returns this frame's visual overflow rect as it would be before taking
+   * account of SVG effects or transforms. The rect returned is relative to
+   * this frame.
+   */
+  nsRect GetPreEffectsVisualOverflowRect() const;
+
+  /**
    * Store the overflow area in the frame's mOverflow.mVisualDeltas
    * fields or as a frame property in the frame manager so that it can
    * be retrieved later without reflowing the frame. Returns true if either of
@@ -2469,7 +2492,8 @@ public:
   /**
    * Determines whether this frame is a pseudo stacking context, looking
    * only as style --- i.e., assuming that it's in-flow and not a replaced
-   * element.
+   * element and not an SVG element.
+   * XXX maybe check IsTransformed()?
    */
   bool IsPseudoStackingContextFromStyle() {
     const nsStyleDisplay* disp = GetStyleDisplay();
@@ -2579,6 +2603,8 @@ NS_PTR_TO_INT32(frame->Properties().Get(nsIFrame::ParagraphDepthProperty()))
    */
   virtual bool IsFocusable(PRInt32 *aTabIndex = nsnull, bool aWithMouse = false);
 
+  void ClearDisplayItemCache();
+
   // BOX LAYOUT METHODS
   // These methods have been migrated from nsIBox and are in the process of
   // being refactored. DO NOT USE OUTSIDE OF XUL.
@@ -2677,7 +2703,7 @@ NS_PTR_TO_INT32(frame->Properties().Get(nsIFrame::ParagraphDepthProperty()))
   NS_HIDDEN_(nsresult) Redraw(nsBoxLayoutState& aState, const nsRect* aRect = nsnull);
   NS_IMETHOD RelayoutChildAtOrdinal(nsBoxLayoutState& aState, nsIBox* aChild)=0;
   // XXX take this out after we've branched
-  virtual bool GetMouseThrough() const { return false; };
+  virtual bool GetMouseThrough() const { return false; }
 
 #ifdef DEBUG_LAYOUT
   NS_IMETHOD SetDebug(nsBoxLayoutState& aState, bool aDebug)=0;
@@ -2968,7 +2994,7 @@ protected:
    *              Input: mDirection
    *              Output: mResultContent, mContentOffset
    */
-   nsresult PeekOffsetParagraph(nsPeekOffsetStruct *aPos);
+  nsresult PeekOffsetParagraph(nsPeekOffsetStruct *aPos);
 
 private:
   nsOverflowAreas* GetOverflowAreasProperty();
@@ -2992,7 +3018,7 @@ private:
   bool SetOverflowAreas(const nsOverflowAreas& aOverflowAreas);
   nsPoint GetOffsetToCrossDoc(const nsIFrame* aOther, const PRInt32 aAPD) const;
 
-#ifdef NS_DEBUG
+#ifdef DEBUG
 public:
   // Formerly nsIFrameDebug
   NS_IMETHOD  List(FILE* out, PRInt32 aIndent) const = 0;

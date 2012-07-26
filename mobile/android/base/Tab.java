@@ -11,9 +11,8 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.os.AsyncTask;
+import android.net.Uri;
 import android.util.Log;
-import android.view.Surface;
 import android.view.View;
 
 import org.json.JSONException;
@@ -26,7 +25,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 
@@ -45,12 +43,13 @@ public final class Tab {
     private int mFaviconSize;
     private JSONObject mIdentityData;
     private boolean mReaderEnabled;
-    private Drawable mThumbnail;
+    private BitmapDrawable mThumbnail;
     private int mHistoryIndex;
     private int mHistorySize;
     private int mParentId;
     private boolean mExternal;
     private boolean mBookmark;
+    private boolean mReadingListItem;
     private HashMap<String, DoorHanger> mDoorHangers;
     private long mFaviconLoadId;
     private String mDocumentURI;
@@ -68,6 +67,7 @@ public final class Tab {
     private int mState;
     private ByteBuffer mThumbnailBuffer;
     private Bitmap mThumbnailBitmap;
+    private boolean mDesktopMode;
 
     public static final int STATE_DELAYED = 0;
     public static final int STATE_LOADING = 1;
@@ -89,6 +89,7 @@ public final class Tab {
         mHistoryIndex = -1;
         mHistorySize = 0;
         mBookmark = false;
+        mReadingListItem = false;
         mDoorHangers = new HashMap<String, DoorHanger>();
         mFaviconLoadId = 0;
         mDocumentURI = "";
@@ -189,10 +190,9 @@ public final class Tab {
             public void run() {
                 if (b != null) {
                     try {
-                        if (mState == Tab.STATE_SUCCESS)
-                            saveThumbnailToDB(new BitmapDrawable(b));
-
                         mThumbnail = new BitmapDrawable(b);
+                        if (mState == Tab.STATE_SUCCESS)
+                            saveThumbnailToDB();
                     } catch (OutOfMemoryError oom) {
                         Log.e(LOGTAG, "Unable to create/scale bitmap", oom);
                         mThumbnail = null;
@@ -232,6 +232,10 @@ public final class Tab {
 
     public boolean isBookmark() {
         return mBookmark;
+    }
+
+    public boolean isReadingListItem() {
+        return mReadingListItem;
     }
 
     public boolean isExternal() {
@@ -373,6 +377,11 @@ public final class Tab {
 
     public void setReaderEnabled(boolean readerEnabled) {
         mReaderEnabled = readerEnabled;
+        GeckoAppShell.getMainHandler().post(new Runnable() {
+            public void run() {
+                Tabs.getInstance().notifyListeners(Tab.this, Tabs.TabEvents.MENU_UPDATED);
+            }
+        });
     }
 
     private void updateBookmark() {
@@ -380,14 +389,21 @@ public final class Tab {
         if (url == null)
             return;
 
-        GeckoBackgroundThread.getHandler().post(new Runnable() {
-            public void run() {
-                boolean bookmark = BrowserDB.isBookmark(mContentResolver, url);
+        (new GeckoAsyncTask<Void, Void, Void>() {
+            @Override
+            public Void doInBackground(Void... params) {
                 if (url.equals(getURL())) {
-                    mBookmark = bookmark;
+                    mBookmark = BrowserDB.isBookmark(mContentResolver, url);
+                    mReadingListItem = BrowserDB.isReadingListItem(mContentResolver, url);
                 }
+                return null;
             }
-        });
+
+            @Override
+            public void onPostExecute(Void result) {
+                Tabs.getInstance().notifyListeners(Tab.this, Tabs.TabEvents.MENU_UPDATED);
+            }
+        }).execute();
     }
 
     public void addBookmark() {
@@ -422,11 +438,33 @@ public final class Tab {
         GeckoAppShell.sendEventToGecko(e);
     }
 
+    public void removeFromReadingList() {
+        if (!mReaderEnabled)
+            return;
+
+        GeckoAppShell.getHandler().post(new Runnable() {
+            public void run() {
+                String url = getURL();
+                if (url == null)
+                    return;
+
+                BrowserDB.removeReadingListItemWithURL(mContentResolver, url);
+
+                GeckoApp.mAppContext.mMainHandler.post(new Runnable() {
+                    public void run() {
+                        GeckoEvent e = GeckoEvent.createBroadcastEvent("Reader:Remove", getURL());
+                        GeckoAppShell.sendEventToGecko(e);
+                    }
+                });
+            }
+        });
+    }
+
     public void readerMode() {
         if (!mReaderEnabled)
             return;
 
-        GeckoApp.mAppContext.loadUrl("about:reader?url=" + getURL());
+        GeckoApp.mAppContext.loadUrl("about:reader?url=" + Uri.encode(getURL()));
     }
 
     public boolean doReload() {
@@ -545,13 +583,13 @@ public final class Tab {
         }
     }
 
-    private void saveThumbnailToDB(BitmapDrawable thumbnail) {
+    private void saveThumbnailToDB() {
         try {
             String url = getURL();
             if (url == null)
                 return;
 
-            BrowserDB.updateThumbnailForUrl(mContentResolver, url, thumbnail);
+            BrowserDB.updateThumbnailForUrl(mContentResolver, url, mThumbnail);
         } catch (Exception e) {
             // ignore
         }
@@ -615,5 +653,13 @@ public final class Tab {
         int g = Integer.parseInt(matcher.group(2));
         int b = Integer.parseInt(matcher.group(3));
         return Color.rgb(r, g, b);
+    }
+
+    public void setDesktopMode(boolean enabled) {
+        mDesktopMode = enabled;
+    }
+
+    public boolean getDesktopMode() {
+        return mDesktopMode;
     }
 }

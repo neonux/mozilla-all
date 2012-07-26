@@ -10,7 +10,9 @@ import java.net.InetAddress;
 import org.apache.http.conn.util.InetAddressUtils;
 import java.net.NetworkInterface;
 import java.net.SocketException;
+import java.net.UnknownHostException;
 import java.util.Enumeration;
+import java.util.Formatter;
 import java.util.List;
 import java.util.Timer;
 
@@ -31,6 +33,7 @@ import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.net.wifi.WifiManager.WifiLock;
 import android.os.BatteryManager;
+import android.os.Build.VERSION;
 import android.os.Bundle;
 import android.os.Handler;
 import android.telephony.TelephonyManager;
@@ -122,18 +125,41 @@ public class SUTAgentAndroid extends Activity
         if (getLocalIpAddress() == null)
             setUpNetwork(sIniFile);
 
-        WifiInfo wifi;
-        WifiManager wifiMan = (WifiManager)getSystemService(Context.WIFI_SERVICE);
         String macAddress = "Unknown";
-        if (wifiMan != null)
+        if (android.os.Build.VERSION.SDK_INT > 8) {
+            try {
+                NetworkInterface iface = NetworkInterface.getByInetAddress(InetAddress.getAllByName(getLocalIpAddress())[0]);
+                if (iface != null)
+                    {
+                        byte[] mac = iface.getHardwareAddress();
+                        if (mac != null)
+                            {
+                                StringBuilder sb = new StringBuilder();
+                                Formatter f = new Formatter(sb);
+                                for (int i = 0; i < mac.length; i++)
+                                    {
+                                        f.format("%02x%s", mac[i], (i < mac.length - 1) ? ":" : "");
+                                    }
+                                macAddress = sUniqueID = sb.toString();
+                            }
+                    }
+            }
+            catch (UnknownHostException ex) {}
+            catch (SocketException ex) {}
+        }
+        else
             {
-            wifi = wifiMan.getConnectionInfo();
-            if (wifi != null)
-                {
-                macAddress = wifi.getMacAddress();
-                if (macAddress != null)
-                    sUniqueID = macAddress;
-                }
+                // Fall back to getting info from wifiman on older versions of Android,
+                // which don't support the NetworkInterface interface
+                WifiManager wifiMan = (WifiManager)getSystemService(Context.WIFI_SERVICE);
+                if (wifiMan != null)
+                    {
+                        WifiInfo wifi = wifiMan.getConnectionInfo();
+                        if (wifi != null)
+                            macAddress = wifi.getMacAddress();
+                        if (macAddress != null)
+                            sUniqueID = macAddress;
+                    }
             }
 
         if (sUniqueID == null)

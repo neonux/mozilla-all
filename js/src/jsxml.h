@@ -177,6 +177,8 @@ struct JSXML : js::gc::Cell {
 
     static void writeBarrierPre(JSXML *xml);
     static void writeBarrierPost(JSXML *xml, void *addr);
+
+    static inline js::ThingRootKind rootKind() { return js::THING_ROOT_XML; }
 };
 
 /* xml_flags values */
@@ -254,7 +256,8 @@ js_GetAnyName(JSContext *cx, jsid *idp);
  * Note: nameval must be either QName, AttributeName, or AnyName.
  */
 extern JSBool
-js_FindXMLProperty(JSContext *cx, const js::Value &nameval, JSObject **objp, jsid *idp);
+js_FindXMLProperty(JSContext *cx, const js::Value &nameval,
+                   js::MutableHandleObject objp, jsid *idp);
 
 extern JSBool
 js_GetXMLMethod(JSContext *cx, js::HandleObject obj, jsid id, js::Value *vp);

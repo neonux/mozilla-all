@@ -9,15 +9,19 @@
 
 
 #include "nsCOMPtr.h"
-#include "nsIDOMNode.h"
-#include "nsISelection.h"
-#include "nsIEditor.h"
-#include "nsIAtom.h"
+#include "nsDebug.h"
 #include "nsEditor.h"
-#include "nsIContentIterator.h"
-#include "nsCOMArray.h"
+#include "nsIDOMNode.h"
+#include "nsIEditor.h"
+#include "nscore.h"
+#include "prtypes.h"
 
-class nsPlaintextEditor;
+class nsIAtom;
+class nsIContentIterator;
+class nsIDOMDocument;
+class nsIDOMRange;
+class nsISelection;
+template <class E> class nsCOMArray;
 
 /***************************************************************************
  * stack based helper class for batching a collection of txns inside a 
@@ -53,12 +57,12 @@ class NS_STACK_CLASS nsAutoSelectionReset
 {
   private:
     /** ref-counted reference to the selection that we are supposed to restore */
-    nsCOMPtr<nsISelection> mSel;
+    nsRefPtr<mozilla::Selection> mSel;
     nsEditor *mEd;  // non-owning ref to nsEditor
 
   public:
     /** constructor responsible for remembering all state needed to restore aSel */
-    nsAutoSelectionReset(nsISelection *aSel, nsEditor *aEd);
+    nsAutoSelectionReset(mozilla::Selection* aSel, nsEditor* aEd);
     
     /** destructor restores mSel to its former state */
     ~nsAutoSelectionReset();
@@ -226,9 +230,9 @@ class nsEditorUtils
 };
 
 
-class nsITransferable;
 class nsIDOMEvent;
 class nsISimpleEnumerator;
+class nsITransferable;
 
 class nsEditorHookUtils
 {

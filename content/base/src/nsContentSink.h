@@ -16,22 +16,15 @@
 #include "nsICSSLoaderObserver.h"
 #include "nsWeakReference.h"
 #include "nsCOMPtr.h"
-#include "nsCOMArray.h"
 #include "nsString.h"
 #include "nsAutoPtr.h"
 #include "nsGkAtoms.h"
-#include "nsTHashtable.h"
-#include "nsHashKeys.h"
-#include "nsTArray.h"
 #include "nsITimer.h"
 #include "nsStubDocumentObserver.h"
-#include "nsIParserService.h"
 #include "nsIContentSink.h"
 #include "prlog.h"
-#include "nsIRequest.h"
 #include "nsCycleCollectionParticipant.h"
 #include "nsThreadUtils.h"
-#include "nsIScriptElement.h"
 
 class nsIDocument;
 class nsIURI;
@@ -52,7 +45,7 @@ class Loader;
 }
 }
 
-#ifdef NS_DEBUG
+#ifdef DEBUG
 
 extern PRLogModuleInfo* gContentSinkLogModuleInfo;
 
@@ -310,8 +303,6 @@ protected:
   // True if this is parser is a fragment parser or an HTML DOMParser.
   // XML DOMParser leaves this to false for now!
   PRUint8 mRunsToCompletion : 1;
-  // True to call prevent script execution in the fragment mode.
-  PRUint8 mPreventScriptExecution : 1;
   
   //
   // -- Can interrupt parsing members --

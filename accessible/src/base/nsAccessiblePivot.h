@@ -12,6 +12,7 @@
 #include "nsAutoPtr.h"
 #include "nsTObserverArray.h"
 #include "nsCycleCollectionParticipant.h"
+#include "mozilla/Attributes.h"
 
 class Accessible;
 class nsIAccessibleTraversalRule;
@@ -23,7 +24,7 @@ NS_ERROR_GENERATE_FAILURE(NS_ERROR_MODULE_GENERAL, 0x26)
 /**
  * Class represents an accessible pivot.
  */
-class nsAccessiblePivot: public nsIAccessiblePivot
+class nsAccessiblePivot MOZ_FINAL : public nsIAccessiblePivot
 {
 public:
   nsAccessiblePivot(Accessible* aRoot);
@@ -48,7 +49,8 @@ private:
    * observers have been notified.
    */
   bool NotifyOfPivotChange(Accessible* aOldAccessible,
-                           PRInt32 aOldStart, PRInt32 aOldEnd);
+                           PRInt32 aOldStart, PRInt32 aOldEnd,
+                           PivotMoveReason aReason);
 
   /*
    * Check to see that the given accessible is in the pivot's subtree.
@@ -75,7 +77,7 @@ private:
   /*
    * Update the pivot, and notify observers. Return true if it moved.
    */
-  bool MovePivotInternal(Accessible* aPosition);
+  bool MovePivotInternal(Accessible* aPosition, PivotMoveReason aReason);
 
   /*
    * The root accessible.

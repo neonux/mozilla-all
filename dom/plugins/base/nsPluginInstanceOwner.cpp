@@ -36,6 +36,7 @@ using mozilla::DefaultXDisplay;
 #include "nsSize.h"
 #include "nsDisplayList.h"
 #include "ImageLayers.h"
+#include "SharedTextureImage.h"
 #include "nsIDOMEventTarget.h"
 #include "nsObjectFrame.h"
 #include "nsIPluginDocument.h"
@@ -58,7 +59,6 @@ using mozilla::DefaultXDisplay;
 #include "nsIDOMDragEvent.h"
 #include "nsIScrollableFrame.h"
 #include "nsIImageLoadingContent.h"
-#include "nsIObjectLoadingContent.h"
 #include "nsIDocShell.h"
 
 #include "nsContentCID.h"
@@ -85,7 +85,6 @@ static NS_DEFINE_CID(kAppShellCID, NS_APPSHELL_CID);
 #ifdef MOZ_WIDGET_ANDROID
 #include "ANPBase.h"
 #include "AndroidBridge.h"
-#include "AndroidMediaLayer.h"
 #include "nsWindow.h"
 
 static nsPluginInstanceOwner* sFullScreenInstance = nsnull;
@@ -171,6 +170,38 @@ static void OnDestroyImage(void* aPluginInstanceOwner)
 already_AddRefed<ImageContainer>
 nsPluginInstanceOwner::GetImageContainer()
 {
+#if MOZ_WIDGET_ANDROID
+  // Right now we only draw with Gecko layers on Honeycomb and higher. See Paint()
+  // for what we do on other versions.
+  if (AndroidBridge::Bridge()->GetAPIVersion() < 11)
+    return NULL;
+  
+  nsRefPtr<ImageContainer> container = LayerManager::CreateImageContainer();
+
+  Image::Format format = Image::SHARED_TEXTURE;
+  nsRefPtr<Image> img = container->CreateImage(&format, 1);
+
+  SharedTextureImage::Data data;
+  data.mHandle = mInstance->CreateSharedHandle();
+  data.mShareType = mozilla::gl::TextureImage::ThreadShared;
+  data.mInverted = mInstance->Inverted();
+
+  gfxRect r = GetPluginRect();
+  data.mSize = gfxIntSize(r.width, r.height);
+
+  SharedTextureImage* pluginImage = static_cast<SharedTextureImage*>(img.get());
+  pluginImage->SetData(data);
+
+  container->SetCurrentImage(img);
+
+  float xResolution = mObjectFrame->PresContext()->GetRootPresContext()->PresShell()->GetXResolution();
+  float yResolution = mObjectFrame->PresContext()->GetRootPresContext()->PresShell()->GetYResolution();
+  r.Scale(xResolution, yResolution);
+  mInstance->NotifySize(nsIntSize(r.width, r.height));
+
+  return container.forget();
+#endif
+
   if (mInstance) {
     nsRefPtr<ImageContainer> container;
     // Every call to nsIPluginInstance::GetImage() creates
@@ -307,9 +338,7 @@ nsPluginInstanceOwner::nsPluginInstanceOwner()
   mWaitingForPaint = false;
 
 #ifdef MOZ_WIDGET_ANDROID
-  mInverted = false;
   mFullScreen = false;
-  mLayer = nsnull;
   mJavaView = nsnull;
 #endif
 }
@@ -734,7 +763,7 @@ NS_IMETHODIMP nsPluginInstanceOwner::GetNetscapeWindow(void *value)
   }
 
   return rv;
-#elif (defined(MOZ_WIDGET_GTK2) || defined(MOZ_WIDGET_QT)) && defined(MOZ_X11)
+#elif (defined(MOZ_WIDGET_GTK) || defined(MOZ_WIDGET_QT)) && defined(MOZ_X11)
   // X11 window managers want the toplevel window for WM_TRANSIENT_FOR.
   nsIWidget* win = mObjectFrame->GetNearestWidget();
   if (!win)
@@ -1207,31 +1236,6 @@ nsresult nsPluginInstanceOwner::EnsureCachedAttrParamArrays()
     mNumCachedAttrs++;
   }
 
-  // Some plugins (java, bug 406541) don't canonicalize the 'codebase' attribute
-  // in a standard way - codebase="" results in / (domain root), but
-  // codebase="blah" results in ./blah; codebase="file:" results in "file:///".
-  // We canonicalize codebase here to ensure the codebase we run security checks
-  // against is the same codebase java uses.
-  // Note that GetObjectBaseURI mimics some of java's quirks for maximal
-  // compatibility.
-  const char* mime = nsnull;
-  bool addCodebase = false;
-  nsCAutoString codebaseSpec;
-  if (mInstance && NS_SUCCEEDED(mInstance->GetMIMEType(&mime)) && mime &&
-      strcmp(mime, "application/x-java-vm") == 0) {
-    addCodebase = true;
-    nsCOMPtr<nsIObjectLoadingContent> objlContent = do_QueryInterface(mContent);
-    nsCOMPtr<nsIURI> codebaseURI;
-    objlContent->GetObjectBaseURI(nsCString(mime), getter_AddRefs(codebaseURI));
-    nsresult rv = codebaseURI->GetSpec(codebaseSpec);
-    NS_ENSURE_SUCCESS(rv, rv);
-
-    // Make space if codebase isn't already set
-    if (!mContent->HasAttr(kNameSpaceID_None, nsGkAtoms::codebase)) {
-      mNumCachedAttrs++;
-    }
-  }
-
   mCachedAttrParamNames  = (char**)NS_Alloc(sizeof(char*) * (mNumCachedAttrs + 1 + mNumCachedParams));
   NS_ENSURE_TRUE(mCachedAttrParamNames,  NS_ERROR_OUT_OF_MEMORY);
   mCachedAttrParamValues = (char**)NS_Alloc(sizeof(char*) * (mNumCachedAttrs + 1 + mNumCachedParams));
@@ -1285,19 +1289,9 @@ nsresult nsPluginInstanceOwner::EnsureCachedAttrParamArrays()
         mNumCachedAttrs--;
         wmodeSet = true;
       }
-    } else if (addCodebase && 0 == PL_strcasecmp(mCachedAttrParamNames[nextAttrParamIndex], "codebase")) {
-      mCachedAttrParamValues[nextAttrParamIndex] = ToNewUTF8String(NS_ConvertUTF8toUTF16(codebaseSpec));
-      addCodebase = false;
     } else {
       mCachedAttrParamValues[nextAttrParamIndex] = ToNewUTF8String(value);
     }
-    nextAttrParamIndex++;
-  }
-
-  // Pontentially add CODEBASE attribute
-  if (addCodebase) {
-    mCachedAttrParamNames [nextAttrParamIndex] = ToNewUTF8String(NS_LITERAL_STRING("codebase"));
-    mCachedAttrParamValues[nextAttrParamIndex] = ToNewUTF8String(NS_ConvertUTF8toUTF16(codebaseSpec));
     nextAttrParamIndex++;
   }
 
@@ -1760,26 +1754,6 @@ gfxRect nsPluginInstanceOwner::GetPluginRect()
   return gfxRect(intBounds);
 }
 
-void nsPluginInstanceOwner::SendSize(int width, int height)
-{
-  if (!mInstance)
-    return;
-
-  PRInt32 model = mInstance->GetANPDrawingModel();
-
-  if (model != kOpenGL_ANPDrawingModel)
-    return;
-
-  ANPEvent event;
-  event.inSize = sizeof(ANPEvent);
-  event.eventType = kDraw_ANPEventType;
-  event.data.draw.model = kOpenGL_ANPDrawingModel;
-  event.data.draw.data.surfaceSize.width = width;
-  event.data.draw.data.surfaceSize.height = height;
-
-  mInstance->HandleEvent(&event, nsnull);
-}
-
 bool nsPluginInstanceOwner::AddPluginView(const gfxRect& aRect /* = gfxRect(0, 0, 0, 0) */)
 {
   if (!mJavaView) {
@@ -1813,6 +1787,46 @@ void nsPluginInstanceOwner::RemovePluginView()
 
   if (mFullScreen)
     sFullScreenInstance = nsnull;
+}
+
+void nsPluginInstanceOwner::GetVideos(nsTArray<nsNPAPIPluginInstance::VideoInfo*>& aVideos)
+{
+  if (!mInstance)
+    return;
+
+  mInstance->GetVideos(aVideos);
+}
+
+already_AddRefed<ImageContainer> nsPluginInstanceOwner::GetImageContainerForVideo(nsNPAPIPluginInstance::VideoInfo* aVideoInfo)
+{
+  nsRefPtr<ImageContainer> container = LayerManager::CreateImageContainer();
+
+  Image::Format format = Image::SHARED_TEXTURE;
+  nsRefPtr<Image> img = container->CreateImage(&format, 1);
+
+  SharedTextureImage::Data data;
+
+  data.mHandle = mInstance->GLContext()->CreateSharedHandle(gl::TextureImage::ThreadShared, aVideoInfo->mSurfaceTexture, gl::GLContext::SurfaceTexture);
+  data.mShareType = mozilla::gl::TextureImage::ThreadShared;
+  data.mInverted = mInstance->Inverted();
+  data.mSize = gfxIntSize(aVideoInfo->mDimensions.width, aVideoInfo->mDimensions.height);
+
+  SharedTextureImage* pluginImage = static_cast<SharedTextureImage*>(img.get());
+  pluginImage->SetData(data);
+  container->SetCurrentImage(img);
+
+  return container.forget();
+}
+
+nsIntRect nsPluginInstanceOwner::GetVisibleRect()
+{
+  gfxRect r = nsIntRect(0, 0, mPluginWindow->width, mPluginWindow->height);
+
+  float xResolution = mObjectFrame->PresContext()->GetRootPresContext()->PresShell()->GetXResolution();
+  float yResolution = mObjectFrame->PresContext()->GetRootPresContext()->PresShell()->GetYResolution();
+  r.Scale(xResolution, yResolution);
+
+  return nsIntRect(r.x, r.y, r.width, r.height);
 }
 
 void nsPluginInstanceOwner::Invalidate() {
@@ -2432,7 +2446,7 @@ nsEventStatus nsPluginInstanceOwner::ProcessEvent(const nsGUIEvent& anEvent)
         nsIntPoint rootPoint(-1,-1);
         if (widget)
           rootPoint = anEvent.refPoint + widget->WidgetToScreenOffset();
-#ifdef MOZ_WIDGET_GTK2
+#ifdef MOZ_WIDGET_GTK
         Window root = GDK_ROOT_WINDOW();
 #elif defined(MOZ_WIDGET_QT)
         Window root = RootWindowOfScreen(DefaultScreenOfDisplay(mozilla::DefaultXDisplay()));
@@ -2520,7 +2534,7 @@ nsEventStatus nsPluginInstanceOwner::ProcessEvent(const nsGUIEvent& anEvent)
       if (anEvent.pluginEvent)
         {
           XKeyEvent &event = pluginEvent.xkey;
-#ifdef MOZ_WIDGET_GTK2
+#ifdef MOZ_WIDGET_GTK
           event.root = GDK_ROOT_WINDOW();
           event.time = anEvent.time;
           const GdkEventKey* gdkEvent =
@@ -2792,10 +2806,6 @@ nsPluginInstanceOwner::Destroy()
 
 #if MOZ_WIDGET_ANDROID
   RemovePluginView();
-
-  if (mLayer)
-    mLayer->SetVisible(false);
-
 #endif
 
   if (mWidget) {
@@ -2911,26 +2921,10 @@ void nsPluginInstanceOwner::Paint(gfxContext* aContext,
 
   PRInt32 model = mInstance->GetANPDrawingModel();
 
-  gfxRect pluginRect = GetPluginRect();
-
   if (model == kSurface_ANPDrawingModel) {
-    if (!AddPluginView(pluginRect)) {
+    if (!AddPluginView(GetPluginRect())) {
       Invalidate();
     }
-    return;
-  }
-
-  if (model == kOpenGL_ANPDrawingModel) {
-    if (!mLayer)
-      mLayer = new AndroidMediaLayer();
-
-    mLayer->UpdatePosition(pluginRect);
-
-    float xResolution = mObjectFrame->PresContext()->GetRootPresContext()->PresShell()->GetXResolution();
-    float yResolution = mObjectFrame->PresContext()->GetRootPresContext()->PresShell()->GetYResolution();
-    pluginRect.Scale(xResolution, yResolution);
-
-    SendSize((int)pluginRect.width, (int)pluginRect.height);
     return;
   }
 
@@ -3046,17 +3040,11 @@ void nsPluginInstanceOwner::Paint(gfxContext* aContext,
   aContext->Translate(pluginRect.TopLeft());
 
   Renderer renderer(window, this, pluginSize, pluginDirtyRect);
-#ifdef MOZ_WIDGET_GTK2
-  // This is the visual used by the widgets, 24-bit if available.
-  GdkVisual* gdkVisual = gdk_rgb_get_visual();
-  Visual* visual = gdk_x11_visual_get_xvisual(gdkVisual);
-  Screen* screen =
-    gdk_x11_screen_get_xscreen(gdk_visual_get_screen(gdkVisual));
-#else
+
   Display* dpy = mozilla::DefaultXDisplay();
   Screen* screen = DefaultScreenOfDisplay(dpy);
   Visual* visual = DefaultVisualOfScreen(screen);
-#endif
+
   renderer.Draw(aContext, nsIntSize(window->width, window->height),
                 rendererFlags, screen, visual, nsnull);
 }
@@ -3676,9 +3664,6 @@ nsPluginInstanceOwner::UpdateDocumentActiveState(bool aIsActive)
 
 #ifdef MOZ_WIDGET_ANDROID
   if (mInstance) {
-    if (mLayer)
-      mLayer->SetVisible(mPluginDocumentActiveState);
-
     if (!mPluginDocumentActiveState)
       RemovePluginView();
 

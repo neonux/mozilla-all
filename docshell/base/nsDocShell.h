@@ -182,7 +182,6 @@ public:
     NS_DECL_NSIWEBPAGEDESCRIPTOR
     NS_DECL_NSIAUTHPROMPTPROVIDER
     NS_DECL_NSIOBSERVER
-    NS_DECL_NSILOADCONTEXT
     NS_DECL_NSICLIPBOARDCOMMANDS
     NS_DECL_NSIWEBSHELLSERVICES
 
@@ -220,6 +219,16 @@ public:
 
     // nsIScriptGlobalObjectOwner methods
     virtual nsIScriptGlobalObject* GetScriptGlobalObject();
+
+    // Don't use NS_DECL_NSILOADCONTEXT because some of nsILoadContext's methods
+    // are shared with nsIDocShell (appID, etc.) and can't be declared twice.
+    NS_IMETHOD GetAssociatedWindow(nsIDOMWindow**);
+    NS_IMETHOD GetTopWindow(nsIDOMWindow**);
+    NS_IMETHOD IsAppOfType(PRUint32, bool*);
+    NS_IMETHOD GetIsContent(bool*);
+    NS_IMETHOD GetUsePrivateBrowsing(bool*);
+    NS_IMETHOD SetUsePrivateBrowsing(bool);
+    NS_IMETHOD GetExtendedOrigin(nsIURI *uri, nsACString & retval);
 
     // Restores a cached presentation from history (mLSHE).
     // This method swaps out the content viewer and simulates loads for
@@ -664,6 +673,15 @@ protected:
 
     bool JustStartedNetworkLoad();
 
+    enum FrameType {
+        eFrameTypeRegular  = 0x0, // 0000
+        eFrameTypeBrowser  = 0x1, // 0001
+        eFrameTypeApp      = 0x2  // 0010
+    };
+
+    FrameType GetInheritedFrameType();
+    FrameType GetFrameType();
+
     // hash of session storages, keyed by domain
     nsInterfaceHashtable<nsCStringHashKey, nsIDOMStorage> mStorages;
 
@@ -814,6 +832,8 @@ protected:
     static nsIURIFixup *sURIFixup;
 
     nsRefPtr<nsDOMNavigationTiming> mTiming;
+
+    PRUint32 mAppId;
 
 private:
     nsCOMPtr<nsIAtom> mForcedCharset;

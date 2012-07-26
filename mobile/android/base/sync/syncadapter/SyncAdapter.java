@@ -10,6 +10,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.TimeUnit;
 
 import org.json.simple.parser.ParseException;
+import org.mozilla.gecko.db.BrowserContract;
 import org.mozilla.gecko.sync.AlreadySyncingException;
 import org.mozilla.gecko.sync.GlobalConstants;
 import org.mozilla.gecko.sync.GlobalSession;
@@ -20,12 +21,15 @@ import org.mozilla.gecko.sync.SyncConfigurationException;
 import org.mozilla.gecko.sync.SyncException;
 import org.mozilla.gecko.sync.ThreadPool;
 import org.mozilla.gecko.sync.Utils;
+import org.mozilla.gecko.sync.config.AccountPickler;
+import org.mozilla.gecko.sync.crypto.CryptoException;
 import org.mozilla.gecko.sync.crypto.KeyBundle;
 import org.mozilla.gecko.sync.delegates.ClientsDataDelegate;
 import org.mozilla.gecko.sync.delegates.GlobalSessionCallback;
 import org.mozilla.gecko.sync.net.ConnectionMonitorThread;
 import org.mozilla.gecko.sync.setup.Constants;
 import org.mozilla.gecko.sync.setup.SyncAccounts;
+import org.mozilla.gecko.sync.setup.SyncAccounts.SyncAccountParameters;
 import org.mozilla.gecko.sync.stage.GlobalSyncStage.Stage;
 
 import android.accounts.Account;
@@ -36,6 +40,7 @@ import android.accounts.AuthenticatorException;
 import android.accounts.OperationCanceledException;
 import android.content.AbstractThreadedSyncAdapter;
 import android.content.ContentProviderClient;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
@@ -44,7 +49,6 @@ import android.database.sqlite.SQLiteConstraintException;
 import android.database.sqlite.SQLiteException;
 import android.os.Bundle;
 import android.os.Handler;
-import android.util.Log;
 
 public class SyncAdapter extends AbstractThreadedSyncAdapter implements GlobalSessionCallback, ClientsDataDelegate {
   private static final String  LOG_TAG = "SyncAdapter";
@@ -61,10 +65,11 @@ public class SyncAdapter extends AbstractThreadedSyncAdapter implements GlobalSe
   private final AccountManager mAccountManager;
   private final Context        mContext;
 
+  protected long syncStartTimestamp;
+
   public SyncAdapter(Context context, boolean autoInitialize) {
     super(context, autoInitialize);
     mContext = context;
-    Log.d(LOG_TAG, "AccountManager.get(" + mContext + ")");
     mAccountManager = AccountManager.get(context);
   }
 
@@ -120,32 +125,32 @@ public class SyncAdapter extends AbstractThreadedSyncAdapter implements GlobalSe
     setShouldInvalidateAuthToken();
     try {
       if (e instanceof SQLiteConstraintException) {
-        Log.e(LOG_TAG, "Constraint exception. Aborting sync.", e);
+        Logger.error(LOG_TAG, "Constraint exception. Aborting sync.", e);
         syncResult.stats.numParseExceptions++;       // This is as good as we can do.
         return;
       }
       if (e instanceof SQLiteException) {
-        Log.e(LOG_TAG, "Couldn't open database (locked?). Aborting sync.", e);
+        Logger.error(LOG_TAG, "Couldn't open database (locked?). Aborting sync.", e);
         syncResult.stats.numIoExceptions++;
         return;
       }
       if (e instanceof OperationCanceledException) {
-        Log.e(LOG_TAG, "Operation canceled. Aborting sync.", e);
+        Logger.error(LOG_TAG, "Operation canceled. Aborting sync.", e);
         return;
       }
       if (e instanceof AuthenticatorException) {
         syncResult.stats.numParseExceptions++;
-        Log.e(LOG_TAG, "AuthenticatorException. Aborting sync.", e);
+        Logger.error(LOG_TAG, "AuthenticatorException. Aborting sync.", e);
         return;
       }
       if (e instanceof IOException) {
         syncResult.stats.numIoExceptions++;
-        Log.e(LOG_TAG, "IOException. Aborting sync.", e);
+        Logger.error(LOG_TAG, "IOException. Aborting sync.", e);
         e.printStackTrace();
         return;
       }
       syncResult.stats.numIoExceptions++;
-      Log.e(LOG_TAG, "Unknown exception. Aborting sync.", e);
+      Logger.error(LOG_TAG, "Unknown exception. Aborting sync.", e);
     } finally {
       notifyMonitor();
     }
@@ -162,9 +167,9 @@ public class SyncAdapter extends AbstractThreadedSyncAdapter implements GlobalSe
     String token;
     try {
       token = future.getResult().getString(AccountManager.KEY_AUTHTOKEN);
-      mAccountManager.invalidateAuthToken(Constants.ACCOUNTTYPE_SYNC, token);
+      mAccountManager.invalidateAuthToken(GlobalConstants.ACCOUNTTYPE_SYNC, token);
     } catch (Exception e) {
-      Log.e(LOG_TAG, "Couldn't invalidate auth token: " + e);
+      Logger.error(LOG_TAG, "Couldn't invalidate auth token: " + e);
     }
   }
 
@@ -221,64 +226,88 @@ public class SyncAdapter extends AbstractThreadedSyncAdapter implements GlobalSe
     return delayMilliseconds() > 0;
   }
 
+  /**
+   * Asynchronously request an immediate sync, optionally syncing only the given
+   * named stages.
+   * <p>
+   * Returns immediately.
+   *
+   * @param account
+   *          the Android <code>Account</code> instance to sync.
+   * @param stageNames
+   *          stage names to sync, or <code>null</code> to sync all known stages.
+   */
+  public static void requestImmediateSync(final Account account, final String[] stageNames) {
+    if (account == null) {
+      Logger.warn(LOG_TAG, "Not requesting immediate sync because Android Account is null.");
+      return;
+    }
+
+    final Bundle extras = new Bundle();
+    Utils.putStageNamesToSync(extras, stageNames, null);
+    extras.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
+    ContentResolver.requestSync(account, BrowserContract.AUTHORITY, extras);
+  }
+
   @Override
   public void onPerformSync(final Account account,
                             final Bundle extras,
                             final String authority,
                             final ContentProviderClient provider,
                             final SyncResult syncResult) {
-
+    Logger.resetLogging();
     Utils.reseedSharedRandom(); // Make sure we don't work with the same random seed for too long.
 
     // Set these so that we don't need to thread them through assorted calls and callbacks.
     this.syncResult   = syncResult;
     this.localAccount = account;
 
-    thisSyncIsForced = (extras != null) && (extras.getBoolean("force", false));
+    Logger.info(LOG_TAG,
+        "Syncing account named " + account.name +
+        " for client named '" + getClientName() +
+        "' with client guid " + getAccountGUID() +
+        " (sync account has " + getClientsCount() + " clients).");
+
+    thisSyncIsForced = (extras != null) && (extras.getBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, false));
     long delay = delayMilliseconds();
     if (delay > 0) {
       if (thisSyncIsForced) {
-        Log.i(LOG_TAG, "Forced sync: overruling remaining backoff of " + delay + "ms.");
+        Logger.info(LOG_TAG, "Forced sync: overruling remaining backoff of " + delay + "ms.");
       } else {
-        Log.i(LOG_TAG, "Not syncing: must wait another " + delay + "ms.");
+        Logger.info(LOG_TAG, "Not syncing: must wait another " + delay + "ms.");
         long remainingSeconds = delay / 1000;
         syncResult.delayUntil = remainingSeconds + BACKOFF_PAD_SECONDS;
         return;
       }
     }
 
-    // Pick up log level changes. Do this here so that we don't do extra work
-    // if we're not going to be syncing.
-    Logger.resetLogging();
-
     // TODO: don't clear the auth token unless we have a sync error.
-    Log.i(LOG_TAG, "Got onPerformSync. Extras bundle is " + extras);
-    Log.i(LOG_TAG, "Account name: " + account.name);
+    Logger.debug(LOG_TAG, "Got onPerformSync. Extras bundle is " + extras);
 
     // TODO: don't always invalidate; use getShouldInvalidateAuthToken.
     // However, this fixes Bug 716815, so it'll do for now.
-    Log.d(LOG_TAG, "Invalidating auth token.");
+    Logger.trace(LOG_TAG, "Invalidating auth token.");
     invalidateAuthToken(account);
 
     final SyncAdapter self = this;
     final AccountManagerCallback<Bundle> callback = new AccountManagerCallback<Bundle>() {
       @Override
       public void run(AccountManagerFuture<Bundle> future) {
-        Log.i(LOG_TAG, "AccountManagerCallback invoked.");
+        Logger.trace(LOG_TAG, "AccountManagerCallback invoked.");
         // TODO: N.B.: Future must not be used on the main thread.
         try {
           Bundle bundle = future.getResult(60L, TimeUnit.SECONDS);
           if (bundle.containsKey("KEY_INTENT")) {
-            Log.w(LOG_TAG, "KEY_INTENT included in AccountManagerFuture bundle. Problem?");
+            Logger.warn(LOG_TAG, "KEY_INTENT included in AccountManagerFuture bundle. Problem?");
           }
           String username  = bundle.getString(Constants.OPTION_USERNAME);
           String syncKey   = bundle.getString(Constants.OPTION_SYNCKEY);
           String serverURL = bundle.getString(Constants.OPTION_SERVER);
           String password  = bundle.getString(AccountManager.KEY_AUTHTOKEN);
-          Log.d(LOG_TAG, "Username: " + username);
-          Log.d(LOG_TAG, "Server:   " + serverURL);
-          Log.d(LOG_TAG, "Password? " + (password != null));
-          Log.d(LOG_TAG, "Key?      " + (syncKey != null));
+          Logger.debug(LOG_TAG, "Username: " + username);
+          Logger.debug(LOG_TAG, "Server:   " + serverURL);
+          Logger.debug(LOG_TAG, "Password? " + (password != null));
+          Logger.debug(LOG_TAG, "Key?      " + (syncKey != null));
 
           if (password  == null &&
               username  == null &&
@@ -302,26 +331,24 @@ public class SyncAdapter extends AbstractThreadedSyncAdapter implements GlobalSe
 
           // Now catch the individual cases.
           if (password == null) {
-            Log.e(LOG_TAG, "No password: aborting sync.");
+            Logger.error(LOG_TAG, "No password: aborting sync.");
             syncResult.stats.numAuthExceptions++;
             notifyMonitor();
             return;
           }
 
           if (syncKey == null) {
-            Log.e(LOG_TAG, "No Sync Key: aborting sync.");
+            Logger.error(LOG_TAG, "No Sync Key: aborting sync.");
             syncResult.stats.numAuthExceptions++;
             notifyMonitor();
             return;
           }
 
-          KeyBundle keyBundle = new KeyBundle(username, syncKey);
-
           // Support multiple accounts by mapping each server/account pair to a branch of the
           // shared preferences space.
           String prefsPath = Utils.getPrefsPath(username, serverURL);
           self.performSync(account, extras, authority, provider, syncResult,
-              username, password, prefsPath, serverURL, keyBundle);
+              username, password, prefsPath, serverURL, syncKey);
         } catch (Exception e) {
           self.handleException(e, syncResult);
           return;
@@ -346,14 +373,16 @@ public class SyncAdapter extends AbstractThreadedSyncAdapter implements GlobalSe
       ConnectionMonitorThread stale = new ConnectionMonitorThread();
       stale.start();
 
-      Log.i(LOG_TAG, "Waiting on sync monitor.");
+      Logger.trace(LOG_TAG, "Waiting on sync monitor.");
       try {
         syncMonitor.wait();
-        long next = System.currentTimeMillis() + getSyncInterval();
-        Log.i(LOG_TAG, "Setting minimum next sync time to " + next);
+        long interval = getSyncInterval();
+        long next = System.currentTimeMillis() + interval;
+        Logger.info(LOG_TAG, "Setting minimum next sync time to " + next + " (" + interval + "ms from now).");
         extendEarliestNextSync(next);
+        Logger.info(LOG_TAG, "Sync took " + Utils.formatDuration(syncStartTimestamp, System.currentTimeMillis()) + ".");
       } catch (InterruptedException e) {
-        Log.i(LOG_TAG, "Waiting on sync monitor interrupted.", e);
+        Logger.warn(LOG_TAG, "Waiting on sync monitor interrupted.", e);
       } finally {
         // And we're done with HTTP stuff.
         stale.shutdown();
@@ -386,22 +415,62 @@ public class SyncAdapter extends AbstractThreadedSyncAdapter implements GlobalSe
    * @throws NonObjectJSONException
    * @throws ParseException
    * @throws IOException
+   * @throws CryptoException
    */
-  protected void performSync(Account account, Bundle extras, String authority,
-                             ContentProviderClient provider,
-                             SyncResult syncResult,
-                             String username, String password,
-                             String prefsPath,
-                             String serverURL, KeyBundle keyBundle)
+  protected void performSync(final Account account,
+                             final Bundle extras,
+                             final String authority,
+                             final ContentProviderClient provider,
+                             final SyncResult syncResult,
+                             final String username,
+                             final String password,
+                             final String prefsPath,
+                             final String serverURL,
+                             final String syncKey)
                                  throws NoSuchAlgorithmException,
                                         SyncConfigurationException,
                                         IllegalArgumentException,
                                         AlreadySyncingException,
                                         IOException, ParseException,
-                                        NonObjectJSONException {
-    Log.i(LOG_TAG, "Performing sync.");
+                                        NonObjectJSONException, CryptoException {
+    Logger.trace(LOG_TAG, "Performing sync.");
+    syncStartTimestamp = System.currentTimeMillis();
+
+    /**
+     * Bug 769745: pickle Sync account parameters to JSON file. Un-pickle in
+     * <code>SyncAccounts.syncAccountsExist</code>.
+     */
+    try {
+      // Constructor can throw on nulls, which should not happen -- but let's be safe.
+      final SyncAccountParameters params = new SyncAccountParameters(mContext, mAccountManager,
+        account.name, // Un-encoded, like "test@mozilla.com".
+        syncKey,
+        password,
+        serverURL,
+        null, // We'll re-fetch cluster URL; not great, but not harmful.
+        getClientName(),
+        getAccountGUID());
+
+      // Bug 772971: pickle Sync account parameters on background thread to
+      // avoid strict mode warnings.
+      ThreadPool.run(new Runnable() {
+        @Override
+        public void run() {
+          final boolean syncAutomatically = ContentResolver.getSyncAutomatically(account, authority);
+          try {
+            AccountPickler.pickle(mContext, Constants.ACCOUNT_PICKLE_FILENAME, params, syncAutomatically);
+          } catch (Exception e) {
+            // Should never happen, but we really don't want to die in a background thread.
+            Logger.warn(LOG_TAG, "Got exception pickling current account details; ignoring.", e);
+          }
+        }
+      });
+    } catch (IllegalArgumentException e) {
+      // Do nothing.
+    }
 
     // TODO: default serverURL.
+    final KeyBundle keyBundle = new KeyBundle(username, syncKey);
     GlobalSession globalSession = new GlobalSession(SyncConfiguration.DEFAULT_USER_API,
                                                     serverURL, username, password, prefsPath,
                                                     keyBundle, this, this.mContext, extras, this);
@@ -411,7 +480,7 @@ public class SyncAdapter extends AbstractThreadedSyncAdapter implements GlobalSe
 
   private void notifyMonitor() {
     synchronized (syncMonitor) {
-      Log.i(LOG_TAG, "Notifying sync monitor.");
+      Logger.trace(LOG_TAG, "Notifying sync monitor.");
       syncMonitor.notifyAll();
     }
   }
@@ -419,7 +488,7 @@ public class SyncAdapter extends AbstractThreadedSyncAdapter implements GlobalSe
   // Implementing GlobalSession callbacks.
   @Override
   public void handleError(GlobalSession globalSession, Exception ex) {
-    Log.i(LOG_TAG, "GlobalSession indicated error. Flagging auth token as invalid, just in case.");
+    Logger.info(LOG_TAG, "GlobalSession indicated error. Flagging auth token as invalid, just in case.");
     setShouldInvalidateAuthToken();
     this.updateStats(globalSession, ex);
     notifyMonitor();
@@ -427,7 +496,7 @@ public class SyncAdapter extends AbstractThreadedSyncAdapter implements GlobalSe
 
   @Override
   public void handleAborted(GlobalSession globalSession, String reason) {
-    Log.w(LOG_TAG, "Sync aborted: " + reason);
+    Logger.warn(LOG_TAG, "Sync aborted: " + reason);
     notifyMonitor();
   }
 
@@ -449,8 +518,8 @@ public class SyncAdapter extends AbstractThreadedSyncAdapter implements GlobalSe
 
   @Override
   public void handleSuccess(GlobalSession globalSession) {
-    Log.i(LOG_TAG, "GlobalSession indicated success.");
-    Log.i(LOG_TAG, "Prefs target: " + globalSession.config.prefsPath);
+    Logger.info(LOG_TAG, "GlobalSession indicated success.");
+    Logger.debug(LOG_TAG, "Prefs target: " + globalSession.config.prefsPath);
     globalSession.config.persistToPrefs();
     notifyMonitor();
   }
@@ -458,7 +527,7 @@ public class SyncAdapter extends AbstractThreadedSyncAdapter implements GlobalSe
   @Override
   public void handleStageCompleted(Stage currentState,
                                    GlobalSession globalSession) {
-    Log.i(LOG_TAG, "Stage completed: " + currentState);
+    Logger.trace(LOG_TAG, "Stage completed: " + currentState);
   }
 
   @Override
@@ -472,7 +541,7 @@ public class SyncAdapter extends AbstractThreadedSyncAdapter implements GlobalSe
   public synchronized String getAccountGUID() {
     String accountGUID = mAccountManager.getUserData(localAccount, Constants.ACCOUNT_GUID);
     if (accountGUID == null) {
-      Logger.info(LOG_TAG, "Account GUID was null. Creating a new one.");
+      Logger.debug(LOG_TAG, "Account GUID was null. Creating a new one.");
       accountGUID = Utils.generateGuid();
       setAccountGUID(mAccountManager, localAccount, accountGUID);
     }

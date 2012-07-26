@@ -18,6 +18,9 @@ EXPORTS		= \
 		nsEventStateManager.h \
 		nsEventListenerManager.h \
 		nsDOMEventTargetHelper.h \
+		nsDOMEvent.h \
+		nsDOMTouchEvent.h \
+		nsDOMUIEvent.h \
 		$(NULL)
 
 CPPSRCS		= \
@@ -33,13 +36,8 @@ CPPSRCS		= \
 		nsDOMDragEvent.cpp \
 		nsDOMMutationEvent.cpp \
 		nsDOMPopupBlockedEvent.cpp \
-		nsDOMDeviceProximityEvent.cpp \
-		nsDOMUserProximityEvent.cpp \
-		nsDOMDeviceLightEvent.cpp \
-		nsDOMDeviceOrientationEvent.cpp \
 		nsDOMDeviceMotionEvent.cpp \
 		nsDOMBeforeUnloadEvent.cpp \
-		nsDOMPageTransitionEvent.cpp \
 		nsDOMXULCommandEvent.cpp \
 		nsDOMCommandEvent.cpp \
 		nsDOMMessageEvent.cpp \
@@ -62,15 +60,9 @@ CPPSRCS		= \
 		nsDOMScrollAreaEvent.cpp \
 		nsDOMTransitionEvent.cpp \
 		nsDOMAnimationEvent.cpp \
-		nsDOMPopStateEvent.cpp \
-		nsDOMHashChangeEvent.cpp \
-		nsDOMCloseEvent.cpp \
 		nsDOMSettingsEvent.cpp \
-		nsDOMContactChangeEvent.cpp \
 		nsDOMTouchEvent.cpp \
-		nsDOMCustomEvent.cpp \
 		nsDOMCompositionEvent.cpp \
-		nsDOMApplicationEvent.cpp \
 		$(NULL)
 
 ifdef MOZ_B2G_RIL
@@ -93,7 +85,6 @@ LOCAL_INCLUDES	+= \
              -I$(srcdir)/../../xml/content/src \
              -I$(srcdir)/../../../dom/base \
              -I$(srcdir)/../../../dom/settings \
-             -I$(srcdir)/../../../dom/contacts \
              -I$(srcdir)/../../../dom/src/storage \
              -I$(srcdir)/../../../layout/generic \
              -I$(srcdir)/../../../layout/xul/base/src \

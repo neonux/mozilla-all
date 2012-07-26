@@ -5,29 +5,12 @@
 
 package org.mozilla.gecko;
 
-import org.mozilla.gecko.db.BrowserDB;
-import org.mozilla.gecko.gfx.CairoImage;
-import org.mozilla.gecko.gfx.BufferedCairoImage;
-import org.mozilla.gecko.gfx.FloatSize;
-import org.mozilla.gecko.gfx.GeckoLayerClient;
-import org.mozilla.gecko.gfx.IntSize;
-import org.mozilla.gecko.gfx.Layer;
-import org.mozilla.gecko.gfx.LayerController;
-import org.mozilla.gecko.gfx.LayerView;
-import org.mozilla.gecko.gfx.PluginLayer;
-import org.mozilla.gecko.gfx.RectUtils;
-import org.mozilla.gecko.gfx.SurfaceTextureLayer;
-import org.mozilla.gecko.gfx.ViewportMetrics;
-import org.mozilla.gecko.gfx.ImmutableViewportMetrics;
-
 import java.io.*;
 import java.util.*;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 import java.util.zip.*;
-import java.net.URL;
 import java.nio.*;
-import java.nio.channels.FileChannel;
 import java.util.concurrent.*;
 import java.lang.reflect.*;
 import java.net.*;
@@ -37,20 +20,15 @@ import org.json.*;
 import android.os.*;
 import android.app.*;
 import android.text.*;
-import android.text.format.Time;
 import android.view.*;
 import android.view.inputmethod.*;
-import android.view.ViewGroup.LayoutParams;
 import android.content.*;
 import android.content.res.*;
 import android.graphics.*;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.BitmapDrawable;
 import android.widget.*;
 import android.hardware.*;
 import android.location.*;
-import android.view.accessibility.AccessibilityManager;
-import android.view.accessibility.AccessibilityEvent;
 
 import android.util.*;
 import android.net.*;
@@ -84,11 +62,10 @@ abstract public class BrowserApp extends GeckoApp
                     maybeCancelFaviconLoad(tab);
                 }
                 break;
+            case LOAD_ERROR:
             case START:
-                if (Tabs.getInstance().isSelectedTab(tab)) {
-                    invalidateOptionsMenu();
-                }
             case STOP:
+            case MENU_UPDATED:
                 if (Tabs.getInstance().isSelectedTab(tab)) {
                     invalidateOptionsMenu();
                 }
@@ -170,7 +147,7 @@ abstract public class BrowserApp extends GeckoApp
         mMainHandler.post(new Runnable() {
             public void run() {
                 if (Tabs.getInstance().isSelectedTab(tab))
-                    mBrowserToolbar.setReaderVisibility(tab.getReaderEnabled());
+                    mBrowserToolbar.setReaderMode(tab.getReaderEnabled());
             }
         });
     }
@@ -197,7 +174,8 @@ abstract public class BrowserApp extends GeckoApp
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        LinearLayout actionBar = (LinearLayout) findViewById(R.id.browser_toolbar);
+        LinearLayout actionBar = (LinearLayout) getActionBarLayout();
+        mMainLayout.addView(actionBar, 0);
 
         mBrowserToolbar = new BrowserToolbar(mAppContext);
         mBrowserToolbar.from(actionBar);
@@ -292,12 +270,38 @@ abstract public class BrowserApp extends GeckoApp
 
     @Override
     public void refreshChrome() {
-        if (Build.VERSION.SDK_INT >= 11) {
-            mBrowserToolbar.requestLayout();
+        // Only ICS phones use a smaller action-bar in landscape mode.
+        if (Build.VERSION.SDK_INT >= 14 && !isTablet()) {
+            int index = mMainLayout.indexOfChild(mBrowserToolbar.getLayout());
+            mMainLayout.removeViewAt(index);
+
+            LinearLayout actionBar = (LinearLayout) getActionBarLayout();
+            mMainLayout.addView(actionBar, index);
+            mBrowserToolbar.from(actionBar);
             mBrowserToolbar.refresh();
-            invalidateOptionsMenu();
-            mTabsPanel.refresh();
         }
+
+        invalidateOptionsMenu();
+        mTabsPanel.refresh();
+    }
+
+    public View getActionBarLayout() {
+        int actionBarRes;
+
+        if (!GeckoApp.mAppContext.hasPermanentMenuKey() || GeckoApp.mAppContext.isTablet())
+           actionBarRes = R.layout.browser_toolbar_menu;
+        else
+           actionBarRes = R.layout.browser_toolbar;
+
+        LinearLayout actionBar = (LinearLayout) LayoutInflater.from(GeckoApp.mAppContext).inflate(actionBarRes, null);
+        actionBar.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.FILL_PARENT,
+                                                                (int) mAppContext.getResources().getDimension(R.dimen.browser_toolbar_height)));
+        return actionBar;
+    }
+
+    @Override
+    public boolean hasTabsSideBar() {
+        return (mTabsPanel != null && mTabsPanel.isSideBar());
     }
 
     void addTab() {
@@ -323,6 +327,14 @@ abstract public class BrowserApp extends GeckoApp
         mTabsPanel.hide();
     }
 
+    public boolean autoHideTabs() {
+        if (!hasTabsSideBar() && areTabsShown()) {
+            hideTabs();
+            return true;
+        }
+        return false;
+    }
+
     public boolean areTabsShown() {
         return mTabsPanel.isShown();
     }
@@ -332,10 +344,13 @@ abstract public class BrowserApp extends GeckoApp
         if (mMainLayoutAnimator != null)
             mMainLayoutAnimator.stop();
 
+        if (mTabsPanel.isShown())
+            mTabsPanel.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+
         mMainLayoutAnimator = new PropertyAnimator(150);
         mMainLayoutAnimator.setPropertyAnimationListener(this);
 
-        if (isTablet()) {
+        if (hasTabsSideBar()) {
             mMainLayoutAnimator.attach(mBrowserToolbar.getLayout(),
                                        PropertyAnimator.Property.SHRINK_LEFT,
                                        width);
@@ -373,15 +388,17 @@ abstract public class BrowserApp extends GeckoApp
     public void onPropertyAnimationEnd() {
         mMainHandler.post(new Runnable() {
             public void run() {
-                if (isTablet() && mTabsPanel.isShown()) {
+                if (hasTabsSideBar() && mTabsPanel.isShown()) {
                     // Fake the gecko layout to have been shrunk, instead of sliding.
                     ((LinearLayout.LayoutParams) mGeckoLayout.getLayoutParams()).setMargins(mTabsPanel.getWidth(), 0, 0, 0);
                     mGeckoLayout.scrollTo(0, 0);
                     mGeckoLayout.requestLayout();
                 }
 
-                if (!mTabsPanel.isShown())
+                if (!mTabsPanel.isShown()) {
                     mBrowserToolbar.updateTabs(false);
+                    mTabsPanel.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+                }
             }
         });
     }
@@ -401,7 +418,7 @@ abstract public class BrowserApp extends GeckoApp
     private void loadFavicon(final Tab tab) {
         maybeCancelFaviconLoad(tab);
 
-        long id = mFavicons.loadFavicon(tab.getURL(), tab.getFaviconURL(),
+        long id = getFavicons().loadFavicon(tab.getURL(), tab.getFaviconURL(),
                         new Favicons.OnFaviconLoadedListener() {
 
             public void onFaviconLoaded(String pageUrl, Drawable favicon) {
@@ -439,7 +456,7 @@ abstract public class BrowserApp extends GeckoApp
             return;
 
         // Cancel pending favicon load task
-        mFavicons.cancelFaviconLoad(faviconLoadId);
+        getFavicons().cancelFaviconLoad(faviconLoadId);
 
         // Reset favicon load state
         tab.setFaviconLoadId(Favicons.NOT_LOADING);
@@ -488,6 +505,7 @@ abstract public class BrowserApp extends GeckoApp
                             loadUrl(url, AwesomeBar.Target.CURRENT_TAB);
                         }
                     });
+                    mAboutHomeContent.setOnInterceptTouchListener(new ContentTouchListener());
                 } else {
                     mAboutHomeContent.update(GeckoApp.mAppContext,
                                              EnumSet.of(AboutHomeContent.UpdateFlags.TOP_SITES,
@@ -517,6 +535,9 @@ abstract public class BrowserApp extends GeckoApp
 
     @Override
     public void openOptionsMenu() {
+        if (!hasTabsSideBar() && areTabsShown())
+            return;
+
         // Scroll custom menu to the top
         if (mMenuPanel != null)
             mMenuPanel.scrollTo(0, 0);
@@ -534,10 +555,14 @@ abstract public class BrowserApp extends GeckoApp
     @Override
     public void setFullScreen(final boolean fullscreen) {
       super.setFullScreen(fullscreen);
-      if (fullscreen)
-          mBrowserToolbar.hide();
-      else
-          mBrowserToolbar.show();
+      mMainHandler.post(new Runnable() {
+          public void run() {
+              if (fullscreen)
+                  mBrowserToolbar.hide();
+              else
+                  mBrowserToolbar.show();
+          }
+      });
     }
 
     @Override
@@ -553,20 +578,23 @@ abstract public class BrowserApp extends GeckoApp
         MenuItem bookmark = aMenu.findItem(R.id.bookmark);
         MenuItem forward = aMenu.findItem(R.id.forward);
         MenuItem share = aMenu.findItem(R.id.share);
+        MenuItem readingList = aMenu.findItem(R.id.reading_list);
         MenuItem saveAsPDF = aMenu.findItem(R.id.save_as_pdf);
         MenuItem charEncoding = aMenu.findItem(R.id.char_encoding);
         MenuItem findInPage = aMenu.findItem(R.id.find_in_page);
+        MenuItem desktopMode = aMenu.findItem(R.id.desktop_mode);
 
         if (tab == null || tab.getURL() == null) {
             bookmark.setEnabled(false);
             forward.setEnabled(false);
             share.setEnabled(false);
+            readingList.setEnabled(false);
             saveAsPDF.setEnabled(false);
             findInPage.setEnabled(false);
             return true;
         }
 
-        bookmark.setEnabled(true);
+        bookmark.setEnabled(!tab.getURL().startsWith("about:reader"));
         bookmark.setCheckable(true);
         
         if (tab.isBookmark()) {
@@ -577,7 +605,19 @@ abstract public class BrowserApp extends GeckoApp
             bookmark.setIcon(R.drawable.ic_menu_bookmark_add);
         }
 
+        readingList.setEnabled(tab.getReaderEnabled());
+        readingList.setCheckable(true);
+
+        if (tab.isReadingListItem()) {
+            readingList.setChecked(true);
+            readingList.setIcon(R.drawable.ic_menu_reading_list_remove);
+        } else {
+            readingList.setChecked(false);
+            readingList.setIcon(R.drawable.ic_menu_reading_list_add);
+        }
+
         forward.setEnabled(tab.canDoForward());
+        desktopMode.setChecked(tab.getDesktopMode());
 
         // Disable share menuitem for about:, chrome:, file:, and resource: URIs
         String scheme = Uri.parse(tab.getURL()).getScheme();
@@ -589,8 +629,7 @@ abstract public class BrowserApp extends GeckoApp
                                tab.getContentType().equals("application/vnd.mozilla.xul+xml")));
 
         // Disable find in page for about:home, since it won't work on Java content
-        if (!tab.getURL().equals("about:home"))
-            findInPage.setEnabled(true);
+        findInPage.setEnabled(!tab.getURL().equals("about:home"));
 
         charEncoding.setVisible(GeckoPreferences.getCharEncodingState());
 

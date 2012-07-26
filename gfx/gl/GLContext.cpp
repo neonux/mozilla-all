@@ -79,6 +79,7 @@ static const char *sExtensionNames[] = {
     "GL_ARB_sync",
     "GL_OES_EGL_image",
     "GL_OES_EGL_sync",
+    "GL_OES_EGL_image_external",
     nsnull
 };
 
@@ -265,6 +266,7 @@ GLContext::InitWithPrefix(const char *prefix, bool trygl)
                 { (PRFuncPtr*) &mSymbols.fReadBuffer, { "ReadBuffer", NULL } },
                 { (PRFuncPtr*) &mSymbols.fMapBuffer, { "MapBuffer", NULL } },
                 { (PRFuncPtr*) &mSymbols.fUnmapBuffer, { "UnmapBuffer", NULL } },
+                { (PRFuncPtr*) &mSymbols.fPointParameterf, { "PointParameterf", NULL } },
                 { NULL, { NULL } },
             };
 
@@ -332,8 +334,8 @@ GLContext::InitWithPrefix(const char *prefix, bool trygl)
 
     if (mInitialized) {
 #ifdef DEBUG
-        static bool once = false;
-        if (DebugMode() && !once) {
+        static bool firstRun = true;
+        if (firstRun && DebugMode()) {
             const char *vendors[VendorOther] = {
                 "Intel",
                 "NVIDIA",
@@ -341,7 +343,6 @@ GLContext::InitWithPrefix(const char *prefix, bool trygl)
                 "Qualcomm"
             };
 
-            once = true;
             if (mVendor < VendorOther) {
                 printf_stderr("OpenGL vendor ('%s') recognized as: %s\n",
                               glVendorString, vendors[mVendor]);
@@ -349,6 +350,7 @@ GLContext::InitWithPrefix(const char *prefix, bool trygl)
                 printf_stderr("OpenGL vendor ('%s') unrecognized\n", glVendorString);
             }
         }
+        firstRun = false;
 #endif
 
         InitExtensions();
@@ -469,7 +471,7 @@ GLContext::InitWithPrefix(const char *prefix, bool trygl)
 
         if (IsExtensionSupported(OES_EGL_image)) {
             SymLoadStruct imageSymbols[] = {
-                { (PRFuncPtr*) &mSymbols.fImageTargetTexture2D, { "EGLImageTargetTexture2DOES", nsnull } },
+                { (PRFuncPtr*) &mSymbols.fEGLImageTargetTexture2D, { "EGLImageTargetTexture2DOES", nsnull } },
                 { nsnull, { nsnull } },
             };
 
@@ -477,7 +479,7 @@ GLContext::InitWithPrefix(const char *prefix, bool trygl)
                 NS_ERROR("GL supports OES_EGL_image without supplying its functions.");
 
                 MarkExtensionUnsupported(OES_EGL_image);
-                mSymbols.fImageTargetTexture2D = nsnull;
+                mSymbols.fEGLImageTargetTexture2D = nsnull;
             }
         }
        
@@ -539,17 +541,16 @@ GLContext::InitExtensions()
         return;
 
 #ifdef DEBUG
-    // If DEBUG, then be verbose the first time we're run.
-    static bool firstVerboseRun = true;
+    static bool firstRun = true;
 #else
     // Non-DEBUG, so never spew.
-    const bool firstVerboseRun = false;
+    const bool firstRun = false;
 #endif
 
-    mAvailableExtensions.Load(extensions, sExtensionNames, firstVerboseRun);
+    mAvailableExtensions.Load(extensions, sExtensionNames, firstRun && DebugMode());
 
 #ifdef DEBUG
-    firstVerboseRun = false;
+    firstRun = false;
 #endif
 }
 
@@ -1273,39 +1274,57 @@ PRUint32 TiledTextureImage::GetTileCount()
 }
 
 GLContext::GLFormats
-GLContext::ChooseGLFormats(ContextFormat& aCF)
+GLContext::ChooseGLFormats(ContextFormat& aCF, ColorByteOrder aByteOrder)
 {
     GLFormats formats;
 
-    if (aCF.alpha) {
-        if (mIsGLES2 && IsExtensionSupported(EXT_texture_format_BGRA8888)) {
-            formats.texColor = LOCAL_GL_BGRA;
-        } else {
+    // If we're on ES2 hardware and we have an explicit request for 16 bits of color or less
+    // OR we don't support full 8-bit color, return a 4444 or 565 format.
+    if (mIsGLES2 && (aCF.colorBits() <= 16 || !IsExtensionSupported(OES_rgb8_rgba8))) {
+        if (aCF.alpha) {
             formats.texColor = LOCAL_GL_RGBA;
-        }
-
-        if (mIsGLES2 && !IsExtensionSupported(OES_rgb8_rgba8)) {
+            formats.texColorType = LOCAL_GL_UNSIGNED_SHORT_4_4_4_4;
             formats.rbColor = LOCAL_GL_RGBA4;
+
             aCF.red = aCF.green = aCF.blue = aCF.alpha = 4;
         } else {
-            formats.rbColor = LOCAL_GL_RGBA8;
-            aCF.red = aCF.green = aCF.blue = aCF.alpha = 8;
-        }
-    } else {
-        formats.texColor = LOCAL_GL_RGB;
-        if (mIsGLES2 && !IsExtensionSupported(OES_rgb8_rgba8)) {
+            formats.texColor = LOCAL_GL_RGB;
+            formats.texColorType = LOCAL_GL_UNSIGNED_SHORT_5_6_5;
             formats.rbColor = LOCAL_GL_RGB565;
+
             aCF.red = 5;
             aCF.green = 6;
             aCF.blue = 5;
-        } else {
-            formats.rbColor = LOCAL_GL_RGB8;
-            aCF.red = aCF.green = aCF.blue = 8;
-        }
-        aCF.alpha = 0;
-    }
-    formats.texColorType = LOCAL_GL_UNSIGNED_BYTE;
+            aCF.alpha = 0;
+        }   
+    } else {
+        formats.texColorType = LOCAL_GL_UNSIGNED_BYTE;
 
+        if (aCF.alpha) {
+            // Prefer BGRA8888 on ES2 hardware; if the extension is supported, it
+            // should be faster.  There are some cases where we don't want this --
+            // specifically, CopyTex*Image doesn't seem to understand how to deal
+            // with a BGRA source going to a RGB/RGBA destination on some drivers.
+            if (mIsGLES2 &&
+                IsExtensionSupported(EXT_texture_format_BGRA8888) &&
+                aByteOrder != ForceRGBA)
+            {
+                formats.texColor = LOCAL_GL_BGRA;
+            } else {
+                formats.texColor = LOCAL_GL_RGBA;
+            }
+
+            formats.rbColor = LOCAL_GL_RGBA8;
+
+            aCF.red = aCF.green = aCF.blue = aCF.alpha = 8;
+        } else {
+            formats.texColor = LOCAL_GL_RGB;
+            formats.rbColor = LOCAL_GL_RGB8;
+
+            aCF.red = aCF.green = aCF.blue = 8;
+            aCF.alpha = 0;
+        }
+    }
 
     GLsizei samples = aCF.samples;
 
@@ -1771,7 +1790,7 @@ already_AddRefed<gfxImageSurface>
 GLContext::GetTexImage(GLuint aTexture, bool aYInvert, ShaderProgramType aShader)
 {
     MakeCurrent();
-    fFinish();
+    GuaranteeResolve();
     fActiveTexture(LOCAL_GL_TEXTURE0);
     fBindTexture(LOCAL_GL_TEXTURE_2D, aTexture);
 
@@ -2263,7 +2282,6 @@ GLContext::UploadSurfaceToTexture(gfxASurface *aSurface,
     }
 
     GLenum format;
-    GLenum internalformat;
     GLenum type;
     PRInt32 pixelSize = gfxASurface::BytePerPixelFromFormat(imageSurface->Format());
     ShaderProgramType shader;
@@ -2301,8 +2319,6 @@ GLContext::UploadSurfaceToTexture(gfxASurface *aSurface,
 
     PRInt32 stride = imageSurface->Stride();
 
-    internalformat = mIsGLES2 ? format : LOCAL_GL_RGBA;
-
     nsIntRegionRectIterator iter(paintRegion);
     const nsIntRect *iterRect;
 
@@ -2334,7 +2350,7 @@ GLContext::UploadSurfaceToTexture(gfxASurface *aSurface,
         } else {
             TexImage2D(LOCAL_GL_TEXTURE_2D,
                        0,
-                       internalformat,
+                       format,
                        iterRect->width,
                        iterRect->height,
                        stride,
@@ -2371,7 +2387,7 @@ GLContext::TexImage2D(GLenum target, GLint level, GLint internalformat,
 {
     if (mIsGLES2) {
 
-        NS_ASSERTION(format == internalformat,
+        NS_ASSERTION(format == (GLenum)internalformat,
                     "format and internalformat not the same for glTexImage2D on GLES2");
 
         if (!CanUploadNonPowerOfTwo()
@@ -2952,11 +2968,9 @@ RemoveNamesFromArray(GLContext *aOrigin, GLsizei aCount, GLuint *aNames, nsTArra
         if (name == 0)
             continue;
 
-        bool found = false;
         for (PRUint32 i = 0; i < aArray.Length(); ++i) {
             if (aArray[i].name == name) {
                 aArray.RemoveElementAt(i);
-                found = true;
                 break;
             }
         }

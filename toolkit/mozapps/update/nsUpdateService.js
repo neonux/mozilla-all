@@ -111,7 +111,7 @@ const STATE_FAILED          = "failed";
 
 // From updater/errors.h:
 const WRITE_ERROR        = 7;
-const UNEXPECTED_ERROR   = 8;
+// const UNEXPECTED_ERROR   = 8; // Replaced with errors 38-42
 const ELEVATION_CANCELED = 9;
 
 // Windows service specific errors
@@ -125,6 +125,15 @@ const SERVICE_STILL_APPLYING_ON_FAILURE    = 30;
 const SERVICE_UPDATER_NOT_FIXED_DRIVE      = 31;
 const SERVICE_COULD_NOT_LOCK_UPDATER       = 32;
 const SERVICE_INSTALLDIR_ERROR             = 33;
+
+const WRITE_ERROR_ACCESS_DENIED       = 35;
+const WRITE_ERROR_SHARING_VIOLATION   = 36;
+const WRITE_ERROR_CALLBACK_APP        = 37;
+const INVALID_UPDATER_STATUS_CODE     = 38;
+const UNEXPECTED_BZIP_ERROR           = 39;
+const UNEXPECTED_MAR_ERROR            = 40;
+const UNEXPECTED_BSPATCH_ERROR        = 41;
+const UNEXPECTED_FILE_OPERATION_ERROR = 42;
 
 const CERT_ATTR_CHECK_FAILED_NO_UPDATE  = 100;
 const CERT_ATTR_CHECK_FAILED_HAS_UPDATE = 101;
@@ -973,7 +982,10 @@ function readStringFromFile(file) {
 
 function handleUpdateFailure(update, errorCode) {
   update.errorCode = parseInt(errorCode);
-  if (update.errorCode == WRITE_ERROR) {
+  if (update.errorCode == WRITE_ERROR || 
+      update.errorCode == WRITE_ERROR_ACCESS_DENIED ||
+      update.errorCode == WRITE_ERROR_SHARING_VIOLATION ||
+      update.errorCode == WRITE_ERROR_CALLBACK_APP) {
     Cc["@mozilla.org/updates/update-prompt;1"].
       createInstance(Ci.nsIUpdatePrompt).
       showUpdateError(update);
@@ -1686,15 +1698,19 @@ UpdateService.prototype = {
   /**
    * Submit a telemetry ping with a boolean value which indicates if the service
    * is installed.
+   * Also submits a telemetry ping with a boolean value which indicates if the
+   * service was at some point installed, but is now uninstalled.
    */
   _sendServiceInstalledTelemetryPing: function AUS__svcInstallTelemetryPing() {
     let installed = 0;
+    let attempted = 0;
     try {
       let wrk = Components.classes["@mozilla.org/windows-registry-key;1"]
                 .createInstance(Components.interfaces.nsIWindowsRegKey);
       wrk.open(wrk.ROOT_KEY_LOCAL_MACHINE,
                "SOFTWARE\\Mozilla\\MaintenanceService",
                wrk.ACCESS_READ | wrk.WOW64_64);
+      attempted = wrk.readIntValue("Attempted");
       installed = wrk.readIntValue("Installed");
       wrk.close();
     } catch(e) {
@@ -1702,6 +1718,13 @@ UpdateService.prototype = {
     try {
       let h = Services.telemetry.getHistogramById("UPDATER_SERVICE_INSTALLED");
       h.add(installed);
+    } catch(e) {
+      // Don't allow any exception to be propagated.
+      Components.utils.reportError(e);
+    }
+    try {
+      let h = Services.telemetry.getHistogramById("UPDATER_SERVICE_MANUALLY_UNINSTALLED");
+      h.add(!installed && attempted ? 1 : 0);
     } catch(e) {
       // Don't allow any exception to be propagated.
       Components.utils.reportError(e);
@@ -1747,7 +1770,7 @@ UpdateService.prototype = {
       }
       let result = 0; // 0 means success
       if (parts.length > 1) {
-        result = parseInt(parts[1]) || UNEXPECTED_ERROR;
+        result = parseInt(parts[1]) || INVALID_UPDATER_STATUS_CODE;
       }
       Services.telemetry.getHistogramById("UPDATER_STATUS_CODES").add(result);
     } catch(e) {
@@ -3476,7 +3499,11 @@ UpdatePrompt.prototype = {
       return;
 
     // In some cases, we want to just show a simple alert dialog:
-    if (update.state == STATE_FAILED && update.errorCode == WRITE_ERROR) {
+    if (update.state == STATE_FAILED &&
+        (update.errorCode == WRITE_ERROR ||
+         update.errorCode == WRITE_ERROR_ACCESS_DENIED ||
+         update.errorCode == WRITE_ERROR_SHARING_VIOLATION ||
+         update.errorCode == WRITE_ERROR_CALLBACK_APP)) {
       var title = gUpdateBundle.GetStringFromName("updaterIOErrorTitle");
       var text = gUpdateBundle.formatStringFromName("updaterIOErrorMsg",
                                                     [Services.appinfo.name,

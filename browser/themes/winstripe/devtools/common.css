@@ -92,9 +92,9 @@
   padding-bottom: 0;
   -moz-padding-start: 18px;
   -moz-padding-end: 12px;
-  -moz-transition-property: background-color, border-color, box-shadow;
-  -moz-transition-duration: 150ms;
-  -moz-transition-timing-function: ease;
+  transition-property: background-color, border-color, box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: ease;
   color: inherit;
 }
 
@@ -106,7 +106,7 @@
 }
 
 .devtools-searchinput:-moz-locale-dir(rtl) {
-  background-position: -moz-calc(100% - 4px) 3px, top left, top left;
+  background-position: calc(100% - 4px) 3px, top left, top left;
 }
 
 .devtools-searchinput > .textbox-input-box > .textbox-search-icons {

@@ -446,13 +446,13 @@ var gAllTests = [
 
     var sm = Cc["@mozilla.org/scriptsecuritymanager;1"]
              .getService(Ci.nsIScriptSecurityManager);
-    var principal = sm.getCodebasePrincipal(URI);
+    var principal = sm.getNoAppCodebasePrincipal(URI);
 
     // Give www.example.com privileges to store offline data
     var pm = Cc["@mozilla.org/permissionmanager;1"]
              .getService(Ci.nsIPermissionManager);
-    pm.add(URI, "offline-app", Ci.nsIPermissionManager.ALLOW_ACTION);
-    pm.add(URI, "offline-app", Ci.nsIOfflineCacheUpdateService.ALLOW_NO_WARN);
+    pm.addFromPrincipal(principal, "offline-app", Ci.nsIPermissionManager.ALLOW_ACTION);
+    pm.addFromPrincipal(principal, "offline-app", Ci.nsIOfflineCacheUpdateService.ALLOW_NO_WARN);
 
     // Store some user data to localStorage
     var dsm = Cc["@mozilla.org/dom/storagemanager;1"]
@@ -465,12 +465,6 @@ var gAllTests = [
     var cs = Components.classes["@mozilla.org/network/cache-service;1"]
              .getService(Components.interfaces.nsICacheService);
     var session = cs.createSession(URL + "/manifest", nsICache.STORE_OFFLINE, nsICache.STREAM_BASED);
-    var cacheEntry = session.openCacheEntry(URL, nsICache.ACCESS_READ_WRITE, false);
-    var stream = cacheEntry.openOutputStream(0);
-    var content = "content";
-    stream.write(content, content.length);
-    stream.close();
-    cacheEntry.close();
 
     // Open the dialog
     let wh = new WindowHelper();
@@ -506,7 +500,20 @@ var gAllTests = [
       cs.visitEntries(visitor);
       is(size, 0, "offline application cache entries evicted");
     };
-    wh.open();
+
+    var cacheListener = {
+      onCacheEntryAvailable: function (entry, access, status) {
+        is(status, Cr.NS_OK);
+        var stream = entry.openOutputStream(0);
+        var content = "content";
+        stream.write(content, content.length);
+        stream.close();
+        entry.close();
+        wh.open();
+      }
+    };
+
+    session.asyncOpenCacheEntry(URL, nsICache.ACCESS_READ_WRITE, cacheListener);
   },
   function () {
     // Test for offline apps permission deletion
@@ -517,6 +524,10 @@ var gAllTests = [
     var ios = Cc["@mozilla.org/network/io-service;1"]
               .getService(Ci.nsIIOService);
     var URI = ios.newURI(URL, null, null);
+
+    var sm = Cc["@mozilla.org/scriptsecuritymanager;1"]
+             .getService(Ci.nsIScriptSecurityManager);
+    var principal = sm.getNoAppCodebasePrincipal(URI);
 
     // Open the dialog
     let wh = new WindowHelper();
@@ -532,7 +543,7 @@ var gAllTests = [
       // Check all has been deleted (privileges, data, cache)
       var pm = Cc["@mozilla.org/permissionmanager;1"]
                .getService(Ci.nsIPermissionManager);
-      is(pm.testPermission(URI, "offline-app"), 0, "offline-app permissions removed");
+      is(pm.testPermissionFromPrincipal(principal, "offline-app"), 0, "offline-app permissions removed");
     };
     wh.open();
   }

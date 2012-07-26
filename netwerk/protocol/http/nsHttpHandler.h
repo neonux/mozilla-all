@@ -94,6 +94,7 @@ public:
     PRUint32       SpdySendingChunkSize() { return mSpdySendingChunkSize; }
     PRIntervalTime SpdyPingThreshold() { return mSpdyPingThreshold; }
     PRIntervalTime SpdyPingTimeout() { return mSpdyPingTimeout; }
+    PRUint32       ConnectTimeout()  { return mConnectTimeout; }
 
     bool           PromptTempRedirect()      { return mPromptTempRedirect; }
 
@@ -286,7 +287,6 @@ private:
     PRUint16 mIdleSynTimeout;
 
     PRUint16 mMaxConnections;
-    PRUint8  mMaxConnectionsPerServer;
     PRUint8  mMaxPersistentConnectionsPerServer;
     PRUint8  mMaxPersistentConnectionsPerProxy;
     PRUint16 mMaxPipelinedRequests;
@@ -331,6 +331,7 @@ private:
     nsXPIDLCString mAppName;
     nsXPIDLCString mAppVersion;
     nsCString      mCompatFirefox;
+    bool           mCompatFirefoxEnabled;
     nsXPIDLCString mCompatDevice;
 
     nsCString      mUserAgent;
@@ -366,6 +367,10 @@ private:
     PRUint32       mSpdySendingChunkSize;
     PRIntervalTime mSpdyPingThreshold;
     PRIntervalTime mSpdyPingTimeout;
+
+    // The maximum amount of time to wait for socket transport to be
+    // established. In milliseconds.
+    PRUint32       mConnectTimeout;
 };
 
 //-----------------------------------------------------------------------------

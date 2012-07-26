@@ -56,7 +56,7 @@ NS_IMPL_FRAMEARENA_HELPERS(nsSVGGradientFrame)
 /* virtual */ void
 nsSVGGradientFrame::DidSetStyleContext(nsStyleContext* aOldStyleContext)
 {
-  nsSVGEffects::InvalidateRenderingObservers(this);
+  nsSVGEffects::InvalidateDirectRenderingObservers(this);
   nsSVGGradientFrameBase::DidSetStyleContext(aOldStyleContext);
 }
 
@@ -69,14 +69,14 @@ nsSVGGradientFrame::AttributeChanged(PRInt32         aNameSpaceID,
       (aAttribute == nsGkAtoms::gradientUnits ||
        aAttribute == nsGkAtoms::gradientTransform ||
        aAttribute == nsGkAtoms::spreadMethod)) {
-    nsSVGEffects::InvalidateRenderingObservers(this);
+    nsSVGEffects::InvalidateDirectRenderingObservers(this);
   } else if (aNameSpaceID == kNameSpaceID_XLink &&
              aAttribute == nsGkAtoms::href) {
     // Blow away our reference, if any
     Properties().Delete(nsSVGEffects::HrefProperty());
     mNoHRefURI = false;
     // And update whoever references us
-    nsSVGEffects::InvalidateRenderingObservers(this);
+    nsSVGEffects::InvalidateDirectRenderingObservers(this);
   }
 
   return nsSVGGradientFrameBase::AttributeChanged(aNameSpaceID,
@@ -238,6 +238,7 @@ nsSVGGradientFrame::GetRadialGradientWithLength(PRUint32 aIndex,
 
 already_AddRefed<gfxPattern>
 nsSVGGradientFrame::GetPaintServerPattern(nsIFrame *aSource,
+                                          const gfxMatrix& aContextMatrix,
                                           nsStyleSVGPaint nsStyleSVG::*aFillOrStroke,
                                           float aGraphicOpacity,
                                           const gfxRect *aOverrideBounds)
@@ -388,7 +389,7 @@ nsSVGGradientFrame::GetStopFrame(PRInt32 aIndex, nsIFrame * *aStopFrame)
   AutoGradientReferencer gradientRef(this);
   nsSVGGradientFrame* next = GetReferencedGradientIfNotInUse();
   if (!next)
-    return nsnull;
+    return 0;
 
   return next->GetStopFrame(aIndex, aStopFrame);
 }
@@ -426,7 +427,7 @@ nsSVGLinearGradientFrame::AttributeChanged(PRInt32         aNameSpaceID,
        aAttribute == nsGkAtoms::y1 ||
        aAttribute == nsGkAtoms::x2 ||
        aAttribute == nsGkAtoms::y2)) {
-    nsSVGEffects::InvalidateRenderingObservers(this);
+    nsSVGEffects::InvalidateDirectRenderingObservers(this);
   }
 
   return nsSVGGradientFrame::AttributeChanged(aNameSpaceID,
@@ -528,7 +529,7 @@ nsSVGRadialGradientFrame::AttributeChanged(PRInt32         aNameSpaceID,
        aAttribute == nsGkAtoms::cy ||
        aAttribute == nsGkAtoms::fx ||
        aAttribute == nsGkAtoms::fy)) {
-    nsSVGEffects::InvalidateRenderingObservers(this);
+    nsSVGEffects::InvalidateDirectRenderingObservers(this);
   }
 
   return nsSVGGradientFrame::AttributeChanged(aNameSpaceID,

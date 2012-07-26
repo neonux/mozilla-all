@@ -20,6 +20,7 @@
 #include "nsBoxLayoutState.h"
 #include "nsIReflowCallback.h"
 #include "nsContentUtils.h"
+#include "mozilla/Attributes.h"
 //
 // NS_NewToolbarFrame
 //
@@ -42,7 +43,7 @@ nsProgressMeterFrame :: ~nsProgressMeterFrame ( )
 {
 }
 
-class nsAsyncProgressMeterInit : public nsIReflowCallback
+class nsAsyncProgressMeterInit MOZ_FINAL : public nsIReflowCallback
 {
 public:
   nsAsyncProgressMeterInit(nsIFrame* aFrame) : mWeakFrame(aFrame) {}
@@ -140,7 +141,7 @@ nsProgressMeterFrame::AttributeChanged(PRInt32 aNameSpaceID,
   return NS_OK;
 }
 
-#ifdef NS_DEBUG
+#ifdef DEBUG
 NS_IMETHODIMP
 nsProgressMeterFrame::GetFrameName(nsAString& aResult) const
 {

@@ -7,6 +7,7 @@ const {classes: Cc, interfaces: Ci, utils: Cu} = Components;
 const MARIONETTE_CONTRACTID = "@mozilla.org/marionette;1";
 const MARIONETTE_CID = Components.ID("{786a1369-dca5-4adc-8486-33d23c88010a}");
 const DEBUGGER_ENABLED_PREF = 'devtools.debugger.remote-enabled';
+const MARIONETTE_ENABLED_PREF = 'marionette.defaultPrefs.enabled';
 
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 Cu.import("resource://gre/modules/Services.jsm");
@@ -17,6 +18,12 @@ function MarionetteComponent() {
   this._loaded = false;
   // set up the logger
   this.logger = Log4Moz.repository.getLogger("Marionette");
+  this.logger.level = Log4Moz.Level["All"];
+  let logf = FileUtils.getFile('ProfD', ['marionette.log']);
+  
+  let formatter = new Log4Moz.BasicFormatter();
+  this.logger.addAppender(new Log4Moz.FileAppender(logf, formatter));
+  this.logger.info("MarionetteComponent loaded");
 }
 
 MarionetteComponent.prototype = {
@@ -30,14 +37,12 @@ MarionetteComponent.prototype = {
     let observerService = Services.obs;
     switch (aTopic) {
       case "profile-after-change":
-        if (Services.prefs.getBoolPref('marionette.defaultPrefs.enabled')) {
-
-          this.logger.level = Log4Moz.Level["All"];
-          let logf = FileUtils.getFile('ProfD', ['marionette.log']);
-          
-          let formatter = new Log4Moz.BasicFormatter();
-          this.logger.addAppender(new Log4Moz.FileAppender(logf, formatter));
-          this.logger.info("MarionetteComponent loaded");
+        let enabled = false;
+        try {
+          enabled = Services.prefs.getBoolPref(MARIONETTE_ENABLED_PREF);
+        } catch(e) {}
+        if (enabled) {
+          this.logger.info("marionette enabled");
 
           //add observers
           observerService.addObserver(this, "final-ui-startup", false);

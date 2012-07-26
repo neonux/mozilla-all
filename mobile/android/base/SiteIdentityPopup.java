@@ -4,14 +4,12 @@
 
 package org.mozilla.gecko;
 
-import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.drawable.BitmapDrawable;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.PopupWindow;
-import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.RelativeLayout.LayoutParams;
 import android.widget.ImageView;
@@ -61,7 +59,8 @@ public class SiteIdentityPopup extends PopupWindow {
     private void init() {
         setBackgroundDrawable(new BitmapDrawable());
         setOutsideTouchable(true);
-        setWindowLayoutMode(LayoutParams.FILL_PARENT, LayoutParams.WRAP_CONTENT);
+        setWindowLayoutMode(GeckoApp.mAppContext.isTablet() ? LayoutParams.WRAP_CONTENT : LayoutParams.FILL_PARENT,
+                LayoutParams.WRAP_CONTENT);
 
         LayoutInflater inflater = LayoutInflater.from(GeckoApp.mAppContext);
         RelativeLayout layout = (RelativeLayout) inflater.inflate(R.layout.site_identity_popup, null);
@@ -96,7 +95,7 @@ public class SiteIdentityPopup extends PopupWindow {
         try {
             mode = identityData.getString("mode");
         } catch (JSONException e) {
-            Log.e(LOGTAG, "Exception trying to get identity mode: " + e);
+            Log.e(LOGTAG, "Exception trying to get identity mode", e);
             return;
         }
 
@@ -121,7 +120,7 @@ public class SiteIdentityPopup extends PopupWindow {
             String encrypted = identityData.getString("encrypted");
             mEncrypted.setText(encrypted);
         } catch (JSONException e) {
-            Log.e(LOGTAG, "Exception trying to get identity data: " + e);
+            Log.e(LOGTAG, "Exception trying to get identity data", e);
             return;
         }
 
@@ -147,13 +146,21 @@ public class SiteIdentityPopup extends PopupWindow {
             mSupplemental.setTextColor(mResources.getColor(R.color.identity_identified));
         }
 
-        // Position the mArrow according to lock position
+        int offset = 0;
+        if (GeckoApp.mAppContext.isTablet()) {
+            int popupWidth = mResources.getDimensionPixelSize(R.dimen.site_identity_popup_width);
+            int arrowWidth = mResources.getDimensionPixelSize(R.dimen.doorhanger_arrow_width);
+
+            // Double arrowWidth to leave extra space on the right side of the arrow
+            leftMargin = popupWidth - arrowWidth*2;
+            offset = 0 - popupWidth + arrowWidth*3/2 + v.getWidth()/2;
+        }
+
         LayoutParams layoutParams = (LayoutParams) mArrow.getLayoutParams();
         LayoutParams newLayoutParams = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
         newLayoutParams.setMargins(leftMargin, layoutParams.topMargin, 0, 0);
         mArrow.setLayoutParams(newLayoutParams);
 
-        // This will place the popup at the correct vertical position
-        showAsDropDown(v);
+        showAsDropDown(v, offset, 0);
     }
 }

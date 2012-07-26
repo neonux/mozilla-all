@@ -1,5 +1,3 @@
-import WebIDL
-
 def WebIDLTest(parser, harness):
     parser.parse("""
       dictionary Dict2 : Dict1 {
@@ -29,7 +27,7 @@ def WebIDLTest(parser, harness):
                   "'a' really comes before 'c'")
 
     # Now reset our parser
-    parser = WebIDL.Parser()
+    parser = parser.reset()
     threw = False
     try:
         parser.parse("""
@@ -45,7 +43,7 @@ def WebIDLTest(parser, harness):
     harness.ok(threw, "Should not allow name duplication in a dictionary")
 
     # Now reset our parser again
-    parser = WebIDL.Parser()
+    parser = parser.reset()
     threw = False
     try:
         parser.parse("""
@@ -67,7 +65,7 @@ def WebIDLTest(parser, harness):
                "its ancestor")
 
     # More reset
-    parser = WebIDL.Parser()
+    parser = parser.reset()
     threw = False
     try:
         parser.parse("""
@@ -83,7 +81,7 @@ def WebIDLTest(parser, harness):
     harness.ok(threw, "Should not allow non-dictionary parents for dictionaries")
 
     # Even more reset
-    parser = WebIDL.Parser()
+    parser = parser.reset()
     threw = False
     try:
         parser.parse("""
@@ -95,3 +93,106 @@ def WebIDLTest(parser, harness):
         threw = True
 
     harness.ok(threw, "Should not allow cycles in dictionary inheritance chains")
+
+    parser = parser.reset()
+    threw = False
+    try:
+        parser.parse("""
+            dictionary A {
+              [TreatNullAs=EmptyString] DOMString foo;
+            };
+        """)
+        results = parser.finish()
+    except:
+        threw = True
+
+    harness.ok(threw, "Should not allow [TreatNullAs] on dictionary members");
+
+    parser = parser.reset()
+    threw = False
+    try:
+        parser.parse("""
+            dictionary A {
+              [TreatUndefinedAs=EmptyString] DOMString foo;
+            };
+        """)
+        results = parser.finish()
+    except:
+        threw = True
+
+    harness.ok(threw, "Should not allow [TreatUndefinedAs] on dictionary members");
+
+    parser = parser.reset()
+    threw = False
+    try:
+        parser.parse("""
+            dictionary A {
+            };
+            interface X {
+              void doFoo(A arg);
+            };
+        """)
+        results = parser.finish()
+    except:
+        threw = True
+
+    harness.ok(threw, "Trailing dictionary arg must be optional")
+
+    parser = parser.reset()
+    threw = False
+    try:
+        parser.parse("""
+            dictionary A {
+            };
+            interface X {
+              void doFoo(A arg1, optional long arg2);
+            };
+        """)
+        results = parser.finish()
+    except:
+        threw = True
+
+    harness.ok(threw, "Dictionary arg followed by optional arg must be optional")
+
+    parser = parser.reset()
+    parser.parse("""
+            dictionary A {
+            };
+            interface X {
+              void doFoo(A arg1, long arg2);
+            };
+        """)
+    results = parser.finish()
+    harness.ok(True, "Dictionary arg followed by required arg can be required")
+
+    parser = parser.reset()
+    threw = False
+    try:
+        parser.parse("""
+            dictionary A {
+            };
+            interface X {
+              void doFoo(optional A? arg1);
+            };
+        """)
+        results = parser.finish()
+    except:
+        threw = True
+
+    harness.ok(threw, "Dictionary arg must not be nullable")
+
+    parser = parser.reset()
+    threw = False
+    try:
+        parser.parse("""
+            dictionary A {
+            };
+            interface X {
+              void doFoo((A or long)? arg1);
+            };
+        """)
+        results = parser.finish()
+    except:
+        threw = True
+
+    harness.ok(threw, "Dictionary arg must not be in a nullable union")

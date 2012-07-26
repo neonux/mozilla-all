@@ -289,7 +289,8 @@ let Manager = {
       case "LocationChange":
         ConsoleProgressListener.startMonitor(ConsoleProgressListener
                                              .MONITOR_LOCATION_CHANGE);
-        ConsoleProgressListener.sendLocation();
+        ConsoleProgressListener.sendLocation(this.window.location.href,
+                                             this.window.document.title);
         break;
       default:
         Cu.reportError("Web Console content: unknown feature " + aFeature);
@@ -497,7 +498,7 @@ let Manager = {
       NetworkResponseListener = ConsoleProgressListener = null;
 
     XPCOMUtils = gConsoleStorage = WebConsoleUtils = l10n = JSPropertyProvider =
-      NetworkHelper = NetUtil = activityDistributor = null;
+      null;
   },
 };
 
@@ -1175,12 +1176,13 @@ let ConsoleAPIObserver = {
         aRemoteMessage.objectsCacheId = Manager.sequenceId;
         aRemoteMessage.argumentsToString = [];
         let mapFunction = function(aItem) {
-          aRemoteMessage.argumentsToString.push(this._formatObject(aItem));
+          let formattedObject = this._formatObject(aItem);
+          aRemoteMessage.argumentsToString.push(formattedObject);
           if (WebConsoleUtils.isObjectInspectable(aItem)) {
             return JSTerm.prepareObjectForRemote(aItem,
                                                  aRemoteMessage.objectsCacheId);
           }
-          return aItem;
+          return formattedObject;
         }.bind(this);
 
         aRemoteMessage.apiMessage.arguments =
@@ -2225,7 +2227,7 @@ let NetworkMonitor = {
 
     // DNS timing information is available only in when the DNS record is not
     // cached.
-    harTimings.dns = timings.STATUS_RESOLVING ?
+    harTimings.dns = timings.STATUS_RESOLVING && timings.STATUS_RESOLVED ?
                      timings.STATUS_RESOLVED.last -
                      timings.STATUS_RESOLVING.first : -1;
 
@@ -2471,17 +2473,24 @@ let ConsoleProgressListener = {
   _checkLocationChange:
   function CPL__checkLocationChange(aProgress, aRequest, aState, aStatus)
   {
+    let isStart = aState & Ci.nsIWebProgressListener.STATE_START;
     let isStop = aState & Ci.nsIWebProgressListener.STATE_STOP;
     let isNetwork = aState & Ci.nsIWebProgressListener.STATE_IS_NETWORK;
     let isWindow = aState & Ci.nsIWebProgressListener.STATE_IS_WINDOW;
 
     // Skip non-interesting states.
-    if (!isStop || !isNetwork || !isWindow ||
+    if (!isNetwork || !isWindow ||
         aProgress.DOMWindow != Manager.window) {
       return;
     }
 
-    this.sendLocation();
+    if (isStart && aRequest instanceof Ci.nsIChannel) {
+      this.sendLocation(aRequest.URI.spec, "");
+    }
+    else if (isStop) {
+      this.sendLocation(Manager.window.location.href,
+                        Manager.window.document.title);
+    }
   },
 
   onLocationChange: function() {},
@@ -2493,12 +2502,17 @@ let ConsoleProgressListener = {
    * Send the location of the current top window to the remote Web Console.
    * A "WebConsole:LocationChange" message is sent. The JSON object holds two
    * properties: location and title.
+   *
+   * @param string aLocation
+   *        Current page address.
+   * @param string aTitle
+   *        Current page title.
    */
-  sendLocation: function CPL_sendLocation()
+  sendLocation: function CPL_sendLocation(aLocation, aTitle)
   {
     let message = {
-      "location": Manager.window.location.href,
-      "title": Manager.window.document.title,
+      "location": aLocation,
+      "title": aTitle,
     };
     Manager.sendMessage("WebConsole:LocationChange", message);
   },

@@ -6,11 +6,14 @@
 #ifndef __TextEditorTest_h__
 #define __TextEditorTest_h__
 
-#ifdef NS_DEBUG
+#include "nscore.h"
+#include "prtypes.h"
+
+class nsIEditor;
+class nsIPlaintextEditor;
+#ifdef DEBUG
 
 #include "nsCOMPtr.h"
-#include "nsIEditor.h"
-#include "nsIPlaintextEditor.h"
 
 class TextEditorTest
 {
@@ -35,6 +38,6 @@ protected:
   nsCOMPtr<nsIEditor> mEditor;
 };
 
-#endif /* NS_DEBUG */
+#endif /* DEBUG */
 
 #endif

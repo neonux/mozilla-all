@@ -5,23 +5,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+include LayersSurfaces;
+using mozilla::ScreenRotation;
 include protocol PCompositor;
+include protocol PGrallocBuffer;
 include protocol PLayer;
 include protocol PRenderFrame;
 
 include "gfxipc/ShadowLayerUtils.h";
-
-using gfx3DMatrix;
-using gfxRGBA;
-using nsIntPoint;
-using nsIntRect;
-using nsIntRegion;
-using nsIntSize;
-using mozilla::GraphicsFilterType;
-using mozilla::layers::FrameMetrics;
-using mozilla::layers::SurfaceDescriptorX11;
-using mozilla::null_t;
-using mozilla::WindowsHandle;
+include "mozilla/WidgetUtils.h";
 
 /**
  * The layers protocol is spoken between thread contexts that manage
@@ -34,35 +26,18 @@ using mozilla::WindowsHandle;
 namespace mozilla {
 namespace layers {
 
+struct TargetConfig {
+  nsIntRect naturalBounds;
+  ScreenRotation rotation;
+};
+
 // Create a shadow layer for |layer|
 struct OpCreateThebesLayer     { PLayer layer; };
 struct OpCreateContainerLayer  { PLayer layer; };
 struct OpCreateImageLayer      { PLayer layer; };
 struct OpCreateColorLayer      { PLayer layer; };
 struct OpCreateCanvasLayer     { PLayer layer; };
-
-struct SurfaceDescriptorD3D10 {
-  WindowsHandle handle;
-};
-
-union SurfaceDescriptor {
-  Shmem;
-  SurfaceDescriptorD3D10;
-  SurfaceDescriptorX11;
-};
-
-struct YUVImage {
-  Shmem Ydata;
-  Shmem Udata;
-  Shmem Vdata;
-  nsIntRect picture;
-};
-
-union SharedImage {
-  SurfaceDescriptor;
-  YUVImage;
-  null_t;
-};
+struct OpCreateRefLayer        { PLayer layer; };
 
 struct ThebesBuffer {
   SurfaceDescriptor buffer;
@@ -85,6 +60,7 @@ struct CommonLayerAttributes {
   bool useClipRect;
   nsIntRect clipRect;
   bool isFixedPosition;
+  gfxPoint fixedPositionAnchor;
   nullable PLayer maskLayer;
 };
 
@@ -94,6 +70,7 @@ struct ThebesLayerAttributes {
 struct ContainerLayerAttributes{ FrameMetrics metrics; };
 struct ColorLayerAttributes    { gfxRGBA color; };
 struct CanvasLayerAttributes   { GraphicsFilterType filter; };
+struct RefLayerAttributes      { int64_t id; };
 struct ImageLayerAttributes    {
   GraphicsFilterType filter;
   bool forceSingleTile;
@@ -105,6 +82,7 @@ union SpecificLayerAttributes {
   ContainerLayerAttributes;
   ColorLayerAttributes;
   CanvasLayerAttributes;
+  RefLayerAttributes;
   ImageLayerAttributes;
 };
 
@@ -159,6 +137,7 @@ union Edit {
   OpCreateImageLayer;
   OpCreateColorLayer;
   OpCreateCanvasLayer;
+  OpCreateRefLayer;
 
   OpSetLayerAttributes;
 
@@ -204,14 +183,22 @@ union EditReply {
 
 sync protocol PLayers {
   manager PRenderFrame or PCompositor;
+  manages PGrallocBuffer;
   manages PLayer;
 
 parent:
+  /**
+   * Only the parent side has privileges to allocate the buffer.
+   * Allocation may fail (pmem is a scarce resource), and if so null_t
+   * is returned.
+   */
+  sync PGrallocBuffer(gfxIntSize size, gfxContentType content)
+    returns (MaybeMagicGrallocBufferHandle handle);
   async PLayer();
 
   // The isFirstPaint flag can be used to indicate that this is the first update
   // for a particular document.
-  sync Update(Edit[] cset, bool isFirstPaint)
+  sync Update(Edit[] cset, TargetConfig targetConfig, bool isFirstPaint)
     returns (EditReply[] reply);
 
   // Composite the layer tree to the given surface, and return the surface.
@@ -220,7 +207,7 @@ parent:
 
   // We don't need to send a sync transaction if
   // no transaction operate require a swap.
-  async UpdateNoSwap(Edit[] cset, bool isFirstPaint);
+  async UpdateNoSwap(Edit[] cset, TargetConfig targetConfig, bool isFirstPaint);
 
   async __delete__();
 };

@@ -43,6 +43,9 @@
 
 [xpcom]
 @BINPATH@/dependentlibs.list
+#ifdef XP_WIN32
+@BINPATH@/@DLL_PREFIX@gkmedias@DLL_SUFFIX@
+#endif
 #ifndef MOZ_STATIC_JS
 @BINPATH@/@DLL_PREFIX@mozjs@DLL_SUFFIX@
 #endif
@@ -82,11 +85,13 @@
 @BINPATH@/mozcpp19.dll
 #endif
 #endif
+#ifdef MOZ_SHARED_MOZGLUE
+@BINPATH@/@DLL_PREFIX@mozglue@DLL_SUFFIX@
+#endif
 #ifdef ANDROID
 @BINPATH@/AndroidManifest.xml
 @BINPATH@/resources.arsc
 @BINPATH@/classes.dex
-@BINPATH@/@DLL_PREFIX@mozglue@DLL_SUFFIX@
 @BINPATH@/res/drawable
 @BINPATH@/res/drawable-hdpi
 @BINPATH@/res/layout
@@ -148,6 +153,7 @@
 @BINPATH@/components/directory.xpt
 @BINPATH@/components/docshell.xpt
 @BINPATH@/components/dom.xpt
+@BINPATH@/components/dom_activities.xpt
 @BINPATH@/components/dom_apps.xpt
 @BINPATH@/components/dom_base.xpt
 #ifdef MOZ_B2G_RIL
@@ -161,6 +167,7 @@
 #endif
 @BINPATH@/components/dom_canvas.xpt
 @BINPATH@/components/dom_contacts.xpt
+@BINPATH@/components/dom_alarm.xpt
 @BINPATH@/components/dom_core.xpt
 @BINPATH@/components/dom_css.xpt
 @BINPATH@/components/dom_devicestorage.xpt
@@ -178,6 +185,7 @@
 @BINPATH@/components/dom_mms.xpt
 #endif
 @BINPATH@/components/dom_browserelement.xpt
+@BINPATH@/components/dom_messages.xpt
 @BINPATH@/components/dom_power.xpt
 @BINPATH@/components/dom_range.xpt
 @BINPATH@/components/dom_settings.xpt
@@ -316,6 +324,8 @@
 @BINPATH@/components/BrowserElementParent.js
 @BINPATH@/components/ContactManager.js
 @BINPATH@/components/ContactManager.manifest
+@BINPATH@/components/AlarmsManager.js
+@BINPATH@/components/AlarmsManager.manifest
 @BINPATH@/components/FeedProcessor.manifest
 @BINPATH@/components/FeedProcessor.js
 @BINPATH@/components/BrowserFeeds.manifest
@@ -462,6 +472,19 @@
 @BINPATH@/components/Webapps.manifest
 @BINPATH@/components/AppsService.js
 @BINPATH@/components/AppsService.manifest
+
+@BINPATH@/components/SystemMessageInternal.js
+@BINPATH@/components/SystemMessageManager.js
+@BINPATH@/components/SystemMessageManager.manifest
+
+@BINPATH@/components/Activities.manifest
+@BINPATH@/components/ActivityOptions.js
+@BINPATH@/components/ActivityProxy.js
+@BINPATH@/components/ActivityRequestHandler.js
+@BINPATH@/components/ActivityWrapper.js
+
+@BINPATH@/components/AppProtocolHandler.js
+@BINPATH@/components/AppProtocolHandler.manifest
 
 ; Modules
 @BINPATH@/modules/*
@@ -659,4 +682,6 @@ bin/components/@DLL_PREFIX@nkgnomevfs@DLL_SUFFIX@
 #endif
 @BINPATH@/components/MozKeyboard.js
 @BINPATH@/components/DirectoryProvider.js
+@BINPATH@/components/ActivitiesGlue.js
 @BINPATH@/components/ProcessGlobal.js
+@BINPATH@/components/ContentHandler.js

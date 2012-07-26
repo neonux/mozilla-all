@@ -9,15 +9,23 @@
 #include "IDBFactory.h"
 
 #include "nsIFile.h"
+#include "nsIJSContextStack.h"
 #include "nsIPrincipal.h"
 #include "nsIScriptContext.h"
+#include "nsIXPConnect.h"
+#include "nsIXPCScriptable.h"
 
+#include "jsdbgapi.h"
+#include "mozilla/dom/ContentChild.h"
+#include "mozilla/dom/PBrowserChild.h"
+#include "mozilla/dom/TabChild.h"
 #include "mozilla/storage.h"
 #include "nsComponentManagerUtils.h"
 #include "nsIScriptSecurityManager.h"
 #include "nsCharSeparatedTokenizer.h"
 #include "nsContentUtils.h"
 #include "nsDOMClassInfoID.h"
+#include "nsGlobalWindow.h"
 #include "nsHashKeys.h"
 #include "nsPIDOMWindow.h"
 #include "nsServiceManagerUtils.h"
@@ -33,13 +41,12 @@
 #include "IndexedDatabaseManager.h"
 #include "Key.h"
 
-#include "mozilla/dom/PBrowserChild.h"
-#include "mozilla/dom/TabChild.h"
-using mozilla::dom::TabChild;
-
 #include "ipc/IndexedDBChild.h"
 
 USING_INDEXEDDB_NAMESPACE
+
+using mozilla::dom::ContentChild;
+using mozilla::dom::TabChild;
 
 namespace {
 
@@ -55,7 +62,8 @@ struct ObjectStoreInfoMap
 } // anonymous namespace
 
 IDBFactory::IDBFactory()
-: mOwningObject(nsnull), mActorChild(nsnull), mActorParent(nsnull)
+: mOwningObject(nsnull), mActorChild(nsnull), mActorParent(nsnull),
+  mRootedOwningObject(false)
 {
 }
 
@@ -66,6 +74,9 @@ IDBFactory::~IDBFactory()
     NS_ASSERTION(!IndexedDatabaseManager::IsMainProcess(), "Wrong process!");
     mActorChild->Send__delete__(mActorChild);
     NS_ASSERTION(!mActorChild, "Should have cleared in Send__delete__!");
+  }
+  if (mRootedOwningObject) {
+    NS_DROP_JS_OBJECTS(this, IDBFactory);
   }
 }
 
@@ -152,6 +163,92 @@ IDBFactory::Create(JSContext* aCx,
   factory->mASCIIOrigin = origin;
   factory->mOwningObject = aOwningObject;
 
+  if (!IndexedDatabaseManager::IsMainProcess()) {
+    ContentChild* contentChild = ContentChild::GetSingleton();
+    NS_ENSURE_TRUE(contentChild, NS_ERROR_DOM_INDEXEDDB_UNKNOWN_ERR);
+
+    IndexedDBChild* actor = new IndexedDBChild(origin);
+
+    contentChild->SendPIndexedDBConstructor(actor);
+
+    actor->SetFactory(factory);
+  }
+
+  factory.forget(aFactory);
+  return NS_OK;
+}
+
+// static
+nsresult
+IDBFactory::Create(IDBFactory** aFactory)
+{
+  NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
+  NS_ASSERTION(IndexedDatabaseManager::IsMainProcess(), "Wrong process!");
+  NS_ASSERTION(nsContentUtils::IsCallerChrome(), "Only for chrome!");
+
+#ifdef DEBUG
+  {
+    nsIThreadJSContextStack* cxStack = nsContentUtils::ThreadJSContextStack();
+    NS_ASSERTION(cxStack, "Couldn't get ThreadJSContextStack!");
+
+    JSContext* lastCx;
+    if (NS_SUCCEEDED(cxStack->Peek(&lastCx))) {
+      NS_ASSERTION(!lastCx, "We should only be called from C++!");
+    }
+    else {
+      NS_ERROR("nsIThreadJSContextStack::Peek should never fail!");
+    }
+  }
+#endif
+
+  nsCString origin;
+  nsresult rv =
+    IndexedDatabaseManager::GetASCIIOriginFromWindow(nsnull, origin);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  nsCOMPtr<nsIPrincipal> principal =
+    do_CreateInstance("@mozilla.org/nullprincipal;1");
+  NS_ENSURE_TRUE(principal, NS_ERROR_FAILURE);
+
+  JSContext* cx = nsContentUtils::GetSafeJSContext();
+  NS_ENSURE_TRUE(cx, NS_ERROR_FAILURE);
+
+  nsCxPusher pusher;
+  if (!pusher.Push(cx)) {
+    NS_WARNING("Failed to push safe JS context!");
+    return NS_ERROR_FAILURE;
+  }
+
+  JSAutoRequest ar(cx);
+
+  nsIXPConnect* xpc = nsContentUtils::XPConnect();
+  NS_ASSERTION(xpc, "This should never be null!");
+
+  nsCOMPtr<nsIXPConnectJSObjectHolder> globalHolder;
+  rv = xpc->CreateSandbox(cx, principal, getter_AddRefs(globalHolder));
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  JSObject* global;
+  rv = globalHolder->GetJSObject(&global);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  // The CreateSandbox call returns a proxy to the actual sandbox object. We
+  // don't need a proxy here.
+  global = JS_UnwrapObject(global);
+
+  JSAutoEnterCompartment ac;
+  if (!ac.enter(cx, global)) {
+    NS_WARNING("Failed to enter compartment!");
+    return NS_ERROR_FAILURE;
+  }
+
+  nsRefPtr<IDBFactory> factory;
+  rv = Create(cx, global, getter_AddRefs(factory));
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  NS_HOLD_JS_OBJECTS(factory, IDBFactory);
+  factory->mRootedOwningObject = true;
+
   factory.forget(aFactory);
   return NS_OK;
 }
@@ -184,9 +281,15 @@ IDBFactory::GetConnection(const nsAString& aDatabaseFilePath)
                                getter_AddRefs(connection));
   NS_ENSURE_SUCCESS(rv, nsnull);
 
-  // Turn on foreign key constraints!
+  // Turn on foreign key constraints and recursive triggers.
+  // The "INSERT OR REPLACE" statement doesn't fire the update trigger,
+  // instead it fires only the insert trigger. This confuses the update
+  // refcount function. This behavior changes with enabled recursive triggers,
+  // so the statement fires the delete trigger first and then the insert
+  // trigger.
   rv = connection->ExecuteSimpleSQL(NS_LITERAL_CSTRING(
-    "PRAGMA foreign_keys = ON;"
+    "PRAGMA foreign_keys = ON; "
+    "PRAGMA recursive_triggers = ON;"
   ));
   NS_ENSURE_SUCCESS(rv, nsnull);
 
@@ -237,33 +340,17 @@ IDBFactory::LoadDatabaseInformation(mozIStorageConnection* aConnection,
     PRInt32 columnType;
     nsresult rv = stmt->GetTypeOfIndex(2, &columnType);
     NS_ENSURE_SUCCESS(rv, rv);
-    if (columnType == mozIStorageStatement::VALUE_TYPE_NULL) {
-      info->keyPath.SetIsVoid(true);
-    }
-    else {
+
+    // NB: We don't have to handle the NULL case, since that is the default
+    // for a new KeyPath.
+    if (columnType != mozIStorageStatement::VALUE_TYPE_NULL) {
       NS_ASSERTION(columnType == mozIStorageStatement::VALUE_TYPE_TEXT,
                    "Should be a string");
-      nsString keyPath;
-      rv = stmt->GetString(2, keyPath);
+      nsString keyPathSerialization;
+      rv = stmt->GetString(2, keyPathSerialization);
       NS_ENSURE_SUCCESS(rv, rv);
 
-      if (!keyPath.IsEmpty() && keyPath.First() == ',') {
-        // We use a comma in the beginning to indicate that it's an array of
-        // key paths. This is to be able to tell a string-keypath from an
-        // array-keypath which contains only one item.
-        nsCharSeparatedTokenizerTemplate<IgnoreWhitespace>
-          tokenizer(keyPath, ',');
-        tokenizer.nextToken();
-        while (tokenizer.hasMoreTokens()) {
-          info->keyPathArray.AppendElement(tokenizer.nextToken());
-        }
-        NS_ASSERTION(!info->keyPathArray.IsEmpty(),
-                     "Should have at least one keypath");
-      }
-      else {
-        info->keyPath = keyPath;
-      }
-
+      info->keyPath = KeyPath::DeserializeFromString(keyPathSerialization);
     }
 
     info->nextAutoIncrementId = stmt->AsInt64(3);
@@ -310,26 +397,12 @@ IDBFactory::LoadDatabaseInformation(mozIStorageConnection* aConnection,
     rv = stmt->GetString(2, indexInfo->name);
     NS_ENSURE_SUCCESS(rv, rv);
 
-    nsString keyPath;
-    rv = stmt->GetString(3, keyPath);
+    nsString keyPathSerialization;
+    rv = stmt->GetString(3, keyPathSerialization);
     NS_ENSURE_SUCCESS(rv, rv);
-    if (!keyPath.IsEmpty() && keyPath.First() == ',') {
-      // We use a comma in the beginning to indicate that it's an array of
-      // key paths. This is to be able to tell a string-keypath from an
-      // array-keypath which contains only one item.
-      nsCharSeparatedTokenizerTemplate<IgnoreWhitespace>
-        tokenizer(keyPath, ',');
-      tokenizer.nextToken();
-      while (tokenizer.hasMoreTokens()) {
-        indexInfo->keyPathArray.AppendElement(tokenizer.nextToken());
-      }
-      NS_ASSERTION(!indexInfo->keyPathArray.IsEmpty(),
-                   "Should have at least one keypath");
-    }
-    else {
-      indexInfo->keyPath = keyPath;
-    }
 
+    // XXX bent wants to assert here
+    indexInfo->keyPath = KeyPath::DeserializeFromString(keyPathSerialization);
     indexInfo->unique = !!stmt->AsInt32(4);
     indexInfo->multiEntry = !!stmt->AsInt32(5);
   }
@@ -412,6 +485,10 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN(IDBFactory)
   if (tmp->mOwningObject) {
     tmp->mOwningObject = nsnull;
   }
+  if (tmp->mRootedOwningObject) {
+    NS_DROP_JS_OBJECTS(tmp, IDBFactory);
+    tmp->mRootedOwningObject = false;
+  }
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mWindow)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 
@@ -425,24 +502,26 @@ nsresult
 IDBFactory::OpenCommon(const nsAString& aName,
                        PRInt64 aVersion,
                        bool aDeleting,
+                       JSContext* aCallingCx,
                        IDBOpenDBRequest** _retval)
 {
   NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
   NS_ASSERTION(mWindow || mOwningObject, "Must have one of these!");
 
   nsCOMPtr<nsPIDOMWindow> window;
-  nsCOMPtr<nsIScriptGlobalObject> sgo;
   JSObject* scriptOwner = nsnull;
 
   if (mWindow) {
     window = mWindow;
+    scriptOwner =
+      static_cast<nsGlobalWindow*>(window.get())->FastGetGlobalJSObject();
   }
   else {
     scriptOwner = mOwningObject;
   }
 
   nsRefPtr<IDBOpenDBRequest> request =
-    IDBOpenDBRequest::Create(window, scriptOwner);
+    IDBOpenDBRequest::Create(window, scriptOwner, aCallingCx);
   NS_ENSURE_TRUE(request, NS_ERROR_DOM_INDEXEDDB_UNKNOWN_ERR);
 
   nsresult rv;
@@ -455,7 +534,7 @@ IDBFactory::OpenCommon(const nsAString& aName,
     NS_ENSURE_SUCCESS(rv, NS_ERROR_DOM_INDEXEDDB_UNKNOWN_ERR);
 
     nsRefPtr<CheckPermissionsHelper> permissionHelper =
-      new CheckPermissionsHelper(openHelper, window, mASCIIOrigin, aDeleting);
+      new CheckPermissionsHelper(openHelper, window, aDeleting);
 
     IndexedDatabaseManager* mgr = IndexedDatabaseManager::Get();
     NS_ASSERTION(mgr, "This should never be null!");
@@ -492,6 +571,7 @@ IDBFactory::OpenCommon(const nsAString& aName,
 NS_IMETHODIMP
 IDBFactory::Open(const nsAString& aName,
                  PRInt64 aVersion,
+                 JSContext* aCx,
                  PRUint8 aArgc,
                  nsIIDBOpenDBRequest** _retval)
 {
@@ -500,7 +580,8 @@ IDBFactory::Open(const nsAString& aName,
   }
 
   nsRefPtr<IDBOpenDBRequest> request;
-  nsresult rv = OpenCommon(aName, aVersion, false, getter_AddRefs(request));
+  nsresult rv = OpenCommon(aName, aVersion, false, aCx,
+                           getter_AddRefs(request));
   NS_ENSURE_SUCCESS(rv, rv);
 
   request.forget(_retval);
@@ -509,10 +590,11 @@ IDBFactory::Open(const nsAString& aName,
 
 NS_IMETHODIMP
 IDBFactory::DeleteDatabase(const nsAString& aName,
+                           JSContext* aCx,
                            nsIIDBOpenDBRequest** _retval)
 {
   nsRefPtr<IDBOpenDBRequest> request;
-  nsresult rv = OpenCommon(aName, 0, true, getter_AddRefs(request));
+  nsresult rv = OpenCommon(aName, 0, true, aCx, getter_AddRefs(request));
   NS_ENSURE_SUCCESS(rv, rv);
 
   request.forget(_retval);

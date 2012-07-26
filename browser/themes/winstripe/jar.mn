@@ -32,7 +32,6 @@ browser.jar:
         skin/classic/browser/identity-icons-generic.png
         skin/classic/browser/identity-icons-https.png
         skin/classic/browser/identity-icons-https-ev.png
-        skin/classic/browser/identity-icons-https-mixed.png
         skin/classic/browser/keyhole-forward-mask.svg
         skin/classic/browser/KUI-background.png
         skin/classic/browser/KUI-close.png
@@ -51,6 +50,9 @@ browser.jar:
 *       skin/classic/browser/searchbar.css                           (searchbar.css)
         skin/classic/browser/searchbar-dropdown-arrow.png
         skin/classic/browser/setDesktopBackground.css
+        skin/classic/browser/share-button.png
+        skin/classic/browser/share-button-active.png
+        skin/classic/browser/share-button-shared.png
         skin/classic/browser/menu-back.png                           (menu-back.png)
         skin/classic/browser/menu-forward.png                        (menu-forward.png)
         skin/classic/browser/monitor.png
@@ -104,6 +106,7 @@ browser.jar:
         skin/classic/browser/preferences/in-content/preferences.css  (preferences/in-content/preferences.css)
         skin/classic/browser/preferences/applications.css            (preferences/applications.css)
         skin/classic/browser/preferences/aboutPermissions.css        (preferences/aboutPermissions.css)
+        skin/classic/browser/social/social.png                       (social/social.png)
         skin/classic/browser/tabbrowser/alltabs.png                  (tabbrowser/alltabs.png)
         skin/classic/browser/tabbrowser/newtab.png                   (tabbrowser/newtab.png)
         skin/classic/browser/tabbrowser/newtab-inverted.png          (tabbrowser/newtab-inverted.png)
@@ -187,6 +190,7 @@ browser.jar:
         skin/classic/browser/devtools/responsive-se-resizer.png     (devtools/responsive-se-resizer.png)
         skin/classic/browser/devtools/responsive-vertical-resizer.png (devtools/responsive-vertical-resizer.png)
         skin/classic/browser/devtools/responsive-background.png     (devtools/responsive-background.png)
+        skin/classic/browser/devtools/tools-icons-small.png         (devtools/tools-icons-small.png)
 #ifdef MOZ_SERVICES_SYNC
         skin/classic/browser/sync-throbber.png
         skin/classic/browser/sync-16.png
@@ -230,7 +234,6 @@ browser.jar:
         skin/classic/aero/browser/identity-icons-generic.png
         skin/classic/aero/browser/identity-icons-https.png
         skin/classic/aero/browser/identity-icons-https-ev.png
-        skin/classic/aero/browser/identity-icons-https-mixed.png
         skin/classic/aero/browser/keyhole-forward-mask.svg
         skin/classic/aero/browser/KUI-background.png
         skin/classic/aero/browser/KUI-close.png
@@ -249,6 +252,9 @@ browser.jar:
 *       skin/classic/aero/browser/searchbar.css                      (searchbar.css)
         skin/classic/aero/browser/searchbar-dropdown-arrow.png       (searchbar-dropdown-arrow-aero.png)
         skin/classic/aero/browser/setDesktopBackground.css
+        skin/classic/aero/browser/share-button.png
+        skin/classic/aero/browser/share-button-active.png
+        skin/classic/aero/browser/share-button-shared.png
         skin/classic/aero/browser/menu-back.png                      (menu-back-aero.png)
         skin/classic/aero/browser/menu-forward.png                   (menu-forward-aero.png)
         skin/classic/aero/browser/monitor.png
@@ -302,6 +308,7 @@ browser.jar:
         skin/classic/aero/browser/preferences/in-content/preferences.css (preferences/in-content/preferences.css)
         skin/classic/aero/browser/preferences/applications.css       (preferences/applications.css)
         skin/classic/aero/browser/preferences/aboutPermissions.css   (preferences/aboutPermissions.css)
+        skin/classic/aero/browser/social/social.png                  (social/social.png)
         skin/classic/aero/browser/tabbrowser/alltabs.png             (tabbrowser/alltabs.png)
         skin/classic/aero/browser/tabbrowser/newtab.png              (tabbrowser/newtab.png)
         skin/classic/aero/browser/tabbrowser/newtab-inverted.png     (tabbrowser/newtab-inverted.png)
@@ -385,6 +392,7 @@ browser.jar:
         skin/classic/aero/browser/devtools/responsive-se-resizer.png (devtools/responsive-se-resizer.png)
         skin/classic/aero/browser/devtools/responsive-vertical-resizer.png (devtools/responsive-vertical-resizer.png)
         skin/classic/aero/browser/devtools/responsive-background.png (devtools/responsive-background.png)
+        skin/classic/aero/browser/devtools/tools-icons-small.png     (devtools/tools-icons-small.png)
 #ifdef MOZ_SERVICES_SYNC
         skin/classic/aero/browser/sync-throbber.png
         skin/classic/aero/browser/sync-16.png

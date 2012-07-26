@@ -5,15 +5,13 @@
 
 package org.mozilla.gecko;
 
-import java.lang.CharSequence;
 import java.util.ArrayList;
 
 import android.app.Dialog;
 import android.text.Editable;
 import android.app.AlertDialog;
-import android.os.Build;
 import android.os.Bundle;
-import android.content.res.Resources;
+import android.content.res.Configuration;
 import android.content.Context;
 import android.preference.*;
 import android.preference.Preference.*;
@@ -21,9 +19,9 @@ import android.text.InputType;
 import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.Toast;
 import android.text.TextWatcher;
 import android.text.TextUtils;
 import android.content.DialogInterface;
@@ -41,12 +39,15 @@ public class GeckoPreferences
     private ArrayList<String> mPreferencesList;
     private PreferenceScreen mPreferenceScreen;
     private static boolean sIsCharEncodingEnabled = false;
+    private static final String NON_PREF_PREFIX = "android.not_a_preference.";
+    private static final String FONT_SIZE_PREF_KEY = "font.size.inflation.minTwips";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         addPreferencesFromResource(R.xml.preferences);
         GeckoAppShell.registerGeckoEventListener("Preferences:Data", this);
+        GeckoAppShell.registerGeckoEventListener("Sanitize:Finished", this);
    }
 
    @Override
@@ -61,9 +62,19 @@ public class GeckoPreferences
     }
 
     @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+
+        final FontSizePreference fontSizePref =
+                (FontSizePreference) mPreferenceScreen.findPreference(FONT_SIZE_PREF_KEY);
+        fontSizePref.onConfigurationChanged(newConfig);
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
         GeckoAppShell.unregisterGeckoEventListener("Preferences:Data", this);
+        GeckoAppShell.unregisterGeckoEventListener("Sanitize:Finished", this);
     }
 
     public void handleMessage(String event, JSONObject message) {
@@ -71,6 +82,15 @@ public class GeckoPreferences
             if (event.equals("Preferences:Data")) {
                 JSONArray jsonPrefs = message.getJSONArray("preferences");
                 refresh(jsonPrefs);
+            } else if (event.equals("Sanitize:Finished")) {
+                boolean success = message.getBoolean("success");
+                final int stringRes = success ? R.string.private_data_success : R.string.private_data_fail;
+                final Context context = this;
+                GeckoAppShell.getMainHandler().post(new Runnable () {
+                    public void run() {
+                        Toast.makeText(context, stringRes, Toast.LENGTH_SHORT).show();
+                    }
+                });
             }
         } catch (Exception e) {
             Log.e(LOGTAG, "Exception handling message \"" + event + "\":", e);
@@ -93,8 +113,17 @@ public class GeckoPreferences
                 initGroups((PreferenceGroup)pref);
             else {
                 pref.setOnPreferenceChangeListener(this);
-                if (pref.getKey() != null)
+
+                // Some Preference UI elements are not actually preferences,
+                // but they require a key to work correctly. For example,
+                // "Clear private data" requires a key for its state to be
+                // saved when the orientation changes. It uses the
+                // "android.not_a_preference.privacy.clear" key - which doesn't
+                // exist in Gecko - to satisfy this requirement.
+                String key = pref.getKey();
+                if (key != null && !key.startsWith(NON_PREF_PREFIX)) {
                     mPreferencesList.add(pref.getKey());
+                }
             }
         }
     }
@@ -137,9 +166,12 @@ public class GeckoPreferences
             int newIndex = ((ListPreference)preference).findIndexOfValue((String) newValue);
             CharSequence newEntry = ((ListPreference)preference).getEntries()[newIndex];
             ((ListPreference)preference).setSummary(newEntry);
-        }
-        if (preference instanceof LinkPreference)
+        } else if (preference instanceof LinkPreference) {
             finish();
+        } else if (preference instanceof FontSizePreference) {
+            final FontSizePreference fontSizePref = (FontSizePreference) preference;
+            fontSizePref.setSummary(fontSizePref.getSavedFontSizeName());
+        }
         return true;
     }
 
@@ -313,7 +345,18 @@ public class GeckoPreferences
                             ((ListPreference)pref).setSummary(selectedEntry);
                         }
                     });
+                } else if (pref instanceof FontSizePreference) {
+                    final FontSizePreference fontSizePref = (FontSizePreference) pref;
+                    final String twipValue = jPref.getString("value");
+                    fontSizePref.setSavedFontSize(twipValue);
+                    final String fontSizeName = fontSizePref.getSavedFontSizeName();
+                    GeckoAppShell.getMainHandler().post(new Runnable() {
+                        public void run() {
+                            fontSizePref.setSummary(fontSizeName); // Ex: "Small".
+                        }
+                    });
                 }
+
             }
         } catch (JSONException e) {
             Log.e(LOGTAG, "Problem parsing preferences response: ", e);

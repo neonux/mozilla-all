@@ -4,8 +4,7 @@
 Cu.import("resource://services-common/async.js");
 Cu.import("resource://services-common/rest.js");
 Cu.import("resource://services-common/utils.js");
-// TODO enable once build infra supports testing modules.
-//Cu.import("resource://testing-common/services-common/storageserver.js");
+Cu.import("resource://testing-common/services-common/storageserver.js");
 
 const PORT = 8080;
 const DEFAULT_USER = "123";
@@ -188,10 +187,12 @@ add_test(function test_basic_http() {
   server.startSynchronous(PORT);
 
   _("Started on " + server.port);
+  do_check_eq(server.requestCount, 0);
   let req = localRequest("/2.0/storage/crypto/keys");
   _("req is " + req);
   req.get(function (err) {
     do_check_eq(null, err);
+    do_check_eq(server.requestCount, 1);
     server.stop(run_next_test);
   });
 });
@@ -248,6 +249,28 @@ add_test(function test_bso_get_existing() {
   let payload = JSON.parse(bso.payload);
   do_check_attribute_count(payload, 1);
   do_check_eq(payload.foo, "bar");
+
+  server.stop(run_next_test);
+});
+
+add_test(function test_percent_decoding() {
+  _("Ensure query string arguments with percent encoded are handled.");
+
+  let server = new StorageServer();
+  server.registerUser("123", "password");
+  server.startSynchronous(PORT);
+
+  let coll = server.user("123").createCollection("test");
+  coll.insert("001", {foo: "bar"});
+  coll.insert("002", {bar: "foo"});
+
+  let request = localRequest("/2.0/123/storage/test?ids=001%2C002", "123",
+                             "password");
+  let error = doGetRequest(request);
+  do_check_null(error);
+  do_check_eq(request.response.status, 200);
+  let items = JSON.parse(request.response.body).items;
+  do_check_attribute_count(items, 2);
 
   server.stop(run_next_test);
 });
@@ -437,6 +460,60 @@ add_test(function test_bso_delete_unmodified() {
   do_check_eq(error, null);
   do_check_eq(request.response.status, 204);
   do_check_true(coll.bso("myid").deleted);
+
+  server.stop(run_next_test);
+});
+
+add_test(function test_collection_get_unmodified_since() {
+  _("Ensure conditional unmodified get on collection works when it should.");
+
+  let server = new StorageServer();
+  server.registerUser("123", "password");
+  server.startSynchronous(PORT);
+  let collection = server.user("123").createCollection("testcoll");
+  collection.insert("bso0", {foo: "bar"});
+
+  let serverModified = collection.timestamp;
+
+  let request1 = localRequest("/2.0/123/storage/testcoll", "123", "password");
+  request1.setHeader("X-If-Unmodified-Since", serverModified);
+  let error = doGetRequest(request1);
+  do_check_null(error);
+  do_check_eq(request1.response.status, 200);
+
+  let request2 = localRequest("/2.0/123/storage/testcoll", "123", "password");
+  request2.setHeader("X-If-Unmodified-Since", serverModified - 1);
+  let error = doGetRequest(request2);
+  do_check_null(error);
+  do_check_eq(request2.response.status, 412);
+
+  server.stop(run_next_test);
+});
+
+add_test(function test_bso_get_unmodified_since() {
+  _("Ensure conditional unmodified get on BSO works appropriately.");
+
+  let server = new StorageServer();
+  server.registerUser("123", "password");
+  server.startSynchronous(PORT);
+  let collection = server.user("123").createCollection("testcoll");
+  let bso = collection.insert("bso0", {foo: "bar"});
+
+  let serverModified = bso.modified;
+
+  let request1 = localRequest("/2.0/123/storage/testcoll/bso0", "123",
+                              "password");
+  request1.setHeader("X-If-Unmodified-Since", serverModified);
+  let error = doGetRequest(request1);
+  do_check_null(error);
+  do_check_eq(request1.response.status, 200);
+
+  let request2 = localRequest("/2.0/123/storage/testcoll/bso0", "123",
+                              "password");
+  request2.setHeader("X-If-Unmodified-Since", serverModified - 1);
+  let error = doGetRequest(request2);
+  do_check_null(error);
+  do_check_eq(request2.response.status, 412);
 
   server.stop(run_next_test);
 });

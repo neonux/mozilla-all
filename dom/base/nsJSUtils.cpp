@@ -16,12 +16,10 @@
 #include "jsdbgapi.h"
 #include "prprf.h"
 #include "nsIScriptContext.h"
-#include "nsIScriptObjectOwner.h"
 #include "nsIScriptGlobalObject.h"
 #include "nsIServiceManager.h"
 #include "nsIXPConnect.h"
 #include "nsCOMPtr.h"
-#include "nsContentUtils.h"
 #include "nsIScriptSecurityManager.h"
 #include "nsPIDOMWindow.h"
 

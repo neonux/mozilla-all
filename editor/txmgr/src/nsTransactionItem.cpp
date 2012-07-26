@@ -3,12 +3,16 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "nsITransaction.h"
-#include "nsTransactionStack.h"
-#include "nsTransactionManager.h"
-#include "nsTransactionItem.h"
-#include "nsCOMPtr.h"
+#include "mozilla/mozalloc.h"
 #include "nsAutoPtr.h"
+#include "nsCOMPtr.h"
+#include "nsDebug.h"
+#include "nsError.h"
+#include "nsITransaction.h"
+#include "nsTraceRefcnt.h"
+#include "nsTransactionItem.h"
+#include "nsTransactionManager.h"
+#include "nsTransactionStack.h"
 
 nsTransactionItem::nsTransactionItem(nsITransaction *aTransaction)
     : mTransaction(aTransaction), mUndoStack(0), mRedoStack(0)
@@ -43,7 +47,7 @@ nsTransactionItem::Release() {
   return mRefCnt;
 }
 
-NS_IMPL_CYCLE_COLLECTION_CLASS(nsTransactionItem)
+NS_IMPL_CYCLE_COLLECTION_NATIVE_CLASS(nsTransactionItem)
 
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_NATIVE(nsTransactionItem)
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mTransaction)
@@ -82,14 +86,11 @@ nsTransactionItem::AddChild(nsTransactionItem *aTransactionItem)
   return NS_OK;
 }
 
-nsresult
-nsTransactionItem::GetTransaction(nsITransaction **aTransaction)
+already_AddRefed<nsITransaction>
+nsTransactionItem::GetTransaction()
 {
-  NS_ENSURE_TRUE(aTransaction, NS_ERROR_NULL_POINTER);
-
-  NS_IF_ADDREF(*aTransaction = mTransaction);
-
-  return NS_OK;
+  nsCOMPtr<nsITransaction> txn = mTransaction;
+  return txn.forget();
 }
 
 nsresult
@@ -227,13 +228,7 @@ nsTransactionItem::UndoChildren(nsTransactionManager *aTxMgr)
         return NS_ERROR_FAILURE;
       }
 
-      nsCOMPtr<nsITransaction> t;
-
-      result = item->GetTransaction(getter_AddRefs(t));
-
-      if (NS_FAILED(result)) {
-        return result;
-      }
+      nsCOMPtr<nsITransaction> t = item->GetTransaction();
 
       bool doInterrupt = false;
 
@@ -306,13 +301,7 @@ nsTransactionItem::RedoChildren(nsTransactionManager *aTxMgr)
       return NS_ERROR_FAILURE;
     }
 
-    nsCOMPtr<nsITransaction> t;
-
-    result = item->GetTransaction(getter_AddRefs(t));
-
-    if (NS_FAILED(result)) {
-      return result;
-    }
+    nsCOMPtr<nsITransaction> t = item->GetTransaction();
 
     bool doInterrupt = false;
 

@@ -8,7 +8,6 @@ import android.content.Intent;
 
 public class Constants {
   // Constants for Firefox Sync SyncAdapter Accounts.
-  public static final String ACCOUNTTYPE_SYNC     = "org.mozilla.firefox_sync";
   public static final String OPTION_SYNCKEY       = "option.synckey";
   public static final String OPTION_USERNAME      = "option.username";
   public static final String AUTHTOKEN_TYPE_PLAIN = "auth.plain";
@@ -18,9 +17,35 @@ public class Constants {
   public static final String NUM_CLIENTS          = "account.numClients";
   public static final String DATA_ENABLE_ON_UPGRADE = "data.enableOnUpgrade";
 
+  /**
+   * Name of file to pickle current account preferences to each sync.
+   * <p>
+   * Must not contain path separators!
+   */
+  public static final String ACCOUNT_PICKLE_FILENAME = "sync.account.json";
+
+  /**
+   * Key in sync extras bundle specifying stages to sync this sync session.
+   * <p>
+   * Corresponding value should be a String JSON-encoding an object, the keys of
+   * which are the stage names to sync. For example:
+   * <code>"{ \"stageToSync\": 0 }"</code>.
+   */
+  public static final String EXTRAS_KEY_STAGES_TO_SYNC = "sync";
+
+  /**
+   * Key in sync extras bundle specifying stages to skip this sync session.
+   * <p>
+   * Corresponding value should be a String JSON-encoding an object, the keys of
+   * which are the stage names to skip. For example:
+   * <code>"{ \"stageToSkip\": 0 }"</code>.
+   */
+  public static final String EXTRAS_KEY_STAGES_TO_SKIP = "skip";
+
   // Constants for Activities.
-  public static final String INTENT_EXTRA_IS_SETUP = "isSetup";
-  public static final String INTENT_EXTRA_IS_PAIR  = "isPair";
+  public static final String INTENT_EXTRA_IS_SETUP        = "isSetup";
+  public static final String INTENT_EXTRA_IS_PAIR         = "isPair";
+  public static final String INTENT_EXTRA_IS_ACCOUNTERROR = "isAccountError";
 
   public static final int FLAG_ACTIVITY_REORDER_TO_FRONT_NO_ANIMATION =
     Intent.FLAG_ACTIVITY_REORDER_TO_FRONT |
@@ -54,6 +79,11 @@ public class Constants {
   public static final String JSON_KEY_PASSWORD   = "password";
   public static final String JSON_KEY_SYNCKEY    = "synckey";
   public static final String JSON_KEY_SERVER     = "serverURL";
+  public static final String JSON_KEY_CLUSTER    = "clusterURL";
+  public static final String JSON_KEY_CLIENT_NAME = "clientName";
+  public static final String JSON_KEY_CLIENT_GUID = "clientGUID";
+  public static final String JSON_KEY_SYNC_AUTOMATICALLY = "syncAutomatically";
+  public static final String JSON_KEY_TIMESTAMP  = "timestamp";
 
   public static final String CRYPTO_KEY_GR1 = "gr1";
   public static final String CRYPTO_KEY_GR2 = "gr2";

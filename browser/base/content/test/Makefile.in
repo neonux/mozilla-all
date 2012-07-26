@@ -13,9 +13,8 @@ DIRS += \
 		$(NULL)
 
 include $(DEPTH)/config/autoconf.mk
-include $(topsrcdir)/config/rules.mk
 
-_TEST_FILES = \
+MOCHITEST_FILES = \
 		test_feed_discovery.html \
 		feed_discovery.html \
 		test_bug395533.html \
@@ -44,7 +43,7 @@ _TEST_FILES = \
 
 # test_contextmenu.html is disabled on Linux due to bug 513558
 ifneq (gtk2,$(MOZ_WIDGET_TOOLKIT))
-_TEST_FILES += \
+MOCHITEST_FILES += \
 		audio.ogg \
 		test_contextmenu.html \
 		subtst_contextmenu.html \
@@ -62,6 +61,8 @@ endif
 # browser_drag.js is disabled, as it needs to be updated for the new behavior from bug 320638.
 
 # browser_bug321000.js is disabled because newline handling is shaky (bug 592528)
+
+# browser_pageInfo.js + feed_tab.html is disabled for leaking (bug 767896)
 
 _BROWSER_FILES = \
                  head.js \
@@ -149,9 +150,13 @@ _BROWSER_FILES = \
                  browser_bug664672.js \
                  browser_bug710878.js \
                  browser_bug719271.js \
+                 browser_bug724239.js \
                  browser_bug735471.js \
                  browser_bug743421.js \
                  browser_bug749738.js \
+                 browser_bug763468.js \
+                 browser_bug767836.js \
+                 browser_shareButton.js \
                  browser_canonizeURL.js \
                  browser_customize.js \
                  browser_findbarClose.js \
@@ -169,7 +174,6 @@ _BROWSER_FILES = \
                  browser_overflowScroll.js \
                  browser_locationBarCommand.js \
                  browser_locationBarExternalLoad.js \
-                 browser_pageInfo.js \
                  browser_page_style_menu.js \
                  browser_pinnedTabs.js \
                  browser_plainTextLinks.js \
@@ -217,7 +221,6 @@ _BROWSER_FILES = \
                  test_bug435035.html \
                  test_bug462673.html \
                  page_style_sample.html \
-                 feed_tab.html \
                  plugin_unknown.html \
                  plugin_test.html \
                  plugin_test2.html \
@@ -253,6 +256,13 @@ _BROWSER_FILES = \
                  browser_tabDrop.js \
                  browser_lastAccessedTab.js \
                  browser_bug734076.js \
+                 browser_social_toolbar.js \
+                 browser_social_sidebar.js \
+                 browser_social_mozSocial_API.js \
+                 social_panel.html \
+                 social_sidebar.html \
+                 social_window.html \
+                 social_worker.js \
                  $(NULL)
 
 ifneq (cocoa,$(MOZ_WIDGET_TOOLKIT))
@@ -269,8 +279,7 @@ _BROWSER_FILES += \
 
 endif
 
-libs:: $(_TEST_FILES)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
+include $(topsrcdir)/config/rules.mk
 
 libs::	$(_BROWSER_FILES)
 	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/browser/$(relativesrcdir)

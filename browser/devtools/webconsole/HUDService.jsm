@@ -10,6 +10,8 @@ const Cu = Components.utils;
 
 const CONSOLEAPI_CLASS_ID = "{b49c18f8-3379-4fc0-8c90-d7772c1a9ff3}";
 
+const MIXED_CONTENT_LEARN_MORE = "https://developer.mozilla.org/en/Security/MixedContent";
+
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 Cu.import("resource://gre/modules/Services.jsm");
 
@@ -251,6 +253,7 @@ function HUD_SERVICE()
   // These methods access the "this" object, but they're registered as
   // event listeners. So we hammer in the "this" binding.
   this.onTabClose = this.onTabClose.bind(this);
+  this.onTabSelect = this.onTabSelect.bind(this);
   this.onWindowUnload = this.onWindowUnload.bind(this);
 
   // Remembers the last console height, in pixels.
@@ -317,6 +320,7 @@ HUD_SERVICE.prototype =
 
     // TODO: check that this works as intended
     gBrowser.tabContainer.addEventListener("TabClose", this.onTabClose, false);
+    gBrowser.tabContainer.addEventListener("TabSelect", this.onTabSelect, false);
     window.addEventListener("unload", this.onWindowUnload, false);
 
     this.registerDisplay(hudId);
@@ -616,6 +620,7 @@ HUD_SERVICE.prototype =
       let gBrowser = window.gBrowser;
       let tabContainer = gBrowser.tabContainer;
       tabContainer.removeEventListener("TabClose", this.onTabClose, false);
+      tabContainer.removeEventListener("TabSelect", this.onTabSelect, false);
 
       this.suspend();
     }
@@ -804,6 +809,17 @@ HUD_SERVICE.prototype =
   },
 
   /**
+   * onTabSelect event handler function
+   *
+   * @param aEvent
+   * @returns void
+   */
+  onTabSelect: function HS_onTabSelect(aEvent)
+  {
+    HeadsUpDisplayUICommands.refreshCommand();
+  },
+
+  /**
    * Called whenever a browser window closes. Cleans up any consoles still
    * around.
    *
@@ -821,6 +837,7 @@ HUD_SERVICE.prototype =
     let tabContainer = gBrowser.tabContainer;
 
     tabContainer.removeEventListener("TabClose", this.onTabClose, false);
+    tabContainer.removeEventListener("TabSelect", this.onTabSelect, false);
 
     let tab = tabContainer.firstChild;
     while (tab != null) {
@@ -997,7 +1014,7 @@ HUD_SERVICE.prototype =
         strings.push("[" + timestampString + "] " + item.clipboardText);
       }
     }
-    clipboardHelper.copyString(strings.join("\n"));
+    clipboardHelper.copyString(strings.join("\n"), aOutputNode.ownerDocument);
   }
 };
 
@@ -1411,7 +1428,7 @@ HeadsUpDisplay.prototype = {
     aRemoteMessages.forEach(function(aMessage) {
       switch (aMessage._type) {
         case "PageError": {
-          let category = this.categoryForScriptError(aMessage.category);
+          let category = this.categoryForScriptError(aMessage);
           this.outputMessage(category, this.reportPageError,
                              [category, aMessage]);
           break;
@@ -1826,6 +1843,7 @@ HeadsUpDisplay.prototype = {
     function HUD_clearButton_onCommand() {
       let hud = HUDService.getHudReferenceById(hudId);
       hud.jsterm.clearOutput(true);
+      hud.chromeWindow.DeveloperToolbar.resetErrorsCount(hud.tab);
     }
 
     let clearButton = this.makeXULNode("toolbarbutton");
@@ -2134,6 +2152,14 @@ HeadsUpDisplay.prototype = {
     urlNode.classList.add("webconsole-msg-url");
     linkNode.appendChild(urlNode);
 
+    let severity = SEVERITY_LOG;
+    if(this.isMixedContentLoad(request.url, this.contentLocation)) {
+      urlNode.classList.add("webconsole-mixed-content");
+      this.makeMixedContentNode(linkNode);
+      //If we define a SEVERITY_SECURITY in the future, switch this to SEVERITY_SECURITY
+      severity = SEVERITY_WARNING;
+    }
+
     let statusNode = this.chromeDocument.createElementNS(XUL_NS, "label");
     statusNode.setAttribute("value", "");
     statusNode.classList.add("hud-clickable");
@@ -2145,7 +2171,7 @@ HeadsUpDisplay.prototype = {
 
     let messageNode = ConsoleUtils.createMessageNode(this.chromeDocument,
                                                      CATEGORY_NETWORK,
-                                                     SEVERITY_LOG,
+                                                     severity,
                                                      msgNode,
                                                      this.hudId,
                                                      null,
@@ -2934,6 +2960,53 @@ HeadsUpDisplay.prototype = {
 
     this.closeButton.removeEventListener("command",
       this.closeButtonOnCommand, false);
+  },
+
+  /**
+   * Determine whether the request should display a Mixed Content warning
+   *
+   * @param string request
+   *        location of the requested content
+   * @param string contentLocation
+   *        location of the current page
+   * @return bool
+   *         True if the content is mixed, false if not
+   */
+  isMixedContentLoad: function HUD_isMixedContentLoad(request, contentLocation) {
+    try {
+      let requestURIObject = Services.io.newURI(request, null, null);
+      let contentWindowURI = Services.io.newURI(contentLocation, null, null);
+      return (contentWindowURI.scheme == "https" && requestURIObject.scheme != "https");
+    } catch(e) {
+      return false;
+    }
+  },
+
+  /**
+   * Create a mixedContentWarningNode and add it the webconsole output.
+   *
+   * @param linkNode
+   *        parent to the requested urlNode
+   */
+  makeMixedContentNode: function HUD_makeMixedContentNode(linkNode) {
+    let mixedContentWarning = "[" + l10n.getStr("webConsoleMixedContentWarning") + "]";
+
+    //mixedContentWarning message links to a Learn More page
+    let mixedContentWarningNode = this.chromeDocument.createElement("label");
+    mixedContentWarningNode.setAttribute("value", mixedContentWarning);
+    mixedContentWarningNode.setAttribute("title", mixedContentWarning);
+
+    //UI for mixed content warning.
+    mixedContentWarningNode.classList.add("hud-clickable");
+    mixedContentWarningNode.classList.add("webconsole-mixed-content-link");
+
+    linkNode.appendChild(mixedContentWarningNode);
+
+    mixedContentWarningNode.addEventListener("click", function(aEvent) {
+      this.chromeWindow.openUILinkIn(MIXED_CONTENT_LEARN_MORE, "tab");
+      aEvent.preventDefault();
+      aEvent.stopPropagation();
+    }.bind(this));
   },
 };
 
@@ -4163,7 +4236,7 @@ ConsoleUtils = {
       treeView.data = {
         rootCacheId: body.cacheId,
         panelCacheId: body.cacheId,
-        remoteObject: body.remoteObject,
+        remoteObject: Array.isArray(body.remoteObject) ? body.remoteObject : [],
         remoteObjectProvider: body.remoteObjectProvider,
       };
 
@@ -4431,7 +4504,7 @@ HeadsUpDisplayUICommands = {
     if (this.getOpenHUD() != null) {
       command.setAttribute("checked", true);
     } else {
-      command.removeAttribute("checked");
+      command.setAttribute("checked", false);
     }
   },
 

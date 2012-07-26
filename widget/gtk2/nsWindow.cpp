@@ -69,7 +69,7 @@
 #include "nsGfxCIID.h"
 #include "nsIObserverService.h"
 
-#include "nsIdleService.h"
+#include "nsIIdleServiceInternal.h"
 #include "nsIPropertyBag2.h"
 
 #ifdef ACCESSIBILITY
@@ -322,10 +322,10 @@ static inline bool TimestampIsNewerThan(guint32 a, guint32 b)
 static void
 UpdateLastInputEventTime(void *aGdkEvent)
 {
-    nsCOMPtr<nsIdleService> idleService =
+    nsCOMPtr<nsIIdleServiceInternal> idleService =
         do_GetService("@mozilla.org/widget/idleservice;1");
     if (idleService) {
-        idleService->ResetIdleTimeOut();
+        idleService->ResetIdleTimeOut(0);
     }
 
     guint timestamp = gdk_event_get_time(static_cast<GdkEvent*>(aGdkEvent));
@@ -610,7 +610,7 @@ nsWindow::Destroy(void)
     /** Need to clean our LayerManager up while still alive */
     if (mLayerManager) {
         nsRefPtr<GLContext> gl = nsnull;
-        if (mLayerManager->GetBackendType() == LayerManager::LAYERS_OPENGL) {
+        if (mLayerManager->GetBackendType() == mozilla::layers::LAYERS_OPENGL) {
             LayerManagerOGL *ogllm = static_cast<LayerManagerOGL*>(mLayerManager.get());
             gl = ogllm->gl();
         }
@@ -908,11 +908,10 @@ nsWindow::SetModal(bool aModal)
 }
 
 // nsIWidget method, which means IsShown.
-NS_IMETHODIMP
-nsWindow::IsVisible(bool& aState)
+bool
+nsWindow::IsVisible() const
 {
-    aState = mIsShown;
-    return NS_OK;
+    return mIsShown;
 }
 
 NS_IMETHODIMP
@@ -1063,6 +1062,8 @@ nsWindow::Resize(PRInt32 aWidth, PRInt32 aHeight, bool aRepaint)
         }
     }
 
+    NotifyRollupGeometryChange(gRollupListener);
+
     // synthesize a resize event if this isn't a toplevel
     if (mIsTopLevel || mListenForResizes) {
         nsIntRect rect(mBounds.x, mBounds.y, aWidth, aHeight);
@@ -1127,6 +1128,8 @@ nsWindow::Resize(PRInt32 aX, PRInt32 aY, PRInt32 aWidth, PRInt32 aHeight,
         }
     }
 
+    NotifyRollupGeometryChange(gRollupListener);
+
     if (mIsTopLevel || mListenForResizes) {
         // synthesize a resize event
         nsIntRect rect(aX, aY, aWidth, aHeight);
@@ -1145,12 +1148,10 @@ nsWindow::Enable(bool aState)
     return NS_OK;
 }
 
-NS_IMETHODIMP
-nsWindow::IsEnabled(bool *aState)
+bool
+nsWindow::IsEnabled() const
 {
-    *aState = mEnabled;
-
-    return NS_OK;
+    return mEnabled;
 }
 
 
@@ -1190,6 +1191,7 @@ nsWindow::Move(PRInt32 aX, PRInt32 aY)
         gdk_window_move(mGdkWindow, aX, aY);
     }
 
+    NotifyRollupGeometryChange(gRollupListener);
     return NS_OK;
 }
 
@@ -2135,7 +2137,7 @@ nsWindow::OnExposeEvent(cairo_t *cr)
 
         return TRUE;
     
-    } else if (GetLayerManager()->GetBackendType() == LayerManager::LAYERS_OPENGL) {
+    } else if (GetLayerManager()->GetBackendType() == mozilla::layers::LAYERS_OPENGL) {
         LayerManagerOGL *manager = static_cast<LayerManagerOGL*>(GetLayerManager());
         manager->SetClippingRegion(event.region);
 
@@ -6199,7 +6201,7 @@ void
 nsWindow::ClearCachedResources()
 {
     if (mLayerManager &&
-        mLayerManager->GetBackendType() == LayerManager::LAYERS_BASIC) {
+        mLayerManager->GetBackendType() == mozilla::layers::LAYERS_BASIC) {
         static_cast<BasicLayerManager*> (mLayerManager.get())->
             ClearCachedResources();
     }

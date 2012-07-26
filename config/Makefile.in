@@ -19,11 +19,8 @@ VISIBILITY_FLAGS =
 # libstdc++-compat is not built yet.
 STDCXX_COMPAT =
 
+ifneq (WINNT,$(HOST_OS_ARCH))
 HOST_PROGRAM	= nsinstall$(HOST_BIN_SUFFIX)
-
-ifeq (WINNT,$(HOST_OS_ARCH))
-HOST_CSRCS	= nsinstall_win.c
-else
 HOST_CSRCS	= nsinstall.c pathsub.c
 endif
 
@@ -164,6 +161,7 @@ PYUNITS := \
   unit-buildlist.py \
   unit-expandlibs.py \
   unit-writemozinfo.py \
+  unit-mozunit.py \
   $(NULL)
 
 check-preqs = \

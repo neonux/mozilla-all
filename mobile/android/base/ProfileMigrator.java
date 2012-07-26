@@ -7,12 +7,8 @@ package org.mozilla.gecko;
 
 import org.mozilla.gecko.db.BrowserContract;
 import org.mozilla.gecko.db.BrowserContract.Bookmarks;
-import org.mozilla.gecko.db.BrowserContract.History;
-import org.mozilla.gecko.db.BrowserContract.ImageColumns;
-import org.mozilla.gecko.db.BrowserContract.Images;
 import org.mozilla.gecko.db.BrowserContract.Passwords;
-import org.mozilla.gecko.db.BrowserContract.URLColumns;
-import org.mozilla.gecko.db.BrowserContract.SyncColumns;
+import org.mozilla.gecko.db.LocalBrowserDB;
 import org.mozilla.gecko.sqlite.SQLiteBridge;
 import org.mozilla.gecko.sqlite.SQLiteBridgeException;
 import org.mozilla.gecko.sync.setup.SyncAccounts;
@@ -20,24 +16,18 @@ import org.mozilla.gecko.sync.setup.SyncAccounts.SyncAccountParameters;
 
 import android.accounts.Account;
 import android.content.ContentResolver;
-import android.content.ContentUris;
-import android.content.ContentValues;
-import android.content.ContentProviderResult;
 import android.content.ContentProviderOperation;
 import android.content.Context;
 import android.content.OperationApplicationException;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.database.SQLException;
-import android.database.sqlite.SQLiteConstraintException;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.os.Build;
 import android.os.RemoteException;
-import android.provider.Browser;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -51,8 +41,6 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.util.Arrays;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -72,6 +60,7 @@ public class ProfileMigrator {
     private Runnable mLongOperationStartCallback;
     private boolean mLongOperationStartRun;
     private Runnable mLongOperationStopCallback;
+    private LocalBrowserDB mDB;
 
     // Default number of history entries to migrate in one run.
     private static final int DEFAULT_HISTORY_MIGRATE_COUNT = 2000;
@@ -177,10 +166,48 @@ public class ProfileMigrator {
     private static final String FAVICON_URL       = "f_url";
     private static final String FAVICON_GUID      = "f_guid";
 
-    // Helper constants
+    // Query for extra bookmark information
+    private static final String BOOKMARK_QUERY_EXTRAS =
+        "SELECT annos.item_id          AS a_item_id, "    +
+        "       attributes.name        AS t_name, "       +
+        "       annos.content          AS a_content "     +
+        "FROM (moz_items_annos AS annos "                 +
+        "      JOIN moz_anno_attributes AS attributes "   +
+        "      ON annos.anno_attribute_id = attributes.id)";
+
+    // Result columns of extra information query
+    private static final String ANNO_ITEM_ID   = "a_item_id";
+    private static final String ATTRIBUTE_NAME = "t_name";
+    private static final String ANNO_CONTENT   = "a_content";
+
+    private class AttributePair {
+        final String name;
+        final String content;
+
+        public AttributePair(String aName, String aContent) {
+            name = aName;
+            content = aContent;
+        }
+    }
+
+    // Places attribute names for bookmarks
+    private static final String PLACES_ATTRIB_QUERY = "Places/SmartBookmark";
+    private static final String PLACES_ATTRIB_LIVEMARK_FEED = "livemark/feedURI";
+    private static final String PLACES_ATTRIB_LIVEMARK_SITE = "livemark/siteURI";
+
+    // Helper constants. They enumerate the different types of bookmarks we
+    // have to deal with, and we should have as many types as BrowserContract
+    // knows about, though the actual values don't necessarily match up. We do
+    // the translation between both values elsewhere.
+    // The first 3 correspond to real types that exist in places, and match
+    // values with the places types.
     private static final int PLACES_TYPE_BOOKMARK  = 1;
     private static final int PLACES_TYPE_FOLDER    = 2;
     private static final int PLACES_TYPE_SEPARATOR = 3;
+    // These aren't used in the type field in places, but we use them
+    // internally because we need to distinguish them from the above types.
+    private static final int PLACES_TYPE_LIVEMARK  = 4;
+    private static final int PLACES_TYPE_QUERY     = 5;
 
     /*
       For statistics keeping.
@@ -199,7 +226,7 @@ public class ProfileMigrator {
         "       places.title            AS p_title, "     +
         "       places.guid             AS p_guid, "      +
         "       MAX(history.visit_date) AS h_date, "      +
-        "       COUNT(*) AS h_visits, "                   +
+        "       COUNT(*)                AS h_visits, "    +
         // see BrowserDB.filterAllSites for this formula
         "       MAX(1, 100 * 225 / (" +
         "          ((MAX(history.visit_date)/1000 - ?) / 86400000) * " +
@@ -266,6 +293,13 @@ public class ProfileMigrator {
         mLongOperationStopCallback = null;
     }
 
+    public ProfileMigrator(Context context, ContentResolver contentResolver) {
+        mContext = context;
+        mCr = contentResolver;
+        mLongOperationStartCallback = null;
+        mLongOperationStopCallback = null;
+    }
+
     // Define callbacks to run if the operation will take a while.
     // Stop callback is only run if there was a start callback that was run.
     public void setLongOperationCallbacks(Runnable start,
@@ -273,6 +307,11 @@ public class ProfileMigrator {
         mLongOperationStartCallback = start;
         mLongOperationStopCallback = stop;
         mLongOperationStartRun = false;
+    }
+
+    public void launchPlacesTest(File profileDir) {
+        resetMigration();
+        launchPlaces(profileDir, DEFAULT_HISTORY_MIGRATE_COUNT);
     }
 
     public void launchPlaces(File profileDir) {
@@ -322,6 +361,15 @@ public class ProfileMigrator {
     public boolean isProfileMoved() {
         return getPreferences().getBoolean(PREFS_MIGRATE_MOVE_PROFILE_DONE,
                                            false);
+    }
+
+    // Only to be used for testing. Allows forcing Migration to rerun.
+    private void resetMigration() {
+        SharedPreferences.Editor editor = getPreferences().edit();
+        editor.putBoolean(PREFS_MIGRATE_BOOKMARKS_DONE, false);
+        editor.putBoolean(PREFS_MIGRATE_HISTORY_DONE, false);
+        editor.putInt(PREFS_MIGRATE_HISTORY_COUNT, 0);
+        editor.commit();
     }
 
     // Has migration run before?
@@ -709,32 +757,15 @@ public class ProfileMigrator {
         public PlacesRunnable(File profileDir, int limit) {
             mProfileDir = profileDir;
             mMaxEntries = limit;
-        }
-
-        protected Uri getBookmarksUri() {
-            Uri.Builder uriBuilder = Bookmarks.CONTENT_URI.buildUpon()
-                .appendQueryParameter(BrowserContract.PARAM_SHOW_DELETED, "1");
-            return uriBuilder.build();
-        }
-
-        protected Uri getHistoryUri() {
-            Uri.Builder uriBuilder = History.CONTENT_URI.buildUpon()
-                .appendQueryParameter(BrowserContract.PARAM_SHOW_DELETED, "1");
-            return uriBuilder.build();
-
-        }
-
-        protected Uri getImagesUri() {
-            Uri.Builder uriBuilder = Images.CONTENT_URI.buildUpon()
-                .appendQueryParameter(BrowserContract.PARAM_SHOW_DELETED, "1");
-            return uriBuilder.build();
+            mDB = new LocalBrowserDB(GeckoProfile.get(mContext).getName());
         }
 
         private long getFolderId(String guid) {
             Cursor c = null;
 
             try {
-                c = mCr.query(getBookmarksUri(),
+                // Uses default profile
+                c = mCr.query(Bookmarks.CONTENT_URI,
                               new String[] { Bookmarks._ID },
                               Bookmarks.GUID + " = ?",
                               new String [] { guid },
@@ -822,72 +853,7 @@ public class ProfileMigrator {
 
         protected void updateBrowserHistory(String url, String title,
                                             long date, int visits) {
-            Cursor cursor = null;
-
-            try {
-                final String[] projection = new String[] {
-                    History._ID,
-                    History.VISITS,
-                    History.DATE_LAST_VISITED
-                };
-
-                cursor = mCr.query(getHistoryUri(),
-                                   projection,
-                                   History.URL + " = ?",
-                                   new String[] { url },
-                                   null);
-
-                ContentValues values = new ContentValues();
-                ContentProviderOperation.Builder builder = null;
-                // Restore deleted record if possible
-                values.put(History.IS_DELETED, 0);
-
-                if (cursor.moveToFirst()) {
-                    int visitsCol = cursor.getColumnIndexOrThrow(History.VISITS);
-                    int dateCol = cursor.getColumnIndexOrThrow(History.DATE_LAST_VISITED);
-                    int oldVisits = cursor.getInt(visitsCol);
-                    long oldDate = cursor.getLong(dateCol);
-
-                    values.put(History.VISITS, oldVisits + visits);
-                    if (title != null) {
-                        values.put(History.TITLE, title);
-                    }
-                    // Only update last visited if newer.
-                    if (date > oldDate) {
-                        values.put(History.DATE_LAST_VISITED, date);
-                    }
-
-                    int idCol = cursor.getColumnIndexOrThrow(History._ID);
-                    // We use default profile anyway
-                    Uri historyUri = ContentUris.withAppendedId(getHistoryUri(),
-                                                                cursor.getLong(idCol));
-
-                    // Update
-                    builder = ContentProviderOperation.newUpdate(historyUri);
-                    // URL should be unique and we should hit it
-                    builder.withExpectedCount(1);
-                    builder.withValues(values);
-                } else {
-                    values.put(History.URL, url);
-                    values.put(History.VISITS, visits);
-                    if (title != null) {
-                        values.put(History.TITLE, title);
-                    } else {
-                        values.put(History.TITLE, url);
-                    }
-                    values.put(History.DATE_LAST_VISITED, date);
-
-                    // Insert
-                    builder = ContentProviderOperation.newInsert(getHistoryUri());
-                    builder.withValues(values);
-                }
-
-                // Queue the operation
-                mOperations.add(builder.build());
-            } finally {
-                if (cursor != null)
-                    cursor.close();
-            }
+            mDB.updateHistoryInBatch(mCr, mOperations, url, title, date, visits);
         }
 
         protected BitmapDrawable decodeImageData(byte[] data) {
@@ -915,57 +881,21 @@ public class ProfileMigrator {
                 }
             }
             try {
-                ContentValues values = new ContentValues();
+                byte[] newData = null;
 
                 // Recompress decoded images to PNG.
                 if (image != null) {
                     Bitmap bitmap = image.getBitmap();
                     ByteArrayOutputStream stream = new ByteArrayOutputStream();
                     bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
-                    values.put(Images.FAVICON, stream.toByteArray());
+                    newData = stream.toByteArray();
                 } else {
                     // PNG images can be passed directly. Well, aside
                     // from having to convert them into a byte[].
-                    values.put(Images.FAVICON, data);
+                    newData = data;
                 }
 
-                values.put(Images.URL, url);
-                values.put(Images.FAVICON_URL, faviconUrl);
-                // Restore deleted record if possible
-                values.put(Images.IS_DELETED, 0);
-                if (faviconGuid != null) {
-                    values.put(Images.GUID, faviconGuid);
-                }
-
-                Cursor cursor = null;
-                ContentProviderOperation.Builder builder = null;
-                try {
-                    cursor = mCr.query(getImagesUri(),
-                                       null,
-                                       Images.URL + " = ?",
-                                       new String[] { url },
-                                       null);
-
-                    if (cursor != null && cursor.moveToFirst()) {
-                        // Update
-                        builder = ContentProviderOperation.newUpdate(getImagesUri());
-                        // URL should be unique and we should hit it
-                        builder.withExpectedCount(1);
-                        builder.withValues(values);
-                        builder.withSelection(Images.URL + " = ?",
-                                              new String[] { url });
-                    } else {
-                        // Insert
-                        builder = ContentProviderOperation.newInsert(getImagesUri());
-                        builder.withValues(values);
-                    }
-                } finally {
-                    if (cursor != null)
-                        cursor.close();
-                }
-
-                // Queue the operation
-                mOperations.add(builder.build());
+                mDB.updateFaviconInBatch(mCr, mOperations, url, faviconUrl, faviconGuid, newData);
             } catch (SQLException e) {
                 Log.i(LOGTAG, "Migrating favicon failed: " + mime + " URL: " + url
                       + " error:" + e.getMessage());
@@ -1081,81 +1011,113 @@ public class ProfileMigrator {
                                    long parent, long added,
                                    long modified, long position,
                                    String keyword, int type) {
-            ContentValues values = new ContentValues();
-            if (title == null && url != null) {
-                title = url;
-            }
-            if (title != null) {
-                values.put(Bookmarks.TITLE, title);
-            }
-            if (url != null) {
-                values.put(Bookmarks.URL, url);
-            }
-            if (guid != null) {
-                values.put(SyncColumns.GUID, guid);
-            }
-            if (keyword != null) {
-                values.put(Bookmarks.KEYWORD, keyword);
-            }
-            values.put(SyncColumns.DATE_CREATED, added);
-            values.put(SyncColumns.DATE_MODIFIED, modified);
-            values.put(Bookmarks.POSITION, position);
-            // Restore deleted record if possible
-            values.put(Bookmarks.IS_DELETED, 0);
+            // Translate the parent pointer if needed.
             if (mRerootMap.containsKey(parent)) {
                 parent = mRerootMap.get(parent);
             }
-            values.put(Bookmarks.PARENT, parent);
+            // The bookmark can only be one of the valid types.
+            final int newtype = (type == PLACES_TYPE_BOOKMARK ? Bookmarks.TYPE_BOOKMARK :
+                                 type == PLACES_TYPE_FOLDER ? Bookmarks.TYPE_FOLDER :
+                                 type == PLACES_TYPE_SEPARATOR ? Bookmarks.TYPE_SEPARATOR :
+                                 type == PLACES_TYPE_LIVEMARK ? Bookmarks.TYPE_LIVEMARK :
+                                 Bookmarks.TYPE_QUERY);
+            mDB.updateBookmarkInBatch(mCr, mOperations,
+                                      url, title, guid, parent, added,
+                                      modified, position, keyword, newtype);
+        }
 
-            // The bookmark can only be one of three valid types
-            values.put(Bookmarks.TYPE, type == PLACES_TYPE_BOOKMARK ? Bookmarks.TYPE_BOOKMARK :
-                                       type == PLACES_TYPE_FOLDER ? Bookmarks.TYPE_FOLDER :
-                                       Bookmarks.TYPE_SEPARATOR);
+        protected Map<Long, List<AttributePair>> getBookmarkAttributes(SQLiteBridge db) {
 
+            Map<Long, List<AttributePair>> attributes =
+                new HashMap<Long, List<AttributePair>>();
             Cursor cursor = null;
-            ContentProviderOperation.Builder builder = null;
 
-            if (url != null) {
-                try {
-                    final String[] projection = new String[] {
-                        Bookmarks._ID,
-                        Bookmarks.URL
-                    };
+            try {
+                cursor = db.rawQuery(BOOKMARK_QUERY_EXTRAS, null);
 
-                    // Check if the boomark exists
-                    cursor = mCr.query(getBookmarksUri(),
-                                       projection,
-                                       Bookmarks.URL + " = ?",
-                                       new String[] { url },
-                                       null);
+                final int idCol = cursor.getColumnIndex(ANNO_ITEM_ID);
+                final int nameCol = cursor.getColumnIndex(ATTRIBUTE_NAME);
+                final int contentCol = cursor.getColumnIndex(ANNO_CONTENT);
 
-                    if (cursor.moveToFirst()) {
-                        int idCol = cursor.getColumnIndexOrThrow(Bookmarks._ID);
-                        // We use default profile anyway
-                        Uri bookmarkUri = ContentUris.withAppendedId(getBookmarksUri(),
-                                                                     cursor.getLong(idCol));
-                        // Update
-                        builder = ContentProviderOperation.newUpdate(bookmarkUri);
-                        // URL should be unique and we should hit it
-                        builder.withExpectedCount(1);
-                        builder.withValues(values);
-                    } else {
-                        // Insert
-                        builder = ContentProviderOperation.newInsert(getBookmarksUri());
-                        builder.withValues(values);
+                cursor.moveToFirst();
+                while (!cursor.isAfterLast()) {
+                    final long id = cursor.getLong(idCol);
+                    final String attName = cursor.getString(nameCol);
+                    final String content = cursor.getString(contentCol);
+
+                    if (PLACES_ATTRIB_QUERY.equals(attName) ||
+                        PLACES_ATTRIB_LIVEMARK_FEED.equals(attName) ||
+                        PLACES_ATTRIB_LIVEMARK_SITE.equals(PLACES_ATTRIB_LIVEMARK_SITE)) {
+                        AttributePair pair = new AttributePair(attName, content);
+
+                        List<AttributePair> list = null;
+                        if (attributes.containsKey(id)) {
+                            list = attributes.get(id);
+                        } else {
+                            list = new ArrayList<AttributePair>();
+                        }
+                        list.add(pair);
+                        attributes.put(id, list);
                     }
-                } finally {
-                    if (cursor != null)
-                        cursor.close();
+                    cursor.moveToNext();
                 }
-            } else {
-                // Insert
-                builder = ContentProviderOperation.newInsert(getBookmarksUri());
-                builder.withValues(values);
+            } catch (SQLiteBridgeException e) {
+                Log.e(LOGTAG, "Failed to get bookmark attributes: ", e);
+                // Do not make this fatal.
+            } finally {
+                if (cursor != null)
+                    cursor.close();
             }
 
-            // Queue the operation
-            mOperations.add(builder.build());
+            return attributes;
+        }
+
+        // Some bookmarks are normal folders in Places but actually have
+        // extra attributes turning them into something "special". In Firefox
+        // for Android these special bookmarks have a specific type, so we need
+        // to change the type from folder into this type if needed.
+        // We also need to translate the extra attributes from the Places
+        // database into extra parameters that are stored in the URL, hence
+        // "augmenting" the bookmark.
+        protected int augmentBookmark(final Map<Long, List<AttributePair>> attributes,
+                                      long id,
+                                      int type,
+                                      StringBuilder urlBuffer) {
+            // Queries don't necessarily have extra attributes,
+            // but are guaranteed to start like this.
+            if (urlBuffer.toString().startsWith("place:")) {
+                type = PLACES_TYPE_QUERY;
+            }
+
+            // No extra attributes, return immediately
+            if (!attributes.containsKey(id)) {
+                return type;
+            }
+
+            final List<AttributePair> list = attributes.get(id);
+            for (AttributePair pair: list) {
+                if (PLACES_ATTRIB_QUERY.equals(pair.name)) {
+                    type = PLACES_TYPE_QUERY;
+                    if (!TextUtils.isEmpty(pair.content)) {
+                        if (urlBuffer.length() > 0) urlBuffer.append("&");
+                        urlBuffer.append("queryId=" + Uri.encode(pair.content));
+                    }
+                } else if (PLACES_ATTRIB_LIVEMARK_FEED.equals(pair.name)) {
+                    type = PLACES_TYPE_LIVEMARK;
+                    if (!TextUtils.isEmpty(pair.content)) {
+                        if (urlBuffer.length() > 0) urlBuffer.append("&");
+                        urlBuffer.append("feedUri=" + Uri.encode(pair.content));
+                   }
+                } else if (PLACES_ATTRIB_LIVEMARK_SITE.equals(pair.name)) {
+                    type = PLACES_TYPE_LIVEMARK;
+                    if (!TextUtils.isEmpty(pair.content)) {
+                        if (urlBuffer.length() > 0) urlBuffer.append("&");
+                        urlBuffer.append("siteUri=" + Uri.encode(pair.content));
+                   }
+                }
+            }
+
+            return type;
         }
 
         protected void migrateBookmarks(SQLiteBridge db) {
@@ -1190,6 +1152,9 @@ public class ProfileMigrator {
                 Telemetry.HistogramAdd("BROWSERPROVIDER_XUL_IMPORT_BOOKMARKS",
                                        bookmarkCount);
 
+                // Get the extra bookmark attributes
+                Map<Long, List<AttributePair>> attributes = getBookmarkAttributes(db);
+
                 // The keys are places IDs.
                 Set<Long> openFolders = new HashSet<Long>();
                 Set<Long> knownFolders = new HashSet<Long>(mRerootMap.keySet());
@@ -1222,15 +1187,6 @@ public class ProfileMigrator {
                         }
 
                         int type = cursor.getInt(typeCol);
-
-                        // Only add bookmarks with a known type
-                        if (!(type == PLACES_TYPE_BOOKMARK ||
-                              type == PLACES_TYPE_FOLDER ||
-                              type == PLACES_TYPE_SEPARATOR)) {
-                            cursor.moveToNext();
-                            continue;
-                        }
-
                         long parent = cursor.getLong(parentCol);
 
                         // Places has an explicit root folder, id=1 parent=0. Skip that.
@@ -1256,6 +1212,20 @@ public class ProfileMigrator {
                         String faviconGuid = null;
                         if (mHasFaviconGUID) {
                             faviconGuid = cursor.getString(faviconGuidCol);
+                        }
+
+                        StringBuilder urlBuffer;
+                        if (url != null) {
+                            urlBuffer = new StringBuilder(url);
+                        } else {
+                            urlBuffer = new StringBuilder();
+                        }
+                        type = augmentBookmark(attributes, id, type, urlBuffer);
+                        // It's important we don't turn null URLs into empty
+                        // URLs here, because null URL means the bookmark
+                        // is identified by something else than the URL.
+                        if (!TextUtils.isEmpty(urlBuffer)) {
+                            url = urlBuffer.toString();
                         }
 
                         // Is the parent for this bookmark already added?

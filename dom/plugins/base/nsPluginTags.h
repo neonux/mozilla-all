@@ -27,17 +27,13 @@ struct nsPluginInfo;
 #define NS_PLUGIN_FLAG_FROMCACHE    0x0004    // this plugintag info was loaded from cache
 // no longer used                   0x0008    // reuse only if regenerating pluginreg.dat
 #define NS_PLUGIN_FLAG_BLOCKLISTED  0x0010    // this is a blocklisted plugin
+#define NS_PLUGIN_FLAG_CLICKTOPLAY  0x0020    // this is a click-to-play plugin
 
 // A linked-list of plugin information that is used for instantiating plugins
 // and reflecting plugin information into JavaScript.
 class nsPluginTag : public nsIPluginTag
 {
 public:
-  enum nsRegisterType {
-    ePluginRegister,
-    ePluginUnregister
-  };
-  
   NS_DECL_ISUPPORTS
   NS_DECL_NSIPLUGINTAG
   
@@ -62,9 +58,8 @@ public:
   void UnMark(PRUint32 mask);
   bool HasFlag(PRUint32 flag);
   PRUint32 Flags();
+  bool HasSameNameAndMimes(const nsPluginTag *aPluginTag) const;
   bool IsEnabled();
-  void RegisterWithCategoryManager(bool aOverrideInternalTypes,
-                                   nsRegisterType aType = ePluginRegister);
   
   nsRefPtr<nsPluginTag> mNext;
   nsPluginHost *mPluginHost;

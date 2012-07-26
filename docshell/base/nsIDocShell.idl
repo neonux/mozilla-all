@@ -39,7 +39,7 @@ interface nsIWebBrowserPrint;
 interface nsIVariant;
 interface nsIPrivacyTransitionObserver;
 
-[scriptable, uuid(6f60ac96-fa2c-41a5-92b4-29aaadbd7a7b)]
+[scriptable, builtinclass, uuid(51f2b7f0-6435-40ec-b315-588f52be7eea)]
 interface nsIDocShell : nsISupports
 {
   /**
@@ -403,17 +403,6 @@ interface nsIDocShell : nsISupports
   void historyPurged(in long numEntries);
 
   /*
-   * Retrieves the WebApps session storage object for the supplied domain.
-   * If it doesn't already exist, a new one will be created.
-   *
-   * @param uri the uri of the storage object to retrieve
-   * @param documentURI new storage will be created with reference to this
-   *                    document.documentURI that will appear in storage event
-   */
-  nsIDOMStorage getSessionStorageForURI(in nsIURI uri,
-                                        in DOMString documentURI);
-
-  /*
    * Retrieves the WebApps session storage object for the supplied principal.
    *
    * @param principal returns a storage for this principal
@@ -433,6 +422,19 @@ interface nsIDocShell : nsISupports
    * @param storage the storage object to add
    */
   void addSessionStorage(in nsIPrincipal principal, in nsIDOMStorage storage);
+
+  /**
+   * Clones all session storage objects and attaches them to the given docshell.
+   * Useful when duplicating tabs and their states.
+   *
+   * @param docShell the docshell to clone the sessionstorage objects to
+   */
+  void cloneSessionStoragesTo(in nsIDocShell docShell);
+
+  /**
+   * Removes all WebApps session storage objects attached to the docshell.
+   */
+  void clearSessionStorages();
 
   /**
    * Gets the channel for the currently loaded document, if any. 
@@ -576,21 +578,76 @@ interface nsIDocShell : nsISupports
    */
   void addWeakPrivacyTransitionObserver(in nsIPrivacyTransitionObserver obs);
 
-  /*
-   * Is this docshell a browser frame (i.e., does it correspond to an <iframe
-   * mozbrowser>)?  The frameloader is responsible for setting this property
-   * when it initializes the docshell.
+  /**
+   * Mark the docshell as a browser frame.
+   * This should be used for <iframe mozbrowser> but not for <iframe mozapp>.
    *
-   * If so, this docshell should act like a chrome/content boundary for the
-   * purposes of window.top and window.parent.
-   *
-   * See also nsIMozBrowserFrame.
+   * This method should not be called more than once.
    */
-  attribute bool isBrowserFrame;
+  void setIsBrowserElement();
 
-  /*
-   * Is this docshell contained in an <iframe mozbrowser>, either directly or
-   * indirectly?
+  /**
+   * Returns true iff the docshell is marked as a browser frame.
    */
-  readonly attribute bool containedInBrowserFrame;
+  readonly attribute boolean isBrowserElement;
+
+  /**
+   * Returns true iif the docshell is marked as an app frame.
+   */
+  readonly attribute boolean isApp;
+
+  /**
+   * Returns true iif the docshell is marked as a type that behaves like a
+   * content boundary.
+   */
+  readonly attribute boolean isContentBoundary;
+
+  /**
+   * Returns true iif the docshell is inside a browser element.
+   */
+  readonly attribute boolean isInBrowserElement;
+
+  /**
+   * Returns true iif the docshell is inside an application.
+   * However, it will return false if the docshell is inside a browser element
+   * that is inside an application.
+   */
+  readonly attribute boolean isInApp;
+
+  /**
+   * Returns if the docshell has a docshell that behaves as a content boundary
+   * in his parent hierarchy.
+   */
+  readonly attribute boolean isBelowContentBoundary;
+
+  /**
+   * Set the app id this docshell is associated with. The id has to be a valid
+   * app id. If the docshell isn't associated with any app, the value should be
+   * nsIScriptSecurityManager::NO_APP_ID. However, this is the default value if
+   * nothing is et.
+   *
+   * This method is [noscript] to reduce the scope. It should be used at very
+   * specific moments.
+   *
+   * Calling setAppId() will mark the frame as an app frame.
+   */
+  [noscript] void setAppId(in unsigned long appId);
+
+  /**
+   * Returns the app id of the app the docshell is in. Returns
+   * nsIScriptSecurityManager::NO_APP_ID if the docshell is not in an app.
+   */
+  readonly attribute unsigned long appId;
+
+  /** 
+   * True iff asynchronous panning and zooming is enabled for this
+   * docshell.
+   */
+  readonly attribute bool asyncPanZoomEnabled;
+
+  /**
+   * Like GetSameTypeParent, except this ignores <iframe mozbrowser>
+   * boundaries.
+   */
+  nsIDocShell getParentIgnoreBrowserFrame();
 };

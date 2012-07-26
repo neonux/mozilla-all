@@ -46,7 +46,7 @@
 
      // Open libc
      let libc;
-     let libc_candidates =  [ "libSystem.dylib",
+     let libc_candidates =  [ "libsystem.B.dylib",
                               "libc.so.6",
                               "libc.so" ];
      for (let i = 0; i < libc_candidates.length; ++i) {
@@ -139,10 +139,90 @@
          new Type("string",
                   ctypes.char.ptr);
 
-
        // Note: support for strings in js-ctypes is very limited.
        // Once bug 552551 has progressed, we should extend this
        // type using ctypes.readString/ctypes.writeString
+
+       /**
+        * Type |mode_t|
+        */
+       Types.mode_t =
+         Types.intn_t(OS.Constants.libc.OSFILE_SIZEOF_MODE_T).withName("mode_t");
+
+       /**
+        * Type |time_t|
+        */
+       Types.time_t =
+         Types.intn_t(OS.Constants.libc.OSFILE_SIZEOF_TIME_T).withName("time_t");
+
+       Types.DIR =
+         new Type("DIR",
+                  ctypes.StructType("DIR"));
+
+       Types.null_or_DIR_ptr =
+         new Type("null_or_DIR*",
+                  Types.DIR.out_ptr.implementation,
+                  function(dir, operation) {
+                    if (dir == null || dir.isNull()) {
+                      return null;
+                    }
+                    return ctypes.CDataFinalizer(dir, _close_dir);
+                  });
+
+       // Structure |dirent|
+       // Building this type is rather complicated, as its layout varies between
+       // variants of Unix. For this reason, we rely on a number of constants
+       // (computed in C from the C data structures) that give us the layout.
+       // The structure we compute looks like
+       //  { int8_t[...] before_d_type; // ignored content
+       //    int8_t      d_type       ;
+       //    int8_t[...] before_d_name; // ignored content
+       //    char[...]   d_name;
+       //    };
+       {
+         let dirent = new OS.Shared.HollowStructure("dirent",
+           OS.Constants.libc.OSFILE_SIZEOF_DIRENT);
+         dirent.add_field_at(OS.Constants.libc.OSFILE_OFFSETOF_DIRENT_D_TYPE,
+           "d_type", ctypes.uint8_t);
+         dirent.add_field_at(OS.Constants.libc.OSFILE_OFFSETOF_DIRENT_D_NAME,
+           "d_name", ctypes.ArrayType(ctypes.char, OS.Constants.libc.OSFILE_SIZEOF_DIRENT_D_NAME));
+
+         // We now have built |dirent|.
+         Types.dirent = dirent.getType();
+         LOG("dirent is: " + Types.dirent.implementation.toSource());
+       }
+       Types.null_or_dirent_ptr =
+         new Type("null_of_dirent",
+                  Types.dirent.out_ptr.implementation);
+
+       // Structure |stat|
+       // Same technique
+       {
+         let stat = new OS.Shared.HollowStructure("stat",
+           OS.Constants.libc.OSFILE_SIZEOF_STAT);
+         stat.add_field_at(OS.Constants.libc.OSFILE_OFFSETOF_STAT_ST_MODE,
+                        "st_mode", Types.mode_t.implementation);
+         stat.add_field_at(OS.Constants.libc.OSFILE_OFFSETOF_STAT_ST_UID,
+                          "st_uid", ctypes.int);
+         stat.add_field_at(OS.Constants.libc.OSFILE_OFFSETOF_STAT_ST_GID,
+                          "st_gid", ctypes.int);
+
+         // Here, things get complicated with different data structures.
+         // Some platforms have |time_t st_atime| and some platforms have
+         // |timespec st_atimespec|. However, since |timespec| starts with
+         // a |time_t|, followed by nanoseconds, we just cheat and pretend
+         // that everybody has |time_t st_atime|, possibly followed by padding
+         stat.add_field_at(OS.Constants.libc.OSFILE_OFFSETOF_STAT_ST_ATIME,
+                          "st_atime", Types.time_t.implementation);
+         stat.add_field_at(OS.Constants.libc.OSFILE_OFFSETOF_STAT_ST_MTIME,
+                          "st_mtime", Types.time_t.implementation);
+         stat.add_field_at(OS.Constants.libc.OSFILE_OFFSETOF_STAT_ST_CTIME,
+                          "st_ctime", Types.time_t.implementation);
+
+         stat.add_field_at(OS.Constants.libc.OSFILE_OFFSETOF_STAT_ST_SIZE,
+                        "st_size", Types.size_t.implementation);
+         Types.stat = stat.getType();
+       }
 
 
        // Declare libc functions as functions of |OS.Unix.File|
@@ -155,6 +235,16 @@
 
        UnixFile.close = function close(fd) {
          // Detach the finalizer and call |_close|.
+         return fd.dispose();
+       };
+
+       let _close_dir =
+         libc.declare("closedir", ctypes.default_abi,
+                        /*return */ctypes.int,
+                        /*dirp*/   Types.DIR.in_ptr.implementation);
+
+       UnixFile.closedir = function closedir(fd) {
+         // Detach the finalizer and call |_close_dir|.
          return fd.dispose();
        };
 
@@ -259,6 +349,22 @@
                     /*fd*/     Types.fd,
                     /*length*/ Types.off_t);
 
+       if (OS.Constants.libc._DARWIN_FEATURE_64_BIT_INODE) {
+         UnixFile.fstat =
+           declareFFI("fstat$INODE64", ctypes.default_abi,
+                      /*return*/ Types.negativeone_or_nothing,
+                      /*path*/   Types.fd,
+                      /*buf*/    Types.stat.out_ptr
+                     );
+       } else {
+         UnixFile.fstat =
+           declareFFI("fstat", ctypes.default_abi,
+                      /*return*/ Types.negativeone_or_nothing,
+                      /*path*/   Types.fd,
+                      /*buf*/    Types.stat.out_ptr
+                     );
+       }
+
        UnixFile.lchown =
          declareFFI("lchown", ctypes.default_abi,
                     /*return*/ Types.negativeone_or_nothing,
@@ -279,6 +385,12 @@
                     /*offset*/ Types.off_t,
                     /*whence*/ Types.int);
 
+       UnixFile.mkdir =
+         declareFFI("mkdir", ctypes.default_abi,
+                    /*return*/ Types.int,
+                    /*path*/ Types.string,
+                    /*mode*/ Types.int);
+
        UnixFile.mkstemp =
          declareFFI("mkstemp", ctypes.default_abi,
                     /*return*/ Types.null_or_string,
@@ -290,6 +402,11 @@
                     /*path*/  Types.string,
                     /*oflags*/Types.int,
                     /*mode*/  Types.int);
+
+       UnixFile.opendir =
+         declareFFI("opendir", ctypes.default_abi,
+                    /*return*/ Types.null_or_DIR_ptr,
+                    /*path*/   Types.string);
 
        UnixFile.pread =
          declareFFI("pread", ctypes.default_abi,
@@ -314,11 +431,32 @@
                     /*buf*/   Types.char.out_ptr,
                     /*nbytes*/Types.size_t);
 
+       if (OS.Constants.libc._DARWIN_FEATURE_64_BIT_INODE) {
+         // Special case for MacOS X 10.5+
+         // Symbol name "readdir" still exists but is used for a
+         // deprecated function that does not match the
+         // constants of |OS.Constants.libc|.
+         UnixFile.readdir =
+           declareFFI("readdir$INODE64", ctypes.default_abi,
+                     /*return*/Types.null_or_dirent_ptr,
+                      /*dir*/   Types.DIR.in_ptr); // For MacOS X
+       } else {
+         UnixFile.readdir =
+           declareFFI("readdir", ctypes.default_abi,
+                      /*return*/Types.null_or_dirent_ptr,
+                      /*dir*/   Types.DIR.in_ptr); // Other Unices
+       }
+
        UnixFile.rename =
          declareFFI("rename", ctypes.default_abi,
                     /*return*/ Types.negativeone_or_nothing,
                     /*old*/    Types.string,
                     /*new*/    Types.string);
+
+       UnixFile.rmdir =
+         declareFFI("rmdir", ctypes.default_abi,
+                    /*return*/ Types.int,
+                    /*path*/   Types.string);
 
        UnixFile.splice =
          declareFFI("splice", ctypes.default_abi,
@@ -361,13 +499,88 @@
 
        // Weird cases that require special treatment
 
+       // OSes use a variety of hacks to differentiate between
+       // 32-bits and 64-bits versions of |stat|, |lstat|, |fstat|.
+       if (OS.Constants.libc._DARWIN_FEATURE_64_BIT_INODE) {
+         // MacOS X 64-bits
+         UnixFile.stat =
+           declareFFI("stat$INODE64", ctypes.default_abi,
+                      /*return*/ Types.negativeone_or_nothing,
+                      /*path*/   Types.string,
+                      /*buf*/    Types.stat.out_ptr
+                     );
+         UnixFile.lstat =
+           declareFFI("lstat$INODE64", ctypes.default_abi,
+                      /*return*/ Types.negativeone_or_nothing,
+                      /*path*/   Types.string,
+                      /*buf*/    Types.stat.out_ptr
+                     );
+         UnixFile.fstat =
+           declareFFI("fstat$INODE64", ctypes.default_abi,
+                      /*return*/ Types.negativeone_or_nothing,
+                      /*path*/   Types.fd,
+                      /*buf*/    Types.stat.out_ptr
+                     );
+       } else if (OS.Constants.libc._STAT_VER != undefined) {
+         const ver = OS.Constants.libc._STAT_VER;
+         // Linux, all widths
+         let xstat =
+           declareFFI("__xstat", ctypes.default_abi,
+                      /*return*/    Types.negativeone_or_nothing,
+                      /*_stat_ver*/ Types.int,
+                      /*path*/      Types.string,
+                      /*buf*/       Types.stat.out_ptr);
+         let lxstat =
+           declareFFI("__lxstat", ctypes.default_abi,
+                      /*return*/    Types.negativeone_or_nothing,
+                      /*_stat_ver*/ Types.int,
+                      /*path*/      Types.string,
+                      /*buf*/       Types.stat.out_ptr);
+         let fxstat =
+           declareFFI("__fxstat", ctypes.default_abi,
+                      /*return*/    Types.negativeone_or_nothing,
+                      /*_stat_ver*/ Types.int,
+                      /*fd*/        Types.fd,
+                      /*buf*/       Types.stat.out_ptr);
+
+         UnixFile.stat = function stat(path, buf) {
+           return xstat(ver, path, buf);
+         };
+         UnixFile.lstat = function stat(path, buf) {
+           return lxstat(ver, path, buf);
+         };
+         UnixFile.fstat = function stat(fd, buf) {
+           return fxstat(ver, fd, buf);
+         };
+       } else {
+         // Mac OS X 32-bits, other Unix
+         UnixFile.stat =
+           declareFFI("stat", ctypes.default_abi,
+                      /*return*/ Types.negativeone_or_nothing,
+                      /*path*/   Types.string,
+                      /*buf*/    Types.stat.out_ptr
+                     );
+         UnixFile.lstat =
+           declareFFI("lstat", ctypes.default_abi,
+                      /*return*/ Types.negativeone_or_nothing,
+                      /*path*/   Types.string,
+                      /*buf*/    Types.stat.out_ptr
+                     );
+         UnixFile.fstat =
+           declareFFI("fstat", ctypes.default_abi,
+                      /*return*/ Types.negativeone_or_nothing,
+                      /*fd*/     Types.fd,
+                      /*buf*/    Types.stat.out_ptr
+                     );
+       }
+
        // We cannot make a C array of CDataFinalizer, so
        // pipe cannot be directly defined as a C function.
 
        let _pipe =
-         declareFFI("pipe", ctypes.default_abi,
-                    /*return*/ Types.negativeone_or_nothing,
-                    /*fds*/    Types.int.out_ptr);
+         libc.declare("pipe", ctypes.default_abi,
+                    /*return*/ ctypes.int,
+                    /*fds*/    ctypes.ArrayType(ctypes.int, 2));
 
        // A shared per-thread buffer used to communicate with |pipe|
        let _pipebuf = new (ctypes.ArrayType(ctypes.int, 2))();

@@ -22,6 +22,7 @@
 #include "nsStringGlue.h"
 #include "nsTArray.h"
 #include "mozilla/dom/DOMJSClass.h"
+#include "nsMathUtils.h"
 
 class nsIPrincipal;
 class nsIXPConnectWrappedJS;
@@ -30,6 +31,16 @@ class nsScriptNameSpaceManager;
 #ifndef BAD_TLS_INDEX
 #define BAD_TLS_INDEX ((PRUint32) -1)
 #endif
+
+namespace xpc {
+JSObject *
+TransplantObject(JSContext *cx, JSObject *origobj, JSObject *target);
+
+JSObject *
+TransplantObjectWithWrapper(JSContext *cx,
+                            JSObject *origobj, JSObject *origwrapper,
+                            JSObject *targetobj, JSObject *targetwrapper);
+} /* namespace xpc */
 
 nsresult
 xpc_CreateGlobalObject(JSContext *cx, JSClass *clasp,
@@ -265,9 +276,9 @@ DOM_DefineQuickStubs(JSContext *cx, JSObject *proto, PRUint32 flags,
 // (which isn't all of them).
 nsresult
 ReportJSRuntimeExplicitTreeStats(const JS::RuntimeStats &rtStats,
-                                 const nsACString &pathPrefix,
+                                 const nsACString &rtPath,
                                  nsIMemoryMultiReporterCallback *cb,
-                                 nsISupports *closure);
+                                 nsISupports *closure, size_t *rtTotal = NULL);
 
 /**
  * Convert a jsval to PRInt64. Return true on success.
@@ -284,7 +295,12 @@ ValueToInt64(JSContext *cx, JS::Value v, int64_t *result)
         double doubleval;
         if (!JS_ValueToNumber(cx, v, &doubleval))
             return false;
-        *result = static_cast<int64_t>(doubleval);
+        // Be careful with non-finite doubles
+        if (NS_finite(doubleval))
+            // XXXbz this isn't quite right either; need to do the mod thing
+            *result = static_cast<int64_t>(doubleval);
+        else
+            *result = 0;
     }
     return true;
 }
@@ -304,7 +320,12 @@ ValueToUint64(JSContext *cx, JS::Value v, uint64_t *result)
         double doubleval;
         if (!JS_ValueToNumber(cx, v, &doubleval))
             return false;
-        *result = static_cast<uint64_t>(doubleval);
+        // Be careful with non-finite doubles
+        if (NS_finite(doubleval))
+            // XXXbz this isn't quite right either; need to do the mod thing
+            *result = static_cast<uint64_t>(doubleval);
+        else
+            *result = 0;
     }
     return true;
 }
@@ -329,6 +350,9 @@ bool
 Throw(JSContext *cx, nsresult rv);
 
 } // namespace xpc
+
+nsCycleCollectionParticipant *
+xpc_JSCompartmentParticipant();
 
 namespace mozilla {
 namespace dom {

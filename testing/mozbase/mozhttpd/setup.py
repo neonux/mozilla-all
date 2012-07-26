@@ -1,6 +1,6 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# License, v. 2.0. If a copy of the MPL was not distributed with this file,
+# You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import os
 from setuptools import setup, find_packages
@@ -11,12 +11,12 @@ try:
 except IOError:
     description = None
 
-version = '0.2'
+PACKAGE_VERSION = '0.3'
 
 deps = []
 
 setup(name='mozhttpd',
-      version=version,
+      version=PACKAGE_VERSION,
       description="basic python webserver, tested with talos",
       long_description=description,
       classifiers=[], # Get strings from http://pypi.python.org/pypi?%3Aaction=list_classifiers

@@ -106,6 +106,7 @@ extern nsresult nsStringInputStreamConstructor(nsISupports *, REFNSIID, void **)
 
 #include "nsChromeRegistry.h"
 #include "nsChromeProtocolHandler.h"
+#include "mozilla/mozPoisonWrite.h"
 
 #include "mozilla/scache/StartupCache.h"
 
@@ -313,8 +314,6 @@ NS_InitXPCOM2(nsIServiceManager* *result,
               nsIDirectoryServiceProvider* appFileLocationProvider)
 {
     NS_TIME_FUNCTION;
-
-    PR_SetCurrentThreadName("Main Thread");
 
     nsresult rv = NS_OK;
 
@@ -646,6 +645,8 @@ ShutdownXPCOM(nsIServiceManager* servMgr)
     NS_IF_RELEASE(nsDirectoryService::gService);
 
     nsCycleCollector_shutdown();
+
+    mozilla::PoisonWrite();
 
     if (moduleLoaders) {
         bool more;

@@ -50,7 +50,13 @@ parent:
             bool                chooseApplicationCache,
             nsCString           appCacheClientID,
             bool                allowSpdy,
-            bool                usePrivateBrowsing);
+            // Fields for imitating a nsILoadContext
+            bool                haveLoadContext,
+            bool                isContent,
+            bool                usePrivateBrowsing,
+            bool                isInBrowserElement,
+            PRUint32            appID,
+            nsCString           extendedOrigin);
 
   // Used to connect redirected-to channel on the parent with redirected-to
   // channel on the child.

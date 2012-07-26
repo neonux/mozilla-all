@@ -61,7 +61,7 @@ class HTMLElement(object):
     def enabled(self):
         return self.marionette._send_message('isElementEnabled', 'value', element=self.id)
 
-    def displayed(self):
+    def is_displayed(self):
         return self.marionette._send_message('isElementDisplayed', 'value', element=self.id)
 
 
@@ -71,7 +71,8 @@ class Marionette(object):
     CONTEXT_CONTENT = 'content'
 
     def __init__(self, host='localhost', port=2828, bin=None, profile=None,
-                 emulator=None, emulatorBinary=None, connectToRunningEmulator=False,
+                 emulator=None, emulatorBinary=None, emulatorImg=None,
+                 emulator_res='480x800', connectToRunningEmulator=False,
                  homedir=None, baseurl=None, noWindow=False, logcat_dir=None):
         self.host = host
         self.port = self.local_port = port
@@ -96,7 +97,9 @@ class Marionette(object):
                                      noWindow=self.noWindow,
                                      logcat_dir=self.logcat_dir,
                                      arch=emulator,
-                                     emulatorBinary=emulatorBinary)
+                                     emulatorBinary=emulatorBinary,
+                                     userdata=emulatorImg,
+                                     res=emulator_res)
             self.emulator.start()
             self.port = self.emulator.setup_port_forwarding(self.port)
             assert(self.emulator.wait_for_port())
@@ -238,17 +241,24 @@ class Marionette(object):
         response = self._send_message('setSearchTimeout', 'ok', value=timeout)
         return response
 
-    def get_window(self):
+    @property
+    def current_window_handle(self):
         self.window = self._send_message('getWindow', 'value')
         return self.window
+    
+    @property
+    def title(self):
+        response = self._send_message('getTitle', 'value') 
+        return response
 
-    def get_windows(self):
+    @property
+    def window_handles(self):
         response = self._send_message('getWindows', 'value')
         return response
 
-    def close_window(self, window_id=None):
+    def close(self, window_id=None):
         if not window_id:
-            window_id = self.get_window()
+            window_id = self.current_window_handle
         response = self._send_message('closeWindow', 'ok', value=window_id)
         return response
 
@@ -322,7 +332,7 @@ class Marionette(object):
 
         return unwrapped
 
-    def execute_js_script(self, script, script_args=None, timeout=True, new_sandbox=True):
+    def execute_js_script(self, script, script_args=None, timeout=True, new_sandbox=True, special_powers=False):
         if script_args is None:
             script_args = []
         args = self.wrapArguments(script_args)
@@ -331,10 +341,11 @@ class Marionette(object):
                                       value=script,
                                       args=args,
                                       timeout=timeout,
-                                      newSandbox=new_sandbox)
+                                      newSandbox=new_sandbox,
+                                      specialPowers=special_powers)
         return self.unwrapValue(response)
 
-    def execute_script(self, script, script_args=None, new_sandbox=True):
+    def execute_script(self, script, script_args=None, new_sandbox=True, special_powers=False):
         if script_args is None:
             script_args = []
         args = self.wrapArguments(script_args)
@@ -342,10 +353,11 @@ class Marionette(object):
                                      'value',
                                       value=script,
                                       args=args,
-                                      newSandbox=new_sandbox)
+                                      newSandbox=new_sandbox,
+                                      specialPowers=special_powers)
         return self.unwrapValue(response)
 
-    def execute_async_script(self, script, script_args=None, new_sandbox=True):
+    def execute_async_script(self, script, script_args=None, new_sandbox=True, special_powers=False):
         if script_args is None:
             script_args = []
         args = self.wrapArguments(script_args)
@@ -353,7 +365,8 @@ class Marionette(object):
                                       'value',
                                       value=script,
                                       args=args,
-                                      newSandbox=new_sandbox)
+                                      newSandbox=new_sandbox,
+                                      specialPowers=special_powers)
         return self.unwrapValue(response)
 
     def find_element(self, method, target, id=None):

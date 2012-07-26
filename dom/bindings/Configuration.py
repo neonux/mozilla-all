@@ -75,13 +75,55 @@ class Configuration:
         return filter(lambda e: e.filename() == webIDLFile, self.enums)
     def getDictionaries(self, webIDLFile):
         return filter(lambda d: d.filename() == webIDLFile, self.dictionaries)
+    def getDescriptor(self, interfaceName, workers):
+        """
+        Gets the appropriate descriptor for the given interface name
+        and the given workers boolean.
+        """
+        iface = self.getInterface(interfaceName)
+        descriptors = self.getDescriptors(interface=iface)
 
-class Descriptor:
+        # The only filter we currently have is workers vs non-workers.
+        matches = filter(lambda x: x.workers is workers, descriptors)
+
+        # After filtering, we should have exactly one result.
+        if len(matches) is not 1:
+            raise NoSuchDescriptorError("For " + interfaceName + " found " +
+                                        str(len(matches)) + " matches");
+        return matches[0]
+    def getDescriptorProvider(self, workers):
+        """
+        Gets a descriptor provider that can provide descriptors as needed,
+        for the given workers boolean
+        """
+        return DescriptorProvider(self, workers)
+
+class NoSuchDescriptorError(TypeError):
+    def __init__(self, str):
+        TypeError.__init__(self, str)
+
+class DescriptorProvider:
+    """
+    A way of getting descriptors for interface names
+    """
+    def __init__(self, config, workers):
+        self.config = config
+        self.workers = workers
+
+    def getDescriptor(self, interfaceName):
+        """
+        Gets the appropriate descriptor for the given interface name given the
+        context of the current descriptor. This selects the appropriate
+        implementation for cases like workers.
+        """
+        return self.config.getDescriptor(interfaceName, self.workers)
+
+class Descriptor(DescriptorProvider):
     """
     Represents a single descriptor for an interface. See Bindings.conf.
     """
     def __init__(self, config, interface, desc):
-        self.config = config
+        DescriptorProvider.__init__(self, config, desc.get('workers', False))
         self.interface = interface
 
         # Read the desc, and fill in the relevant defaults.
@@ -89,11 +131,16 @@ class Descriptor:
         self.hasInstanceInterface = desc.get('hasInstanceInterface', None)
 
         headerDefault = self.nativeType
-        headerDefault = headerDefault.split("::")[-1] + ".h"
+        headerDefault = headerDefault.replace("::", "/") + ".h"
         self.headerFile = desc.get('headerFile', headerDefault)
 
-        castableDefault = not self.interface.isCallback()
-        self.castable = desc.get('castable', castableDefault)
+        if self.interface.isCallback() or self.interface.isExternal():
+            if 'castable' in desc:
+                raise TypeError("%s is external or callback but has a castable "
+                                "setting" % self.interface.identifier.name)
+            self.castable = False
+        else:
+            self.castable = desc.get('castable', True)
 
         self.notflattened = desc.get('notflattened', False)
         self.register = desc.get('register', True)
@@ -107,9 +154,11 @@ class Descriptor:
                 iface.setUserData('hasConcreteDescendant', True)
                 iface = iface.parent
 
+        if self.interface.isExternal() and 'prefable' in desc:
+            raise TypeError("%s is external but has a prefable setting" %
+                            self.interface.identifier.name)
         self.prefable = desc.get('prefable', False)
 
-        self.workers = desc.get('workers', False)
         self.nativeIsISupports = not self.workers
         self.customTrace = desc.get('customTrace', self.workers)
         self.customFinalize = desc.get('customFinalize', self.workers)
@@ -166,30 +215,39 @@ class Descriptor:
 
         return self.interface.hasInterfaceObject() or self.interface.hasInterfacePrototypeObject()
 
-    def getDescriptor(self, interfaceName):
-        """
-        Gets the appropriate descriptor for the given interface name given the
-        context of the current descriptor. This selects the appropriate
-        implementation for cases like workers.
-        """
-        iface = self.config.getInterface(interfaceName)
-        descriptors = self.config.getDescriptors(interface=iface)
-
-        # The only filter we currently have is workers vs non-workers.
-        matches = filter(lambda x: x.workers is self.workers, descriptors)
-
-        # After filtering, we should have exactly one result.
-        if len(matches) is not 1:
-            raise TypeError("For " + interfaceName + " found " +
-                            str(len(matches)) + " matches");
-        return matches[0]
-
     def getExtendedAttributes(self, member, getter=False, setter=False):
+        def ensureValidInfallibleExtendedAttribute(attr):
+            assert(attr is None or attr is True or len(attr) == 1)
+            if (attr is not None and attr is not True and
+                'Workers' not in attr and 'MainThread' not in attr):
+                raise TypeError("Unknown value for 'infallible': " + attr[0])
+
         name = member.identifier.name
         if member.isMethod():
-            return self.extendedAttributes['all'].get(name, [])
+            attrs = self.extendedAttributes['all'].get(name, [])
+            infallible = member.getExtendedAttribute("Infallible")
+            ensureValidInfallibleExtendedAttribute(infallible)
+            if (infallible is not None and
+                (infallible is True or
+                 ('Workers' in infallible and self.workers) or
+                 ('MainThread' in infallible and not self.workers))):
+                attrs.append("infallible")
+            return attrs
 
         assert member.isAttr()
         assert bool(getter) != bool(setter)
         key = 'getterOnly' if getter else 'setterOnly'
-        return self.extendedAttributes['all'].get(name, []) + self.extendedAttributes[key].get(name, [])
+        attrs = self.extendedAttributes['all'].get(name, []) + self.extendedAttributes[key].get(name, [])
+        infallible = member.getExtendedAttribute("Infallible")
+        if infallible is None:
+            infallibleAttr = "GetterInfallible" if getter else "SetterInfallible"
+            infallible = member.getExtendedAttribute(infallibleAttr)
+
+        ensureValidInfallibleExtendedAttribute(infallible)
+        if (infallible is not None and
+            (infallible is True or
+             ('Workers' in infallible and self.workers) or
+             ('MainThread' in infallible and not self.workers))):
+            attrs.append("infallible")
+
+        return attrs

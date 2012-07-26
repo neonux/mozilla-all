@@ -5,23 +5,28 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "mozilla/layers/ShadowLayersParent.h"
+#include "base/basictypes.h"
 
 #include "BasicLayers.h"
+#include "gfx3DMatrix.h"
 #include "LayerManagerOGL.h"
 #ifdef MOZ_ENABLE_D3D9_LAYER
-#include "LayerManagerD3D9.h"
+# include "LayerManagerD3D9.h"
 #endif //MOZ_ENABLE_D3D9_LAYER
-#include "RenderFrameParent.h"
-
-#include "gfx3DMatrix.h"
-#include "nsFrameLoader.h"
-#include "nsViewportFrame.h"
-#include "nsSubDocumentFrame.h"
-#include "nsIObserver.h"
+#include "mozilla/dom/TabParent.h"
+#include "mozilla/layers/AsyncPanZoomController.h"
+#include "mozilla/layers/CompositorParent.h"
+#include "mozilla/layers/ShadowLayersParent.h"
 #include "nsContentUtils.h"
+#include "nsFrameLoader.h"
+#include "nsIObserver.h"
+#include "nsSubDocumentFrame.h"
+#include "nsViewportFrame.h"
+#include "RenderFrameParent.h"
+#include "LayersBackend.h"
 
 typedef nsContentView::ViewConfig ViewConfig;
+using namespace mozilla::dom;
 using namespace mozilla::layers;
 
 namespace mozilla {
@@ -94,7 +99,7 @@ AssertInTopLevelChromeDoc(ContainerLayer* aContainer,
                           nsIFrame* aContainedFrame)
 {
   NS_ASSERTION(
-    (aContainer->Manager()->GetBackendType() != LayerManager::LAYERS_BASIC) ||
+    (aContainer->Manager()->GetBackendType() != mozilla::layers::LAYERS_BASIC) ||
     (aContainedFrame->GetNearestWidget() ==
      static_cast<BasicLayerManager*>(aContainer->Manager())->GetRetainerWidget()),
     "Expected frame to be in top-level chrome document");
@@ -315,7 +320,7 @@ ClearContainer(ContainerLayer* aContainer)
 static bool
 IsTempLayerManager(LayerManager* aManager)
 {
-  return (LayerManager::LAYERS_BASIC == aManager->GetBackendType() &&
+  return (mozilla::layers::LAYERS_BASIC == aManager->GetBackendType() &&
           !static_cast<BasicLayerManager*>(aManager)->IsRetained());
 }
 
@@ -444,14 +449,76 @@ BuildBackgroundPatternFor(ContainerLayer* aContainer,
   aContainer->InsertAfter(layer, nsnull);
 }
 
-RenderFrameParent::RenderFrameParent(nsFrameLoader* aFrameLoader)
-  : mFrameLoader(aFrameLoader)
+already_AddRefed<LayerManager>
+GetFrom(nsFrameLoader* aFrameLoader)
+{
+  nsIDocument* doc = aFrameLoader->GetOwnerDoc();
+  return nsContentUtils::LayerManagerForDocument(doc);
+}
+
+class RemoteContentController : public GeckoContentController {
+public:
+  RemoteContentController(RenderFrameParent* aRenderFrame)
+    : mUILoop(MessageLoop::current())
+    , mRenderFrame(aRenderFrame)
+  { }
+
+  virtual void RequestContentRepaint(const FrameMetrics& aFrameMetrics) MOZ_OVERRIDE
+  {
+    if (MessageLoop::current() != mUILoop) {
+      // We have to send this message from the "UI thread" (main
+      // thread).
+      mUILoop->PostTask(
+        FROM_HERE,
+        NewRunnableMethod(this, &RemoteContentController::RequestContentRepaint,
+                          aFrameMetrics));
+      return;
+    }
+    if (mRenderFrame) {
+      TabParent* browser = static_cast<TabParent*>(mRenderFrame->Manager());
+      browser->UpdateFrame(aFrameMetrics);
+    }
+  }
+
+  void ClearRenderFrame() { mRenderFrame = nsnull; }
+
+private:
+  MessageLoop* mUILoop;
+  RenderFrameParent* mRenderFrame;
+};
+
+RenderFrameParent::RenderFrameParent(nsFrameLoader* aFrameLoader,
+                                     ScrollingBehavior aScrollingBehavior,
+                                     LayersBackend* aBackendType,
+                                     int* aMaxTextureSize,
+                                     uint64_t* aId)
+  : mLayersId(0)
+  , mFrameLoader(aFrameLoader)
   , mFrameLoaderDestroyed(false)
   , mBackgroundColor(gfxRGBA(1, 1, 1))
 {
-  if (aFrameLoader) {
-    mContentViews[FrameMetrics::ROOT_SCROLL_ID] =
-      new nsContentView(aFrameLoader, FrameMetrics::ROOT_SCROLL_ID);
+  mContentViews[FrameMetrics::ROOT_SCROLL_ID] =
+    new nsContentView(aFrameLoader, FrameMetrics::ROOT_SCROLL_ID);
+
+  *aBackendType = mozilla::layers::LAYERS_NONE;
+  *aMaxTextureSize = 0;
+  *aId = 0;
+
+  nsRefPtr<LayerManager> lm = GetFrom(mFrameLoader);
+  *aBackendType = lm->GetBackendType();
+  *aMaxTextureSize = lm->GetMaxTextureSize();
+
+  if (CompositorParent::CompositorLoop()) {
+    // Our remote frame will push layers updates to the compositor,
+    // and we'll keep an indirect reference to that tree.
+    *aId = mLayersId = CompositorParent::AllocateLayerTreeId();
+    if (aScrollingBehavior == ASYNC_PAN_ZOOM) {
+      mContentController = new RemoteContentController(this);
+      mPanZoomController = new AsyncPanZoomController(
+        mContentController, AsyncPanZoomController::USE_GESTURE_DETECTOR);
+      CompositorParent::SetPanZoomControllerForLayerTree(mLayersId,
+                                                         mPanZoomController);
+    }
   }
 }
 
@@ -489,36 +556,16 @@ RenderFrameParent::ContentViewScaleChanged(nsContentView* aView)
 }
 
 void
-RenderFrameParent::ShadowLayersUpdated(bool isFirstPaint)
+RenderFrameParent::ShadowLayersUpdated(ShadowLayersParent* aLayerTree,
+                                       const TargetConfig& aTargetConfig,
+                                       bool isFirstPaint)
 {
-  mFrameLoader->SetCurrentRemoteFrame(this);
-
   // View map must only contain views that are associated with the current
   // shadow layer tree. We must always update the map when shadow layers
   // are updated.
   BuildViewMap();
 
-  nsIFrame* docFrame = mFrameLoader->GetPrimaryFrameOfOwningContent();
-  if (!docFrame) {
-    // Bad, but nothing we can do about it (XXX/cjones: or is there?
-    // maybe bug 589337?).  When the new frame is created, we'll
-    // probably still be the current render frame and will get to draw
-    // our content then.  Or, we're shutting down and this update goes
-    // to /dev/null.
-    return;
-  }
-
-  // FIXME/cjones: we should collect the rects/regions updated for
-  // Painted*Layer() calls and pass that region to here, then only
-  // invalidate that rect
-  //
-  // We pass INVALIDATE_NO_THEBES_LAYERS here because we're
-  // invalidating the <browser> on behalf of its counterpart in the
-  // content process.  Not only do we not need to invalidate the
-  // shadow layers, things would just break if we did --- we have no
-  // way to repaint shadow layers from this process.
-  nsRect rect = nsRect(nsPoint(0, 0), docFrame->GetRect().Size());
-  docFrame->InvalidateWithFlags(rect, nsIFrame::INVALIDATE_NO_THEBES_LAYERS);
+  TriggerRepaint();
 }
 
 already_AddRefed<Layer>
@@ -542,6 +589,25 @@ RenderFrameParent::BuildLayer(nsDisplayListBuilder* aBuilder,
     // the NS_ABORT_IF_FALSE() above will flag it.  Returning NULL
     // here will just cause the shadow subtree not to be rendered.
     return nsnull;
+  }
+
+  uint64_t id = GetLayerTreeId();
+  if (0 != id) {
+    MOZ_ASSERT(!GetRootLayer());
+
+    nsRefPtr<RefLayer> layer = aManager->CreateRefLayer();
+    if (!layer) {
+      // Probably a temporary layer manager that doesn't know how to
+      // use ref layers.
+      return nsnull;
+    }
+    layer->SetReferentId(id);
+    layer->SetVisibleRegion(aVisibleRect);
+    nsIntPoint rootFrameOffset = GetRootFrameOffset(aFrame, aBuilder);
+    layer->SetTransform(
+      gfx3DMatrix::Translation(rootFrameOffset.x, rootFrameOffset.y, 0.0));
+
+    return layer.forget();
   }
 
   if (mContainer) {
@@ -593,8 +659,34 @@ RenderFrameParent::OwnerContentChanged(nsIContent* aContent)
 }
 
 void
+RenderFrameParent::NotifyInputEvent(const nsInputEvent& aEvent,
+                                    nsInputEvent* aOutEvent)
+{
+  if (mPanZoomController) {
+    mPanZoomController->HandleInputEvent(aEvent, aOutEvent);
+  }
+}
+
+void
+RenderFrameParent::NotifyDimensionsChanged(int width, int height)
+{
+  if (mPanZoomController) {
+    mPanZoomController->UpdateViewportSize(width, height);
+  }
+}
+
+void
 RenderFrameParent::ActorDestroy(ActorDestroyReason why)
 {
+  if (mLayersId != 0) {
+    CompositorParent::DeallocateLayerTreeId(mLayersId);
+    if (mContentController) {
+      // Stop our content controller from requesting repaints of our
+      // content.
+      mContentController->ClearRenderFrame();
+    }
+  }
+
   if (mFrameLoader && mFrameLoader->GetCurrentRemoteFrame() == this) {
     // XXX this might cause some weird issues ... we'll just not
     // redraw the part of the window covered by this until the "next"
@@ -607,26 +699,21 @@ RenderFrameParent::ActorDestroy(ActorDestroyReason why)
   mFrameLoader = nsnull;
 }
 
+bool
+RenderFrameParent::RecvNotifyCompositorTransaction()
+{
+  TriggerRepaint();
+  return true;
+}
+
 PLayersParent*
-RenderFrameParent::AllocPLayers(LayerManager::LayersBackend* aBackendType, int* aMaxTextureSize)
+RenderFrameParent::AllocPLayers()
 {
   if (!mFrameLoader || mFrameLoaderDestroyed) {
-    *aBackendType = LayerManager::LAYERS_NONE;
-    *aMaxTextureSize = 0;
     return nsnull;
   }
-
-  nsRefPtr<LayerManager> lm = 
-    nsContentUtils::LayerManagerForDocument(mFrameLoader->GetOwnerDoc());
-  ShadowLayerManager* slm = lm->AsShadowManager();
-  if (!slm) {
-    *aBackendType = LayerManager::LAYERS_NONE;
-    *aMaxTextureSize = 0;
-     return nsnull;
-  }
-  *aBackendType = lm->GetBackendType();
-  *aMaxTextureSize = lm->GetMaxTextureSize();
-  return new ShadowLayersParent(slm, this);
+  nsRefPtr<LayerManager> lm = GetFrom(mFrameLoader);
+  return new ShadowLayersParent(lm->AsShadowManager(), this, 0);
 }
 
 bool
@@ -670,6 +757,34 @@ RenderFrameParent::BuildViewMap()
   mContentViews = newContentViews;
 }
 
+void
+RenderFrameParent::TriggerRepaint()
+{
+  mFrameLoader->SetCurrentRemoteFrame(this);
+
+  nsIFrame* docFrame = mFrameLoader->GetPrimaryFrameOfOwningContent();
+  if (!docFrame) {
+    // Bad, but nothing we can do about it (XXX/cjones: or is there?
+    // maybe bug 589337?).  When the new frame is created, we'll
+    // probably still be the current render frame and will get to draw
+    // our content then.  Or, we're shutting down and this update goes
+    // to /dev/null.
+    return;
+  }
+
+  // FIXME/cjones: we should collect the rects/regions updated for
+  // Painted*Layer() calls and pass that region to here, then only
+  // invalidate that rect
+  //
+  // We pass INVALIDATE_NO_THEBES_LAYERS here because we're
+  // invalidating the <browser> on behalf of its counterpart in the
+  // content process.  Not only do we not need to invalidate the
+  // shadow layers, things would just break if we did --- we have no
+  // way to repaint shadow layers from this process.
+  nsRect rect = nsRect(nsPoint(0, 0), docFrame->GetRect().Size());
+  docFrame->InvalidateWithFlags(rect, nsIFrame::INVALIDATE_NO_THEBES_LAYERS);
+}
+
 ShadowLayersParent*
 RenderFrameParent::GetShadowLayers() const
 {
@@ -678,6 +793,12 @@ RenderFrameParent::GetShadowLayers() const
                     "can only support at most 1 ShadowLayersParent");
   return (shadowParents.Length() == 1) ?
     static_cast<ShadowLayersParent*>(shadowParents[0]) : nsnull;
+}
+
+uint64_t
+RenderFrameParent::GetLayerTreeId() const
+{
+  return mLayersId;
 }
 
 ContainerLayer*

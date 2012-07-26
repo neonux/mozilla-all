@@ -68,6 +68,7 @@
 #include "nsIInlineEventHandlers.h"
 #include "nsDataHashtable.h"
 #include "mozilla/TimeStamp.h"
+#include "mozilla/Attributes.h"
 
 #define XML_DECLARATION_BITS_DECLARATION_EXISTS   (1 << 0)
 #define XML_DECLARATION_BITS_ENCODING_EXISTS      (1 << 1)
@@ -214,6 +215,10 @@ public:
     ChangeCallback mKey;
   };
 
+  static size_t SizeOfExcludingThis(nsIdentifierMapEntry* aEntry,
+                                    nsMallocSizeOfFun aMallocSizeOf,
+                                    void* aArg);
+
 private:
   void FireChangeCallbacks(Element* aOldElement, Element* aNewElement,
                            bool aImageOnly = false);
@@ -286,7 +291,7 @@ protected:
   nsIDocument*  mDocument;
 };
 
-class nsOnloadBlocker : public nsIRequest
+class nsOnloadBlocker MOZ_FINAL : public nsIRequest
 {
 public:
   nsOnloadBlocker() {}
@@ -388,7 +393,7 @@ protected:
   };
   friend class PendingLoad;
 
-  class LoadgroupCallbacks : public nsIInterfaceRequestor
+  class LoadgroupCallbacks MOZ_FINAL : public nsIInterfaceRequestor
   {
   public:
     LoadgroupCallbacks(nsIInterfaceRequestor* aOtherCallbacks)
@@ -409,8 +414,8 @@ protected:
     
     // XXXbz I wish we could just derive the _allcaps thing from _i
 #define DECL_SHIM(_i, _allcaps)                                              \
-    class _i##Shim : public nsIInterfaceRequestor,                           \
-                     public _i                                               \
+    class _i##Shim MOZ_FINAL : public nsIInterfaceRequestor,                 \
+                               public _i                                     \
     {                                                                        \
     public:                                                                  \
       _i##Shim(nsIInterfaceRequestor* aIfreq, _i* aRealPtr)                  \
@@ -420,8 +425,8 @@ protected:
         NS_ASSERTION(mRealPtr, "Expected non-null here");                    \
       }                                                                      \
       NS_DECL_ISUPPORTS                                                      \
-      NS_FORWARD_NSIINTERFACEREQUESTOR(mIfReq->);                            \
-      NS_FORWARD_##_allcaps(mRealPtr->);                                     \
+      NS_FORWARD_NSIINTERFACEREQUESTOR(mIfReq->)                             \
+      NS_FORWARD_##_allcaps(mRealPtr->)                                      \
     private:                                                                 \
       nsCOMPtr<nsIInterfaceRequestor> mIfReq;                                \
       nsCOMPtr<_i> mRealPtr;                                                 \
@@ -1168,11 +1173,6 @@ protected:
 
   bool mInXBLUpdate:1;
 
-  // This flag is only set in nsXMLDocument, for e.g. documents used in XBL. We
-  // don't want animations to play in such documents, so we need to store the
-  // flag here so that we can check it in nsDocument::GetAnimationController.
-  bool mLoadedAsInteractiveData:1;
-
   // Whether we're currently holding a lock on all of our images.
   bool mLockingImages:1;
 
@@ -1256,9 +1256,12 @@ private:
   static void ClearPendingPointerLockRequest(bool aDispatchErrorEvents);
 
   /**
-   * Find the (non-anonymous) element in this document that contains the
-   * content (possibly in a subdocument) associated with aFrame. Returns null
-   * if there is no such element.
+   * Find the (non-anonymous) content in this document for aFrame. It will
+   * be aFrame's content node if that content is in this document and not
+   * anonymous. Otherwise, when aFrame is in a subdocument, we use the frame
+   * element containing the subdocument containing aFrame, and/or find the
+   * nearest non-anonymous ancestor in this document.
+   * Returns null if there is no such element.
    */
   nsIContent* GetContentInThisDocument(nsIFrame* aFrame) const;
 

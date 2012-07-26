@@ -17,17 +17,18 @@
 #include "nsHTMLURIRefObject.h"
 
 #include "nsIDOMText.h"
+#include "nsIDOMNamedNodeMap.h"
 #include "nsIDOMNodeList.h"
 #include "nsIDOMDocument.h"
 #include "nsIDOMAttr.h"
 #include "nsIDocument.h"
 #include "nsIDOMEventTarget.h" 
 #include "nsIDOMKeyEvent.h"
-#include "nsISelectionPrivate.h"
 #include "nsIDOMHTMLAnchorElement.h"
 #include "nsISelectionController.h"
 #include "nsIDOMHTMLDocument.h"
 #include "nsILinkHandler.h"
+#include "nsIInlineSpellChecker.h"
 
 #include "mozilla/css/Loader.h"
 #include "nsCSSStyleSheet.h"
@@ -63,7 +64,9 @@
 
 #include "nsIFrame.h"
 #include "nsIParserService.h"
+#include "mozilla/Selection.h"
 #include "mozilla/dom/Element.h"
+#include "nsTextFragment.h"
 
 using namespace mozilla;
 using namespace mozilla::widget;
@@ -513,24 +516,16 @@ nsHTMLEditor::BeginningOfDocument()
     nsWSRunObject wsObj(this, curNode, curOffset);
     nsCOMPtr<nsIDOMNode> visNode;
     PRInt32 visOffset=0;
-    PRInt16 visType=0;
+    WSType visType;
     wsObj.NextVisibleNode(curNode, curOffset, address_of(visNode), &visOffset, &visType);
-    if ((visType==nsWSRunObject::eNormalWS) || 
-        (visType==nsWSRunObject::eText))
-    {
+    if (visType == WSType::normalWS || visType == WSType::text) {
       selNode = visNode;
       selOffset = visOffset;
       done = true;
-    }
-    else if ((visType==nsWSRunObject::eBreak)    ||
-             (visType==nsWSRunObject::eSpecial))
-    {
-      res = GetNodeLocation(visNode, address_of(selNode), &selOffset);
-      NS_ENSURE_SUCCESS(res, res); 
+    } else if (visType == WSType::br || visType == WSType::special) {
+      selNode = GetNodeLocation(visNode, &selOffset);
       done = true;
-    }
-    else if (visType==nsWSRunObject::eOtherBlock)
-    {
+    } else if (visType == WSType::otherBlock) {
       // By definition of nsWSRunObject, a block element terminates 
       // a whitespace run. That is, although we are calling a method 
       // that is named "NextVisibleNode", the node returned
@@ -546,8 +541,7 @@ nsHTMLEditor::BeginningOfDocument()
         // like a <hr>
         // We want to place the caret in front of that block.
 
-        res = GetNodeLocation(visNode, address_of(selNode), &selOffset);
-        NS_ENSURE_SUCCESS(res, res); 
+        selNode = GetNodeLocation(visNode, &selOffset);
         done = true;
       }
       else
@@ -557,8 +551,7 @@ nsHTMLEditor::BeginningOfDocument()
             isEmptyBlock)
         {
           // skip the empty block
-          res = GetNodeLocation(visNode, address_of(curNode), &curOffset);
-          NS_ENSURE_SUCCESS(res, res); 
+          curNode = GetNodeLocation(visNode, &curOffset);
           ++curOffset;
         }
         else
@@ -599,6 +592,7 @@ nsHTMLEditor::HandleKeyPressEvent(nsIDOMKeyEvent* aKeyEvent)
 
   switch (nativeKeyEvent->keyCode) {
     case nsIDOMKeyEvent::DOM_VK_META:
+    case nsIDOMKeyEvent::DOM_VK_WIN:
     case nsIDOMKeyEvent::DOM_VK_SHIFT:
     case nsIDOMKeyEvent::DOM_VK_CONTROL:
     case nsIDOMKeyEvent::DOM_VK_ALT:
@@ -619,7 +613,7 @@ nsHTMLEditor::HandleKeyPressEvent(nsIDOMKeyEvent* aKeyEvent)
       }
 
       if (nativeKeyEvent->IsControl() || nativeKeyEvent->IsAlt() ||
-          nativeKeyEvent->IsMeta()) {
+          nativeKeyEvent->IsMeta() || nativeKeyEvent->IsOS()) {
         return NS_OK;
       }
 
@@ -669,7 +663,7 @@ nsHTMLEditor::HandleKeyPressEvent(nsIDOMKeyEvent* aKeyEvent)
     case nsIDOMKeyEvent::DOM_VK_RETURN:
     case nsIDOMKeyEvent::DOM_VK_ENTER:
       if (nativeKeyEvent->IsControl() || nativeKeyEvent->IsAlt() ||
-          nativeKeyEvent->IsMeta()) {
+          nativeKeyEvent->IsMeta() || nativeKeyEvent->IsOS()) {
         return NS_OK;
       }
       aKeyEvent->PreventDefault(); // consumed
@@ -684,7 +678,8 @@ nsHTMLEditor::HandleKeyPressEvent(nsIDOMKeyEvent* aKeyEvent)
   // NOTE: On some keyboard layout, some characters are inputted with Control
   // key or Alt key, but at that time, widget sets FALSE to these keys.
   if (nativeKeyEvent->charCode == 0 || nativeKeyEvent->IsControl() ||
-      nativeKeyEvent->IsAlt() || nativeKeyEvent->IsMeta()) {
+      nativeKeyEvent->IsAlt() || nativeKeyEvent->IsMeta() ||
+      nativeKeyEvent->IsOS()) {
     // we don't PreventDefault() here or keybindings like control-x won't work
     return NS_OK;
   }
@@ -693,30 +688,62 @@ nsHTMLEditor::HandleKeyPressEvent(nsIDOMKeyEvent* aKeyEvent)
   return TypedText(str, eTypedText);
 }
 
+static void
+AssertParserServiceIsCorrect(nsIAtom* aTag, bool aIsBlock)
+{
+#ifdef DEBUG
+  // Check this against what we would have said with the old code:
+  if (aTag==nsEditProperty::p          ||
+      aTag==nsEditProperty::div        ||
+      aTag==nsEditProperty::blockquote ||
+      aTag==nsEditProperty::h1         ||
+      aTag==nsEditProperty::h2         ||
+      aTag==nsEditProperty::h3         ||
+      aTag==nsEditProperty::h4         ||
+      aTag==nsEditProperty::h5         ||
+      aTag==nsEditProperty::h6         ||
+      aTag==nsEditProperty::ul         ||
+      aTag==nsEditProperty::ol         ||
+      aTag==nsEditProperty::dl         ||
+      aTag==nsEditProperty::noscript   ||
+      aTag==nsEditProperty::form       ||
+      aTag==nsEditProperty::hr         ||
+      aTag==nsEditProperty::table      ||
+      aTag==nsEditProperty::fieldset   ||
+      aTag==nsEditProperty::address    ||
+      aTag==nsEditProperty::caption    ||
+      aTag==nsEditProperty::col        ||
+      aTag==nsEditProperty::colgroup   ||
+      aTag==nsEditProperty::li         ||
+      aTag==nsEditProperty::dt         ||
+      aTag==nsEditProperty::dd         ||
+      aTag==nsEditProperty::legend     )
+  {
+    if (!aIsBlock) {
+      nsAutoString assertmsg (NS_LITERAL_STRING("Parser and editor disagree on blockness: "));
+
+      nsAutoString tagName;
+      aTag->ToString(tagName);
+      assertmsg.Append(tagName);
+      char* assertstr = ToNewCString(assertmsg);
+      NS_ASSERTION(aIsBlock, assertstr);
+      NS_Free(assertstr);
+    }
+  }
+#endif // DEBUG
+}
+
 /**
  * Returns true if the id represents an element of block type.
  * Can be used to determine if a new paragraph should be started.
  */
-nsresult
-nsHTMLEditor::NodeIsBlockStatic(nsIDOMNode *aNode, bool *aIsBlock)
+bool
+nsHTMLEditor::NodeIsBlockStatic(const dom::Element* aElement)
 {
-  if (!aNode || !aIsBlock) { return NS_ERROR_NULL_POINTER; }
+  MOZ_ASSERT(aElement);
 
-  *aIsBlock = false;
-
-#define USE_PARSER_FOR_BLOCKNESS 1
-#ifdef USE_PARSER_FOR_BLOCKNESS
-  nsresult rv;
-
-  nsCOMPtr<nsIDOMElement>element = do_QueryInterface(aNode);
-  if (!element)
-  {
-    // We don't have an element -- probably a text node
-    return NS_OK;
-  }
-
-  nsIAtom *tagAtom = GetTag(aNode);
-  NS_ENSURE_TRUE(tagAtom, NS_ERROR_NULL_POINTER);
+  nsIAtom* tagAtom = aElement->Tag();
+  MOZ_ASSERT(tagAtom);
 
   // Nodes we know we want to treat as block
   // even though the parser says they're not:
@@ -733,124 +760,28 @@ nsHTMLEditor::NodeIsBlockStatic(nsIDOMNode *aNode, bool *aIsBlock)
       tagAtom==nsEditProperty::dd         ||
       tagAtom==nsEditProperty::pre)
   {
-    *aIsBlock = true;
-    return NS_OK;
+    return true;
   }
 
-  rv = nsContentUtils::GetParserService()->
+  bool isBlock;
+  DebugOnly<nsresult> rv = nsContentUtils::GetParserService()->
     IsBlock(nsContentUtils::GetParserService()->HTMLAtomTagToId(tagAtom),
-            *aIsBlock);
+            isBlock);
+  MOZ_ASSERT(rv == NS_OK);
 
-#ifdef DEBUG
-  // Check this against what we would have said with the old code:
-  if (tagAtom==nsEditProperty::p          ||
-      tagAtom==nsEditProperty::div        ||
-      tagAtom==nsEditProperty::blockquote ||
-      tagAtom==nsEditProperty::h1         ||
-      tagAtom==nsEditProperty::h2         ||
-      tagAtom==nsEditProperty::h3         ||
-      tagAtom==nsEditProperty::h4         ||
-      tagAtom==nsEditProperty::h5         ||
-      tagAtom==nsEditProperty::h6         ||
-      tagAtom==nsEditProperty::ul         ||
-      tagAtom==nsEditProperty::ol         ||
-      tagAtom==nsEditProperty::dl         ||
-      tagAtom==nsEditProperty::noscript   ||
-      tagAtom==nsEditProperty::form       ||
-      tagAtom==nsEditProperty::hr         ||
-      tagAtom==nsEditProperty::table      ||
-      tagAtom==nsEditProperty::fieldset   ||
-      tagAtom==nsEditProperty::address    ||
-      tagAtom==nsEditProperty::caption    ||
-      tagAtom==nsEditProperty::col        ||
-      tagAtom==nsEditProperty::colgroup   ||
-      tagAtom==nsEditProperty::li         ||
-      tagAtom==nsEditProperty::dt         ||
-      tagAtom==nsEditProperty::dd         ||
-      tagAtom==nsEditProperty::legend     )
-  {
-    if (!(*aIsBlock))
-    {
-      nsAutoString assertmsg (NS_LITERAL_STRING("Parser and editor disagree on blockness: "));
+  AssertParserServiceIsCorrect(tagAtom, isBlock);
 
-      nsAutoString tagName;
-      rv = element->GetTagName(tagName);
-      NS_ENSURE_SUCCESS(rv, rv);
+  return isBlock;
+}
 
-      assertmsg.Append(tagName);
-      char* assertstr = ToNewCString(assertmsg);
-      NS_ASSERTION(*aIsBlock, assertstr);
-      NS_Free(assertstr);
-    }
-  }
-#endif /* DEBUG */
+nsresult
+nsHTMLEditor::NodeIsBlockStatic(nsIDOMNode *aNode, bool *aIsBlock)
+{
+  if (!aNode || !aIsBlock) { return NS_ERROR_NULL_POINTER; }
 
-  return rv;
-#else /* USE_PARSER_FOR_BLOCKNESS */
-  nsresult result = NS_ERROR_FAILURE;
-  *aIsBlock = false;
-  nsCOMPtr<nsIDOMElement>element;
-  element = do_QueryInterface(aNode);
-  if (element)
-  {
-    nsAutoString tagName;
-    result = element->GetTagName(tagName);
-    if (NS_SUCCEEDED(result))
-    {
-      ToLowerCase(tagName);
-      nsCOMPtr<nsIAtom> tagAtom = do_GetAtom(tagName);
-      if (!tagAtom) { return NS_ERROR_NULL_POINTER; }
-
-      if (tagAtom==nsEditProperty::p          ||
-          tagAtom==nsEditProperty::div        ||
-          tagAtom==nsEditProperty::blockquote ||
-          tagAtom==nsEditProperty::h1         ||
-          tagAtom==nsEditProperty::h2         ||
-          tagAtom==nsEditProperty::h3         ||
-          tagAtom==nsEditProperty::h4         ||
-          tagAtom==nsEditProperty::h5         ||
-          tagAtom==nsEditProperty::h6         ||
-          tagAtom==nsEditProperty::ul         ||
-          tagAtom==nsEditProperty::ol         ||
-          tagAtom==nsEditProperty::dl         ||
-          tagAtom==nsEditProperty::pre        ||
-          tagAtom==nsEditProperty::noscript   ||
-          tagAtom==nsEditProperty::form       ||
-          tagAtom==nsEditProperty::hr         ||
-          tagAtom==nsEditProperty::fieldset   ||
-          tagAtom==nsEditProperty::address    ||
-          tagAtom==nsEditProperty::body       ||
-          tagAtom==nsEditProperty::caption    ||
-          tagAtom==nsEditProperty::table      ||
-          tagAtom==nsEditProperty::tbody      ||
-          tagAtom==nsEditProperty::thead      ||
-          tagAtom==nsEditProperty::tfoot      ||
-          tagAtom==nsEditProperty::tr         ||
-          tagAtom==nsEditProperty::td         ||
-          tagAtom==nsEditProperty::th         ||
-          tagAtom==nsEditProperty::col        ||
-          tagAtom==nsEditProperty::colgroup   ||
-          tagAtom==nsEditProperty::li         ||
-          tagAtom==nsEditProperty::dt         ||
-          tagAtom==nsEditProperty::dd         ||
-          tagAtom==nsEditProperty::legend     )
-      {
-        *aIsBlock = true;
-      }
-      result = NS_OK;
-    }
-  } else {
-    // We don't have an element -- probably a text node
-    nsCOMPtr<nsIDOMCharacterData>nodeAsText = do_QueryInterface(aNode);
-    if (nodeAsText)
-    {
-      *aIsBlock = false;
-      result = NS_OK;
-    }
-  }
-  return result;
-
-#endif /* USE_PARSER_FOR_BLOCKNESS */
+  nsCOMPtr<dom::Element> element = do_QueryInterface(aNode);
+  *aIsBlock = element && NodeIsBlockStatic(element);
+  return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -860,20 +791,9 @@ nsHTMLEditor::NodeIsBlock(nsIDOMNode *aNode, bool *aIsBlock)
 }
 
 bool
-nsHTMLEditor::IsBlockNode(nsIDOMNode *aNode)
-{
-  bool isBlock;
-  NodeIsBlockStatic(aNode, &isBlock);
-  return isBlock;
-}
-
-bool
 nsHTMLEditor::IsBlockNode(nsINode *aNode)
 {
-  bool isBlock;
-  nsCOMPtr<nsIDOMNode> node = do_QueryInterface(aNode);
-  NodeIsBlockStatic(node, &isBlock);
-  return isBlock;
+  return aNode && aNode->IsElement() && NodeIsBlockStatic(aNode->AsElement());
 }
 
 // Non-static version for the nsIEditor interface and JavaScript
@@ -922,195 +842,70 @@ nsHTMLEditor::GetBlockNodeParent(nsIDOMNode *aNode)
   return p.forget();
 }
 
-///////////////////////////////////////////////////////////////////////////
-// NextNodeInBlock: gets the next/prev node in the block, if any.  Next node
-//                  must be an element or text node, others are ignored
-already_AddRefed<nsIDOMNode>
-nsHTMLEditor::NextNodeInBlock(nsIDOMNode *aNode, IterDirection aDir)
-{
-  NS_ENSURE_TRUE(aNode, nsnull);
-
-  nsresult rv;
-  nsCOMPtr<nsIContentIterator> iter =
-       do_CreateInstance("@mozilla.org/content/post-content-iterator;1", &rv);
-  NS_ENSURE_SUCCESS(rv, nsnull);
-
-  // much gnashing of teeth as we twit back and forth between content and domnode types
-  nsCOMPtr<nsIContent> content = do_QueryInterface(aNode);
-  nsCOMPtr<nsIDOMNode> blockParent;
-  bool isBlock;
-  if (NS_SUCCEEDED(NodeIsBlockStatic(aNode, &isBlock)) && isBlock) {
-    blockParent = aNode;
-  } else {
-    blockParent = GetBlockNodeParent(aNode);
-  }
-  NS_ENSURE_TRUE(blockParent, nsnull);
-  nsCOMPtr<nsIContent> blockContent = do_QueryInterface(blockParent);
-  NS_ENSURE_TRUE(blockContent, nsnull);
-  
-  if (NS_FAILED(iter->Init(blockContent))) {
-    return nsnull;
-  }
-  if (NS_FAILED(iter->PositionAt(content))) {
-    return nsnull;
-  }
-  
-  while (!iter->IsDone()) {
-    // ignore nodes that aren't elements or text, or that are the
-    // block parent
-    nsCOMPtr<nsIDOMNode> node = do_QueryInterface(iter->GetCurrentNode());
-    if (node && IsTextOrElementNode(node) && node != blockParent &&
-        node != aNode)
-      return node.forget();
-
-    if (aDir == kIterForward)
-      iter->Next();
-    else
-      iter->Prev();
-  }
-  
-  return nsnull;
-}
-
 static const PRUnichar nbsp = 160;
 
-///////////////////////////////////////////////////////////////////////////
-// IsNextCharWhitespace: checks the adjacent content in the same block
-//                       to see if following selection is whitespace or nbsp
+///////////////////////////////////////////////////////////////////////////////
+// IsNextCharInNodeWhitespace: checks the adjacent content in the same node to
+//                             see if following selection is whitespace or nbsp
 void
-nsHTMLEditor::IsNextCharWhitespace(nsIDOMNode *aParentNode, 
-                                   PRInt32 aOffset,
-                                   bool *outIsSpace,
-                                   bool *outIsNBSP,
-                                   nsCOMPtr<nsIDOMNode> *outNode,
-                                   PRInt32 *outOffset)
+nsHTMLEditor::IsNextCharInNodeWhitespace(nsIContent* aContent,
+                                         PRInt32 aOffset,
+                                         bool* outIsSpace,
+                                         bool* outIsNBSP,
+                                         nsIContent** outNode,
+                                         PRInt32* outOffset)
 {
-  MOZ_ASSERT(outIsSpace && outIsNBSP);
+  MOZ_ASSERT(aContent && outIsSpace && outIsNBSP);
+  MOZ_ASSERT((outNode && outOffset) || (!outNode && !outOffset));
   *outIsSpace = false;
   *outIsNBSP = false;
-  if (outNode) *outNode = nsnull;
-  if (outOffset) *outOffset = -1;
-  
-  nsAutoString tempString;
-  PRUint32 strLength;
-  nsCOMPtr<nsIDOMText> textNode = do_QueryInterface(aParentNode);
-  if (textNode)
-  {
-    textNode->GetLength(&strLength);
-    if ((PRUint32)aOffset < strLength)
-    {
-      // easy case: next char is in same node
-      textNode->SubstringData(aOffset,aOffset+1,tempString);
-      *outIsSpace = nsCRT::IsAsciiSpace(tempString.First());
-      *outIsNBSP = (tempString.First() == nbsp);
-      if (outNode) *outNode = do_QueryInterface(aParentNode);
-      if (outOffset) *outOffset = aOffset+1;  // yes, this is _past_ the character; 
-      return;
-    }
+  if (outNode && outOffset) {
+    *outNode = nsnull;
+    *outOffset = -1;
   }
-  
-  // harder case: next char in next node.
-  nsCOMPtr<nsIDOMNode> node = NextNodeInBlock(aParentNode, kIterForward);
-  nsCOMPtr<nsIDOMNode> tmp;
-  while (node) 
-  {
-    bool isBlock (false);
-    NodeIsBlock(node, &isBlock);
-    if (isBlock)  // skip over bold, italic, link, ect nodes
-    {
-      if (IsTextNode(node) && IsEditable(node))
-      {
-        textNode = do_QueryInterface(node);
-        textNode->GetLength(&strLength);
-        if (strLength)
-        {
-          textNode->SubstringData(0,1,tempString);
-          *outIsSpace = nsCRT::IsAsciiSpace(tempString.First());
-          *outIsNBSP = (tempString.First() == nbsp);
-          if (outNode) *outNode = do_QueryInterface(node);
-          if (outOffset) *outOffset = 1;  // yes, this is _past_ the character; 
-          return;
-        }
-        // else it's an empty text node, or not editable; skip it.
-      }
-      else  // node is an image or some other thingy that doesn't count as whitespace
-      {
-        break;
-      }
+
+  if (aContent->IsNodeOfType(nsINode::eTEXT) &&
+      (PRUint32)aOffset < aContent->Length()) {
+    PRUnichar ch = aContent->GetText()->CharAt(aOffset);
+    *outIsSpace = nsCRT::IsAsciiSpace(ch);
+    *outIsNBSP = (ch == nbsp);
+    if (outNode && outOffset) {
+      NS_IF_ADDREF(*outNode = aContent);
+      // yes, this is _past_ the character
+      *outOffset = aOffset + 1;
     }
-    tmp = node;
-    node = NextNodeInBlock(tmp, kIterForward);
   }
 }
 
 
-///////////////////////////////////////////////////////////////////////////
-// IsPrevCharWhitespace: checks the adjacent content in the same block
-//                       to see if following selection is whitespace
+///////////////////////////////////////////////////////////////////////////////
+// IsPrevCharInNodeWhitespace: checks the adjacent content in the same node to
+//                             see if following selection is whitespace
 void
-nsHTMLEditor::IsPrevCharWhitespace(nsIDOMNode *aParentNode, 
-                                   PRInt32 aOffset,
-                                   bool *outIsSpace,
-                                   bool *outIsNBSP,
-                                   nsCOMPtr<nsIDOMNode> *outNode,
-                                   PRInt32 *outOffset)
+nsHTMLEditor::IsPrevCharInNodeWhitespace(nsIContent* aContent,
+                                         PRInt32 aOffset,
+                                         bool* outIsSpace,
+                                         bool* outIsNBSP,
+                                         nsIContent** outNode,
+                                         PRInt32* outOffset)
 {
-  MOZ_ASSERT(outIsSpace && outIsNBSP);
+  MOZ_ASSERT(aContent && outIsSpace && outIsNBSP);
+  MOZ_ASSERT((outNode && outOffset) || (!outNode && !outOffset));
   *outIsSpace = false;
   *outIsNBSP = false;
-  if (outNode) *outNode = nsnull;
-  if (outOffset) *outOffset = -1;
-  
-  nsAutoString tempString;
-  PRUint32 strLength;
-  nsCOMPtr<nsIDOMText> textNode = do_QueryInterface(aParentNode);
-  if (textNode)
-  {
-    if (aOffset > 0)
-    {
-      // easy case: prev char is in same node
-      textNode->SubstringData(aOffset-1,aOffset,tempString);
-      *outIsSpace = nsCRT::IsAsciiSpace(tempString.First());
-      *outIsNBSP = (tempString.First() == nbsp);
-      if (outNode) *outNode = do_QueryInterface(aParentNode);
-      if (outOffset) *outOffset = aOffset-1;  
-      return;
-    }
+  if (outNode && outOffset) {
+    *outNode = nsnull;
+    *outOffset = -1;
   }
-  
-  // harder case: prev char in next node
-  nsCOMPtr<nsIDOMNode> node = NextNodeInBlock(aParentNode, kIterBackward);
-  nsCOMPtr<nsIDOMNode> tmp;
-  while (node) 
-  {
-    bool isBlock (false);
-    NodeIsBlock(node, &isBlock);
-    if (isBlock)  // skip over bold, italic, link, ect nodes
-    {
-      if (IsTextNode(node) && IsEditable(node))
-      {
-        textNode = do_QueryInterface(node);
-        textNode->GetLength(&strLength);
-        if (strLength)
-        {
-          // you could use nsIContent::TextIsOnlyWhitespace here
-          textNode->SubstringData(strLength-1,strLength,tempString);
-          *outIsSpace = nsCRT::IsAsciiSpace(tempString.First());
-          *outIsNBSP = (tempString.First() == nbsp);
-          if (outNode) *outNode = do_QueryInterface(aParentNode);
-          if (outOffset) *outOffset = strLength-1;  
-          return;
-        }
-        // else it's an empty text node, or not editable; skip it.
-      }
-      else  // node is an image or some other thingy that doesn't count as whitespace
-      {
-        break;
-      }
+
+  if (aContent->IsNodeOfType(nsINode::eTEXT) && aOffset > 0) {
+    PRUnichar ch = aContent->GetText()->CharAt(aOffset - 1);
+    *outIsSpace = nsCRT::IsAsciiSpace(ch);
+    *outIsNBSP = (ch == nbsp);
+    if (outNode && outOffset) {
+      NS_IF_ADDREF(*outNode = aContent);
+      *outOffset = aOffset - 1;
     }
-    // otherwise we found a node we want to skip, keep going
-    tmp = node;
-    node = NextNodeInBlock(tmp, kIterBackward);
   }
 }
 
@@ -1143,15 +938,16 @@ bool nsHTMLEditor::IsVisBreak(nsIDOMNode *aNode)
   // determine what is going on
   nsCOMPtr<nsIDOMNode> selNode, tmp;
   PRInt32 selOffset;
-  GetNodeLocation(aNode, address_of(selNode), &selOffset);
+  selNode = GetNodeLocation(aNode, &selOffset);
   selOffset++; // lets look after the break
   nsWSRunObject wsObj(this, selNode, selOffset);
   nsCOMPtr<nsIDOMNode> visNode;
   PRInt32 visOffset=0;
-  PRInt16 visType=0;
+  WSType visType;
   wsObj.NextVisibleNode(selNode, selOffset, address_of(visNode), &visOffset, &visType);
-  if (visType & nsWSRunObject::eBlock)
+  if (visType & WSType::block) {
     return false;
+  }
   
   return true;
 }
@@ -1649,31 +1445,32 @@ nsHTMLEditor::NormalizeEOLInsertPosition(nsIDOMNode *firstNodeToInsert,
   nsCOMPtr<nsIDOMNode> nextVisNode;
   nsCOMPtr<nsIDOMNode> prevVisNode;
   PRInt32 nextVisOffset=0;
-  PRInt16 nextVisType=0;
+  WSType nextVisType;
   PRInt32 prevVisOffset=0;
-  PRInt16 prevVisType=0;
+  WSType prevVisType;
 
   wsObj.NextVisibleNode(*insertParentNode, *insertOffset, address_of(nextVisNode), &nextVisOffset, &nextVisType);
   if (!nextVisNode)
     return;
 
-  if (! (nextVisType & nsWSRunObject::eBreak))
+  if (!(nextVisType & WSType::br)) {
     return;
+  }
 
   wsObj.PriorVisibleNode(*insertParentNode, *insertOffset, address_of(prevVisNode), &prevVisOffset, &prevVisType);
   if (!prevVisNode)
     return;
 
-  if (prevVisType & nsWSRunObject::eBreak)
+  if (prevVisType & WSType::br) {
     return;
+  }
 
-  if (prevVisType & nsWSRunObject::eThisBlock)
+  if (prevVisType & WSType::thisBlock) {
     return;
+  }
 
-  nsCOMPtr<nsIDOMNode> brNode;
   PRInt32 brOffset=0;
-
-  GetNodeLocation(nextVisNode, address_of(brNode), &brOffset);
+  nsCOMPtr<nsIDOMNode> brNode = GetNodeLocation(nextVisNode, &brOffset);
 
   *insertParentNode = brNode;
   *insertOffset = brOffset + 1;
@@ -1720,9 +1517,7 @@ nsHTMLEditor::InsertElementAtSelection(nsIDOMElement* aElement, bool aDeleteSele
         NS_ENSURE_SUCCESS(res, res);
       }
 
-      nsCOMPtr<nsIDOMNode> tempNode;
-      PRInt32 tempOffset;
-      nsresult result = DeleteSelectionAndPrepareToCreateNode(tempNode,tempOffset);
+      nsresult result = DeleteSelectionAndPrepareToCreateNode();
       NS_ENSURE_SUCCESS(result, result);
     }
 
@@ -1860,17 +1655,13 @@ nsHTMLEditor::SelectElement(nsIDOMElement* aElement)
     res = aElement->GetParentNode(getter_AddRefs(parent));
     if (NS_SUCCEEDED(res) && parent)
     {
-      PRInt32 offsetInParent;
-      res = GetChildOffset(aElement, parent, offsetInParent);
+      PRInt32 offsetInParent = GetChildOffset(aElement, parent);
 
-      if (NS_SUCCEEDED(res))
-      {
-        // Collapse selection to just before desired element,
-        res = selection->Collapse(parent, offsetInParent);
-        if (NS_SUCCEEDED(res)) {
-          //  then extend it to just after
-          res = selection->Extend(parent, offsetInParent+1);
-        }
+      // Collapse selection to just before desired element,
+      res = selection->Collapse(parent, offsetInParent);
+      if (NS_SUCCEEDED(res)) {
+        // then extend it to just after
+        res = selection->Extend(parent, offsetInParent + 1);
       }
     }
   }
@@ -1892,26 +1683,9 @@ nsHTMLEditor::SetCaretAfterElement(nsIDOMElement* aElement)
     res = aElement->GetParentNode(getter_AddRefs(parent));
     NS_ENSURE_SUCCESS(res, res);
     NS_ENSURE_TRUE(parent, NS_ERROR_NULL_POINTER);
-    PRInt32 offsetInParent;
-    res = GetChildOffset(aElement, parent, offsetInParent);
-    if (NS_SUCCEEDED(res))
-    {
-      // Collapse selection to just after desired element,
-      res = selection->Collapse(parent, offsetInParent+1);
-#if 0 //def DEBUG_cmanske
-      {
-      nsAutoString name;
-      parent->GetNodeName(name);
-      printf("SetCaretAfterElement: Parent node: ");
-      wprintf(name.get());
-      printf(" Offset: %d\n\nHTML:\n", offsetInParent+1);
-      nsAutoString Format("text/html");
-      nsAutoString ContentsAs;
-      OutputToString(Format, 2, ContentsAs);
-      wprintf(ContentsAs.get());
-      }
-#endif
-    }
+    PRInt32 offsetInParent = GetChildOffset(aElement, parent);
+    // Collapse selection to just after desired element,
+    res = selection->Collapse(parent, offsetInParent + 1);
   }
   return res;
 }
@@ -3448,12 +3222,6 @@ nsHTMLEditor::DeleteNode(nsIDOMNode* aNode)
     return NS_ERROR_FAILURE;
   }
 
-  nsCOMPtr<nsIDOMNode> selectAllNode = FindUserSelectAllNode(aNode);
-  
-  if (selectAllNode)
-  {
-    return nsEditor::DeleteNode(selectAllNode);
-  }
   return nsEditor::DeleteNode(aNode);
 }
 
@@ -3466,12 +3234,6 @@ NS_IMETHODIMP nsHTMLEditor::DeleteText(nsIDOMCharacterData *aTextNode,
     return NS_ERROR_FAILURE;
   }
 
-  nsCOMPtr<nsIDOMNode> selectAllNode = FindUserSelectAllNode(aTextNode);
-  
-  if (selectAllNode)
-  {
-    return nsEditor::DeleteNode(selectAllNode);
-  }
   return nsEditor::DeleteText(aTextNode, aOffset, aLength);
 }
 
@@ -3507,7 +3269,8 @@ nsHTMLEditor::ContentInserted(nsIDocument *aDocument, nsIContent* aContainer,
   nsCOMPtr<nsIHTMLEditor> kungFuDeathGrip(this);
 
   if (ShouldReplaceRootElement()) {
-    ResetRootElementAndEventTarget();
+    nsContentUtils::AddScriptRunner(NS_NewRunnableMethod(
+      this, &nsHTMLEditor::ResetRootElementAndEventTarget));
   }
   // We don't need to handle our own modifications
   else if (!mAction && (aContainer ? aContainer->IsEditable() : aDocument->IsEditable())) {
@@ -3537,7 +3300,8 @@ nsHTMLEditor::ContentRemoved(nsIDocument *aDocument, nsIContent* aContainer,
   nsCOMPtr<nsIHTMLEditor> kungFuDeathGrip(this);
 
   if (SameCOMIdentity(aChild, mRootElement)) {
-    ResetRootElementAndEventTarget();
+    nsContentUtils::AddScriptRunner(NS_NewRunnableMethod(
+      this, &nsHTMLEditor::ResetRootElementAndEventTarget));
   }
   // We don't need to handle our own modifications
   else if (!mAction && (aContainer ? aContainer->IsEditable() : aDocument->IsEditable())) {
@@ -3547,42 +3311,6 @@ nsHTMLEditor::ContentRemoved(nsIDocument *aDocument, nsIContent* aContainer,
     }
     mRules->DocumentModified();
   }
-}
-
-
-/* This routine examines aNode and its ancestors looking for any node which has the
-   -moz-user-select: all style lit.  Return the highest such ancestor.  */
-already_AddRefed<nsIDOMNode>
-nsHTMLEditor::FindUserSelectAllNode(nsIDOMNode* aNode)
-{
-  nsCOMPtr<nsIDOMNode> node = aNode;
-  nsCOMPtr<nsIDOMElement> root = do_QueryInterface(GetRoot());
-  if (!nsEditorUtils::IsDescendantOf(aNode, root))
-    return nsnull;
-
-  nsCOMPtr<nsIDOMNode> resultNode;  // starts out empty
-  nsAutoString mozUserSelectValue;
-  while (node)
-  {
-    // retrieve the computed style of -moz-user-select for node
-    mHTMLCSSUtils->GetComputedProperty(node, nsEditProperty::cssMozUserSelect, mozUserSelectValue);
-    if (mozUserSelectValue.EqualsLiteral("all"))
-    {
-      resultNode = node;
-    }
-    if (node != root)
-    {
-      nsCOMPtr<nsIDOMNode> tmp;
-      node->GetParentNode(getter_AddRefs(tmp));
-      node = tmp;
-    }
-    else
-    {
-      node = nsnull;
-    }
-  } 
-
-  return resultNode.forget();
 }
 
 NS_IMETHODIMP_(bool)
@@ -3596,6 +3324,36 @@ bool
 nsHTMLEditor::IsModifiableNode(nsINode *aNode)
 {
   return !aNode || aNode->IsEditable();
+}
+
+NS_IMETHODIMP
+nsHTMLEditor::GetIsSelectionEditable(bool* aIsSelectionEditable)
+{
+  MOZ_ASSERT(aIsSelectionEditable);
+
+  nsRefPtr<Selection> selection = GetSelection();
+  NS_ENSURE_TRUE(selection, NS_ERROR_NULL_POINTER);
+
+  // Per the editing spec as of June 2012: we have to have a selection whose
+  // start and end nodes are editable, and which share an ancestor editing
+  // host.  (Bug 766387.)
+  *aIsSelectionEditable = selection->GetRangeCount() &&
+                          selection->GetAnchorNode()->IsEditable() &&
+                          selection->GetFocusNode()->IsEditable();
+
+  if (*aIsSelectionEditable) {
+    nsINode* commonAncestor =
+      selection->GetAnchorFocusRange()->GetCommonAncestor();
+    while (commonAncestor && !commonAncestor->IsEditable()) {
+      commonAncestor = commonAncestor->GetNodeParent();
+    }
+    if (!commonAncestor) {
+      // No editable common ancestor
+      *aIsSelectionEditable = false;
+    }
+  }
+
+  return NS_OK;
 }
 
 static nsresult
@@ -3621,15 +3379,13 @@ SetSelectionAroundHeadChildren(nsISelection* aSelection,
 NS_IMETHODIMP
 nsHTMLEditor::GetHeadContentsAsHTML(nsAString& aOutputString)
 {
-  nsCOMPtr<nsISelection> selection;
-  nsresult res = GetSelection(getter_AddRefs(selection));
-  NS_ENSURE_SUCCESS(res, res);
+  nsRefPtr<Selection> selection = GetSelection();
   NS_ENSURE_TRUE(selection, NS_ERROR_NULL_POINTER);
 
   // Save current selection
   nsAutoSelectionReset selectionResetter(selection, this);
 
-  res = SetSelectionAroundHeadChildren(selection, mDocWeak);
+  nsresult res = SetSelectionAroundHeadChildren(selection, mDocWeak);
   NS_ENSURE_SUCCESS(res, res);
 
   res = OutputToString(NS_LITERAL_STRING("text/html"),
@@ -4332,6 +4088,17 @@ nsHTMLEditor::GetPriorHTMLNode(nsIDOMNode *inNode, nsCOMPtr<nsIDOMNode> *outNode
 ///////////////////////////////////////////////////////////////////////////
 // GetPriorHTMLNode: same as above but takes {parent,offset} instead of node
 //                       
+nsIContent*
+nsHTMLEditor::GetPriorHTMLNode(nsINode* aParent, PRInt32 aOffset,
+                               bool aNoBlockCrossing)
+{
+  if (!GetActiveEditingHost()) {
+    return nsnull;
+  }
+
+  return GetPriorNode(aParent, aOffset, true, aNoBlockCrossing);
+}
+
 nsresult
 nsHTMLEditor::GetPriorHTMLNode(nsIDOMNode *inParent, PRInt32 inOffset, nsCOMPtr<nsIDOMNode> *outNode, bool bNoBlockCrossing)
 {
@@ -4346,7 +4113,7 @@ nsHTMLEditor::GetPriorHTMLNode(nsIDOMNode *inParent, PRInt32 inOffset, nsCOMPtr<
   nsresult res = GetPriorNode(inParent, inOffset, true, address_of(*outNode),
                               bNoBlockCrossing);
   NS_ENSURE_SUCCESS(res, res);
-  
+
   NS_ASSERTION(!*outNode || IsDescendantOfEditorRoot(*outNode),
                "GetPriorNode screwed up");
   return res;
@@ -4375,6 +4142,17 @@ nsHTMLEditor::GetNextHTMLNode(nsIDOMNode *inNode, nsCOMPtr<nsIDOMNode> *outNode,
 ///////////////////////////////////////////////////////////////////////////
 // GetNHTMLextNode: same as above but takes {parent,offset} instead of node
 //                       
+nsIContent*
+nsHTMLEditor::GetNextHTMLNode(nsINode* aParent, PRInt32 aOffset,
+                              bool aNoBlockCrossing)
+{
+  nsIContent* content = GetNextNode(aParent, aOffset, true, aNoBlockCrossing);
+  if (content && !IsDescendantOfEditorRoot(content)) {
+    return nsnull;
+  }
+  return content;
+}
+
 nsresult
 nsHTMLEditor::GetNextHTMLNode(nsIDOMNode *inParent, PRInt32 inOffset, nsCOMPtr<nsIDOMNode> *outNode, bool bNoBlockCrossing)
 {
@@ -4616,12 +4394,10 @@ nsHTMLEditor::IsVisTextNode(nsIContent* aNode,
       nsWSRunObject wsRunObj(this, node, 0);
       nsCOMPtr<nsIDOMNode> visNode;
       PRInt32 outVisOffset=0;
-      PRInt16 visType=0;
+      WSType visType;
       wsRunObj.NextVisibleNode(node, 0, address_of(visNode),
                                &outVisOffset, &visType);
-      if ( (visType == nsWSRunObject::eNormalWS) ||
-           (visType == nsWSRunObject::eText) )
-      {
+      if (visType == WSType::normalWS || visType == WSType::text) {
         *outIsEmptyNode = (node != visNode);
       }
     }

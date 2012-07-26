@@ -44,7 +44,7 @@
 using mozilla::MonitorAutoLock;
 using mozilla::ipc::GeckoChildProcessHost;
 
-#ifdef MOZ_WIDGET_ANDROID
+#ifdef ANDROID
 // Like its predecessor in nsExceptionHandler.cpp, this is
 // the magic number of a file descriptor remapping we must
 // preserve for the child process.
@@ -107,11 +107,6 @@ GeckoChildProcessHost::~GeckoChildProcessHost()
 
 void GetPathToBinary(FilePath& exePath)
 {
-#if defined(OS_WIN)
-  exePath = FilePath::FromWStringHack(CommandLine::ForCurrentProcess()->program());
-  exePath = exePath.DirName();
-  exePath = exePath.AppendASCII(MOZ_CHILD_PROCESS_NAME);
-#elif defined(OS_POSIX)
   if (ShouldHaveDirectoryService()) {
     nsCOMPtr<nsIProperties> directoryService(do_GetService(NS_DIRECTORY_SERVICE_CONTRACTID));
     NS_ASSERTION(directoryService, "Expected XPCOM to be available");
@@ -119,8 +114,13 @@ void GetPathToBinary(FilePath& exePath)
       nsCOMPtr<nsIFile> greDir;
       nsresult rv = directoryService->Get(NS_GRE_DIR, NS_GET_IID(nsIFile), getter_AddRefs(greDir));
       if (NS_SUCCEEDED(rv)) {
+#ifdef OS_WIN
+        nsString path;
+        greDir->GetPath(path);
+#else
         nsCString path;
         greDir->GetNativePath(path);
+#endif
         exePath = FilePath(path.get());
 #ifdef MOZ_WIDGET_COCOA
         // We need to use an App Bundle on OS X so that we can hide
@@ -132,12 +132,15 @@ void GetPathToBinary(FilePath& exePath)
   }
 
   if (exePath.empty()) {
+#ifdef OS_WIN
+    exePath = FilePath::FromWStringHack(CommandLine::ForCurrentProcess()->program());
+#else
     exePath = FilePath(CommandLine::ForCurrentProcess()->argv()[0]);
+#endif
     exePath = exePath.DirName();
   }
 
   exePath = exePath.AppendASCII(MOZ_CHILD_PROCESS_NAME);
-#endif
 }
 
 #ifdef MOZ_WIDGET_COCOA
@@ -250,6 +253,12 @@ void GeckoChildProcessHost::InitWindowsGroupID()
 bool
 GeckoChildProcessHost::SyncLaunch(std::vector<std::string> aExtraOpts, int aTimeoutMs, base::ProcessArchitecture arch)
 {
+#ifdef MOZ_CRASHREPORTER
+  if (CrashReporter::GetEnabled()) {
+    CrashReporter::OOPInit();
+  }
+#endif
+
 #ifdef XP_WIN
   InitWindowsGroupID();
 #endif
@@ -291,6 +300,12 @@ GeckoChildProcessHost::SyncLaunch(std::vector<std::string> aExtraOpts, int aTime
 bool
 GeckoChildProcessHost::AsyncLaunch(std::vector<std::string> aExtraOpts)
 {
+#ifdef MOZ_CRASHREPORTER
+  if (CrashReporter::GetEnabled()) {
+    CrashReporter::OOPInit();
+  }
+#endif
+
 #ifdef XP_WIN
   InitWindowsGroupID();
 #endif
@@ -473,7 +488,9 @@ GeckoChildProcessHost::PerformAsyncLaunchInternal(std::vector<std::string>& aExt
   // fill the last arg with something if there's no cache
   if (cacheStr.IsEmpty())
     cacheStr.AppendLiteral("-");
+#endif  // MOZ_WIDGET_ANDROID
 
+#ifdef ANDROID
   // Remap the Android property workspace to a well-known int,
   // and update the environment to reflect the new value for the
   // child process.
@@ -488,7 +505,7 @@ GeckoChildProcessHost::PerformAsyncLaunchInternal(std::vector<std::string>& aExt
     snprintf(buf, sizeof(buf), "%d%s", kMagicAndroidSystemPropFd, szptr);
     newEnvVars["ANDROID_PROPERTY_WORKSPACE"] = buf;
   }
-#endif  // MOZ_WIDGET_ANDROID
+#endif  // ANDROID
 
   // remap the IPC socket fd to a well-known int, as the OS does for
   // STDOUT_FILENO, for example
@@ -676,17 +693,27 @@ GeckoChildProcessHost::OnChannelConnected(int32 peer_pid)
   lock.Notify();
 }
 
-// XXX/cjones: these next two methods should basically never be called.
-// after the process is launched, its channel will be used to create
-// one of our channels, AsyncChannel et al.
 void
 GeckoChildProcessHost::OnMessageReceived(const IPC::Message& aMsg)
 {
+  // We never process messages ourself, just save them up for the next
+  // listener.
+  mQueue.push(aMsg);
 }
+
 void
 GeckoChildProcessHost::OnChannelError()
 {
-  // XXXbent Notify that the child process is gone?
+  // FIXME/bug 773925: save up this error for the next listener.
+}
+
+void
+GeckoChildProcessHost::GetQueuedMessages(std::queue<IPC::Message>& queue)
+{
+  // If this is called off the IO thread, bad things will happen.
+  DCHECK(MessageLoopForIO::current());
+  swap(queue, mQueue);
+  // We expect the next listener to take over processing of our queue.
 }
 
 void

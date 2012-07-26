@@ -59,9 +59,11 @@ SHARED_LIBRARY_LIBS = \
 	$(DEPTH)/content/xbl/src/$(LIB_PREFIX)gkconxbl_s.$(LIB_SUFFIX) \
 	$(DEPTH)/content/xul/document/src/$(LIB_PREFIX)gkconxuldoc_s.$(LIB_SUFFIX) \
 	$(DEPTH)/view/src/$(LIB_PREFIX)gkview_s.$(LIB_SUFFIX) \
+	$(DEPTH)/dom/activities/src/$(LIB_PREFIX)dom_activities_s.$(LIB_SUFFIX) \
 	$(DEPTH)/dom/base/$(LIB_PREFIX)jsdombase_s.$(LIB_SUFFIX) \
 	$(DEPTH)/dom/battery/$(LIB_PREFIX)dom_battery_s.$(LIB_SUFFIX) \
 	$(DEPTH)/dom/contacts/$(LIB_PREFIX)jsdomcontacts_s.$(LIB_SUFFIX) \
+	$(DEPTH)/dom/alarm/$(LIB_PREFIX)domalarm_s.$(LIB_SUFFIX) \
 	$(DEPTH)/dom/devicestorage/$(LIB_PREFIX)domdevicestorage_s.$(LIB_SUFFIX) \
 	$(DEPTH)/dom/file/$(LIB_PREFIX)domfile_s.$(LIB_SUFFIX) \
 	$(DEPTH)/dom/power/$(LIB_PREFIX)dom_power_s.$(LIB_SUFFIX) \
@@ -129,6 +131,7 @@ endif #}
 ifdef MOZ_MEDIA
 SHARED_LIBRARY_LIBS 	+= \
 	$(DEPTH)/content/media/$(LIB_PREFIX)gkconmedia_s.$(LIB_SUFFIX) \
+	$(DEPTH)/content/media/webrtc/$(LIB_PREFIX)gkconwebrtc_s.$(LIB_SUFFIX) \
 	$(NULL)
 endif
 
@@ -251,6 +254,7 @@ LOCAL_INCLUDES	+= -I$(srcdir)/../base \
 		   -I$(topsrcdir)/editor/libeditor/base \
 		   -I$(topsrcdir)/editor/libeditor/text \
 		   -I$(topsrcdir)/editor/libeditor/html \
+		   -I$(topsrcdir)/editor/txmgr/src \
 		   -I$(topsrcdir)/editor/txtsvc/src \
 		   -I$(topsrcdir)/editor/composer/src \
 		   -I$(topsrcdir)/js/xpconnect/src \

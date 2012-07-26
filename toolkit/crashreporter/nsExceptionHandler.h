@@ -43,6 +43,7 @@ nsresult AppendAppNotesToCrashReport(const nsACString& data);
 nsresult SetRestartArgs(int argc, char** argv);
 nsresult SetupExtraData(nsIFile* aAppDataDirectory,
                         const nsACString& aBuildID);
+bool GetLastRunCrashID(nsAString& id);
 
 // Registers an additional memory region to be included in the minidump
 nsresult RegisterAppMemory(void* ptr, size_t length);
@@ -69,11 +70,17 @@ nsresult SetSubmitReports(bool aSubmitReport);
 
 // Out-of-process crash reporter API.
 
-// Return true iff a dump was found for |childPid|, and return the
+// Initializes out-of-process crash reporting. This method must be called
+// before the platform-specifi notificationpipe APIs are called.
+void OOPInit();
+
+// Return true if a dump was found for |childPid|, and return the
 // path in |dump|.  The caller owns the last reference to |dump| if it
-// is non-NULL.
+// is non-NULL. The sequence parameter will be filled with an ordinal
+// indicating which remote process crashed first.
 bool TakeMinidumpForChild(PRUint32 childPid,
-                          nsIFile** dump NS_OUTPARAM);
+                          nsIFile** dump,
+                          PRUint32* aSequence = NULL);
 
 #if defined(XP_WIN)
 typedef HANDLE ProcessHandle;
@@ -103,13 +110,37 @@ ThreadId CurrentThreadId();
 // returned non-null on failure.
 bool CreatePairedMinidumps(ProcessHandle childPid,
                            ThreadId childBlamedThread,
-                           nsAString* pairGUID NS_OUTPARAM,
-                           nsIFile** childDump NS_OUTPARAM,
-                           nsIFile** parentDump NS_OUTPARAM);
+                           nsAString* pairGUID,
+                           nsIFile** childDump,
+                           nsIFile** parentDump);
 
 #  if defined(XP_WIN32) || defined(XP_MACOSX)
 // Parent-side API for children
 const char* GetChildNotificationPipe();
+
+#ifdef MOZ_CRASHREPORTER_INJECTOR
+// Inject a crash report client into an arbitrary process, and inform the
+// callback object when it crashes. Parent process only.
+
+class InjectorCrashCallback
+{
+public:
+  InjectorCrashCallback() { }
+
+  /**
+   * Inform the callback of a crash. The client code should call
+   * TakeMinidumpForChild to remove it from the PID mapping table.
+   *
+   * The callback will not be fired if the client has already called
+   * TakeMinidumpForChild for this process ID.
+   */
+  virtual void OnCrash(DWORD processID) = 0;
+};
+
+// This method implies OOPInit
+void InjectCrashReporterIntoProcess(DWORD processID, InjectorCrashCallback* cb);
+void UnregisterInjectorCallback(DWORD processID);
+#endif
 
 // Child-side API
 bool SetRemoteExceptionHandler(const nsACString& crashPipe);
@@ -134,7 +165,7 @@ bool SetRemoteExceptionHandler();
 
 bool UnsetRemoteExceptionHandler();
 
-#if defined(__ANDROID__)
+#if defined(MOZ_WIDGET_ANDROID)
 // Android builds use a custom library loader, so /proc/<pid>/maps
 // will just show anonymous mappings for all the non-system
 // shared libraries. This API is to work around that by providing

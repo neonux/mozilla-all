@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 package org.mozilla.gecko.sync.setup.activities;
 
 import java.util.List;
@@ -5,26 +9,29 @@ import java.util.List;
 import org.mozilla.gecko.R;
 import org.mozilla.gecko.sync.CommandProcessor;
 import org.mozilla.gecko.sync.CommandRunner;
+import org.mozilla.gecko.sync.GlobalConstants;
+import org.mozilla.gecko.sync.GlobalSession;
 import org.mozilla.gecko.sync.Logger;
 import org.mozilla.gecko.sync.repositories.NullCursorException;
 import org.mozilla.gecko.sync.repositories.android.ClientsDatabaseAccessor;
 import org.mozilla.gecko.sync.repositories.domain.ClientRecord;
 import org.mozilla.gecko.sync.setup.Constants;
+import org.mozilla.gecko.sync.stage.SyncClientsEngineStage;
+import org.mozilla.gecko.sync.syncadapter.SyncAdapter;
+
 import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.app.Activity;
-import android.app.Dialog;
+import android.content.Context;
 import android.content.Intent;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.view.View;
-import android.view.View.OnClickListener;
-import android.view.Window;
-import android.widget.Button;
 import android.widget.ListView;
+import android.widget.Toast;
 
 public class SendTabActivity extends Activity {
   public static final String LOG_TAG = "SendTabActivity";
-  private ListView listview;
   private ClientRecordArrayAdapter arrayAdapter;
   private AccountManager accountManager;
   private Account localAccount;
@@ -44,29 +51,44 @@ public class SendTabActivity extends Activity {
     registerDisplayURICommand();
 
     setContentView(R.layout.sync_send_tab);
-    arrayAdapter = new ClientRecordArrayAdapter(this, R.layout.sync_list_item, getClientArray());
-
-    listview = (ListView) findViewById(R.id.device_list);
-    listview.setAdapter(arrayAdapter);
+    final ListView listview = (ListView) findViewById(R.id.device_list);
     listview.setItemsCanFocus(true);
     listview.setTextFilterEnabled(true);
     listview.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE);
     enableSend(false);
+
+    // Fetching the client list hits the clients database, so we spin this onto
+    // a background task.
+    final Context context = this;
+    new AsyncTask<Void, Void, ClientRecord[]>() {
+
+      @Override
+      protected ClientRecord[] doInBackground(Void... params) {
+        return getClientArray();
+      }
+
+      @Override
+      protected void onPostExecute(final ClientRecord[] clientArray) {
+        // We're allowed to update the UI from here.
+        arrayAdapter = new ClientRecordArrayAdapter(context, R.layout.sync_list_item, clientArray);
+        listview.setAdapter(arrayAdapter);
+      }
+    }.execute();
   }
 
-  private void registerDisplayURICommand() {
+  private static void registerDisplayURICommand() {
     final CommandProcessor processor = CommandProcessor.getProcessor();
     processor.registerCommand("displayURI", new CommandRunner(3) {
       @Override
-      public void executeCommand(List<String> args) {
-        CommandProcessor.displayURI(args, getApplicationContext());
+      public void executeCommand(final GlobalSession session, List<String> args) {
+        CommandProcessor.displayURI(args, session.getContext());
       }
     });
   }
 
   private void redirectIfNoSyncAccount() {
     accountManager = AccountManager.get(getApplicationContext());
-    Account[] accts = accountManager.getAccountsByType(Constants.ACCOUNTTYPE_SYNC);
+    Account[] accts = accountManager.getAccountsByType(GlobalConstants.ACCOUNTTYPE_SYNC);
 
     // A Sync account exists.
     if (accts.length > 0) {
@@ -97,35 +119,44 @@ public class SendTabActivity extends Activity {
     final String title = extras.getString(Intent.EXTRA_SUBJECT);
     final CommandProcessor processor = CommandProcessor.getProcessor();
 
-    final String[] guids = arrayAdapter.getCheckedGUIDs();
+    final String clientGUID = getAccountGUID();
+    final List<String> guids = arrayAdapter.getCheckedGUIDs();
+
+    if (clientGUID == null || guids == null) {
+      // Should never happen.
+      Logger.warn(LOG_TAG, "clientGUID? " + (clientGUID == null) + " or guids? " + (guids == null) +
+          " was null; aborting without sending tab.");
+      finish();
+      return;
+    }
 
     // Perform tab sending on another thread.
     new Thread() {
       @Override
       public void run() {
-        for (int i = 0; i < guids.length; i++) {
-          processor.sendURIToClientForDisplay(uri, guids[i], title, getAccountGUID(), getApplicationContext());
+        for (String guid : guids) {
+          processor.sendURIToClientForDisplay(uri, guid, title, clientGUID, getApplicationContext());
         }
+
+        Logger.info(LOG_TAG, "Requesting immediate clients stage sync.");
+        SyncAdapter.requestImmediateSync(localAccount, new String[] { SyncClientsEngineStage.COLLECTION_NAME });
       }
     }.start();
 
-    openDialog();
+    notifyAndFinish();
   }
 
-  private void openDialog() {
-    final Dialog dialog = new Dialog(this);
-    dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-    dialog.setContentView(R.layout.sync_custom_popup);
-    Button button = (Button) dialog.findViewById(R.id.continue_browsing);
-    button.setOnClickListener(new OnClickListener() {
-      @Override
-      public void onClick(View v) {
-        dialog.dismiss();
-        finish();
-      }
-    });
-
-    dialog.show();
+  /**
+   * Notify the user that tabs were sent and then finish the activity.
+   * <p>
+   * This is a bit of a misnomer: we wrote "displayURI" commands to the local
+   * command database, and they will be sent on next sync. There is no way to
+   * verify that the commands were successfully received by the intended remote
+   * client, so we lie and say they were sent.
+   */
+  private void notifyAndFinish() {
+    Toast.makeText(this, R.string.sync_text_tab_sent, Toast.LENGTH_LONG).show();
+    finish();
   }
 
   public void enableSend(boolean shouldEnable) {

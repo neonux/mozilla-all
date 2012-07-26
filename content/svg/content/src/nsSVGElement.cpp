@@ -923,13 +923,14 @@ nsSVGElement::sGraphicsMap[] = {
 // PresentationAttributes-TextContentElements
 /* static */ const nsGenericElement::MappedAttributeEntry
 nsSVGElement::sTextContentElementsMap[] = {
-  { &nsGkAtoms::alignment_baseline },
-  { &nsGkAtoms::baseline_shift },
+  // Properties that we don't support are commented out.
+  // { &nsGkAtoms::alignment_baseline },
+  // { &nsGkAtoms::baseline_shift },
   { &nsGkAtoms::direction },
   { &nsGkAtoms::dominant_baseline },
-  { &nsGkAtoms::glyph_orientation_horizontal },
-  { &nsGkAtoms::glyph_orientation_vertical },
-  { &nsGkAtoms::kerning },
+  // { &nsGkAtoms::glyph_orientation_horizontal },
+  // { &nsGkAtoms::glyph_orientation_vertical },
+  // { &nsGkAtoms::kerning },
   { &nsGkAtoms::letter_spacing },
   { &nsGkAtoms::text_anchor },
   { &nsGkAtoms::text_decoration },
@@ -1130,7 +1131,8 @@ MappedAttrParser::ParseMappedAttrValue(nsIAtom* aMappedAttrName,
 
   // Get the nsCSSProperty ID for our mapped attribute.
   nsCSSProperty propertyID =
-    nsCSSProps::LookupProperty(nsDependentAtomString(aMappedAttrName));
+    nsCSSProps::LookupProperty(nsDependentAtomString(aMappedAttrName),
+                               nsCSSProps::eEnabled);
   if (propertyID != eCSSProperty_UNKNOWN) {
     bool changed; // outparam for ParseProperty. (ignored)
     mParser.ParseProperty(propertyID, aMappedAttrValue, mDocURI, mBaseURI,
@@ -2452,7 +2454,8 @@ nsSVGElement::GetAnimatedAttr(PRInt32 aNamespaceID, nsIAtom* aName)
     // Mapped attributes:
     if (IsAttributeMapped(aName)) {
       nsCSSProperty prop =
-        nsCSSProps::LookupProperty(nsDependentAtomString(aName));
+        nsCSSProps::LookupProperty(nsDependentAtomString(aName),
+                                   nsCSSProps::eEnabled);
       // Check IsPropertyAnimatable to avoid attributes that...
       //  - map to explicitly unanimatable properties (e.g. 'direction')
       //  - map to unsupported attributes (e.g. 'glyph-orientation-horizontal')

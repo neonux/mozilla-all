@@ -12,7 +12,7 @@ class TestSwitchFrame(MarionetteTestCase):
         test_html = self.marionette.absolute_url("test_iframe.html")
         self.marionette.navigate(test_html)
         self.assertNotEqual("about:blank", self.marionette.execute_script("return window.location.href;"))
-        self.assertEqual("Marionette IFrame Test", self.marionette.execute_script("return window.document.title;"))
+        self.assertEqual("Marionette IFrame Test", self.marionette.title)
         self.marionette.switch_to_frame("test_iframe")
         self.assertTrue("test.html" in self.marionette.get_url())
 
@@ -22,7 +22,7 @@ class TestSwitchFrame(MarionetteTestCase):
         test_html = self.marionette.absolute_url("test_nested_iframe.html")
         self.marionette.navigate(test_html)
         self.assertNotEqual("about:blank", self.marionette.execute_script("return window.location.href;"))
-        self.assertEqual("Marionette IFrame Test", self.marionette.execute_script("return window.document.title;"))
+        self.assertEqual("Marionette IFrame Test", self.marionette.title)
         self.marionette.switch_to_frame("test_iframe")
         self.assertTrue("test_inner_iframe.html" in self.marionette.get_url())
         self.marionette.switch_to_frame("inner_frame")
@@ -36,13 +36,8 @@ class TestSwitchFrameChrome(MarionetteTestCase):
     def setUp(self):
         MarionetteTestCase.setUp(self)
         self.marionette.set_context("chrome")
-        self.win = self.marionette.get_window()
-        #need to get the file:// path for xul
-        unit = os.path.abspath(os.path.join(os.path.realpath(__file__), os.path.pardir))
-        tests = os.path.abspath(os.path.join(unit, os.path.pardir))
-        mpath = os.path.abspath(os.path.join(tests, os.path.pardir))
-        xul = "file://" + os.path.join(mpath, "www", "test.xul")
-        self.marionette.execute_script("window.open('" + xul +"', '_blank', 'chrome,centerscreen');")
+        self.win = self.marionette.current_window_handle
+        self.marionette.execute_script("window.open('chrome://marionette/content/test.xul', '_blank', 'chrome,centerscreen');")
 
     def tearDown(self):
         self.marionette.execute_script("window.close();")

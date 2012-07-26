@@ -6,6 +6,7 @@ package org.mozilla.gecko.sync;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -195,7 +196,19 @@ public class SyncConfiguration implements CredentialsSource {
    * Copied from latest downloaded meta/global record and used to generate a
    * fresh meta/global record for upload.
    */
-  public Set<String>     enabledEngineNames;
+  public Set<String> enabledEngineNames;
+
+  /**
+   * Names of stages to sync <it>this sync</it>, or <code>null</code> to sync
+   * all known stages.
+   * <p>
+   * Generated <it>each sync</it> from extras bundle passed to
+   * <code>SyncAdapter.onPerformSync</code> and not persisted.
+   * <p>
+   * Not synchronized! Set this exactly once per global session and don't modify
+   * it -- especially not from multiple threads.
+   */
+  public Collection<String> stagesToSync;
 
   // Fields that maintain a reference to a SharedPreferences instance, used for
   // persistence.
@@ -221,7 +234,7 @@ public class SyncConfiguration implements CredentialsSource {
   }
 
   public SharedPreferences getPrefs() {
-    Logger.debug(LOG_TAG, "Returning prefs for " + prefsPath);
+    Logger.trace(LOG_TAG, "Returning prefs for " + prefsPath);
     return prefsSource.getPrefs(prefsPath, Utils.SHARED_PREFERENCES_MODE);
   }
 
@@ -241,14 +254,14 @@ public class SyncConfiguration implements CredentialsSource {
       String u = prefs.getString(PREF_CLUSTER_URL, null);
       try {
         clusterURL = new URI(u);
-        Logger.info(LOG_TAG, "Set clusterURL from bundle: " + u);
+        Logger.trace(LOG_TAG, "Set clusterURL from bundle: " + u);
       } catch (URISyntaxException e) {
         Logger.warn(LOG_TAG, "Ignoring bundle clusterURL (" + u + "): invalid URI.", e);
       }
     }
     if (prefs.contains(PREF_SYNC_ID)) {
       syncID = prefs.getString(PREF_SYNC_ID, null);
-      Logger.info(LOG_TAG, "Set syncID from bundle: " + syncID);
+      Logger.trace(LOG_TAG, "Set syncID from bundle: " + syncID);
     }
     if (prefs.contains(PREF_ENABLED_ENGINE_NAMES)) {
       String json = prefs.getString(PREF_ENABLED_ENGINE_NAMES, null);
@@ -373,7 +386,7 @@ public class SyncConfiguration implements CredentialsSource {
   protected void setAndPersistClusterURL(URI u, SharedPreferences prefs) {
     boolean shouldPersist = (prefs != null) && (clusterURL == null);
 
-    Logger.debug(LOG_TAG, "Setting cluster URL to " + u.toASCIIString() +
+    Logger.trace(LOG_TAG, "Setting cluster URL to " + u.toASCIIString() +
                           (shouldPersist ? ". Persisting." : ". Not persisting."));
     clusterURL = u;
     if (shouldPersist) {
@@ -394,7 +407,7 @@ public class SyncConfiguration implements CredentialsSource {
       return;
     }
     setAndPersistClusterURL(uri.resolve("/"), prefs);
-    Logger.info(LOG_TAG, "Set cluster URL to " + clusterURL.toASCIIString() + ", given input " + u.toASCIIString());
+    Logger.trace(LOG_TAG, "Set cluster URL to " + clusterURL.toASCIIString() + ", given input " + u.toASCIIString());
   }
 
   public void setClusterURL(URI u) {

@@ -293,12 +293,12 @@ class CellIterUnderGC : public CellIterImpl
 {
   public:
     CellIterUnderGC(JSCompartment *comp, AllocKind kind) {
-        JS_ASSERT(comp->rt->gcRunning);
+        JS_ASSERT(comp->rt->isHeapBusy());
         init(comp, kind);
     }
 
     CellIterUnderGC(ArenaHeader *aheader) {
-        JS_ASSERT(aheader->compartment->rt->gcRunning);
+        JS_ASSERT(aheader->compartment->rt->isHeapBusy());
         init(aheader);
     }
 };
@@ -330,7 +330,7 @@ class CellIter : public CellIterImpl
         if (lists->isSynchronizedFreeList(kind)) {
             lists = NULL;
         } else {
-            JS_ASSERT(!comp->rt->gcRunning);
+            JS_ASSERT(!comp->rt->isHeapBusy());
             lists->copyFreeListToArena(kind);
         }
 #ifdef DEBUG
@@ -361,7 +361,7 @@ class GCCompartmentsIter {
 
   public:
     GCCompartmentsIter(JSRuntime *rt) {
-        JS_ASSERT(rt->gcRunning);
+        JS_ASSERT(rt->isHeapBusy());
         it = rt->compartments.begin();
         end = rt->compartments.end();
         if (!(*it)->isCollecting())
@@ -400,7 +400,7 @@ NewGCThing(JSContext *cx, js::gc::AllocKind kind, size_t thingSize)
     JS_ASSERT(thingSize == js::gc::Arena::thingSize(kind));
     JS_ASSERT_IF(cx->compartment == cx->runtime->atomsCompartment,
                  kind == js::gc::FINALIZE_STRING || kind == js::gc::FINALIZE_SHORT_STRING);
-    JS_ASSERT(!cx->runtime->gcRunning);
+    JS_ASSERT(!cx->runtime->isHeapBusy());
     JS_ASSERT(!cx->runtime->noGCOrAllocationCheck);
 
     /* For testing out of memory conditions */
@@ -411,15 +411,20 @@ NewGCThing(JSContext *cx, js::gc::AllocKind kind, size_t thingSize)
         js::gc::RunDebugGC(cx);
 #endif
 
-    MaybeCheckStackRoots(cx);
+    MaybeCheckStackRoots(cx, /* relax = */ false);
 
     JSCompartment *comp = cx->compartment;
     void *t = comp->arenas.allocateFromFreeList(kind, thingSize);
     if (!t)
         t = js::gc::ArenaLists::refillFreeList(cx, kind);
 
-    JS_ASSERT_IF(t && comp->needsBarrier(),
+    JS_ASSERT_IF(t && comp->wasGCStarted() && comp->needsBarrier(),
                  static_cast<T *>(t)->arenaHeader()->allocatedDuringIncremental);
+
+#if defined(JSGC_GENERATIONAL) && defined(JS_GC_ZEAL)
+    if (cx->runtime->gcVerifyPostData && IsNurseryAllocable(kind) && !IsAtomsCompartment(comp))
+        comp->gcNursery.insertPointer(t);
+#endif
     return static_cast<T *>(t);
 }
 
@@ -431,7 +436,7 @@ TryNewGCThing(JSContext *cx, js::gc::AllocKind kind, size_t thingSize)
     JS_ASSERT(thingSize == js::gc::Arena::thingSize(kind));
     JS_ASSERT_IF(cx->compartment == cx->runtime->atomsCompartment,
                  kind == js::gc::FINALIZE_STRING || kind == js::gc::FINALIZE_SHORT_STRING);
-    JS_ASSERT(!cx->runtime->gcRunning);
+    JS_ASSERT(!cx->runtime->isHeapBusy());
     JS_ASSERT(!cx->runtime->noGCOrAllocationCheck);
 
 #ifdef JS_GC_ZEAL
@@ -440,8 +445,14 @@ TryNewGCThing(JSContext *cx, js::gc::AllocKind kind, size_t thingSize)
 #endif
 
     void *t = cx->compartment->arenas.allocateFromFreeList(kind, thingSize);
-    JS_ASSERT_IF(t && cx->compartment->needsBarrier(),
+    JS_ASSERT_IF(t && cx->compartment->wasGCStarted() && cx->compartment->needsBarrier(),
                  static_cast<T *>(t)->arenaHeader()->allocatedDuringIncremental);
+
+#if defined(JSGC_GENERATIONAL) && defined(JS_GC_ZEAL)
+    JSCompartment *comp = cx->compartment;
+    if (cx->runtime->gcVerifyPostData && IsNurseryAllocable(kind) && !IsAtomsCompartment(comp))
+        comp->gcNursery.insertPointer(t);
+#endif
     return static_cast<T *>(t);
 }
 

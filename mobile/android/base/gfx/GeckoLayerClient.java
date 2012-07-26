@@ -5,7 +5,6 @@
 
 package org.mozilla.gecko.gfx;
 
-import org.mozilla.gecko.FloatUtils;
 import org.mozilla.gecko.GeckoApp;
 import org.mozilla.gecko.GeckoAppShell;
 import org.mozilla.gecko.GeckoEvent;
@@ -17,9 +16,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.Point;
 import android.graphics.PointF;
-import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.SystemClock;
 import android.util.DisplayMetrics;
@@ -63,6 +60,9 @@ public class GeckoLayerClient implements GeckoEventResponder,
     /* Used as a temporary ViewTransform by syncViewportInfo */
     private ViewTransform mCurrentViewTransform;
 
+    /* This is written by the compositor thread and read by the UI thread. */
+    private volatile boolean mCompositorCreated;
+
     public GeckoLayerClient(Context context) {
         // we can fill these in with dummy values because they are always written
         // to before being read
@@ -72,6 +72,8 @@ public class GeckoLayerClient implements GeckoEventResponder,
         mRecordDrawTimes = true;
         mDrawTimingQueue = new DrawTimingQueue();
         mCurrentViewTransform = new ViewTransform(0, 0, 1);
+
+        mCompositorCreated = false;
     }
 
     /** Attaches the root layer to the layer controller so that Gecko appears. */
@@ -99,6 +101,14 @@ public class GeckoLayerClient implements GeckoEventResponder,
         DisplayPortCalculator.addPrefNames(prefs);
         PluginLayer.addPrefNames(prefs);
         GeckoAppShell.sendEventToGecko(GeckoEvent.createBroadcastEvent("Preferences:Get", prefs.toString()));
+    }
+
+    public void destroy() {
+        GeckoAppShell.unregisterGeckoEventListener("Viewport:Update", this);
+        GeckoAppShell.unregisterGeckoEventListener("Viewport:PageSize", this);
+        GeckoAppShell.unregisterGeckoEventListener("Viewport:CalculateDisplayPort", this);
+        GeckoAppShell.unregisterGeckoEventListener("Checkerboard:Toggle", this);
+        GeckoAppShell.unregisterGeckoEventListener("Preferences:Data", this);
     }
 
     DisplayPortMetrics getDisplayPort() {
@@ -445,7 +455,9 @@ public class GeckoLayerClient implements GeckoEventResponder,
         // Gecko draw events have been processed.  When this returns, composition is
         // definitely paused -- it'll synchronize with the Gecko event loop, which
         // in turn will synchronize with the compositor thread.
-        GeckoAppShell.sendEventToGeckoSync(GeckoEvent.createCompositorPauseEvent());
+        if (mCompositorCreated) {
+            GeckoAppShell.sendEventToGeckoSync(GeckoEvent.createCompositorPauseEvent());
+        }
     }
 
     /** Implementation of LayerView.Listener */
@@ -454,8 +466,10 @@ public class GeckoLayerClient implements GeckoEventResponder,
         // https://bugzilla.mozilla.org/show_bug.cgi?id=735230#c23), so we
         // resume the compositor directly. We still need to inform Gecko about
         // the compositor resuming, so that Gecko knows that it can now draw.
-        GeckoAppShell.scheduleResumeComposition(width, height);
-        GeckoAppShell.sendEventToGecko(GeckoEvent.createCompositorResumeEvent());
+        if (mCompositorCreated) {
+            GeckoAppShell.scheduleResumeComposition(width, height);
+            GeckoAppShell.sendEventToGecko(GeckoEvent.createCompositorResumeEvent());
+        }
     }
 
     /** Implementation of LayerView.Listener */
@@ -467,6 +481,11 @@ public class GeckoLayerClient implements GeckoEventResponder,
         // aware of the changed surface.
         compositionResumeRequested(width, height);
         renderRequested();
+    }
+
+    /** Implementation of LayerView.Listener */
+    public void compositorCreated() {
+        mCompositorCreated = true;
     }
 
     /** Used by robocop for testing purposes. Not for production use! This is called via reflection by robocop. */

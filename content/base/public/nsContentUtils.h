@@ -31,25 +31,16 @@ static fp_except_t oldmask = fpsetmask(~allmask);
 
 #include "nsAString.h"
 #include "nsIStatefulFrame.h"
-#include "nsINodeInfo.h"
 #include "nsNodeInfoManager.h"
-#include "nsContentList.h"
-#include "nsDOMClassInfoID.h"
 #include "nsIXPCScriptable.h"
 #include "nsDataHashtable.h"
-#include "nsIScriptRuntime.h"
-#include "nsIScriptGlobalObject.h"
 #include "nsIDOMEvent.h"
 #include "nsTArray.h"
-#include "nsTextFragment.h"
 #include "nsReadableUtils.h"
 #include "nsINode.h"
-#include "nsHashtable.h"
 #include "nsIDOMNode.h"
 #include "nsHtml5StringParser.h"
-#include "nsIParser.h"
 #include "nsIDocument.h"
-#include "nsIFragmentContentSink.h"
 #include "nsContentSink.h"
 #include "nsMathUtils.h"
 #include "nsThreadUtils.h"
@@ -70,9 +61,13 @@ class nsIDocument;
 class nsIDocumentObserver;
 class nsIDocShell;
 class nsINameSpaceManager;
+class nsIFragmentContentSink;
+class nsIScriptGlobalObject;
 class nsIScriptSecurityManager;
+class nsTextFragment;
 class nsIJSContextStack;
 class nsIThreadJSContextStack;
+class nsIParser;
 class nsIParserService;
 class nsIIOService;
 class nsIURI;
@@ -95,6 +90,7 @@ class nsEventListenerManager;
 class nsIScriptContext;
 class nsIRunnable;
 class nsIInterfaceRequestor;
+class nsINodeInfo;
 template<class E> class nsCOMArray;
 template<class K, class V> class nsRefPtrHashtable;
 struct JSRuntime;
@@ -1286,6 +1282,8 @@ public:
   static nsresult DropJSObjects(void* aScriptObjectHolder);
 
 #ifdef DEBUG
+  static bool AreJSObjectsHeld(void* aScriptObjectHolder); 
+
   static void CheckCCWrapperTraversal(nsISupports* aScriptObjectHolder,
                                       nsWrapperCache* aCache);
 #endif
@@ -1572,6 +1570,7 @@ public:
                                                       nsresult* aRv);
 
   static JSContext *GetCurrentJSContext();
+  static JSContext *GetSafeJSContext();
 
   /**
    * Case insensitive comparison between two strings. However it only ignores
@@ -1631,6 +1630,11 @@ public:
    */
   static nsresult ASCIIToUpper(nsAString& aStr);
   static nsresult ASCIIToUpper(const nsAString& aSource, nsAString& aDest);
+
+  /**
+   * Return whether aStr contains an ASCII uppercase character.
+   */
+  static bool StringContainsASCIIUpper(const nsAString& aStr);
 
   // Returns NS_OK for same origin, error (NS_ERROR_DOM_BAD_URI) if not.
   static nsresult CheckSameOrigin(nsIChannel *aOldChannel, nsIChannel *aNewChannel);
@@ -1830,6 +1834,11 @@ public:
   static bool IsRequestFullScreenAllowed();
 
   /**
+   * Returns true if the idle observers API is enabled.
+   */
+  static bool IsIdleObserverAPIEnabled() { return sIsIdleObserverAPIEnabled; }
+  
+  /**
    * Returns true if the doc tree branch which contains aDoc contains any
    * plugins which we don't control event dispatch for, i.e. do any plugins
    * in the same tab as this document receive key events outside of our
@@ -1861,6 +1870,7 @@ public:
   static void GetShiftText(nsAString& text);
   static void GetControlText(nsAString& text);
   static void GetMetaText(nsAString& text);
+  static void GetOSText(nsAString& text);
   static void GetAltText(nsAString& text);
   static void GetModifierSeparatorText(nsAString& text);
 
@@ -2012,6 +2022,19 @@ public:
   static void SplitMimeType(const nsAString& aValue, nsString& aType,
                             nsString& aParams);
 
+  /**
+   * Function checks if the user is idle.
+   * 
+   * @param aRequestedIdleTimeInMS    The idle observer's requested idle time.
+   * @param aUserIsIdle               boolean indicating if the user 
+   *                                  is currently idle or not.   *
+   * @return NS_OK                    NS_OK returned if the requested idle service and 
+   *                                  the current idle time were successfully obtained.
+   *                                  NS_ERROR_FAILURE returned if the the requested
+   *                                  idle service or the current idle were not obtained.
+   */
+  static nsresult IsUserIdle(PRUint32 aRequestedIdleTimeInMS, bool* aUserIsIdle);
+
   /** 
    * Takes a window and a string to check prefs against. Assumes that
    * the window is an app window, and that the pref is a comma
@@ -2045,7 +2068,9 @@ public:
                                         Element* aRoot,
                                         PRInt32& aOutStartOffset,
                                         PRInt32& aOutEndOffset);
-  
+
+  static nsIEditor* GetHTMLEditor(nsPresContext* aPresContext);
+
 private:
   static bool InitializeEventTable();
 
@@ -2136,6 +2161,7 @@ private:
   static bool sIsFullScreenApiEnabled;
   static bool sTrustedFullScreenOnly;
   static PRUint32 sHandlingInputTimeout;
+  static bool sIsIdleObserverAPIEnabled;
 
   static nsHtml5StringParser* sHTMLFragmentParser;
   static nsIParser* sXMLFragmentParser;
@@ -2149,6 +2175,7 @@ private:
   static nsString* sShiftText;
   static nsString* sControlText;
   static nsString* sMetaText;
+  static nsString* sOSText;
   static nsString* sAltText;
   static nsString* sModifierSeparator;
 };
@@ -2158,7 +2185,7 @@ typedef nsCharSeparatedTokenizerTemplate<nsContentUtils::IsHTMLWhitespace>
 
 #define NS_HOLD_JS_OBJECTS(obj, clazz)                                         \
   nsContentUtils::HoldJSObjects(NS_CYCLE_COLLECTION_UPCAST(obj, clazz),        \
-                                &NS_CYCLE_COLLECTION_NAME(clazz))
+                                NS_CYCLE_COLLECTION_PARTICIPANT(clazz))
 
 #define NS_DROP_JS_OBJECTS(obj, clazz)                                         \
   nsContentUtils::DropJSObjects(NS_CYCLE_COLLECTION_UPCAST(obj, clazz))

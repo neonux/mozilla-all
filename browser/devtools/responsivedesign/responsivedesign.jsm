@@ -28,10 +28,42 @@ let ResponsiveUIManager = {
    * @param aTab the tab targeted.
    */
   toggle: function(aWindow, aTab) {
-    if (aTab.responsiveUI) {
-      aTab.responsiveUI.close();
+    if (aTab.__responsiveUI) {
+      aTab.__responsiveUI.close();
     } else {
-      aTab.responsiveUI = new ResponsiveUI(aWindow, aTab);
+      aTab.__responsiveUI = new ResponsiveUI(aWindow, aTab);
+    }
+  },
+
+  /**
+   * Handle gcli commands.
+   *
+   * @param aWindow the browser window.
+   * @param aTab the tab targeted.
+   * @param aCommand the command name.
+   * @param aArgs command arguments.
+   */
+  handleGcliCommand: function(aWindow, aTab, aCommand, aArgs) {
+    switch (aCommand) {
+      case "resize to":
+        if (!aTab.__responsiveUI) {
+          aTab.__responsiveUI = new ResponsiveUI(aWindow, aTab);
+        }
+        aTab.__responsiveUI.setSize(aArgs.width, aArgs.height);
+        break;
+      case "resize on":
+        if (!aTab.__responsiveUI) {
+          aTab.__responsiveUI = new ResponsiveUI(aWindow, aTab);
+        }
+        break;
+      case "resize off":
+        if (aTab.__responsiveUI) {
+          aTab.__responsiveUI.close();
+        }
+        break;
+      case "resize toggle":
+          this.toggle(aWindow, aTab);
+      default:
     }
   },
 }
@@ -57,6 +89,7 @@ function ResponsiveUI(aWindow, aTab)
 {
   this.mainWindow = aWindow;
   this.tab = aTab;
+  this.tabContainer = aWindow.gBrowser.tabContainer;
   this.browser = aTab.linkedBrowser;
   this.chromeDoc = aWindow.document;
   this.container = aWindow.gBrowser.getBrowserContainer(this.browser);
@@ -110,11 +143,13 @@ function ResponsiveUI(aWindow, aTab)
 
   // Events
   this.tab.addEventListener("TabClose", this);
-  this.tab.addEventListener("TabAttrModified", this);
-  this.mainWindow.addEventListener("keypress", this.bound_onKeypress, true);
+  this.tabContainer.addEventListener("TabSelect", this);
+  this.mainWindow.document.addEventListener("keypress", this.bound_onKeypress, false);
 
   this.buildUI();
   this.checkMenus();
+
+  this.inspectorWasOpen = this.mainWindow.InspectorUI.isInspectorOpen;
 
   try {
     if (Services.prefs.getBoolPref("devtools.responsiveUI.rotate")) {
@@ -139,6 +174,10 @@ ResponsiveUI.prototype = {
    * Destroy the nodes. Remove listeners. Reset the style.
    */
   close: function RUI_unload() {
+    if (this.closing)
+      return;
+    this.closing = true;
+
     this.unCheckMenus();
     // Reset style of the stack.
     let style = "max-width: none;" +
@@ -153,10 +192,10 @@ ResponsiveUI.prototype = {
     this.saveCurrentPreset();
 
     // Remove listeners.
-    this.mainWindow.removeEventListener("keypress", this.bound_onKeypress, true);
+    this.mainWindow.document.removeEventListener("keypress", this.bound_onKeypress, false);
     this.menulist.removeEventListener("select", this.bound_presetSelected, true);
     this.tab.removeEventListener("TabClose", this);
-    this.tab.removeEventListener("TabAttrModified", this);
+    this.tabContainer.removeEventListener("TabSelect", this);
     this.rotatebutton.removeEventListener("command", this.bound_rotate, true);
 
     // Removed elements.
@@ -168,7 +207,7 @@ ResponsiveUI.prototype = {
     this.container.removeAttribute("responsivemode");
     this.stack.removeAttribute("responsivemode");
 
-    delete this.tab.responsiveUI;
+    delete this.tab.__responsiveUI;
   },
 
   /**
@@ -194,9 +233,17 @@ ResponsiveUI.prototype = {
   onKeypress: function RUI_onKeypress(aEvent) {
     if (aEvent.keyCode == this.mainWindow.KeyEvent.DOM_VK_ESCAPE &&
         this.mainWindow.gBrowser.selectedBrowser == this.browser) {
-      aEvent.preventDefault();
-      aEvent.stopPropagation();
-      this.close();
+
+      // If the inspector wasn't open at first but is open now,
+      // we don't want to close the Responsive Mode on Escape.
+      // We let the inspector close first.
+
+      let isInspectorOpen = this.mainWindow.InspectorUI.isInspectorOpen;
+      if (this.inspectorWasOpen || !isInspectorOpen) {
+        aEvent.preventDefault();
+        aEvent.stopPropagation();
+        this.close();
+      }
     }
   },
 
@@ -208,10 +255,10 @@ ResponsiveUI.prototype = {
       case "TabClose":
         this.close();
         break;
-      case "TabAttrModified":
-        if (this.mainWindow.gBrowser.selectedBrowser == this.browser) {
+      case "TabSelect":
+        if (this.tab.selected) {
           this.checkMenus();
-        } else {
+        } else if (!this.mainWindow.gBrowser.selectedTab.responsiveUI) {
           this.unCheckMenus();
         }
         break;
@@ -361,8 +408,8 @@ ResponsiveUI.prototype = {
    * @param aHeight height of the browser.
    */
   setSize: function RUI_setSize(aWidth, aHeight) {
-    this.currentWidth = aWidth;
-    this.currentHeight = aHeight;
+    this.currentWidth = Math.min(Math.max(aWidth, MIN_WIDTH), MAX_WIDTH);
+    this.currentHeight = Math.min(Math.max(aHeight, MIN_HEIGHT), MAX_WIDTH);
 
     // We resize the containing stack.
     let style = "max-width: %width;" +

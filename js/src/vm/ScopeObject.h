@@ -19,13 +19,71 @@ namespace js {
 /*****************************************************************************/
 
 /*
+ * All function scripts have an "enclosing static scope" that refers to the
+ * innermost enclosing let or function in the program text. This allows full
+ * reconstruction of the lexical scope for debugging or compiling efficient
+ * access to variables in enclosing scopes. The static scope is represented at
+ * runtime by a tree of compiler-created objects representing each scope:
+ *  - a StaticBlockObject is created for 'let' and 'catch' scopes
+ *  - a JSFunction+JSScript+Bindings trio is created for function scopes
+ * (These objects are primarily used to clone objects scopes for the
+ * dynamic scope chain.)
+ *
+ * There is an additional scope for named lambdas. E.g., in:
+ *
+ *   (function f() { var x; function g() { } })
+ *
+ * g's innermost enclosing scope will first be the function scope containing
+ * 'x', enclosed by a scope containing only the name 'f'. (This separate scope
+ * is necessary due to the fact that declarations in the function scope shadow
+ * (dynamically, in the case of 'eval') the lambda name.)
+ *
+ * There are two limitations to the current lexical nesting information:
+ *
+ *  - 'with' is completely absent; this isn't a problem for the current use
+ *    cases since 'with' causes every static scope to be on the dynamic scope
+ *    chain (so the debugger can find everything) and inhibits all upvar
+ *    optimization.
+ *
+ *  - The "enclosing static scope" chain stops at 'eval'. For example in:
+ *      let (x) { eval("function f() {}") }
+ *    f does not have an enclosing static scope. This is fine for current uses
+ *    for the same reason as 'with'.
+ *
+ * (See also AssertDynamicScopeMatchesStaticScope.)
+ */
+class StaticScopeIter
+{
+    JSObject *obj;
+    bool onNamedLambda;
+
+  public:
+    explicit StaticScopeIter(JSObject *obj);
+
+    bool done() const;
+    void operator++(int);
+
+    /* Return whether this static scope will be on the dynamic scope chain. */
+    bool hasDynamicScopeObject() const;
+    Shape *scopeShape() const;
+
+    enum Type { BLOCK, FUNCTION, NAMED_LAMBDA };
+    Type type() const;
+
+    StaticBlockObject &block() const;
+    JSScript *funScript() const;
+};
+
+/*****************************************************************************/
+
+/*
  * A "scope coordinate" describes how to get from head of the scope chain to a
  * given lexically-enclosing variable. A scope coordinate has two dimensions:
  *  - hops: the number of scope objects on the scope chain to skip
- *  - binding: which binding on the scope object
+ *  - slot: the slot on the scope object holding the variable's value
  * Additionally (as described in jsopcode.tbl) there is a 'block' index, but
  * this is only needed for decompilation/inference so it is not included in the
- * main ScopeCoordinate struct: use ScopeCoordinate{BlockChain,Atom} instead.
+ * main ScopeCoordinate struct: use ScopeCoordinate{BlockChain,Name} instead.
  */
 struct ScopeCoordinate
 {
@@ -36,24 +94,16 @@ struct ScopeCoordinate
     inline ScopeCoordinate() {}
 };
 
-/* Return the static block chain (or null) accessed by *pc. */
-extern StaticBlockObject *
-ScopeCoordinateBlockChain(JSScript *script, jsbytecode *pc);
+/*
+ * Return a scope iterator pointing at the static scope containing the variable
+ * accessed by the ALIASEDVAR op at 'pc'.
+ */
+extern StaticScopeIter
+ScopeCoordinateToStaticScope(JSScript *script, jsbytecode *pc);
 
 /* Return the name being accessed by the given ALIASEDVAR op. */
 extern PropertyName *
 ScopeCoordinateName(JSRuntime *rt, JSScript *script, jsbytecode *pc);
-
-/*
- * The 'slot' of a ScopeCoordinate is relative to the scope object. Type
- * inference and jit compilation are instead relative to frame values (even if
- * these values are aliased and thus never accessed, the the index of the
- * variable is used to refer to the jit/inference information). This function
- * maps from the ScopeCoordinate space to the StackFrame variable space.
- */
-enum FrameVarType { FrameVar_Local, FrameVar_Arg };
-extern FrameVarType
-ScopeCoordinateToFrameVar(JSScript *script, jsbytecode *pc, unsigned *index);
 
 /*****************************************************************************/
 
@@ -101,9 +151,6 @@ class ScopeObject : public JSObject
     static const uint32_t SCOPE_CHAIN_SLOT = 0;
 
   public:
-    /* Number of reserved slots for both CallObject and BlockObject. */
-    static const uint32_t CALL_BLOCK_RESERVED_SLOTS = 2;
-
     /*
      * Since every scope chain terminates with a global object and GlobalObject
      * does not derive ScopeObject (it has a completely different layout), the
@@ -133,40 +180,27 @@ class CallObject : public ScopeObject
     create(JSContext *cx, JSScript *script, HandleObject enclosing, HandleFunction callee);
 
   public:
-    static const uint32_t RESERVED_SLOTS = CALL_BLOCK_RESERVED_SLOTS;
+    static const uint32_t RESERVED_SLOTS = 2;
 
     static CallObject *createForFunction(JSContext *cx, StackFrame *fp);
     static CallObject *createForStrictEval(JSContext *cx, StackFrame *fp);
 
-    /* True if this is for a strict mode eval frame or for a function call. */
+    /* True if this is for a strict mode eval frame. */
     inline bool isForEval() const;
 
     /*
-     * The callee function if this CallObject was created for a function
-     * invocation, or null if it was created for a strict mode eval frame.
+     * Returns the function for which this CallObject was created. (This may
+     * only be called if !isForEval.)
      */
-    inline JSObject *getCallee() const;
-    inline JSFunction *getCalleeFunction() const;
-    inline void setCallee(JSObject *callee);
+    inline JSFunction &callee() const;
 
-    /* Returns the formal argument at the given index. */
-    inline const Value &arg(unsigned i, MaybeCheckAliasing = CHECK_ALIASING) const;
-    inline void setArg(unsigned i, const Value &v, MaybeCheckAliasing = CHECK_ALIASING);
+    /* Get/set the formal argument at the given index. */
+    inline const Value &formal(unsigned i, MaybeCheckAliasing = CHECK_ALIASING) const;
+    inline void setFormal(unsigned i, const Value &v, MaybeCheckAliasing = CHECK_ALIASING);
 
-    /* Returns the variable at the given index. */
+    /* Get/set the variable at the given index. */
     inline const Value &var(unsigned i, MaybeCheckAliasing = CHECK_ALIASING) const;
     inline void setVar(unsigned i, const Value &v, MaybeCheckAliasing = CHECK_ALIASING);
-
-    /*
-     * Get the actual arrays of arguments and variables. Only call if type
-     * inference is enabled, where we ensure that call object variables are in
-     * contiguous slots (see NewCallObject).
-     */
-    inline HeapSlotArray argArray();
-    inline HeapSlotArray varArray();
-
-    static JSBool setArgOp(JSContext *cx, HandleObject obj, HandleId id, JSBool strict, Value *vp);
-    static JSBool setVarOp(JSContext *cx, HandleObject obj, HandleId id, JSBool strict, Value *vp);
 
     /* Copy in all the unaliased formals and locals. */
     void copyUnaliasedValues(StackFrame *fp);
@@ -216,7 +250,7 @@ class WithObject : public NestedScopeObject
 class BlockObject : public NestedScopeObject
 {
   public:
-    static const unsigned RESERVED_SLOTS = CALL_BLOCK_RESERVED_SLOTS;
+    static const unsigned RESERVED_SLOTS = 2;
     static const gc::AllocKind FINALIZE_KIND = gc::FINALIZE_OBJECT4_BACKGROUND;
 
     /* Return the number of variables associated with this block. */
@@ -227,7 +261,8 @@ class BlockObject : public NestedScopeObject
      * range [0, slotCount()) and the return local index is in the range
      * [script->nfixed, script->nfixed + script->nslots).
      */
-    unsigned slotToFrameLocal(JSScript *script, unsigned i);
+    unsigned slotToLocalIndex(const Bindings &bindings, unsigned slot);
+    unsigned localIndexToSlot(const Bindings &bindings, uint32_t i);
 
   protected:
     /* Blocks contain an object slot for each slot i: 0 <= i < slotCount. */
@@ -240,24 +275,25 @@ class StaticBlockObject : public BlockObject
   public:
     static StaticBlockObject *create(JSContext *cx);
 
-    inline StaticBlockObject *enclosingBlock() const;
-    inline void setEnclosingBlock(StaticBlockObject *blockObj);
+    /* See StaticScopeIter comment. */
+    inline JSObject *enclosingStaticScope() const;
 
-    void setStackDepth(uint32_t depth);
+    /*
+     * A refinement of enclosingStaticScope that returns NULL if the enclosing
+     * static scope is a JSFunction.
+     */
+    inline StaticBlockObject *enclosingBlock() const;
+
+    /*
+     * Return whether this StaticBlockObject contains a variable stored at
+     * the given stack depth (i.e., fp->base()[depth]).
+     */
     bool containsVarAtDepth(uint32_t depth);
 
     /*
-     * Frontend compilation temporarily uses the object's slots to link
-     * a let var to its associated Definition parse node.
-     */
-    void setDefinitionParseNode(unsigned i, Definition *def);
-    Definition *maybeDefinitionParseNode(unsigned i);
-
-    /*
-     * A let binding is aliased is accessed lexically by nested functions or
+     * A let binding is aliased if accessed lexically by nested functions or
      * dynamically through dynamic name lookup (eval, with, function::, etc).
      */
-    void setAliased(unsigned i, bool aliased);
     bool isAliased(unsigned i);
 
     /*
@@ -266,7 +302,31 @@ class StaticBlockObject : public BlockObject
      */
     bool needsClone();
 
-    const Shape *addVar(JSContext *cx, jsid id, int index, bool *redeclared);
+    /* Frontend-only functions ***********************************************/
+
+    /* Initialization functions for above fields. */
+    void setAliased(unsigned i, bool aliased);
+    void setStackDepth(uint32_t depth);
+    void initEnclosingStaticScope(JSObject *obj);
+
+    /*
+     * Frontend compilation temporarily uses the object's slots to link
+     * a let var to its associated Definition parse node.
+     */
+    void setDefinitionParseNode(unsigned i, frontend::Definition *def);
+    frontend::Definition *maybeDefinitionParseNode(unsigned i);
+
+    /*
+     * The parser uses 'enclosingBlock' as the prev-link in the tc->blockChain
+     * stack. Note: in the case of hoisting, this prev-link will not ultimately
+     * be the same as enclosingBlock, initEnclosingStaticScope must be called
+     * separately in the emitter. 'reset' is just for asserting stackiness.
+     */
+    void initPrevBlockChainFromParser(StaticBlockObject *prev);
+    void resetPrevBlockChainFromParser();
+
+    static Shape *addVar(JSContext *cx, Handle<StaticBlockObject*> block, HandleId id,
+                         int index, bool *redeclared);
 };
 
 class ClonedBlockObject : public BlockObject
@@ -288,11 +348,11 @@ class ClonedBlockObject : public BlockObject
 
 template<XDRMode mode>
 bool
-XDRStaticBlockObject(XDRState<mode> *xdr, JSScript *script, StaticBlockObject **objp);
+XDRStaticBlockObject(XDRState<mode> *xdr, HandleObject enclosingScope, HandleScript script,
+                     StaticBlockObject **objp);
 
 extern JSObject *
-CloneStaticBlockObject(JSContext *cx, StaticBlockObject &srcBlock,
-                       const AutoObjectVector &objects, JSScript *src);
+CloneStaticBlockObject(JSContext *cx, HandleObject enclosingScope, Handle<StaticBlockObject*> src);
 
 /*****************************************************************************/
 

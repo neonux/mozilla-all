@@ -20,6 +20,12 @@ class gfxContext;
 class nsRootPresContext;
 
 namespace mozilla {
+namespace layers {
+class ContainerLayer;
+class ThebesLayer;
+}
+
+class FrameLayerBuilder;
 
 enum LayerState {
   LAYER_NONE,
@@ -29,7 +35,43 @@ enum LayerState {
   // when the layer has rounded rect clips.
   LAYER_ACTIVE_FORCE,
   // Special layer that is metadata only.
-  LAYER_ACTIVE_EMPTY
+  LAYER_ACTIVE_EMPTY,
+  // Inactive style layer for rendering SVG effects.
+  LAYER_SVG_EFFECTS
+};
+
+class LayerManagerLayerBuilder : public layers::LayerUserData {
+public:
+  LayerManagerLayerBuilder(FrameLayerBuilder* aBuilder, bool aDelete = true)
+    : mLayerBuilder(aBuilder)
+    , mDelete(aDelete)
+  {
+    MOZ_COUNT_CTOR(LayerManagerLayerBuilder);
+  }
+  ~LayerManagerLayerBuilder();
+
+  FrameLayerBuilder* mLayerBuilder;
+  bool mDelete;
+};
+
+extern PRUint8 gLayerManagerLayerBuilder;
+
+class ContainerLayerPresContext : public layers::LayerUserData {
+public:
+  nsPresContext* mPresContext;
+};
+
+extern PRUint8 gContainerLayerPresContext;
+
+static inline FrameLayerBuilder *GetLayerBuilderForManager(layers::LayerManager* aManager)
+{
+  LayerManagerLayerBuilder *data = static_cast<LayerManagerLayerBuilder*>(aManager->GetUserData(&gLayerManagerLayerBuilder));
+  return data ? data->mLayerBuilder : nsnull;
+}
+
+class RefCountedRegion : public RefCounted<RefCountedRegion> {
+public:
+  nsRegion mRegion;
 };
 
 /**
@@ -81,11 +123,20 @@ public:
   FrameLayerBuilder() :
     mRetainingManager(nsnull),
     mDetectedDOMModification(false),
-    mInvalidateAllLayers(false)
+    mInvalidateAllLayers(false),
+    mContainerLayerGeneration(0),
+    mMaxContainerLayerGeneration(0)
   {
+    MOZ_COUNT_CTOR(FrameLayerBuilder);
     mNewDisplayItemData.Init();
     mThebesLayerItems.Init();
   }
+  ~FrameLayerBuilder()
+  {
+    MOZ_COUNT_DTOR(FrameLayerBuilder);
+  }
+
+  static void Shutdown();
 
   void Init(nsDisplayListBuilder* aBuilder);
 
@@ -216,6 +267,8 @@ public:
   /**
    * This callback must be provided to EndTransaction. The callback data
    * must be the nsDisplayListBuilder containing this FrameLayerBuilder.
+   * This function can be called multiple times in a row to draw
+   * different regions.
    */
   static void DrawThebesLayer(ThebesLayer* aLayer,
                               gfxContext* aContext,
@@ -228,7 +281,7 @@ public:
    * Dumps this FrameLayerBuilder's retained layer manager's retained
    * layer tree to stderr.
    */
-  void DumpRetainedLayerTree(FILE* aFile = stdout);
+  static void DumpRetainedLayerTree(LayerManager* aManager, FILE* aFile = stdout);
 #endif
 
   /******* PRIVATE METHODS to FrameLayerBuilder.cpp ********/
@@ -265,6 +318,7 @@ public:
    */
   Layer* GetOldLayerFor(nsIFrame* aFrame, PRUint32 aDisplayItemKey);
 
+  static Layer* GetDebugOldLayerFor(nsIFrame* aFrame, PRUint32 aDisplayItemKey);
   /**
    * Try to determine whether the ThebesLayer aLayer paints an opaque
    * single color everywhere it's visible in aRect.
@@ -415,11 +469,16 @@ protected:
    */
   class DisplayItemData {
   public:
-    DisplayItemData(Layer* aLayer, PRUint32 aKey, LayerState aLayerState)
-      : mLayer(aLayer), mDisplayItemKey(aKey), mLayerState(aLayerState) {}
+    DisplayItemData(Layer* aLayer, PRUint32 aKey, LayerState aLayerState, PRUint32 aGeneration)
+      : mLayer(aLayer)
+      , mDisplayItemKey(aKey)
+      , mContainerLayerGeneration(aGeneration)
+      , mLayerState(aLayerState)
+    {}
 
     nsRefPtr<Layer> mLayer;
     PRUint32        mDisplayItemKey;
+    PRUint32        mContainerLayerGeneration;
     LayerState      mLayerState;
   };
 
@@ -440,13 +499,17 @@ protected:
       nsPtrHashKey<nsIFrame>(toCopy.mKey), mIsSharingContainerLayer(toCopy.mIsSharingContainerLayer)
     {
       // This isn't actually a copy-constructor; notice that it steals toCopy's
-      // array.  Be careful.
+      // array and invalid region.  Be careful.
       mData.SwapElements(toCopy.mData);
+      mInvalidRegion.swap(toCopy.mInvalidRegion);
+      mContainerLayerGeneration = toCopy.mContainerLayerGeneration;
     }
 
     bool HasNonEmptyContainerLayer();
 
     nsAutoTArray<DisplayItemData, 1> mData;
+    nsRefPtr<RefCountedRegion> mInvalidRegion;
+    PRUint32 mContainerLayerGeneration;
     bool mIsSharingContainerLayer;
 
     enum { ALLOW_MEMMOVE = false };
@@ -490,13 +553,14 @@ protected:
    * mItem always has an underlying frame.
    */
   struct ClippedDisplayItem {
-    ClippedDisplayItem(nsDisplayItem* aItem, const Clip& aClip)
-      : mItem(aItem), mClip(aClip)
+    ClippedDisplayItem(nsDisplayItem* aItem, const Clip& aClip, PRUint32 aGeneration)
+      : mItem(aItem), mClip(aClip), mContainerLayerGeneration(aGeneration)
     {
     }
 
     nsDisplayItem* mItem;
     Clip mClip;
+    PRUint32 mContainerLayerGeneration;
     bool mInactiveLayer;
   };
 
@@ -521,6 +585,7 @@ public:
     // The translation set on this ThebesLayer before we started updating the
     // layer tree.
     nsIntPoint mLastPaintOffset;
+    PRUint32 mContainerLayerGeneration;
     bool mHasExplicitLastPaintOffset;
     /**
       * The first mCommonClipCount rounded rectangle clips are identical for
@@ -543,10 +608,16 @@ public:
 protected:
   void RemoveThebesItemsForLayerSubtree(Layer* aLayer);
 
+  static void SetAndClearInvalidRegion(DisplayItemDataEntry* aEntry);
   static PLDHashOperator UpdateDisplayItemDataForFrame(DisplayItemDataEntry* aEntry,
                                                        void* aUserArg);
   static PLDHashOperator StoreNewDisplayItemData(DisplayItemDataEntry* aEntry,
                                                  void* aUserArg);
+  static PLDHashOperator RestoreDisplayItemData(DisplayItemDataEntry* aEntry,
+                                                void *aUserArg);
+
+  static PLDHashOperator RestoreThebesLayerItemEntries(ThebesLayerItemsEntry* aEntry,
+                                                       void *aUserArg);
 
   /**
    * Returns true if the DOM has been modified since we started painting,
@@ -588,6 +659,9 @@ protected:
    * during this paint.
    */
   bool                                mInvalidateAllLayers;
+
+  PRUint32                            mContainerLayerGeneration;
+  PRUint32                            mMaxContainerLayerGeneration;
 };
 
 }

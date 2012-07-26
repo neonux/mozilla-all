@@ -15,6 +15,7 @@ import android.view.LayoutInflater;
 import android.view.ViewGroup;
 import android.view.View;
 import android.widget.PopupWindow;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 
@@ -29,20 +30,27 @@ public class DoorHangerPopup extends PopupWindow {
     private LinearLayout mContent;
 
     private boolean mInflated; 
+    private ImageView mArrow;
+    private int mArrowWidth;
 
     public DoorHangerPopup(Context aContext) {
         super(aContext);
         mContext = aContext;
+
         mInflated = false;
+        mArrowWidth = aContext.getResources().getDimensionPixelSize(R.dimen.doorhanger_arrow_width);
    }
 
     private void init() {
         setBackgroundDrawable(new BitmapDrawable());
         setOutsideTouchable(true);
-        setWindowLayoutMode(ViewGroup.LayoutParams.FILL_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        setFocusable(true);
+        setWindowLayoutMode(GeckoApp.mAppContext.isTablet() ? ViewGroup.LayoutParams.WRAP_CONTENT : ViewGroup.LayoutParams.FILL_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT);
 
         LayoutInflater inflater = LayoutInflater.from(mContext);
         RelativeLayout layout = (RelativeLayout) inflater.inflate(R.layout.doorhangerpopup, null);
+        mArrow = (ImageView) layout.findViewById(R.id.doorhanger_arrow);
         mContent = (LinearLayout) layout.findViewById(R.id.doorhanger_container);
         
         setContentView(layout);
@@ -72,7 +80,7 @@ public class DoorHangerPopup extends PopupWindow {
                 int callBackId = buttonObject.getInt("callback");
                 dh.addButton(label, callBackId);
             } catch (JSONException e) {
-                Log.i(LOGTAG, "JSON throws " + e);
+                Log.i(LOGTAG, "JSON throws", e);
             }
          }
         dh.setOptions(options);
@@ -136,10 +144,18 @@ public class DoorHangerPopup extends PopupWindow {
     public void showPopup(View v) {
         fixBackgroundForFirst();
 
-        if (isShowing())
+        if (isShowing()) {
             update();
-        else
-            showAsDropDown(v);
+            return;
+        }
+
+        // On tablets, we need to position the popup so that the center of the arrow points to the
+        // center of the anchor view. On phones the popup stretches across the entire screen, so the
+        // arrow position is determined by its left margin.
+        int offset = GeckoApp.mAppContext.isTablet() ? v.getWidth()/2 - mArrowWidth/2 -
+                     ((RelativeLayout.LayoutParams) mArrow.getLayoutParams()).leftMargin : 0;
+
+        showAsDropDown(v, offset, 0);
     }
 
     private void fixBackgroundForFirst() {

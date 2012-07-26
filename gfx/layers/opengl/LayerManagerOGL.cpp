@@ -17,6 +17,7 @@
 #include "TiledThebesLayerOGL.h"
 #include "mozilla/TimeStamp.h"
 #include "mozilla/Preferences.h"
+#include "TexturePoolOGL.h"
 
 #include "gfxContext.h"
 #include "gfxUtils.h"
@@ -425,6 +426,13 @@ LayerManagerOGL::EndTransaction(DrawThebesLayerCallback aCallback,
 #endif
 }
 
+already_AddRefed<gfxASurface>
+LayerManagerOGL::CreateOptimalMaskSurface(const gfxIntSize &aSize)
+{
+  return gfxPlatform::GetPlatform()->
+    CreateOffscreenImageSurface(aSize, gfxASurface::CONTENT_ALPHA);
+}
+
 already_AddRefed<ThebesLayer>
 LayerManagerOGL::CreateThebesLayer()
 {
@@ -743,6 +751,10 @@ LayerManagerOGL::Render()
   } else {
     MakeCurrent();
   }
+
+#if MOZ_WIDGET_ANDROID
+  TexturePoolOGL::Fill(gl());
+#endif
 
   SetupBackBuffer(width, height);
   SetupPipeline(width, height, ApplyWorldTransform);
@@ -1237,6 +1249,16 @@ LayerManagerOGL::CreateShadowCanvasLayer()
     return nsnull;
   }
   return nsRefPtr<ShadowCanvasLayerOGL>(new ShadowCanvasLayerOGL(this)).forget();
+}
+
+already_AddRefed<ShadowRefLayer>
+LayerManagerOGL::CreateShadowRefLayer()
+{
+  if (LayerManagerOGL::mDestroyed) {
+    NS_WARNING("Call on destroyed layer manager");
+    return nsnull;
+  }
+  return nsRefPtr<ShadowRefLayerOGL>(new ShadowRefLayerOGL(this)).forget();
 }
 
 } /* layers */

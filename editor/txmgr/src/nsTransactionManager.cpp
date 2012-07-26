@@ -3,16 +3,22 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "nsITransaction.h"
-#include "nsITransactionListener.h"
-
-#include "nsTransactionItem.h"
-#include "nsTransactionStack.h"
-#include "nsVoidArray.h"
-#include "nsTransactionManager.h"
-#include "nsTransactionList.h"
+#include "mozilla/Assertions.h"
+#include "mozilla/mozalloc.h"
 #include "nsAutoPtr.h"
 #include "nsCOMPtr.h"
+#include "nsDebug.h"
+#include "nsError.h"
+#include "nsISupportsBase.h"
+#include "nsISupportsUtils.h"
+#include "nsITransaction.h"
+#include "nsITransactionList.h"
+#include "nsITransactionListener.h"
+#include "nsIWeakReference.h"
+#include "nsTransactionItem.h"
+#include "nsTransactionList.h"
+#include "nsTransactionManager.h"
+#include "nsTransactionStack.h"
 
 nsTransactionManager::nsTransactionManager(PRInt32 aMaxTransactionCount)
   : mMaxTransactionCount(aMaxTransactionCount)
@@ -111,13 +117,7 @@ nsTransactionManager::UndoTransaction()
     return NS_OK;
   }
 
-  nsCOMPtr<nsITransaction> t;
-
-  result = tx->GetTransaction(getter_AddRefs(t));
-
-  if (NS_FAILED(result)) {
-    return result;
-  }
+  nsCOMPtr<nsITransaction> t = tx->GetTransaction();
 
   bool doInterrupt = false;
 
@@ -170,13 +170,7 @@ nsTransactionManager::RedoTransaction()
     return NS_OK;
   }
 
-  nsCOMPtr<nsITransaction> t;
-
-  result = tx->GetTransaction(getter_AddRefs(t));
-
-  if (NS_FAILED(result)) {
-    return result;
-  }
+  nsCOMPtr<nsITransaction> t = tx->GetTransaction();
 
   bool doInterrupt = false;
 
@@ -272,8 +266,9 @@ nsTransactionManager::EndBatch()
 
   nsRefPtr<nsTransactionItem> tx = mDoStack.Peek();
 
-  if (tx)
-    tx->GetTransaction(getter_AddRefs(ti));
+  if (tx) {
+    ti = tx->GetTransaction();
+  }
 
   if (!tx || ti) {
     return NS_ERROR_FAILURE;
@@ -399,41 +394,41 @@ nsTransactionManager::SetMaxTransactionCount(PRInt32 aMaxCount)
 NS_IMETHODIMP
 nsTransactionManager::PeekUndoStack(nsITransaction **aTransaction)
 {
-  nsresult result;
+  MOZ_ASSERT(aTransaction);
+  *aTransaction = PeekUndoStack().get();
+  return NS_OK;
+}
 
-  NS_ENSURE_TRUE(aTransaction, NS_ERROR_NULL_POINTER);
-
-  *aTransaction = 0;
-
+already_AddRefed<nsITransaction>
+nsTransactionManager::PeekUndoStack()
+{
   nsRefPtr<nsTransactionItem> tx = mUndoStack.Peek();
 
   if (!tx) {
-    return NS_OK;
+    return nsnull;
   }
 
-  result = tx->GetTransaction(aTransaction);
-
-  return result;
+  return tx->GetTransaction();
 }
 
 NS_IMETHODIMP
-nsTransactionManager::PeekRedoStack(nsITransaction **aTransaction)
+nsTransactionManager::PeekRedoStack(nsITransaction** aTransaction)
 {
-  nsresult result;
+  MOZ_ASSERT(aTransaction);
+  *aTransaction = PeekRedoStack().get();
+  return NS_OK;
+}
 
-  NS_ENSURE_TRUE(aTransaction, NS_ERROR_NULL_POINTER);
-
-  *aTransaction = 0;
-
+already_AddRefed<nsITransaction>
+nsTransactionManager::PeekRedoStack()
+{
   nsRefPtr<nsTransactionItem> tx = mRedoStack.Peek();
 
   if (!tx) {
-    return NS_OK;
+    return nsnull;
   }
 
-  result = tx->GetTransaction(aTransaction);
-
-  return result;
+  return tx->GetTransaction();
 }
 
 NS_IMETHODIMP
@@ -749,7 +744,6 @@ nsTransactionManager::BeginTransaction(nsITransaction *aTransaction)
 nsresult
 nsTransactionManager::EndTransaction()
 {
-  nsCOMPtr<nsITransaction> tint;
   nsresult result              = NS_OK;
 
   nsRefPtr<nsTransactionItem> tx = mDoStack.Pop();
@@ -757,12 +751,7 @@ nsTransactionManager::EndTransaction()
   if (!tx)
     return NS_ERROR_FAILURE;
 
-  result = tx->GetTransaction(getter_AddRefs(tint));
-
-  if (NS_FAILED(result)) {
-    // XXX: What do we do with the transaction item at this point?
-    return result;
-  }
+  nsCOMPtr<nsITransaction> tint = tx->GetTransaction();
 
   if (!tint) {
     PRInt32 nc = 0;
@@ -819,9 +808,7 @@ nsTransactionManager::EndTransaction()
 
   if (tint && top) {
     bool didMerge = false;
-    nsCOMPtr<nsITransaction> topTransaction;
-
-    result = top->GetTransaction(getter_AddRefs(topTransaction));
+    nsCOMPtr<nsITransaction> topTransaction = top->GetTransaction();
 
     if (topTransaction) {
 

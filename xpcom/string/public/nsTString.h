@@ -4,6 +4,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+// IWYU pragma: private, include "nsString.h"
 
   /**
    * This is the canonical null-terminated string class.  All subclasses
@@ -349,9 +350,6 @@ class nsTString_CharT : public nsTSubstring_CharT
 
       void AssignWithConversion( const nsTAString_IncompatibleCharT& aString );
       void AssignWithConversion( const incompatible_char_type* aData, PRInt32 aLength=-1 );
-
-      void AppendWithConversion( const nsTAString_IncompatibleCharT& aString );
-      void AppendWithConversion( const incompatible_char_type* aData, PRInt32 aLength=-1 );
 
 #endif // !MOZ_STRING_WITH_OBSOLETE_API
 

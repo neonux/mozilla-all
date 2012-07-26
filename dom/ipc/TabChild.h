@@ -10,6 +10,9 @@
 #ifndef _IMPL_NS_LAYOUT
 #include "mozilla/dom/PBrowserChild.h"
 #endif
+#ifdef DEBUG
+#include "PCOMContentPermissionRequestChild.h"
+#endif /* DEBUG */
 #include "nsIWebNavigation.h"
 #include "nsCOMPtr.h"
 #include "nsAutoPtr.h"
@@ -40,6 +43,7 @@
 #include "nsIPrincipal.h"
 #include "nsIScriptObjectPrincipal.h"
 #include "nsIScriptContext.h"
+#include "nsPIDOMWindow.h"
 #include "nsWeakReference.h"
 #include "nsITabChild.h"
 #include "mozilla/Attributes.h"
@@ -140,7 +144,14 @@ class TabChild : public PBrowserChild,
     typedef mozilla::layout::RenderFrameChild RenderFrameChild;
 
 public:
-    TabChild(PRUint32 aChromeFlags);
+    /**
+     * Create a new TabChild object.
+     *
+     * |aIsBrowserElement| indicates whether the tab is inside an <iframe mozbrowser>.
+     * |aAppId| is the app id of the app containing this tab. If the tab isn't
+     * contained in an app, aAppId will be nsIScriptSecurityManager::NO_APP_ID.
+     */
+    TabChild(PRUint32 aChromeFlags, bool aIsBrowserElement, PRUint32 aAppId);
     virtual ~TabChild();
     nsresult Init();
 
@@ -157,6 +168,10 @@ public:
     virtual bool RecvLoadURL(const nsCString& uri);
     virtual bool RecvShow(const nsIntSize& size);
     virtual bool RecvUpdateDimensions(const nsRect& rect, const nsIntSize& size);
+    virtual bool RecvUpdateFrame(const nsIntRect& aDisplayPort,
+                                      const nsIntPoint& aScrollOffset,
+                                      const gfxSize& aResolution,
+                                      const nsIntRect& aScreenSize);
     virtual bool RecvActivate();
     virtual bool RecvDeactivate();
     virtual bool RecvMouseEvent(const nsString& aType,
@@ -169,6 +184,7 @@ public:
     virtual bool RecvRealMouseEvent(const nsMouseEvent& event);
     virtual bool RecvRealKeyEvent(const nsKeyEvent& event);
     virtual bool RecvMouseScrollEvent(const nsMouseScrollEvent& event);
+    virtual bool RecvRealTouchEvent(const nsTouchEvent& event);
     virtual bool RecvKeyEvent(const nsString& aType,
                               const PRInt32&  aKeyCode,
                               const PRInt32&  aCharCode,
@@ -209,6 +225,18 @@ public:
                                const InfallibleTArray<nsString>& aStringParams,
                                nsIDialogParamBlock* aParams);
 
+#ifdef DEBUG
+    virtual PContentPermissionRequestChild* SendPContentPermissionRequestConstructor(PContentPermissionRequestChild* aActor,
+                                                                                     const nsCString& aType,
+                                                                                     const URI& aUri)
+    {
+      PCOMContentPermissionRequestChild* child = static_cast<PCOMContentPermissionRequestChild*>(aActor);
+      PContentPermissionRequestChild* request = PBrowserChild::SendPContentPermissionRequestConstructor(aActor, aType, aUri);
+      child->mIPCOpen = true;
+      return request;
+    }
+#endif /* DEBUG */
+
     virtual PContentPermissionRequestChild* AllocPContentPermissionRequest(const nsCString& aType, const IPC::URI& uri);
     virtual bool DeallocPContentPermissionRequest(PContentPermissionRequestChild* actor);
 
@@ -225,22 +253,29 @@ public:
     nsIPrincipal* GetPrincipal() { return mPrincipal; }
 
     void SetBackgroundColor(const nscolor& aColor);
-protected:
-    NS_OVERRIDE
-    virtual PRenderFrameChild* AllocPRenderFrame();
-    NS_OVERRIDE
-    virtual bool DeallocPRenderFrame(PRenderFrameChild* aFrame);
-    NS_OVERRIDE
-    virtual bool RecvDestroy();
 
-    bool DispatchWidgetEvent(nsGUIEvent& event);
+    void NotifyPainted();
+
+    bool IsAsyncPanZoomEnabled();
+
+protected:
+    virtual PRenderFrameChild* AllocPRenderFrame(ScrollingBehavior* aScrolling,
+                                                 LayersBackend* aBackend,
+                                                 int32_t* aMaxTextureSize,
+                                                 uint64_t* aLayersId) MOZ_OVERRIDE;
+    virtual bool DeallocPRenderFrame(PRenderFrameChild* aFrame) MOZ_OVERRIDE;
+    virtual bool RecvDestroy() MOZ_OVERRIDE;
+
+    nsEventStatus DispatchWidgetEvent(nsGUIEvent& event);
 
     virtual PIndexedDBChild* AllocPIndexedDB(const nsCString& aASCIIOrigin,
                                              bool* /* aAllowed */);
 
-    virtual bool DeallocPIndexedDB(PIndexedDBChild* actor);
+    virtual bool DeallocPIndexedDB(PIndexedDBChild* aActor);
 
 private:
+    bool UseDirectCompositor();
+
     void ActorDestroy(ActorDestroyReason why);
 
     bool InitTabChildGlobal();
@@ -265,7 +300,10 @@ private:
     PRUint32 mChromeFlags;
     nsIntRect mOuterRect;
     nscolor mLastBackgroundColor;
+    ScrollingBehavior mScrolling;
     bool mDidFakeShow;
+    bool mIsBrowserElement;
+    PRUint32 mAppId;
 
     DISALLOW_EVIL_CONSTRUCTORS(TabChild);
 };

@@ -74,6 +74,7 @@
 #include "nsISocketProvider.h"
 #include "nsIRedirectChannelRegistrar.h"
 #include "nsIMIMEHeaderParam.h"
+#include "nsILoadContext.h"
 #include "mozilla/Services.h"
 
 #ifdef MOZILLA_INTERNAL_API
@@ -1294,6 +1295,61 @@ NS_QueryNotificationCallbacks(nsIInterfaceRequestor  *callbacks,
                 cbs->GetInterface(iid, result);
         }
     }
+}
+
+/**
+ * Returns true if channel is using Private Browsing, or false if not.
+ * Returns false if channel's callbacks don't implement nsILoadContext.
+ */
+inline bool
+NS_UsePrivateBrowsing(nsIChannel *channel)
+{
+    nsCOMPtr<nsILoadContext> loadContext;
+    NS_QueryNotificationCallbacks(channel, loadContext);
+    return loadContext && loadContext->UsePrivateBrowsing();
+}
+
+/**
+ * Gets ExtendedOrigin value for given channel's nsILoadContext.
+ * Returns false if error or channel's callbacks don't implement nsILoadContext.
+ */
+inline bool
+NS_GetExtendedOrigin(nsIChannel *aChannel, nsACString &aResult)
+{
+    nsCOMPtr<nsILoadContext> loadContext;
+    NS_QueryNotificationCallbacks(aChannel, loadContext);
+    if (!loadContext) {
+        return false;
+    }
+    nsCOMPtr<nsIURI> uri;
+    nsresult rv = aChannel->GetURI(getter_AddRefs(uri));
+    NS_ENSURE_SUCCESS(rv, false);
+
+    rv = loadContext->GetExtendedOrigin(uri, aResult);
+    NS_ENSURE_SUCCESS(rv, false);
+    return true;
+}
+
+/**
+ * Gets AppId and isInBrowserElement from channel's nsILoadContext.
+ * Returns false if error or channel's callbacks don't implement nsILoadContext.
+ */
+inline bool
+NS_GetAppInfo(nsIChannel *aChannel, PRUint32 *aAppID, bool *aIsInBrowserElement)
+{
+    nsCOMPtr<nsILoadContext> loadContext;
+    NS_QueryNotificationCallbacks(aChannel, loadContext);
+    if (!loadContext) {
+        return false;
+    }
+
+    nsresult rv = loadContext->GetAppId(aAppID);
+    NS_ENSURE_SUCCESS(rv, false);
+
+    rv = loadContext->GetIsInBrowserElement(aIsInBrowserElement);
+    NS_ENSURE_SUCCESS(rv, false);
+
+    return true;
 }
 
 /**

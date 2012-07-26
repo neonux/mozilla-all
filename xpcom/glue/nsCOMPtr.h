@@ -58,7 +58,7 @@
 
 #define NSCAP_FEATURE_USE_BASE
 
-#ifdef NS_DEBUG
+#ifdef DEBUG
   #define NSCAP_FEATURE_TEST_DONTQUERY_CASES
   #undef NSCAP_FEATURE_USE_BASE
 //#define NSCAP_FEATURE_TEST_NONNULL_QUERY_SUCCEEDS
@@ -401,7 +401,12 @@ nsCOMPtr_base
           // nothing else to do here
         }
 
-      NS_COM_GLUE NS_CONSTRUCTOR_FASTCALL ~nsCOMPtr_base();
+      NS_COM_GLUE NS_CONSTRUCTOR_FASTCALL ~nsCOMPtr_base()
+        {
+          NSCAP_LOG_RELEASE(this, mRawPtr);
+            if ( mRawPtr )
+              NSCAP_RELEASE(this, mRawPtr);
+        }
 
       NS_COM_GLUE void NS_FASTCALL   assign_with_AddRef( nsISupports* );
       NS_COM_GLUE void NS_FASTCALL   assign_from_qi( const nsQueryInterface, const nsIID& );
@@ -735,13 +740,14 @@ class nsCOMPtr MOZ_FINAL
 
       template <typename I>
       void
-      forget( I** rhs NS_OUTPARAM )
+      forget( I** rhs )
           // Set the target of rhs to the value of mRawPtr and null out mRawPtr.
           // Useful to avoid unnecessary AddRef/Release pairs with "out"
           // parameters where rhs bay be a T** or an I** where I is a base class
           // of T.
         {
           NS_ASSERTION(rhs, "Null pointer passed to forget!");
+          NSCAP_LOG_RELEASE(this, mRawPtr);
           *rhs = get();
           mRawPtr = 0;
         }
@@ -1040,7 +1046,7 @@ class nsCOMPtr<nsISupports>
         }
 
       void
-      forget( nsISupports** rhs NS_OUTPARAM )
+      forget( nsISupports** rhs )
           // Set the target of rhs to the value of mRawPtr and null out mRawPtr.
           // Useful to avoid unnecessary AddRef/Release pairs with "out"
           // parameters.

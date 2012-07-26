@@ -115,7 +115,11 @@ typedef enum JSProtoKey {
 /* js_CheckAccess mode enumeration. */
 typedef enum JSAccessMode {
     JSACC_PROTO  = 0,           /* XXXbe redundant w.r.t. id */
-    JSACC_PARENT = 1,           /* XXXbe redundant w.r.t. id */
+
+                                /*
+                                 * enum value #1 formerly called JSACC_PARENT,
+                                 * gap preserved for ABI compatibility.
+                                 */
 
                                 /*
                                  * enum value #2 formerly called JSACC_IMPORT,
@@ -230,9 +234,25 @@ enum ThingRootKind
     THING_ROOT_SCRIPT,
     THING_ROOT_XML,
     THING_ROOT_ID,
+    THING_ROOT_PROPERTY_ID,
     THING_ROOT_VALUE,
+    THING_ROOT_TYPE,
     THING_ROOT_LIMIT
 };
+
+template <typename T>
+struct RootKind;
+
+/*
+ * Specifically mark the ThingRootKind of externally visible types, so that
+ * JSAPI users may use JSRooted... types without having the class definition
+ * available.
+ */
+template <> struct RootKind<JSObject *> { static ThingRootKind rootKind() { return THING_ROOT_OBJECT; }; };
+template <> struct RootKind<JSString *> { static ThingRootKind rootKind() { return THING_ROOT_STRING; }; };
+template <> struct RootKind<JSScript *> { static ThingRootKind rootKind() { return THING_ROOT_SCRIPT; }; };
+template <> struct RootKind<jsid> { static ThingRootKind rootKind() { return THING_ROOT_ID; }; };
+template <> struct RootKind<Value> { static ThingRootKind rootKind() { return THING_ROOT_VALUE; }; };
 
 struct ContextFriendFields {
     JSRuntime *const    runtime;

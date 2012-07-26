@@ -20,6 +20,7 @@
 
 #scripts {
   max-width: 350px;
+  min-width: 150px;
 }
 
 /**
@@ -30,6 +31,10 @@
   padding: 2px;
 }
 
+.list-item:not(.selected):not(.empty):hover {
+  background: #cddae5;
+}
+
 .list-item.selected {
   background: Highlight;
   color: HighlightText;
@@ -37,6 +42,7 @@
 
 .list-item.empty {
   color: GrayText;
+  padding: 4px;
 }
 
 /**
@@ -55,6 +61,22 @@
 .dbg-stackframe-name {
   -moz-padding-end: 4px;
   font-weight: 600;
+}
+
+/**
+ * Breakpoints view
+ */
+
+#breakpoints {
+  background-color: white;
+}
+
+.dbg-breakpoint-info {
+  font-weight: 600;
+}
+
+.dbg-breakpoint-text {
+  font: 8pt monospace;
 }
 
 /**
@@ -105,17 +127,17 @@
   margin-top: 2px;
   border-bottom: 1px dotted #ddd;
   border-radius: 8px;
-  -moz-transition: background 1s ease-in-out;
+  transition: background 1s ease-in-out;
   background: #fff;
 }
 
 .variable[changed] {
-  -moz-transition-duration: 0.4s;
+  transition-duration: 0.4s;
   background: rgba(255, 255, 0, 0.65);
 }
 
 .variable[added] {
-  -moz-transition-duration: 0.4s;
+  transition-duration: 0.4s;
   background: rgba(0, 255, 0, 0.15);
 }
 
@@ -170,6 +192,16 @@
   opacity: 0.5;
 }
 
+#element-tooltip > label {
+  margin: 0 2px 0 2px;
+}
+
+#element-tooltip > label[non-enumerable],
+#element-tooltip > label[non-configurable],
+#element-tooltip > label[non-writable]{
+  text-decoration: line-through;
+}
+
 /**
  * Property values colors
  */
@@ -221,21 +253,21 @@
  */
 
 .details[open][animated] {
-  -moz-animation-duration: 0.25s;
-  -moz-animation-name: showblock;
+  animation-duration: 0.25s;
+  animation-name: showblock;
 }
 
-@-moz-keyframes showblock {
+@keyframes showblock {
   from {
     opacity: 0;
-    -moz-transform-origin: top;
-    -moz-transform: scaleY(0);
+    transform-origin: top;
+    transform: scaleY(0);
   }
 
   to {
     opacity: 1;
-    -moz-transform-origin: top;
-    -moz-transform: scaleY(1);
+    transform-origin: top;
+    transform: scaleY(1);
   }
 }
 
@@ -262,10 +294,6 @@
 
 #step-out {
   list-style-image: url("chrome://browser/skin/devtools/debugger-step-out.png");
-}
-
-#step-over {
-  list-style-image: url("chrome://browser/skin/devtools/debugger-step-over.png");
 }
 
 #debugger-controls > toolbarbutton {

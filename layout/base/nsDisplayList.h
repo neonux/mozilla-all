@@ -20,7 +20,6 @@
 #include "nsISelection.h"
 #include "nsCaret.h"
 #include "plarena.h"
-#include "Layers.h"
 #include "nsRegion.h"
 #include "FrameLayerBuilder.h"
 #include "nsThemeConstants.h"
@@ -222,6 +221,19 @@ public:
    */
   void SetPaintingToWindow(bool aToWindow) { mIsPaintingToWindow = aToWindow; }
   bool IsPaintingToWindow() const { return mIsPaintingToWindow; }
+
+  /**
+   * @return Returns if the builder is currently building an
+   * nsDisplayFixedPosition sub-tree.
+   */
+  bool IsInFixedPosition() const { return mIsInFixedPosition; }
+
+  bool SetIsCompositingCheap(bool aCompositingCheap) { 
+    bool temp = mIsCompositingCheap; 
+    mIsCompositingCheap = aCompositingCheap;
+    return temp;
+  }
+  bool IsCompositingCheap() const { return mIsCompositingCheap; }
   /**
    * Display the caret if needed.
    */
@@ -257,10 +269,9 @@ public:
 
   /**
    * Returns true if we're currently building a display list that's
-   * directly or indirectly under an nsDisplayTransform or SVG
-   * foreignObject.
+   * directly or indirectly under an nsDisplayTransform.
    */
-  bool IsInTransform() { return mInTransform; }
+  bool IsInTransform() const { return mInTransform; }
   /**
    * Indicate whether or not we're directly or indirectly under and
    * nsDisplayTransform or SVG foreignObject.
@@ -330,11 +341,6 @@ public:
   void MarkPreserve3DFramesForDisplayList(nsIFrame* aDirtyFrame, const nsRect& aDirtyRect);
 
   /**
-   * Return the FrameLayerBuilder.
-   */
-  FrameLayerBuilder* LayerBuilder() { return &mLayerBuilder; }
-
-  /**
    * Get the area of the final transparent region.
    */
   const nsRegion* GetFinalTransparentRegion() { return mFinalTransparentRegion; }
@@ -391,8 +397,8 @@ public:
   
   /**
    * A helper class to temporarily set the value of
-   * mIsAtRootOfPseudoStackingContext and temporarily update
-   * mCachedOffsetFrame/mCachedOffset from a frame to its child.
+   * mIsAtRootOfPseudoStackingContext and mIsInFixedPosition, and temporarily
+   * update mCachedOffsetFrame/mCachedOffset from a frame to its child.
    */
   class AutoBuildingDisplayList;
   friend class AutoBuildingDisplayList;
@@ -406,11 +412,13 @@ public:
       aBuilder->mIsAtRootOfPseudoStackingContext = aIsRoot;
     }
     AutoBuildingDisplayList(nsDisplayListBuilder* aBuilder,
-                            nsIFrame* aForChild, bool aIsRoot)
+                            nsIFrame* aForChild, bool aIsRoot,
+                            bool aIsInFixedPosition)
       : mBuilder(aBuilder),
         mPrevCachedOffsetFrame(aBuilder->mCachedOffsetFrame),
         mPrevCachedOffset(aBuilder->mCachedOffset),
-        mPrevIsAtRootOfPseudoStackingContext(aBuilder->mIsAtRootOfPseudoStackingContext) {
+        mPrevIsAtRootOfPseudoStackingContext(aBuilder->mIsAtRootOfPseudoStackingContext),
+        mPrevIsInFixedPosition(aBuilder->mIsInFixedPosition) {
       if (mPrevCachedOffsetFrame == aForChild->GetParent()) {
         aBuilder->mCachedOffset += aForChild->GetPosition();
       } else {
@@ -418,17 +426,22 @@ public:
       }
       aBuilder->mCachedOffsetFrame = aForChild;
       aBuilder->mIsAtRootOfPseudoStackingContext = aIsRoot;
+      if (aIsInFixedPosition) {
+        aBuilder->mIsInFixedPosition = aIsInFixedPosition;
+      }
     }
     ~AutoBuildingDisplayList() {
       mBuilder->mCachedOffsetFrame = mPrevCachedOffsetFrame;
       mBuilder->mCachedOffset = mPrevCachedOffset;
       mBuilder->mIsAtRootOfPseudoStackingContext = mPrevIsAtRootOfPseudoStackingContext;
+      mBuilder->mIsInFixedPosition = mPrevIsInFixedPosition;
     }
   private:
     nsDisplayListBuilder* mBuilder;
     const nsIFrame*       mPrevCachedOffsetFrame;
     nsPoint               mPrevCachedOffset;
     bool                  mPrevIsAtRootOfPseudoStackingContext;
+    bool                  mPrevIsInFixedPosition;
   };
 
   /**
@@ -503,7 +516,6 @@ private:
     return &mPresShellStates[mPresShellStates.Length() - 1];
   }
 
-  FrameLayerBuilder              mLayerBuilder;
   nsIFrame*                      mReferenceFrame;
   nsIFrame*                      mIgnoreScrollFrame;
   PLArenaPool                    mPool;
@@ -536,6 +548,8 @@ private:
   bool                           mIsPaintingToWindow;
   bool                           mHasDisplayPort;
   bool                           mHasFixedItems;
+  bool                           mIsInFixedPosition;
+  bool                           mIsCompositingCheap;
 };
 
 class nsDisplayItem;
@@ -1016,8 +1030,10 @@ public:
   void AppendToBottom(nsDisplayList* aList) {
     if (aList->mSentinel.mAbove) {
       aList->mTop->mAbove = mSentinel.mAbove;
-      mTop = aList->mTop;
       mSentinel.mAbove = aList->mSentinel.mAbove;
+      if (mTop == &mSentinel) {
+        mTop = aList->mTop;
+      }
            
       aList->mTop = &aList->mSentinel;
       aList->mSentinel.mAbove = nsnull;
@@ -1613,6 +1629,7 @@ protected:
                                const nsRect& aRect, bool* aSnap);
 
   bool TryOptimizeToImageLayer(nsDisplayListBuilder* aBuilder);
+  bool IsSingleFixedPositionImage(nsDisplayListBuilder* aBuilder, const nsRect& aClipRect);
   void ConfigureLayer(ImageLayer* aLayer);
 
   /* Used to cache mFrame->IsThemed() since it isn't a cheap call */
@@ -1899,7 +1916,7 @@ public:
                                    LayerManager* aManager,
                                    const ContainerParameters& aParameters)
   {
-    return mozilla::LAYER_ACTIVE;
+    return mozilla::LAYER_ACTIVE_FORCE;
   }
   virtual bool TryMerge(nsDisplayListBuilder* aBuilder, nsDisplayItem* aItem)
   {
@@ -1907,6 +1924,28 @@ public:
     return false;
   }
   NS_DISPLAY_DECL_NAME("OwnLayer", TYPE_OWN_LAYER)
+};
+
+/**
+ * A display item used to represent fixed position elements. This will ensure
+ * the contents gets its own layer, and that the built layer will have
+ * position-related metadata set on it.
+ */
+class nsDisplayFixedPosition : public nsDisplayOwnLayer {
+public:
+  nsDisplayFixedPosition(nsDisplayListBuilder* aBuilder, nsIFrame* aFrame,
+                         nsIFrame* aFixedPosFrame, nsDisplayList* aList);
+#ifdef NS_BUILD_REFCNT_LOGGING
+  virtual ~nsDisplayFixedPosition();
+#endif
+
+  virtual already_AddRefed<Layer> BuildLayer(nsDisplayListBuilder* aBuilder,
+                                             LayerManager* aManager,
+                                             const ContainerParameters& aContainerParameters);
+  NS_DISPLAY_DECL_NAME("FixedPosition", TYPE_FIXED_POSITION)
+
+protected:
+  nsIFrame* mFixedPosFrame;
 };
 
 /**
@@ -2154,12 +2193,23 @@ public:
     *aSnap = false;
     return mEffectsBounds + ToReferenceFrame();
   }
-  virtual void Paint(nsDisplayListBuilder* aBuilder, nsRenderingContext* aCtx);
   virtual bool ComputeVisibility(nsDisplayListBuilder* aBuilder,
                                    nsRegion* aVisibleRegion,
                                    const nsRect& aAllowVisibleRegionExpansion);  
   virtual bool TryMerge(nsDisplayListBuilder* aBuilder, nsDisplayItem* aItem);
   NS_DISPLAY_DECL_NAME("SVGEffects", TYPE_SVG_EFFECTS)
+
+  virtual LayerState GetLayerState(nsDisplayListBuilder* aBuilder,
+                                   LayerManager* aManager,
+                                   const ContainerParameters& aParameters);
+ 
+  virtual already_AddRefed<Layer> BuildLayer(nsDisplayListBuilder* aBuilder,
+                                             LayerManager* aManager,
+                                             const ContainerParameters& aContainerParameters);
+
+  void PaintAsLayer(nsDisplayListBuilder* aBuilder,
+                    nsRenderingContext* aCtx,
+                    LayerManager* aManager);
 
 #ifdef MOZ_DUMP_PAINTING
   void PrintEffects(FILE* aOutput);
@@ -2211,7 +2261,7 @@ public:
   }
 #endif
 
-  NS_DISPLAY_DECL_NAME("nsDisplayTransform", TYPE_TRANSFORM);
+  NS_DISPLAY_DECL_NAME("nsDisplayTransform", TYPE_TRANSFORM)
 
   virtual nsRect GetComponentAlphaBounds(nsDisplayListBuilder* aBuilder)
   {

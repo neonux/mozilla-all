@@ -188,7 +188,7 @@ nsSVGSVGElement::Clone(nsINodeInfo *aNodeInfo, nsINode **aResult) const
 
   nsCOMPtr<nsINode> kungFuDeathGrip = it;
   nsresult rv = it->Init();
-  rv |= CopyInnerTo(it);
+  rv |= const_cast<nsSVGSVGElement*>(this)->CopyInnerTo(it);
   if (NS_SUCCEEDED(rv)) {
     kungFuDeathGrip.swap(*aResult);
   }
@@ -942,19 +942,21 @@ nsSVGSVGElement::ChildrenOnlyTransformChanged()
                       NS_STATE_SVG_NONDISPLAY_CHILD),
                     "Non-display SVG frames don't maintain overflow rects");
 
+  nsChangeHint changeHint;
+
   bool hasChildrenOnlyTransform = HasViewBoxOrSyntheticViewBox() ||
     (IsRoot() && (mCurrentTranslate != nsSVGTranslatePoint(0.0f, 0.0f) ||
                   mCurrentScale != 1.0f));
 
-  // XXXSDL Currently we don't destroy frames if
-  // hasChildrenOnlyTransform != mHasChildrenOnlyTransform
-  // but we should once we start using GFX layers for SVG transforms
-  // (see the comment in nsSVGGraphicElement::GetAttributeChangeHint).
-
-  nsChangeHint changeHint =
-    nsChangeHint(nsChangeHint_RepaintFrame |
-                 nsChangeHint_UpdateOverflow |
-                 nsChangeHint_ChildrenOnlyTransform);
+  if (hasChildrenOnlyTransform != mHasChildrenOnlyTransform) {
+    // Reconstruct the frame tree to handle stacking context changes:
+    changeHint = nsChangeHint_ReconstructFrame;
+  } else {
+    // We just assume the old and new transforms are different.
+    changeHint = nsChangeHint(nsChangeHint_RepaintFrame |
+                   nsChangeHint_UpdateOverflow |
+                   nsChangeHint_ChildrenOnlyTransform);
+  }
 
   nsLayoutUtils::PostRestyleEvent(this, nsRestyleHint(0), changeHint);
 
@@ -1143,16 +1145,6 @@ nsSVGSVGElement::GetLength(PRUint8 aCtxType)
     return float(nsSVGUtils::ComputeNormalizedHypotenuse(w, h));
   }
   return 0;
-}
-
-void
-nsSVGSVGElement::SyncWidthOrHeight(nsIAtom* aName, nsSVGElement *aTarget) const
-{
-  NS_ASSERTION(aName == nsGkAtoms::width || aName == nsGkAtoms::height,
-               "The clue is in the function name");
-
-  PRUint32 index = *sLengthInfo[WIDTH].mName == aName ? WIDTH : HEIGHT;
-  aTarget->SetLength(aName, mLengthAttributes[index]);
 }
 
 //----------------------------------------------------------------------

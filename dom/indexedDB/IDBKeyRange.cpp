@@ -10,11 +10,10 @@
 
 #include "nsIXPConnect.h"
 
-#include "nsDOMClassInfo.h"
 #include "nsJSUtils.h"
 #include "nsThreadUtils.h"
 #include "nsContentUtils.h"
-
+#include "nsDOMClassInfoID.h"
 #include "Key.h"
 
 #include "mozilla/dom/indexedDB/PIndexedDBIndex.h"
@@ -90,9 +89,7 @@ ThrowException(JSContext* aCx,
                nsresult aErrorCode)
 {
   NS_ASSERTION(NS_FAILED(aErrorCode), "Not an error code!");
-  if (!JS_IsExceptionPending(aCx)) {
-    nsDOMClassInfo::ThrowJSException(aCx, aErrorCode);
-  }
+  xpc::Throw(aCx, aErrorCode);
 }
 
 inline

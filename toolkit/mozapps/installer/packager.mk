@@ -171,7 +171,7 @@ RPM_CMD = \
   mkdir -p $(RPMBUILD_SOURCEDIR) && \
   $(PYTHON) $(topsrcdir)/config/Preprocessor.py \
 	-DMOZ_APP_NAME=$(MOZ_APP_NAME) \
-	-DMOZ_APP_DISPLAYNAME=$(MOZ_APP_DISPLAYNAME) \
+	-DMOZ_APP_DISPLAYNAME="$(MOZ_APP_DISPLAYNAME)" \
 	< $(RPM_INCIDENTALS)/mozilla.desktop \
 	> $(RPMBUILD_SOURCEDIR)/$(MOZ_APP_NAME).desktop && \
   rm -rf $(_ABS_DIST)/$(TARGET_CPU) && \
@@ -786,6 +786,10 @@ endif
 	$(PYTHON) $(MOZILLA_DIR)/toolkit/mozapps/installer/link-manifests.py \
 	  $(DIST)/$(MOZ_PKG_DIR)/$(_BINPATH)/chrome/localized.manifest \
 	  $(patsubst %,$(DIST)/manifests/%/chrome,$(MOZ_LOCALIZED_PKG_LIST))
+ifdef MOZ_WEBAPP_RUNTIME
+	mv $(DIST)/$(MOZ_PKG_DIR)/$(_BINPATH)/webapprt/chrome/$(AB_CD).manifest $(DIST)/$(MOZ_PKG_DIR)/$(_BINPATH)/webapprt/chrome/localized.manifest
+	sed 's/$(AB_CD)/localized/' $(DIST)/bin/webapprt/chrome.manifest > $(DIST)/$(MOZ_PKG_DIR)/$(_BINPATH)/webapprt/chrome.manifest
+endif
 	printf "manifest components/interfaces.manifest\nmanifest components/components.manifest\nmanifest chrome/nonlocalized.manifest\nmanifest chrome/localized.manifest\n" > $(DIST)/$(MOZ_PKG_DIR)/$(_BINPATH)/chrome.manifest
 else # !MOZ_PKG_MANIFEST
 ifeq ($(MOZ_WIDGET_TOOLKIT),cocoa)

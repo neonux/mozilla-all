@@ -250,6 +250,10 @@ function do_check_addon(aActualAddon, aExpectedAddon, aProperties) {
           do_check_compatibilityoverride(actualValue[i], expectedValue[i]);
         break;
 
+      case "icons":
+        do_check_icons(actualValue, expectedValue);
+        break;
+
       default:
         if (actualValue !== expectedValue)
           do_throw("Failed for " + aProperty + " for add-on " + aExpectedAddon.id +
@@ -307,6 +311,12 @@ function do_check_compatibilityoverride(aActual, aExpected) {
   do_check_eq(aActual.appID, aExpected.appID);
   do_check_eq(aActual.appMinVersion, aExpected.appMinVersion);
   do_check_eq(aActual.appMaxVersion, aExpected.appMaxVersion);
+}
+
+function do_check_icons(aActual, aExpected) {
+  for (var size in aExpected) {
+    do_check_eq(aActual[size], aExpected[size]);
+  }
 }
 
 /**
@@ -453,6 +463,8 @@ function isItemInAddonsList(aType, aDir, aId) {
   xpiPath.append(aId + ".xpi");
   for (var i = 0; i < gAddonsList[aType].length; i++) {
     let file = gAddonsList[aType][i];
+    if (!file.exists())
+      do_throw("Non-existant path found in extensions.ini: " + file.path)
     if (file.isDirectory() && file.equals(path))
       return true;
     if (file.isFile() && file.equals(xpiPath))

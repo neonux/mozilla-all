@@ -7,7 +7,6 @@
 
 #include "nsIDOMMouseEvent.h"
 #include "nsIDOMEventTarget.h"
-#include "nsIDOMDocument.h"
 #include "nsIDOMXULDocument.h"
 #include "nsIDOMXULElement.h"
 #include "nsIDocument.h"
@@ -497,9 +496,9 @@ nsXULTooltipListener::LaunchTooltip()
       // Because of mutation events, currentTooltip can be null.
       return;
     }
-    currentTooltip->SetAttr(nsnull, nsGkAtoms::titletip, NS_LITERAL_STRING("true"), true);
+    currentTooltip->SetAttr(kNameSpaceID_None, nsGkAtoms::titletip, NS_LITERAL_STRING("true"), true);
   } else {
-    currentTooltip->UnsetAttr(nsnull, nsGkAtoms::titletip, true);
+    currentTooltip->UnsetAttr(kNameSpaceID_None, nsGkAtoms::titletip, true);
   }
   if (!(currentTooltip = do_QueryReferent(mCurrentTooltip))) {
     // Because of mutation events, currentTooltip can be null.

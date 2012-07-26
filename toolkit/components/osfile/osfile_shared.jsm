@@ -151,16 +151,23 @@
        /**
         * Attach a finalizer to a type.
         */
-       releaseWith: function(finalizer) {
+       releaseWith: function releaseWith(finalizer) {
          let parent = this;
          let type = new Type("[auto " + finalizer +"] " + this.name,
            this.implementation,
-           function (value, operation) {
+           function release(value, operation) {
              return ctypes.CDataFinalizer(
                parent.convert_from_c(value, operation),
                finalizer);
            });
          return type;
+       },
+
+       /**
+        * Return an alias to a type with a different name.
+        */
+       withName: function withName(name) {
+         return Object.create(this, {name: {value: name}});
        }
      };
 
@@ -177,12 +184,7 @@
        return parseInt(x.toString(), 10);
      };
      let projectLargeUInt = function projectLargeUInt(x) {
-       if (ctypes.UInt64.hi(x)) {
-         throw new Error("Number too large " + x +
-             "(unsigned, hi: " + ctypes.UInt64.hi(x) +
-                 ", lo:" + ctypes.UInt64.lo(x) + ")");
-       }
-       return ctypes.UInt64.lo(x);
+       return parseInt(x.toString(), 10);
      };
      let projectValue = function projectValue(x) {
        if (!(x instanceof ctypes.CData)) {
@@ -218,7 +220,47 @@
        LOG("Projected as a regular number");
        return projectValue;
      };
+     exports.OS.Shared.projectValue = projectValue;
 
+
+
+     /**
+      * Get the appropriate type for an unsigned int of the given size.
+      *
+      * This function is useful to define types such as |mode_t| whose
+      * actual width depends on the OS/platform.
+      *
+      * @param {number} size The number of bytes requested.
+      */
+     Types.uintn_t = function uintn_t(size) {
+       switch (size) {
+       case 1: return Types.uint8_t;
+       case 2: return Types.uint16_t;
+       case 4: return Types.uint32_t;
+       case 8: return Types.uint64_t;
+       default:
+         throw new Error("Cannot represent unsigned integers of " + size + " bytes");
+       }
+     };
+
+     /**
+      * Get the appropriate type for an signed int of the given size.
+      *
+      * This function is useful to define types such as |mode_t| whose
+      * actual width depends on the OS/platform.
+      *
+      * @param {number} size The number of bytes requested.
+      */
+     Types.intn_t = function intn_t(size) {
+       switch (size) {
+       case 1: return Types.int8_t;
+       case 2: return Types.int16_t;
+       case 4: return Types.int32_t;
+       case 8: return Types.int64_t;
+       default:
+         throw new Error("Cannot represent integers of " + size + " bytes");
+       }
+     };
 
      /**
       * Actual implementation of common C types.
@@ -280,6 +322,34 @@
                 projector(ctypes.unsigned_int, false));
 
      /**
+      * A C integer (8-bits).
+      */
+     Types.int8_t =
+       new Type("int8_t",
+                ctypes.int8_t,
+                projectValue);
+
+     Types.uint8_t =
+       new Type("uint8_t",
+                ctypes.uint8_t,
+                projectValue);
+
+     /**
+      * A C integer (16-bits).
+      *
+      * Also known as WORD under Windows.
+      */
+     Types.int16_t =
+       new Type("int16_t",
+                ctypes.int16_t,
+                projectValue);
+
+     Types.uint16_t =
+       new Type("uint16_t",
+                ctypes.uint16_t,
+                projectValue);
+
+     /**
       * A C integer (32-bits).
       *
       * Also known as DWORD under Windows.
@@ -293,6 +363,19 @@
        new Type("uint32_t",
                 ctypes.uint32_t,
                 projectValue);
+
+     /**
+      * A C integer (64-bits).
+      */
+     Types.int64_t =
+       new Type("int64_t",
+                ctypes.int64_t,
+                projectLargeInt);
+
+     Types.uint64_t =
+       new Type("uint64_t",
+                ctypes.uint64_t,
+                projectLargeUInt);
 
      /**
       * A C integer.
@@ -313,15 +396,6 @@
                 function projectBool(x) {
                   return !!(x.value);
                 });
-
-     /**
-      * A file access mode
-      * Implemented as a C integer.
-      */
-     Types.mode_t =
-       new Type("mode_t",
-                ctypes.int,
-                projector(ctypes.int, true));
 
      /**
       * A user identifier.
@@ -368,6 +442,147 @@
                 ctypes.ssize_t,
                 projector(ctypes.ssize_t, true));
 
+
+     /**
+      * Utility class, used to build a |struct| type
+      * from a set of field names, types and offsets.
+      *
+      * @param {string} name The name of the |struct| type.
+      * @param {number} size The total size of the |struct| type in bytes.
+      */
+     function HollowStructure(name, size) {
+       if (!name) {
+         throw new TypeError("HollowStructure expects a name");
+       }
+       if (!size || size < 0) {
+         throw new TypeError("HollowStructure expects a (positive) size");
+       }
+
+       // A mapping from offsets in the struct to name/type pairs
+       // (or nothing if no field starts at that offset).
+       this.offset_to_field_info = [];
+
+       // The name of the struct
+       this.name = name;
+
+       // The size of the struct, in bytes
+       this.size = size;
+
+       // The number of paddings inserted so far.
+       // Used to give distinct names to padding fields.
+       this._paddings = 0;
+     }
+     HollowStructure.prototype = {
+       /**
+        * Add a field at a given offset.
+        *
+        * @param {number} offset The offset at which to insert the field.
+        * @param {string} name The name of the field.
+        * @param {CType|Type} type The type of the field.
+        */
+       add_field_at: function add_field_at(offset, name, type) {
+         if (offset == null) {
+           throw new TypeError("add_field_at requires a non-null offset");
+         }
+         if (!name) {
+           throw new TypeError("add_field_at requires a non-null name");
+         }
+         if (!type) {
+           throw new TypeError("add_field_at requires a non-null type");
+         }
+         if (type instanceof Type) {
+           type = type.implementation;
+         }
+         if (this.offset_to_field_info[offset]) {
+           throw new Error("HollowStructure " + this.name +
+                           " already has a field at offset " + offset);
+         }
+         if (offset + type.size > this.size) {
+           throw new Error("HollowStructure " + this.name +
+                           " cannot place a value of type " + type +
+                           " at offset " + offset +
+                           " without exceeding its size of " + this.size);
+         }
+         let field = {name: name, type:type};
+         this.offset_to_field_info[offset] = field;
+       },
+
+       /**
+        * Create a pseudo-field that will only serve as padding.
+        *
+        * @param {number} size The number of bytes in the field.
+        * @return {Object} An association field-name => field-type,
+        * as expected by |ctypes.StructType|.
+        */
+       _makePaddingField: function makePaddingField(size) {
+         let field = ({});
+         field["padding_" + this._paddings] =
+           ctypes.ArrayType(ctypes.uint8_t, size);
+         this._paddings++;
+         return field;
+       },
+
+       /**
+        * Convert this |HollowStructure| into a |Type|.
+        */
+       getType: function getType() {
+         // Contents of the structure, in the format expected
+         // by ctypes.StructType.
+         let struct = [];
+
+         let i = 0;
+         while (i < this.size) {
+           let currentField = this.offset_to_field_info[i];
+           if (!currentField) {
+             // No field was specified at this offset, we need to
+             // introduce some padding.
+
+             // Firstly, determine how many bytes of padding
+             let padding_length = 1;
+             while (i + padding_length < this.size
+                 && !this.offset_to_field_info[i + padding_length]) {
+               ++padding_length;
+             }
+
+             // Then add the padding
+             struct.push(this._makePaddingField(padding_length));
+
+             // And proceed
+             i += padding_length;
+           } else {
+             // We have a field at this offset.
+
+             // Firstly, ensure that we do not have two overlapping fields
+             for (let j = 1; j < currentField.type.size; ++j) {
+               let candidateField = this.offset_to_field_info[i + j];
+               if (candidateField) {
+                 throw new Error("Fields " + currentField.name +
+                   " and " + candidateField.name +
+                   " overlap at position " + (i + j));
+               }
+             }
+
+             // Then add the field
+             let field = ({});
+             field[currentField.name] = currentField.type;
+             struct.push(field);
+
+             // And proceed
+             i += currentField.type.size;
+           }
+         }
+         let result = new Type(this.name, ctypes.StructType(this.name, struct));
+         if (result.implementation.size != this.size) {
+           throw new Error("Wrong size for type " + this.name +
+               ": expected " + this.size +
+               ", found " + result.implementation.size +
+               " (" + result.implementation.toSource() + ")");
+         }
+         return result;
+       }
+     };
+     exports.OS.Shared.HollowStructure = HollowStructure;
+
      /**
       * Declare a function through js-ctypes
       *
@@ -401,6 +616,10 @@
        let argtypes  = [];
        for (let i = 3; i < arguments.length; ++i) {
          let current = arguments[i];
+         if (!current) {
+           throw new TypeError("Missing type for argument " + ( i - 3 ) +
+                               " of symbol " + symbol);
+         }
          if (!current.implementation) {
            throw new TypeError("Missing implementation for argument " + (i - 3)
                                + " of symbol " + symbol

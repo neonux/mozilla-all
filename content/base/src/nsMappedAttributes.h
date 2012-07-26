@@ -14,12 +14,13 @@
 #include "nsAttrAndChildArray.h"
 #include "nsMappedAttributeElement.h"
 #include "nsIStyleRule.h"
+#include "mozilla/Attributes.h"
 
 class nsIAtom;
 class nsHTMLStyleSheet;
 class nsRuleWalker;
 
-class nsMappedAttributes : public nsIStyleRule
+class nsMappedAttributes MOZ_FINAL : public nsIStyleRule
 {
 public:
   nsMappedAttributes(nsHTMLStyleSheet* aSheet,
@@ -33,6 +34,7 @@ public:
 
   nsresult SetAndTakeAttr(nsIAtom* aAttrName, nsAttrValue& aValue);
   const nsAttrValue* GetAttr(nsIAtom* aAttrName) const;
+  const nsAttrValue* GetAttr(const nsAString& aAttrName) const;
 
   PRUint32 Count() const
   {
@@ -66,7 +68,7 @@ public:
   // aValue; any value that was already in aValue is destroyed.
   void RemoveAttrAt(PRUint32 aPos, nsAttrValue& aValue);
   const nsAttrName* GetExistingAttrNameFromQName(const nsAString& aName) const;
-  PRInt32 IndexOfAttr(nsIAtom* aLocalName, PRInt32 aNamespaceID) const;
+  PRInt32 IndexOfAttr(nsIAtom* aLocalName) const;
   
 
   // nsIStyleRule 

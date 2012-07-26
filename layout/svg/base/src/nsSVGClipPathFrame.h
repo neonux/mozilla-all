@@ -30,6 +30,13 @@ protected:
 public:
   NS_DECL_FRAMEARENA_HELPERS
 
+  // nsIFrame methods:
+  NS_IMETHOD BuildDisplayList(nsDisplayListBuilder*   aBuilder,
+                              const nsRect&           aDirtyRect,
+                              const nsDisplayListSet& aLists) {
+    return NS_OK;
+  }
+
   // nsSVGClipPathFrame methods:
   nsresult ClipPaint(nsRenderingContext* aContext,
                      nsIFrame* aParent,
@@ -95,7 +102,7 @@ public:
   bool mInUse;
 
   // nsSVGContainerFrame methods:
-  virtual gfxMatrix GetCanvasTM();
+  virtual gfxMatrix GetCanvasTM(PRUint32 aFor);
 };
 
 #endif

@@ -67,6 +67,7 @@
 #include "nsEventListenerManager.h"
 #include "nsIDOMDragEvent.h"
 #include "nsIConstraintValidation.h"
+#include "mozilla/Attributes.h"
 
 using namespace mozilla;
 
@@ -583,6 +584,13 @@ nsDocShellTreeOwner::SetParentNativeWindow(nativeWindow aParentNativeWindow)
 }
 
 NS_IMETHODIMP
+nsDocShellTreeOwner::GetNativeHandle(nsAString& aNativeHandle)
+{
+  // the nativeHandle should be accessed from nsIXULWindow
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
 nsDocShellTreeOwner::GetVisibility(bool* aVisibility)
 {
   nsCOMPtr<nsIEmbeddingSiteWindow> ownerWin = GetOwnerWin();
@@ -968,7 +976,7 @@ nsDocShellTreeOwner::GetOwnerRequestor()
 ///////////////////////////////////////////////////////////////////////////////
 // DefaultTooltipTextProvider
 
-class DefaultTooltipTextProvider : public nsITooltipTextProvider
+class DefaultTooltipTextProvider MOZ_FINAL : public nsITooltipTextProvider
 {
 public:
     DefaultTooltipTextProvider();

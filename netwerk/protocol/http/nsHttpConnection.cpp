@@ -49,6 +49,7 @@ nsHttpConnection::nsHttpConnection()
     , mTotalBytesWritten(0)
     , mKeepAlive(true) // assume to keep-alive by default
     , mKeepAliveMask(true)
+    , mDontReuse(false)
     , mSupportsPipelining(false) // assume low-grade server
     , mIsReused(false)
     , mCompletedProxyConnect(false)
@@ -349,8 +350,7 @@ nsHttpConnection::Activate(nsAHttpTransaction *trans, PRUint8 caps, PRInt32 pri)
 
     // need to handle HTTP CONNECT tunnels if this is the first time if
     // we are tunneling through a proxy
-    if (((mConnInfo->UsingSSL() && mConnInfo->UsingHttpProxy()) ||
-         mConnInfo->ShouldForceConnectMethod()) && !mCompletedProxyConnect) {
+    if (mConnInfo->UsingConnect() && !mCompletedProxyConnect) {
         rv = SetupProxyConnect();
         if (NS_FAILED(rv))
             goto failed_activation;
@@ -517,6 +517,7 @@ nsHttpConnection::DontReuse()
 {
     mKeepAliveMask = false;
     mKeepAlive = false;
+    mDontReuse = true;
     mIdleTimeout = 0;
     if (mSpdySession)
         mSpdySession->DontReuse();
@@ -533,12 +534,15 @@ nsHttpConnection::SupportsPipelining()
              this, mTransaction->PipelineDepth(), mRemainingConnectionUses));
         return false;
     }
-    return mSupportsPipelining && IsKeepAlive();
+    return mSupportsPipelining && IsKeepAlive() && !mDontReuse;
 }
 
 bool
 nsHttpConnection::CanReuse()
 {
+    if (mDontReuse)
+        return false;
+
     if ((mTransaction ? mTransaction->PipelineDepth() : 0) >=
         mRemainingConnectionUses) {
         return false;
@@ -637,7 +641,7 @@ nsHttpConnection::SupportsPipelining(nsHttpResponseHead *responseHead)
         return false;
 
     // assuming connection is HTTP/1.1 with keep-alive enabled
-    if (mConnInfo->UsingHttpProxy() && !mConnInfo->UsingSSL()) {
+    if (mConnInfo->UsingHttpProxy() && !mConnInfo->UsingConnect()) {
         // XXX check for bad proxy servers...
         return true;
     }
@@ -963,24 +967,23 @@ nsHttpConnection::ReadTimeoutTick(PRIntervalTime now)
 
     PRUint32 pipelineDepth = mTransaction->PipelineDepth();
 
-    if (delta >= gHttpHandler->GetPipelineRescheduleTimeout()) {
+    if (delta >= gHttpHandler->GetPipelineRescheduleTimeout() &&
+        pipelineDepth > 1) {
 
         // this just reschedules blocked transactions. no transaction
         // is aborted completely.
         LOG(("cancelling pipeline due to a %ums stall - depth %d\n",
              PR_IntervalToMilliseconds(delta), pipelineDepth));
 
-        if (pipelineDepth > 1) {
-            nsHttpPipeline *pipeline = mTransaction->QueryPipeline();
-            NS_ABORT_IF_FALSE(pipeline, "pipelinedepth > 1 without pipeline");
-            // code this defensively for the moment and check for null in opt build
-            // This will reschedule blocked members of the pipeline, but the
-            // blocking transaction (i.e. response 0) will not be changed.
-            if (pipeline) {
-                pipeline->CancelPipeline(NS_ERROR_NET_TIMEOUT);
-                LOG(("Rescheduling the head of line blocked members of a pipeline "
-                     "because reschedule-timeout idle interval exceeded"));
-            }
+        nsHttpPipeline *pipeline = mTransaction->QueryPipeline();
+        NS_ABORT_IF_FALSE(pipeline, "pipelinedepth > 1 without pipeline");
+        // code this defensively for the moment and check for null in opt build
+        // This will reschedule blocked members of the pipeline, but the
+        // blocking transaction (i.e. response 0) will not be changed.
+        if (pipeline) {
+            pipeline->CancelPipeline(NS_ERROR_NET_TIMEOUT);
+            LOG(("Rescheduling the head of line blocked members of a pipeline "
+                 "because reschedule-timeout idle interval exceeded"));
         }
     }
 
@@ -1366,6 +1369,20 @@ nsHttpConnection::OnSocketReadable()
     bool again = true;
 
     do {
+        if (!mProxyConnectInProgress && !mNPNComplete) {
+            // Unless we are setting up a tunnel via CONNECT, prevent reading
+            // from the socket until the results of NPN
+            // negotiation are known (which is determined from the write path).
+            // If the server speaks SPDY it is likely the readable data here is
+            // a spdy settings frame and without NPN it would be misinterpreted
+            // as HTTP/*
+
+            LOG(("nsHttpConnection::OnSocketReadable %p return due to inactive "
+                 "tunnel setup but incomplete NPN state\n", this));
+            rv = NS_OK;
+            break;
+        }
+
         rv = mTransaction->WriteSegments(this, nsIOService::gDefaultSegmentSize, &n);
         if (NS_FAILED(rv)) {
             // if the transaction didn't want to take any more data, then

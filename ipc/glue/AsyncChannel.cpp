@@ -13,7 +13,8 @@
 #include "nsTraceRefcnt.h"
 #include "nsXULAppAPI.h"
 
-using mozilla::MonitorAutoLock;
+using namespace mozilla;
+using namespace std;
 
 template<>
 struct RunnableMethodTraits<mozilla::ipc::AsyncChannel>
@@ -115,7 +116,6 @@ AsyncChannel::ProcessLink::Open(mozilla::ipc::Transport* aTransport,
     // FIXME need to check for valid channel
 
     mTransport = aTransport;
-    mExistingListener = mTransport->set_listener(this);
 
     // FIXME figure out whether we're in parent or child, grab IO loop
     // appropriately
@@ -132,9 +132,6 @@ AsyncChannel::ProcessLink::Open(mozilla::ipc::Transport* aTransport,
         mChan->mChild = false;
         needOpen = false;
         aIOLoop = XRE_GetIOMessageLoop();
-        // FIXME assuming that the parent waits for the OnConnected event.
-        // FIXME see GeckoChildProcessHost.cpp.  bad assumption!
-        mChan->mChannelState = ChannelConnected;
     }
 
     mIOLoop = aIOLoop;
@@ -142,14 +139,27 @@ AsyncChannel::ProcessLink::Open(mozilla::ipc::Transport* aTransport,
     NS_ASSERTION(mIOLoop, "need an IO loop");
     NS_ASSERTION(mChan->mWorkerLoop, "need a worker loop");
 
-    if (needOpen) {             // child process
+    {
         MonitorAutoLock lock(*mChan->mMonitor);
 
-        mIOLoop->PostTask(FROM_HERE, 
-                          NewRunnableMethod(this, &ProcessLink::OnChannelOpened));
+        if (needOpen) {
+            // Transport::Connect() has not been called.  Call it so
+            // we start polling our pipe and processing outgoing
+            // messages.
+            mIOLoop->PostTask(
+                FROM_HERE,
+                NewRunnableMethod(this, &ProcessLink::OnChannelOpened));
+        } else {
+            // Transport::Connect() has already been called.  Take
+            // over the channel from the previous listener and process
+            // any queued messages.
+            mIOLoop->PostTask(
+                FROM_HERE,
+                NewRunnableMethod(this, &ProcessLink::OnTakeConnectedChannel));
+        }
 
         // FIXME/cjones: handle errors
-        while (mChan->mChannelState != ChannelConnected) {
+        while (!mChan->Connected()) {
             mChan->mMonitor->Wait();
         }
     }
@@ -482,6 +492,8 @@ AsyncChannel::OnNotifyMaybeChannelError()
     AssertWorkerThread();
     mMonitor->AssertNotCurrentThreadOwns();
 
+    mChannelErrorTask = NULL;
+
     // OnChannelError holds mMonitor when it posts this task and this
     // task cannot be allowed to run until OnChannelError has
     // exited. We enforce that order by grabbing the mutex here which
@@ -668,9 +680,45 @@ AsyncChannel::ProcessLink::OnChannelOpened()
     mChan->AssertLinkThread();
     {
         MonitorAutoLock lock(*mChan->mMonitor);
+
+        mExistingListener = mTransport->set_listener(this);
+#ifdef DEBUG
+        if (mExistingListener) {
+            queue<Message> pending;
+            mExistingListener->GetQueuedMessages(pending);
+            MOZ_ASSERT(pending.empty());
+        }
+#endif  // DEBUG
+
         mChan->mChannelState = ChannelOpening;
+        lock.Notify();
     }
     /*assert*/mTransport->Connect();
+}
+
+void
+AsyncChannel::ProcessLink::OnTakeConnectedChannel()
+{
+    AssertIOThread();
+
+    queue<Message> pending;
+    {
+        MonitorAutoLock lock(*mChan->mMonitor);
+
+        mChan->mChannelState = ChannelConnected;
+
+        mExistingListener = mTransport->set_listener(this);
+        if (mExistingListener) {
+            mExistingListener->GetQueuedMessages(pending);
+        }
+        lock.Notify();
+    }
+
+    // Dispatch whatever messages the previous listener had queued up.
+    while (!pending.empty()) {
+        OnMessageReceived(pending.front());
+        pending.pop();
+    }
 }
 
 void
@@ -744,12 +792,26 @@ AsyncChannel::OnChannelErrorFromLink()
 }
 
 void
+AsyncChannel::CloseWithError()
+{
+    AssertWorkerThread();
+
+    MonitorAutoLock lock(*mMonitor);
+    if (ChannelConnected != mChannelState) {
+        return;
+    }
+    SynchronouslyClose();
+    mChannelState = ChannelError;
+    PostErrorNotifyTask();
+}
+
+void
 AsyncChannel::PostErrorNotifyTask()
 {
-    AssertLinkThread();
     mMonitor->AssertCurrentThreadOwns();
 
-    NS_ASSERTION(!mChannelErrorTask, "OnChannelError called twice?");
+    if (mChannelErrorTask)
+        return;
 
     // This must be the last code that runs on this thread!
     mChannelErrorTask =

@@ -800,6 +800,20 @@ Declaration::GetValue(nsCSSProperty aProperty, nsAString& aValue) const
       AppendValueToString(subprops[1], aValue);
       break;
     }
+#ifdef MOZ_FLEXBOX
+    case eCSSProperty_flex: {
+      // flex-grow, flex-shrink, flex-basis, separated by single space
+      const nsCSSProperty* subprops =
+        nsCSSProps::SubpropertyEntryFor(aProperty);
+
+      AppendValueToString(subprops[0], aValue);
+      aValue.Append(PRUnichar(' '));
+      AppendValueToString(subprops[1], aValue);
+      aValue.Append(PRUnichar(' '));
+      AppendValueToString(subprops[2], aValue);
+      break;
+    }
+#endif // MOZ_FLEXBOX
     default:
       NS_ABORT_IF_FALSE(false, "no other shorthands");
       break;
@@ -809,7 +823,7 @@ Declaration::GetValue(nsCSSProperty aProperty, nsAString& aValue) const
 bool
 Declaration::GetValueIsImportant(const nsAString& aProperty) const
 {
-  nsCSSProperty propID = nsCSSProps::LookupProperty(aProperty);
+  nsCSSProperty propID = nsCSSProps::LookupProperty(aProperty, nsCSSProps::eAny);
   if (propID == eCSSProperty_UNKNOWN) {
     return false;
   }

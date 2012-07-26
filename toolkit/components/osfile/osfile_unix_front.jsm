@@ -18,6 +18,7 @@
   }
   importScripts("resource://gre/modules/osfile/osfile_shared.jsm");
   importScripts("resource://gre/modules/osfile/osfile_unix_back.jsm");
+  importScripts("resource://gre/modules/osfile/ospath_unix_back.jsm");
   (function(exports) {
      "use strict";
 
@@ -159,6 +160,16 @@
          return throw_on_negative("setPosition",
            UnixFile.lseek(this.fd, pos, whence)
          );
+       },
+
+       /**
+        * Fetch the information on the file.
+        *
+        * @return File.Info The information on |this| file.
+        */
+       stat: function stat() {
+         throw_on_negative("stat", UnixFile.fstat(this.fd, gStatDataPtr));
+         return new File.Info(gStatData);
        }
      };
 
@@ -590,6 +601,232 @@
 
      } // End of definition of copy/move
 
+     /**
+      * Iterate on one directory.
+      *
+      * This iterator will not enter subdirectories.
+      *
+      * @param {string} path The directory upon which to iterate.
+      * @param {*=} options Ignored in this implementation.
+      *
+      * @throws {File.Error} If |path| does not represent a directory or
+      * if the directory cannot be iterated.
+      * @constructor
+      */
+     File.DirectoryIterator = function DirectoryIterator(path, options) {
+       let dir = throw_on_null("DirectoryIterator", UnixFile.opendir(path));
+       this._dir = dir;
+       this._path = path;
+     };
+     File.DirectoryIterator.prototype = {
+       __iterator__: function __iterator__() {
+         return this;
+       },
+       /**
+        * Return the next entry in the directory, if any such entry is
+        * available.
+        *
+        * Skip special directories "." and "..".
+        *
+        * @return {File.Entry} The next entry in the directory.
+        * @throws {StopIteration} Once all files in the directory have been
+        * encountered.
+        */
+       next: function next() {
+         if (!this._dir) {
+           throw StopIteration;
+         }
+         for (let entry = UnixFile.readdir(this._dir);
+              entry != null && !entry.isNull();
+              entry = UnixFile.readdir(this._dir)) {
+           let contents = entry.contents;
+           if (contents.d_type == OS.Constants.libc.DT_DIR) {
+             let name = contents.d_name.readString();
+             if (name == "." || name == "..") {
+               continue;
+             }
+           }
+           return new File.DirectoryIterator.Entry(contents, this._path);
+         }
+         this.close();
+         throw StopIteration;
+       },
+
+       /**
+        * Close the iterator and recover all resources.
+        * You should call this once you have finished iterating on a directory.
+        */
+       close: function close() {
+         if (!this._dir) return;
+         UnixFile.closedir(this._dir);
+         this._dir = null;
+       }
+     };
+
+     /**
+      * An entry in a directory.
+      */
+     File.DirectoryIterator.Entry = function Entry(unix_entry, parent) {
+       // Copy the relevant part of |unix_entry| to ensure that
+       // our data is not overwritten prematurely.
+       this._d_type = unix_entry.d_type;
+       this._name = unix_entry.d_name.readString();
+       this._parent = parent;
+     };
+     File.DirectoryIterator.Entry.prototype = {
+       /**
+        * |true| if the entry is a directory, |false| otherwise
+        */
+       get isDir() {
+         return this._d_type == OS.Constants.libc.DT_DIR;
+       },
+
+       /**
+        * |true| if the entry is a symbolic link, |false| otherwise
+        */
+       get isSymLink() {
+         return this._d_type == OS.Constants.libc.DT_LNK;
+       },
+
+       /**
+        * The name of the entry.
+        * @type {string}
+        */
+       get name() {
+         return this._name;
+       },
+
+       /**
+        * The full path to the entry.
+        */
+       get path() {
+         delete this.path;
+         let path = OS.Unix.Path.join(this._parent, this.name);
+         Object.defineProperty(this, "path", {value: path});
+         return path;
+       }
+     };
+
+     let gStatData = new OS.Shared.Type.stat.implementation();
+     let gStatDataPtr = gStatData.address();
+     let MODE_MASK = 4095 /*= 07777*/;
+     File.Info = function Info(stat) {
+       this._st_mode = stat.st_mode;
+       this._st_uid = stat.st_uid;
+       this._st_gid = stat.st_gid;
+       this._st_atime = stat.st_atime;
+       this._st_mtime = stat.st_mtime;
+       this._st_ctime = stat.st_ctime;
+       this._st_size = stat.st_size;
+     };
+     File.Info.prototype = {
+       /**
+        * |true| if this file is a directory, |false| otherwise
+        */
+       get isDir() {
+         return (this._st_mode & OS.Constants.libc.S_IFMT) == OS.Constants.libc.S_IFDIR;
+       },
+       /**
+        * |true| if this file is a symbolink link, |false| otherwise
+        */
+       get isSymLink() {
+         return (this._st_mode & OS.Constants.libc.S_IFMT) == OS.Constants.libc.S_IFLNK;
+       },
+       /**
+        * The size of the file, in bytes.
+        *
+        * Note that the result may be |NaN| if the size of the file cannot be
+        * represented in JavaScript.
+        *
+        * @type {number}
+        */
+       get size() {
+         delete this.size;
+         let size;
+         try {
+           size = OS.Shared.projectValue(this._st_size);
+         } catch(x) {
+           LOG("get size error", x);
+           size = NaN;
+         }
+         Object.defineProperty(this, "size", { value: size });
+         return size;
+       },
+       /**
+        * The date of creation of this file
+        *
+        * @type {Date}
+        */
+       get creationDate() {
+         delete this.creationDate;
+         let date = new Date(this._st_ctime * 1000);
+         Object.defineProperty(this, "creationDate", { value: date });
+         return date;
+       },
+       /**
+        * The date of last access to this file.
+        *
+        * Note that the definition of last access may depend on the
+        * underlying operating system and file system.
+        *
+        * @type {Date}
+        */
+       get lastAccessDate() {
+         delete this.lastAccessDate;
+         let date = new Date(this._st_atime * 1000);
+         Object.defineProperty(this, "lastAccessDate", {value: date});
+         return date;
+       },
+       /**
+        * Return the date of last modification of this file.
+        */
+       get lastModificationDate() {
+         delete this.lastModificationDate;
+         let date = new Date(this._st_mtime * 1000);
+         Object.defineProperty(this, "lastModificationDate", {value: date});
+         return date;
+       },
+       /**
+        * Return the Unix owner of this file.
+        */
+       get unixOwner() {
+         return this._st_uid;
+       },
+       /**
+        * Return the Unix group of this file.
+        */
+       get unixGroup() {
+         return this._st_gid;
+       },
+       /**
+        * Return the Unix mode of this file.
+        */
+       get unixMode() {
+         return this._st_mode & MODE_MASK;
+       }
+     };
+
+     /**
+      * Fetch the information on a file.
+      *
+      * @param {string} path The full name of the file to open.
+      * @param {*=} options Additional options. In this implementation:
+      *
+      * - {bool} unixNoFollowingLinks If set and |true|, if |path|
+      * represents a symbolic link, the call will return the information
+      * of the link itself, rather than that of the target file.
+      *
+      * @return {File.Information}
+      */
+     File.stat = function stat(path, options) {
+       options = options || noOptions;
+       if (options.unixNoFollowingLinks) {
+         throw_on_negative("stat", UnixFile.lstat(path, gStatDataPtr));
+       } else {
+         throw_on_negative("stat", UnixFile.stat(path, gStatDataPtr));
+       }
+       return new File.Info(gStatData);
+     };
 
      /**
       * Get/set the current directory.
@@ -601,11 +838,10 @@
            );
          },
          get: function() {
-           let path = UnixFile.getwd(null);
-           if (path.isNull()) {
-             throw new File.Error("getwd");
-           }
-           return ctypes.CDataFinalizer(path, UnixFile.free);
+           let path = UnixFile.get_current_dir_name?UnixFile.get_current_dir_name():
+             UnixFile.getwd_auto(null);
+           throw_on_null("curDir",path);
+           return path.readString();
          }
        }
      );
@@ -633,6 +869,13 @@
       */
      function throw_on_negative(operation, result) {
        if (result < 0) {
+         throw new File.Error(operation);
+       }
+       return result;
+     }
+
+     function throw_on_null(operation, result) {
+       if (result == null || (result.isNull && result.isNull())) {
          throw new File.Error(operation);
        }
        return result;

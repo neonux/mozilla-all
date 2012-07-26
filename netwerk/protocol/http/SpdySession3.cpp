@@ -78,7 +78,8 @@ SpdySession3::SpdySession3(nsAHttpTransaction *aHttpTransaction,
   mSendingChunkSize = gHttpHandler->SpdySendingChunkSize();
   GenerateSettings();
 
-  AddStream(aHttpTransaction, firstPriority);
+  if (!aHttpTransaction->IsNullTransaction())
+    AddStream(aHttpTransaction, firstPriority);
   mLastDataReadEpoch = mLastReadEpoch;
   
   DeterminePingThreshold();
@@ -699,6 +700,11 @@ SpdySession3::VerifyStream(SpdyStream3 *aStream, PRUint32 aOptionalID = 0)
 {
   // This is annoying, but at least it is O(1)
   NS_ABORT_IF_FALSE(PR_GetCurrentThread() == gSocketThread, "wrong thread");
+
+#ifndef DEBUG
+  // Only do the real verification in debug builds
+  return true;
+#endif
 
   if (!aStream)
     return true;
@@ -2086,12 +2092,18 @@ SpdySession3::OnWriteSegment(char *buf,
     *countWritten = count;
 
     if (mFlatHTTPResponseHeaders.Length() == mFlatHTTPResponseHeadersOut) {
-      // Now ready to process data frames.
       if (mDataPending) {
+        // Now ready to process data frames - pop PROCESING_DATA_FRAME back onto
+        // the stack because receipt of that first data frame triggered the
+        // response header processing
         mDataPending = false;
         ChangeDownstreamState(PROCESSING_DATA_FRAME);
       }
-      else {
+      else if (!mInputFrameDataLast) {
+        // If more frames are expected in this stream, then reset the state so they can be
+        // handled. Otherwise (e.g. a 0 length response with the fin on the SYN_REPLY)
+        // stay in PROCESSING_COMPLETE_HEADERS state so the SetNeedsCleanup() code above can
+        // cleanup the stream.
         ResetDownstreamState();
       }
     }

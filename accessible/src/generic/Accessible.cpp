@@ -67,7 +67,7 @@
 #include "nsNetUtil.h"
 #include "nsEventStates.h"
 
-#ifdef NS_DEBUG
+#ifdef DEBUG
 #include "nsIDOMCharacterData.h"
 #endif
 
@@ -111,7 +111,7 @@ Accessible::QueryInterface(REFNSIID aIID, void** aInstancePtr)
   *aInstancePtr = nsnull;
 
   if (aIID.Equals(NS_GET_IID(nsXPCOMCycleCollectionParticipant))) {
-    *aInstancePtr = &NS_CYCLE_COLLECTION_NAME(Accessible);
+    *aInstancePtr = NS_CYCLE_COLLECTION_PARTICIPANT(Accessible);
     return NS_OK;
   }
 
@@ -192,6 +192,12 @@ void
 Accessible::SetRoleMapEntry(nsRoleMapEntry* aRoleMapEntry)
 {
   mRoleMapEntry = aRoleMapEntry;
+}
+
+bool
+Accessible::Init()
+{
+  return true;
 }
 
 NS_IMETHODIMP
@@ -670,13 +676,28 @@ Accessible::NativeState()
   state |= VisibilityState();
 
   nsIFrame *frame = GetFrame();
-  if (frame && (frame->GetStateBits() & NS_FRAME_OUT_OF_FLOW))
-    state |= states::FLOATING;
+  if (frame) {
+    if (frame->GetStateBits() & NS_FRAME_OUT_OF_FLOW)
+      state |= states::FLOATING;
+
+    // XXX we should look at layout for non XUL box frames, but need to decide
+    // how that interacts with ARIA.
+    if (mContent->IsXUL() && frame->IsBoxFrame()) {
+      const nsStyleXUL* xulStyle = frame->GetStyleXUL();
+      if (xulStyle && frame->IsBoxFrame()) {
+        // In XUL all boxes are either vertical or horizontal
+        if (xulStyle->mBoxOrient == NS_STYLE_BOX_ORIENT_VERTICAL)
+          state |= states::VERTICAL;
+        else
+          state |= states::HORIZONTAL;
+      }
+    }
+  }
 
   // Check if a XUL element has the popup attribute (an attached popup menu).
-  if (mContent->IsXUL())
-    if (mContent->HasAttr(kNameSpaceID_None, nsGkAtoms::popup))
-      state |= states::HASPOPUP;
+      if (mContent->IsXUL() && mContent->HasAttr(kNameSpaceID_None,
+                                                 nsGkAtoms::popup))
+        state |= states::HASPOPUP;
 
   // Bypass the link states specialization for non links.
   if (!mRoleMapEntry || mRoleMapEntry->roleRule == kUseNativeRole ||
@@ -799,38 +820,11 @@ Accessible::ChildAtPoint(PRInt32 aX, PRInt32 aY,
   if (!accessible)
     return fallbackAnswer;
 
-  if (accessible == this) {
-    // Manually walk through accessible children and see if the are within this
-    // point. Skip offscreen or invisible accessibles. This takes care of cases
-    // where layout won't walk into things for us, such as image map areas and
-    // sub documents (XXX: subdocuments should be handled by methods of
-    // OuterDocAccessibles).
-    PRUint32 childCount = ChildCount();
-    for (PRUint32 childIdx = 0; childIdx < childCount; childIdx++) {
-      Accessible* child = GetChildAt(childIdx);
-
-      PRInt32 childX, childY, childWidth, childHeight;
-      child->GetBounds(&childX, &childY, &childWidth, &childHeight);
-      if (aX >= childX && aX < childX + childWidth &&
-          aY >= childY && aY < childY + childHeight &&
-          (child->State() & states::INVISIBLE) == 0) {
-
-        if (aWhichChild == eDeepestChild)
-          return child->ChildAtPoint(aX, aY, eDeepestChild);
-
-        return child;
-      }
-    }
-
-    // The point is in this accessible but not in a child. We are allowed to
-    // return |this| as the answer.
-    return accessible;
-  }
-
+  // Hurray! We have an accessible for the frame that layout gave us.
   // Since DOM node of obtained accessible may be out of flow then we should
   // ensure obtained accessible is a child of this accessible.
   Accessible* child = accessible;
-  while (true) {
+  while (child != this) {
     Accessible* parent = child->Parent();
     if (!parent) {
       // Reached the top of the hierarchy. These bounds were inside an
@@ -838,13 +832,37 @@ Accessible::ChildAtPoint(PRInt32 aX, PRInt32 aY,
       return fallbackAnswer;
     }
 
-    if (parent == this)
-      return aWhichChild == eDeepestChild ? accessible : child;
+    // If we landed on a legitimate child of |this|, and we want the direct
+    // child, return it here.
+    if (parent == this && aWhichChild == eDirectChild)
+        return child;
 
     child = parent;
   }
 
-  return nsnull;
+  // Manually walk through accessible children and see if the are within this
+  // point. Skip offscreen or invisible accessibles. This takes care of cases
+  // where layout won't walk into things for us, such as image map areas and
+  // sub documents (XXX: subdocuments should be handled by methods of
+  // OuterDocAccessibles).
+  PRUint32 childCount = accessible->ChildCount();
+  for (PRUint32 childIdx = 0; childIdx < childCount; childIdx++) {
+    Accessible* child = accessible->GetChildAt(childIdx);
+
+    PRInt32 childX, childY, childWidth, childHeight;
+    child->GetBounds(&childX, &childY, &childWidth, &childHeight);
+    if (aX >= childX && aX < childX + childWidth &&
+        aY >= childY && aY < childY + childHeight &&
+        (child->State() & states::INVISIBLE) == 0) {
+
+      if (aWhichChild == eDeepestChild)
+        return child->ChildAtPoint(aX, aY, eDeepestChild);
+
+      return child;
+    }
+  }
+
+  return accessible;
 }
 
 // nsIAccessible getChildAtPoint(in long x, in long y)
@@ -1507,17 +1525,6 @@ Accessible::State()
     state |= states::OPAQUE1;
   }
 
-  const nsStyleXUL *xulStyle = frame->GetStyleXUL();
-  if (xulStyle) {
-    // In XUL all boxes are either vertical or horizontal
-    if (xulStyle->mBoxOrient == NS_STYLE_BOX_ORIENT_VERTICAL) {
-      state |= states::VERTICAL;
-    }
-    else {
-      state |= states::HORIZONTAL;
-    }
-  }
-
   return state;
 }
 
@@ -1530,7 +1537,7 @@ Accessible::ApplyARIAState(PRUint64* aState) const
   dom::Element* element = mContent->AsElement();
 
   // Test for universal states first
-  *aState |= nsARIAMap::UniversalStatesFor(element);
+  *aState |= aria::UniversalStatesFor(element);
 
   if (mRoleMapEntry) {
 

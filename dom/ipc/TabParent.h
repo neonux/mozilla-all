@@ -7,28 +7,37 @@
 #ifndef mozilla_tabs_TabParent_h
 #define mozilla_tabs_TabParent_h
 
+#include "base/basictypes.h"
+
+#include "jsapi.h"
 #include "mozilla/dom/PBrowserParent.h"
 #include "mozilla/dom/PContentDialogParent.h"
 #include "mozilla/ipc/GeckoChildProcessHost.h"
-
-#include "jsapi.h"
 #include "nsCOMPtr.h"
-#include "nsITabParent.h"
-#include "nsIBrowserDOMWindow.h"
-#include "nsWeakReference.h"
-#include "nsIDialogParamBlock.h"
 #include "nsIAuthPromptProvider.h"
+#include "nsIBrowserDOMWindow.h"
+#include "nsIDialogParamBlock.h"
 #include "nsISecureBrowserUI.h"
+#include "nsITabParent.h"
+#include "nsWeakReference.h"
 
-class nsFrameLoader;
-class nsIURI;
-class nsIDOMElement;
 struct gfxMatrix;
-
 struct JSContext;
 struct JSObject;
+class nsFrameLoader;
+class nsIDOMElement;
+class nsIURI;
 
 namespace mozilla {
+
+namespace layers {
+struct FrameMetrics;
+}
+
+namespace layout {
+class RenderFrameParent;
+}
+
 namespace dom {
 
 class ContentDialogParent : public PContentDialogParent {};
@@ -105,6 +114,7 @@ public:
     // eating the return values
     void Show(const nsIntSize& size);
     void UpdateDimensions(const nsRect& rect, const nsIntSize& size);
+    void UpdateFrame(const layers::FrameMetrics& aFrameMetrics);
     void Activate();
     void Deactivate();
 
@@ -123,6 +133,7 @@ public:
     bool SendRealMouseEvent(nsMouseEvent& event);
     bool SendMouseScrollEvent(nsMouseScrollEvent& event);
     bool SendRealKeyEvent(nsKeyEvent& event);
+    bool SendRealTouchEvent(nsTouchEvent& event);
 
     virtual PDocumentRendererParent*
     AllocPDocumentRenderer(const nsRect& documentRect, const gfxMatrix& transform,
@@ -154,13 +165,19 @@ public:
     bool SendCompositionEvent(nsCompositionEvent& event);
     bool SendTextEvent(nsTextEvent& event);
     bool SendSelectionEvent(nsSelectionEvent& event);
+
+    static TabParent* GetFrom(nsFrameLoader* aFrameLoader);
+    static TabParent* GetFrom(nsIContent* aContent);
+
 protected:
     bool ReceiveMessage(const nsString& aMessage,
                         bool aSync,
                         const nsString& aJSON,
                         InfallibleTArray<nsString>* aJSONRetVal = nsnull);
 
-    void ActorDestroy(ActorDestroyReason why);
+    virtual bool Recv__delete__() MOZ_OVERRIDE;
+
+    virtual void ActorDestroy(ActorDestroyReason why) MOZ_OVERRIDE;
 
     virtual PIndexedDBParent* AllocPIndexedDB(const nsCString& aASCIIOrigin,
                                               bool* /* aAllowed */);
@@ -195,10 +212,11 @@ protected:
     bool ShouldDelayDialogs();
     bool AllowContentIME();
 
-    NS_OVERRIDE
-    virtual PRenderFrameParent* AllocPRenderFrame();
-    NS_OVERRIDE
-    virtual bool DeallocPRenderFrame(PRenderFrameParent* aFrame);
+    virtual PRenderFrameParent* AllocPRenderFrame(ScrollingBehavior* aScrolling,
+                                                  LayersBackend* aBackend,
+                                                  int32_t* aMaxTextureSize,
+                                                  uint64_t* aLayersId) MOZ_OVERRIDE;
+    virtual bool DeallocPRenderFrame(PRenderFrameParent* aFrame) MOZ_OVERRIDE;
 
     // IME
     static TabParent *mIMETabParent;
@@ -220,7 +238,20 @@ protected:
 private:
     already_AddRefed<nsFrameLoader> GetFrameLoader() const;
     already_AddRefed<nsIWidget> GetWidget() const;
+    layout::RenderFrameParent* GetRenderFrame();
     void TryCacheDPI();
+    // Return true iff this TabParent was created for a mozbrowser
+    // frame.
+    bool IsForMozBrowser();
+    // When true, we create a pan/zoom controller for our frame and
+    // notify it of input events targeting us.
+    bool UseAsyncPanZoom();
+    // If we have a render frame currently, notify it that we're about
+    // to dispatch |aEvent| to our child.  If there's a relevant
+    // transform in place, |aOutEvent| is the transformed |aEvent| to
+    // dispatch to content.
+    void MaybeForwardEventToRenderFrame(const nsInputEvent& aEvent,
+                                        nsInputEvent* aOutEvent);
 };
 
 } // namespace dom

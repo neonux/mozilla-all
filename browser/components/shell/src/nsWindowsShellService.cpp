@@ -5,7 +5,6 @@
 
 #include "imgIContainer.h"
 #include "imgIRequest.h"
-#include "nsIDOMDocument.h"
 #include "nsIDOMElement.h"
 #include "nsIDOMHTMLImageElement.h"
 #include "nsIImageLoadingContent.h"
@@ -226,7 +225,11 @@ GetHelperPath(nsAutoString& aPath)
   rv = appHelper->AppendNative(NS_LITERAL_CSTRING("helper.exe"));
   NS_ENSURE_SUCCESS(rv, rv);
 
-  return appHelper->GetPath(aPath);
+  rv = appHelper->GetPath(aPath);
+
+  aPath.Insert(L'"', 0);
+  aPath.Append(L'"');
+  return rv;
 }
 
 nsresult

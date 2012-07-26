@@ -1,4 +1,4 @@
-# -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
+# -*- Mode: javascript; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -9,8 +9,19 @@ Components.utils.import("resource://gre/modules/XPCOMUtils.jsm");
 
 XPCOMUtils.defineLazyGetter(this, "BROWSER_NEW_TAB_URL", function () {
   const PREF = "browser.newtab.url";
+  const TOPIC = "private-browsing-transition-complete";
 
   function getNewTabPageURL() {
+    if (("gPrivateBrowsingUI" in window) &&
+        !Services.prefs.prefHasUserValue(PREF)) {
+      // gPrivateBrowsingUI may not be initialized yet, in that case we'll
+      // update BROWSER_NEW_TAB_URL when it gets initialized.
+      if (!gPrivateBrowsingUI.initialized)
+        gPrivateBrowsingUI.addInitializationCallback(update);
+      else if (gPrivateBrowsingUI.privateWindow &&
+               !gPrivateBrowsingUI.autoStarted)
+        return "about:privatebrowsing";
+    }
     return Services.prefs.getCharPref(PREF) || "about:blank";
   }
 
@@ -19,9 +30,12 @@ XPCOMUtils.defineLazyGetter(this, "BROWSER_NEW_TAB_URL", function () {
   }
 
   Services.prefs.addObserver(PREF, update, false);
+  Services.obs.addObserver(update, TOPIC, false);
+
   addEventListener("unload", function onUnload() {
     removeEventListener("unload", onUnload);
     Services.prefs.removeObserver(PREF, update);
+    Services.obs.removeObserver(update, TOPIC);
   });
 
   return getNewTabPageURL();
@@ -459,7 +473,7 @@ function openAboutDialog() {
 
 function openPreferences(paneID, extraArgs)
 {
-  if (Services.prefs.getBoolPref("browser.preferences.inContent")) {  
+  if (Services.prefs.getBoolPref("browser.preferences.inContent")) {
     openUILinkIn("about:preferences", "tab");
   } else {
     var instantApply = getBoolPref("browser.preferences.instantApply", false);
@@ -478,17 +492,17 @@ function openPreferences(paneID, extraArgs)
         advancedPaneTabs.selectedTab = win.document.getElementById(extraArgs["advancedTab"]);
       }
 
-     return win;
+     return;
     }
 
-    return openDialog("chrome://browser/content/preferences/preferences.xul",
-                      "Preferences", features, paneID, extraArgs);
+    openDialog("chrome://browser/content/preferences/preferences.xul",
+               "Preferences", features, paneID, extraArgs);
   }
 }
 
 function openAdvancedPreferences(tabID)
 {
-  return openPreferences("paneAdvanced", { "advancedTab" : tabID });
+  openPreferences("paneAdvanced", { "advancedTab" : tabID });
 }
 
 /**

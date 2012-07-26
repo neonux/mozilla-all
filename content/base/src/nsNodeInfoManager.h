@@ -13,6 +13,7 @@
 #include "nsCOMPtr.h" // for already_AddRefed
 #include "plhash.h"
 #include "nsCycleCollectionParticipant.h"
+#include "mozilla/Attributes.h"
 
 class nsIAtom;
 class nsIDocument;
@@ -28,15 +29,14 @@ class nsIDOMNamedNodeMap;
 class nsXULPrototypeDocument;
 class nsBindingManager;
 
-class nsNodeInfoManager
+class nsNodeInfoManager MOZ_FINAL : public nsISupports
 {
 public:
   nsNodeInfoManager();
   ~nsNodeInfoManager();
 
-  NS_DECL_CYCLE_COLLECTION_NATIVE_CLASS(nsNodeInfoManager)
-
-  NS_INLINE_DECL_REFCOUNTING(nsNodeInfoManager)
+  NS_DECL_CYCLE_COLLECTING_ISUPPORTS
+  NS_DECL_CYCLE_COLLECTION_CLASS(nsNodeInfoManager)
 
   /**
    * Initialize the nodeinfo manager with a document.

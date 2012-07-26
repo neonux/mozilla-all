@@ -33,6 +33,7 @@ public:
   NS_IMETHOD  Init(nsIContent* aContent,
                    nsIFrame*   aParent,
                    nsIFrame*   aPrevInFlow);
+  virtual void DestroyFrom(nsIFrame* aDestructRoot);
   NS_IMETHOD  AttributeChanged(PRInt32         aNameSpaceID,
                                nsIAtom*        aAttribute,
                                PRInt32         aModType);
@@ -47,6 +48,10 @@ public:
                     nsHTMLReflowMetrics&     aDesiredSize,
                     const nsHTMLReflowState& aReflowState,
                     nsReflowStatus&          aStatus);
+
+  NS_IMETHOD BuildDisplayList(nsDisplayListBuilder*   aBuilder,
+                              const nsRect&           aDirtyRect,
+                              const nsDisplayListSet& aLists);
 
   /**
    * Get the "type" of the frame
@@ -65,6 +70,9 @@ public:
                                   nscoord aX, nscoord aY, nsIFrame* aForChild,
                                   PRUint32 aFlags);
 
+  virtual bool IsSVGTransformed(gfxMatrix *aOwnTransform,
+                                gfxMatrix *aFromParentTransform) const;
+
 #ifdef DEBUG
   NS_IMETHOD GetFrameName(nsAString& aResult) const
   {
@@ -77,25 +85,22 @@ public:
                       const nsIntRect *aDirtyRect);
   NS_IMETHOD_(nsIFrame*) GetFrameForPoint(const nsPoint &aPoint);
   NS_IMETHOD_(nsRect) GetCoveredRegion();
-  virtual void UpdateBounds();
+  virtual void ReflowSVG();
   virtual void NotifySVGChanged(PRUint32 aFlags);
   virtual SVGBBox GetBBoxContribution(const gfxMatrix &aToBBoxUserspace,
                                       PRUint32 aFlags);
   NS_IMETHOD_(bool) IsDisplayContainer() { return true; }
 
-  gfxMatrix GetCanvasTM();
+  gfxMatrix GetCanvasTM(PRUint32 aFor);
 
 protected:
   // implementation helpers:
   void DoReflow();
   void RequestReflow(nsIPresShell::IntrinsicDirty aType);
 
-  // Returns GetCanvasTM followed by a scale from CSS px to Dev px. Used for
-  // painting, because children expect to paint to device space, not userspace.
-  gfxMatrix GetCanvasTMForChildren();
-  void InvalidateDirtyRect(nsSVGOuterSVGFrame* aOuter,
-                           const nsRect& aRect, PRUint32 aFlags);
-  void FlushDirtyRegion(PRUint32 aFlags);
+  void InvalidateDirtyRect(const nsRect& aRect, PRUint32 aFlags,
+                           bool aDuringReflowSVG);
+  void FlushDirtyRegion(PRUint32 aFlags, bool aDuringReflowSVG);
 
   // If width or height is less than or equal to zero we must disable rendering
   bool IsDisabled() const { return mRect.width <= 0 || mRect.height <= 0; }
@@ -107,8 +112,6 @@ protected:
 
   // Areas dirtied by changes to sub-documents embedded by our decendents
   nsRegion mSubDocDirtyRegion;
-
-  nsRect mCoveredRegion;
 
   bool mInReflow;
 };

@@ -10,15 +10,11 @@ import android.content.res.Resources;
 import android.content.res.Configuration;
 import android.os.SystemClock;
 import android.util.Log;
-import android.widget.AbsoluteLayout;
 
-import java.io.File;
-import java.io.FilenameFilter;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.util.Date;
 import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
+
+import org.mozilla.gecko.gfx.GfxInfoThread;
 
 public class GeckoThread extends Thread {
     private static final String LOGTAG = "GeckoThread";
@@ -46,6 +42,16 @@ public class GeckoThread extends Thread {
     }
 
     public void run() {
+
+        // Here we start the GfxInfo thread, which will query OpenGL
+        // system information for Gecko. This must be done early enough that the data will be
+        // ready by the time it's needed to initialize the LayerManager (it takes about 100 ms
+        // to obtain). Doing it here seems to have no negative effect on startup time. See bug 766251.
+        // Starting the GfxInfoThread here from the GeckoThread, ensures that
+        // the Gecko thread is started first, adding some determinism there.
+        GeckoAppShell.sGfxInfoThread = new GfxInfoThread();
+        GeckoAppShell.sGfxInfoThread.start();
+
         final GeckoApp app = GeckoApp.mAppContext;
 
         // At some point while loading the gecko libs our default locale gets set
@@ -73,9 +79,12 @@ public class GeckoThread extends Thread {
 
         // find the right intent type
         final String action = mIntent.getAction();
-        String type = action.startsWith(GeckoApp.ACTION_WEBAPP_PREFIX) ? "-webapp" :
-                      GeckoApp.ACTION_BOOKMARK.equals(action) ? "-bookmark" :
-                      null;
+        String type = null;
+
+        if (action != null && action.startsWith(GeckoApp.ACTION_WEBAPP_PREFIX))
+            type = "-webapp";
+        else if (GeckoApp.ACTION_BOOKMARK.equals(action))
+            type = "-bookmark";
 
         String args = mIntent.getStringExtra("args");
 

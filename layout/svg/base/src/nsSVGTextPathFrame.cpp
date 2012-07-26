@@ -46,7 +46,6 @@ nsSVGTextPathFrame::Init(nsIContent* aContent,
   nsCOMPtr<nsIDOMSVGTextPathElement> textPath = do_QueryInterface(aContent);
   NS_ASSERTION(textPath, "Content is not an SVG textPath");
 
-
   return nsSVGTextPathFrameBase::Init(aContent, aParent, aPrevInFlow);
 }
 #endif /* DEBUG */
@@ -158,9 +157,11 @@ nsSVGTextPathFrame::AttributeChanged(PRInt32         aNameSpaceID,
 {
   if (aNameSpaceID == kNameSpaceID_None &&
       aAttribute == nsGkAtoms::startOffset) {
+    nsSVGUtils::InvalidateAndScheduleReflowSVG(this);
     NotifyGlyphMetricsChange();
   } else if (aNameSpaceID == kNameSpaceID_XLink &&
              aAttribute == nsGkAtoms::href) {
+    nsSVGUtils::InvalidateAndScheduleReflowSVG(this);
     // Blow away our reference, if any
     Properties().Delete(nsSVGEffects::HrefProperty());
     NotifyGlyphMetricsChange();

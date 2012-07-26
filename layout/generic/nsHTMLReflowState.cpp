@@ -26,7 +26,7 @@
 #include "nsBidiUtils.h"
 #include "nsFontInflationData.h"
 
-#ifdef NS_DEBUG
+#ifdef DEBUG
 #undef NOISY_VERTICAL_ALIGN
 #else
 #undef NOISY_VERTICAL_ALIGN
@@ -85,6 +85,45 @@ static bool CheckNextInFlowParenthood(nsIFrame* aFrame, nsIFrame* aParent)
   return frameNext && parentNext && frameNext->GetParent() == parentNext;
 }
 
+/**
+ * Adjusts the margin for a list (ol, ul), if necessary, depending on
+ * font inflation settings. Unfortunately, because bullets from a list are
+ * placed in the margin area, we only have ~40px in which to place the
+ * bullets. When they are inflated, however, this causes problems, since
+ * the text takes up more space than is available in the margin.
+ *
+ * This method will return a small amount (in app units) by which the
+ * margin can be adjusted, so that the space is available for list
+ * bullets to be rendered with font inflation enabled.
+ */
+static  nscoord
+FontSizeInflationListMarginAdjustment(const nsIFrame* aFrame)
+{
+  float inflation = nsLayoutUtils::FontSizeInflationFor(aFrame);
+  if (aFrame->IsFrameOfType(nsIFrame::eBlockFrame)) {
+    const nsBlockFrame* blockFrame = static_cast<const nsBlockFrame*>(aFrame);
+    const nsStyleList* styleList = aFrame->GetStyleList();
+
+    // We only want to adjust the margins if we're dealing with an ordered
+    // list.
+    if (inflation > 1.0f &&
+        blockFrame->HasBullet() &&
+        styleList->mListStyleType != NS_STYLE_LIST_STYLE_NONE &&
+        styleList->mListStyleType != NS_STYLE_LIST_STYLE_DISC &&
+        styleList->mListStyleType != NS_STYLE_LIST_STYLE_CIRCLE &&
+        styleList->mListStyleType != NS_STYLE_LIST_STYLE_SQUARE &&
+        inflation > 1.0f) {
+
+      // The HTML spec states that the default padding for ordered lists begins
+      // at 40px, indicating that we have 40px of space to place a bullet. When
+      // performing font inflation calculations, we add space equivalent to this,
+      // but simply inflated at the same amount as the text, in app units.
+      return nsPresContext::CSSPixelsToAppUnits(40) * (inflation - 1);
+    }
+  }
+
+  return 0;
+}
 // Initialize a reflow state for a child frames reflow. Some state
 // is copied from the parent reflow state; the remaining state is
 // computed.
@@ -596,7 +635,6 @@ nsHTMLReflowState::InitFrameType(nsIAtom* aFrameType)
   // takes precedence over float which takes precedence over display.
   // XXXldb nsRuleNode::ComputeDisplayData should take care of this, right?
   // Make sure the frame was actually moved out of the flow, and don't
-
   // just assume what the style says, because we might not have had a
   // useful float/absolute containing block
 
@@ -1642,6 +1680,7 @@ CalcQuirkContainingBlockHeight(const nsHTMLReflowState* aCBReflowState)
   // Make sure not to return a negative height here!
   return NS_MAX(result, 0);
 }
+
 // Called by InitConstraints() to compute the containing block rectangle for
 // the element. Handles the special logic for absolutely positioned elements
 void
@@ -1672,7 +1711,7 @@ nsHTMLReflowState::ComputeContainingBlockRectangle(nsPresContext*          aPres
       nsMargin computedBorder = aContainingBlockRS->mComputedBorderPadding -
         aContainingBlockRS->mComputedPadding;
       aContainingBlockWidth = aContainingBlockRS->frame->GetRect().width -
-        computedBorder.LeftRight();;
+        computedBorder.LeftRight();
       NS_ASSERTION(aContainingBlockWidth >= 0,
                    "Negative containing block width!");
       aContainingBlockHeight = aContainingBlockRS->frame->GetRect().height -
@@ -2336,6 +2375,18 @@ nsCSSOffsetState::ComputeMargin(nscoord aContainingBlockWidth)
       ComputeWidthDependentValue(aContainingBlockWidth,
                                  styleMargin->mMargin.GetBottom());
   }
+
+  nscoord marginAdjustment = FontSizeInflationListMarginAdjustment(frame);
+
+  if (marginAdjustment > 0) {
+    const nsStyleVisibility* visibility = frame->GetStyleVisibility();
+    if (visibility->mDirection == NS_STYLE_DIRECTION_RTL) {
+      mComputedMargin.right = mComputedMargin.right + marginAdjustment;
+    } else {
+      mComputedMargin.left = mComputedMargin.left + marginAdjustment;
+    }
+  }
+
   return isWidthDependent;
 }
 
@@ -2373,25 +2424,6 @@ nsCSSOffsetState::ComputePadding(nscoord aContainingBlockWidth, nsIAtom* aFrameT
                                  stylePadding->mPadding.GetBottom()));
   }
   return isWidthDependent;
-}
-
-void
-nsHTMLReflowState::ApplyMinMaxConstraints(nscoord* aFrameWidth,
-                                          nscoord* aFrameHeight) const
-{
-  if (aFrameWidth) {
-    if (NS_UNCONSTRAINEDSIZE != mComputedMaxWidth) {
-      *aFrameWidth = NS_MIN(*aFrameWidth, mComputedMaxWidth);
-    }
-    *aFrameWidth = NS_MAX(*aFrameWidth, mComputedMinWidth);
-  }
-
-  if (aFrameHeight) {
-    if (NS_UNCONSTRAINEDSIZE != mComputedMaxHeight) {
-      *aFrameHeight = NS_MIN(*aFrameHeight, mComputedMaxHeight);
-    }
-    *aFrameHeight = NS_MAX(*aFrameHeight, mComputedMinHeight);
-  }
 }
 
 void

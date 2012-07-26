@@ -115,7 +115,6 @@ CPPSRCS		= \
 		ScopeObject.cpp \
 		Debugger.cpp \
 		GlobalObject.cpp \
-		MethodGuard.cpp \
 		ObjectImpl.cpp \
 		Stack.cpp \
 		String.cpp \
@@ -126,10 +125,12 @@ CPPSRCS		= \
 		ParseNode.cpp \
 		Parser.cpp \
 		SemanticAnalysis.cpp \
+		SPSProfiler.cpp \
 		TokenStream.cpp \
 		TreeContext.cpp \
 		TestingFunctions.cpp \
 		LifoAlloc.cpp \
+		Eval.cpp \
 		MapObject.cpp \
 		MemoryMetrics.cpp \
 		RegExpObject.cpp \
@@ -138,6 +139,7 @@ CPPSRCS		= \
 		Marking.cpp \
 		Memory.cpp \
 		Statistics.cpp \
+		StoreBuffer.cpp \
 		StringBuffer.cpp \
 		Unicode.cpp \
 		Xdr.cpp \
@@ -190,6 +192,7 @@ EXPORTS_gc = \
 		Heap.h \
 		Root.h \
 		Statistics.h \
+		StoreBuffer.h \
 		$(NULL)
 
 ######################################################
@@ -663,6 +666,9 @@ ifeq (,$(filter HP-UX WINNT OS2,$(OS_ARCH)))
 EXTRA_LIBS	+= -lm
 endif
 
+CFLAGS += $(MOZ_ZLIB_CFLAGS)
+EXTRA_LIBS += $(MOZ_ZLIB_LIBS)
+
 # Prevent floating point errors caused by VC++ optimizations
 ifdef _MSC_VER
 # XXX We should add this to CXXFLAGS, too?
@@ -672,6 +678,8 @@ ifeq ($(CPU_ARCH),x86)
 # Workaround compiler bug on PGO (Bug 721284)
 MonoIC.$(OBJ_SUFFIX): CXXFLAGS += -GL-
 Compiler.$(OBJ_SUFFIX): CXXFLAGS += -GL-
+# Ditto (Bug 772303)
+RegExp.$(OBJ_SUFFIX): CXXFLAGS += -GL-
 endif
 endif # _MSC_VER
 

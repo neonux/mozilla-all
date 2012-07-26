@@ -27,8 +27,7 @@ namespace mozilla {
 namespace net {
 
 HttpBaseChannel::HttpBaseChannel()
-  : PrivateBrowsingConsumer(this)
-  , mStartPos(LL_MAXUINT)
+  : mStartPos(LL_MAXUINT)
   , mStatus(NS_OK)
   , mLoadFlags(LOAD_NORMAL)
   , mPriority(PRIORITY_NORMAL)
@@ -49,6 +48,7 @@ HttpBaseChannel::HttpBaseChannel()
   , mTracingEnabled(true)
   , mTimingEnabled(false)
   , mAllowSpdy(true)
+  , mPrivateBrowsing(false)
   , mSuspendCount(0)
 {
   LOG(("Creating HttpBaseChannel @%x\n", this));
@@ -130,7 +130,7 @@ HttpBaseChannel::Init(nsIURI *aURI,
 
   rv = gHttpHandler->
       AddStandardRequestHeaders(&mRequestHead.Headers(), aCaps,
-                                !mConnectionInfo->UsingSSL() &&
+                                !mConnectionInfo->UsingConnect() &&
                                 mConnectionInfo->UsingHttpProxy());
 
   return rv;
@@ -140,8 +140,8 @@ HttpBaseChannel::Init(nsIURI *aURI,
 // HttpBaseChannel::nsISupports
 //-----------------------------------------------------------------------------
 
-NS_IMPL_ISUPPORTS_INHERITED10(HttpBaseChannel,
-                              nsHashPropertyBag, 
+NS_IMPL_ISUPPORTS_INHERITED9( HttpBaseChannel,
+                              nsHashPropertyBag,
                               nsIRequest,
                               nsIChannel,
                               nsIEncodedChannel,
@@ -150,8 +150,7 @@ NS_IMPL_ISUPPORTS_INHERITED10(HttpBaseChannel,
                               nsIUploadChannel,
                               nsIUploadChannel2,
                               nsISupportsPriority,
-                              nsITraceableChannel,
-                              nsIPrivateBrowsingConsumer)
+                              nsITraceableChannel)
 
 //-----------------------------------------------------------------------------
 // HttpBaseChannel::nsIRequest
@@ -273,6 +272,9 @@ HttpBaseChannel::SetNotificationCallbacks(nsIInterfaceRequestor *aCallbacks)
 {
   mCallbacks = aCallbacks;
   mProgressSink = nsnull;
+
+  // Will never change unless SetNotificationCallbacks called again, so cache
+  mPrivateBrowsing = NS_UsePrivateBrowsing(this);
   return NS_OK;
 }
 
@@ -1520,12 +1522,11 @@ HttpBaseChannel::IsSafeMethod(nsHttpAtom method)
 nsresult
 HttpBaseChannel::SetupReplacementChannel(nsIURI       *newURI, 
                                          nsIChannel   *newChannel,
-                                         bool          preserveMethod,
-                                         bool          forProxy)
+                                         bool          preserveMethod)
 {
   LOG(("HttpBaseChannel::SetupReplacementChannel "
-     "[this=%p newChannel=%p preserveMethod=%d forProxy=%d]",
-     this, newChannel, preserveMethod, forProxy));
+     "[this=%p newChannel=%p preserveMethod=%d]",
+     this, newChannel, preserveMethod));
   PRUint32 newLoadFlags = mLoadFlags | LOAD_REPLACE;
   // if the original channel was using SSL and this channel is not using
   // SSL, then no need to inhibit persistent caching.  however, if the
@@ -1647,21 +1648,6 @@ HttpBaseChannel::SetupReplacementChannel(nsIURI       *newURI,
   nsCOMPtr<nsITimedChannel> timed(do_QueryInterface(newChannel));
   if (timed)
     timed->SetTimingEnabled(mTimingEnabled);
-
-  if (forProxy) {
-    // Transfer all the headers from the previous channel
-    //  this is needed for any headers that are not covered by the code above
-    //  or have been set separately. e.g. manually setting Referer without
-    //  setting up mReferrer
-    PRUint32 count = mRequestHead.Headers().Count();
-    for (PRUint32 i = 0; i < count; ++i) {
-      nsHttpAtom header;
-      const char *value = mRequestHead.Headers().PeekHeaderAt(i, header);
-
-      httpChannel->SetRequestHeader(nsDependentCString(header),
-                                    nsDependentCString(value), false);
-    }
-  }
 
   return NS_OK;
 }

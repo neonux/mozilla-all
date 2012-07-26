@@ -545,14 +545,13 @@ void* nsCocoaWindow::GetNativeData(PRUint32 aDataType)
   NS_OBJC_END_TRY_ABORT_BLOCK_NSNULL;
 }
 
-NS_IMETHODIMP nsCocoaWindow::IsVisible(bool & aState)
+bool nsCocoaWindow::IsVisible() const
 {
-  NS_OBJC_BEGIN_TRY_ABORT_BLOCK_NSRESULT;
+  NS_OBJC_BEGIN_TRY_ABORT_BLOCK_RETURN;
 
-  aState = (mWindow && ([mWindow isVisible] || mSheetNeedsShow));
-  return NS_OK;
+  return (mWindow && ([mWindow isVisible] || mSheetNeedsShow));
 
-  NS_OBJC_END_TRY_ABORT_BLOCK_NSRESULT;
+  NS_OBJC_END_TRY_ABORT_BLOCK_RETURN(false);
 }
 
 NS_IMETHODIMP nsCocoaWindow::SetModal(bool aState)
@@ -1012,11 +1011,9 @@ NS_IMETHODIMP nsCocoaWindow::Enable(bool aState)
   return NS_OK;
 }
 
-NS_IMETHODIMP nsCocoaWindow::IsEnabled(bool *aState)
+bool nsCocoaWindow::IsEnabled() const
 {
-  if (aState)
-    *aState = true;
-  return NS_OK;
+  return true;
 }
 
 #define kWindowPositionSlop 20
@@ -1213,6 +1210,16 @@ NS_METHOD nsCocoaWindow::MakeFullScreen(bool aFullScreen)
   if (mFullScreen == aFullScreen) {
     return NS_OK;
   }
+
+  // If we're using native fullscreen mode and our native window is invisible,
+  // our attempt to go into fullscreen mode will fail with an assertion in
+  // system code, without [WindowDelegate windowDidFailToEnterFullScreen:]
+  // ever getting called.  To pre-empt this we bail here.  See bug 752294.
+  if (mUsesNativeFullScreen && aFullScreen && ![mWindow isVisible]) {
+    EnteredFullScreen(false);
+    return NS_OK;
+  }
+
   mInFullScreenTransition = true;
 
   if (mUsesNativeFullScreen) {

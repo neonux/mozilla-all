@@ -33,7 +33,6 @@
 #include "nsIWeakReferenceUtils.h"
 #include "nsCSSRendering.h"
 #include "prprf.h"
-#include "nsIDOMDocument.h"
 #include "nsAutoPtr.h"
 #include "nsEventStateManager.h"
 #include "nsThreadUtils.h"
@@ -1205,6 +1204,33 @@ nsPresContext::GetRootPresContext()
   for (;;) {
     nsPresContext* parent = pc->GetParentPresContext();
     if (!parent)
+      break;
+    pc = parent;
+  }
+  return pc->IsRoot() ? static_cast<nsRootPresContext*>(pc) : nsnull;
+}
+
+nsRootPresContext*
+nsPresContext::GetDisplayRootPresContext()
+{
+  nsPresContext* pc = this;
+  for (;;) {
+    nsPresContext* parent = pc->GetParentPresContext();
+    if (!parent) {
+      // Not sure if this is always strictly the parent, but it works for GetRootPresContext
+      // where the current pres context has no frames.
+      nsIDocument *doc = pc->Document();
+      if (doc) {
+        doc = doc->GetParentDocument();
+        if (doc) {
+          nsIPresShell* shell = doc->GetShell();
+          if (shell) {
+            parent = shell->GetPresContext();
+          }
+        }
+      }
+    }
+    if (!parent || parent == pc)
       break;
     pc = parent;
   }

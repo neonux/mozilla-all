@@ -373,6 +373,7 @@ public:
    * for which IsElement() is true.  This is defined inline in Element.h.
    */
   mozilla::dom::Element* AsElement();
+  const mozilla::dom::Element* AsElement() const;
 
   /**
    * Return this node as nsIContent.  Should only be used for nodes for which
@@ -474,6 +475,17 @@ public:
   const nsString& LocalName() const
   {
     return mNodeInfo->LocalName();
+  }
+
+  /**
+   * Get the tag for this element. This will always return a non-null atom
+   * pointer (as implied by the naming of the method).  For elements this is
+   * the non-namespaced tag, and for other nodes it's something like "#text",
+   * "#comment", "#document", etc.
+   */
+  nsIAtom* Tag() const
+  {
+    return mNodeInfo->NameAtom();
   }
 
   nsINode*
@@ -1157,6 +1169,8 @@ public:
    */
   bool Contains(const nsINode* aOther) const;
   nsresult Contains(nsIDOMNode* aOther, bool* aReturn);
+
+  bool UnoptimizableCCNode() const;
 
 private:
 

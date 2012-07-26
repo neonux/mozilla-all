@@ -15,7 +15,8 @@ let gSyncUI = {
          "weave:ui:login:error",
          "weave:ui:sync:error",
          "weave:ui:sync:finish",
-         "weave:ui:clear-error"],
+         "weave:ui:clear-error",
+  ],
 
   _unloaded: false,
 
@@ -140,7 +141,7 @@ let gSyncUI = {
   },
 
   onSetupComplete: function SUI_onSetupComplete() {
-    onLoginFinish();
+    this.onLoginFinish();
   },
 
   onLoginError: function SUI_onLoginError() {

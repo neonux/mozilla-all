@@ -3,12 +3,19 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "InsertTextTxn.h"
-#include "nsIDOMCharacterData.h"
-#include "nsISelection.h"
-#include "EditAggregateTxn.h"
+#include <stdio.h>                      // for printf
 
-#ifdef NS_DEBUG
+#include "InsertTextTxn.h"
+#include "nsAString.h"
+#include "nsDebug.h"                    // for NS_ASSERTION, etc
+#include "nsError.h"                    // for NS_OK, etc
+#include "nsIDOMCharacterData.h"        // for nsIDOMCharacterData
+#include "nsIEditor.h"                  // for nsIEditor
+#include "nsISelection.h"               // for nsISelection
+#include "nsISupportsUtils.h"           // for NS_ADDREF_THIS, NS_RELEASE
+#include "nsITransaction.h"             // for nsITransaction
+
+#ifdef DEBUG
 static bool gNoisy = false;
 #endif
 
@@ -62,7 +69,7 @@ NS_IMETHODIMP InsertTextTxn::Init(nsIDOMCharacterData *aElement,
 
 NS_IMETHODIMP InsertTextTxn::DoTransaction(void)
 {
-#ifdef NS_DEBUG
+#ifdef DEBUG
   if (gNoisy)
   {
     printf("Do Insert Text element = %p\n",
@@ -98,7 +105,7 @@ NS_IMETHODIMP InsertTextTxn::DoTransaction(void)
 
 NS_IMETHODIMP InsertTextTxn::UndoTransaction(void)
 {
-#ifdef NS_DEBUG
+#ifdef DEBUG
   if (gNoisy)
   {
     printf("Undo Insert Text element = %p\n",
@@ -133,7 +140,7 @@ NS_IMETHODIMP InsertTextTxn::Merge(nsITransaction *aTransaction, bool *aDidMerge
         otherInsTxn->GetData(otherData);
         mStringToInsert += otherData;
         *aDidMerge = true;
-#ifdef NS_DEBUG
+#ifdef DEBUG
         if (gNoisy)
         {
           printf("InsertTextTxn assimilated %p\n",

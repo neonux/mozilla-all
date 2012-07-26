@@ -10,15 +10,15 @@
 #include "nsEvent.h"
 #include "nsIWebProgressListener.h"
 #include "nsITimer.h"
-
-// can't use forward class decl's because of template bugs on Solaris 
-#include "nsIDOMDocument.h"
-
 #include "nsCOMPtr.h"
 #include "nsXULWindow.h"
 
 /* Forward declarations.... */
 class nsIURI;
+
+namespace mozilla {
+class WebShellWindowTimerCallback;
+} // namespace mozilla
 
 class nsWebShellWindow : public nsXULWindow,
                          public nsIWebProgressListener
@@ -45,6 +45,7 @@ public:
   NS_IMETHOD Destroy();
 
 protected:
+  friend class mozilla::WebShellWindowTimerCallback;
   
   virtual ~nsWebShellWindow();
 
@@ -58,7 +59,7 @@ protected:
   mozilla::Mutex          mSPTimerLock;
 
   void        SetPersistenceTimer(PRUint32 aDirtyFlags);
-  static void FirePersistenceTimer(nsITimer *aTimer, void *aClosure);
+  void        FirePersistenceTimer();
 };
 
 

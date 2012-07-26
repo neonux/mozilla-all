@@ -1,6 +1,8 @@
-# This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+// -*- Mode: Java; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
+
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 Components.utils.import("resource://gre/modules/Services.jsm");
 
@@ -88,11 +90,6 @@ function onAlertLoad()
   alertBox.orient = (gOrigin & NS_ALERT_HORIZONTAL) ? "vertical" : "horizontal";
 
   sizeToContent();
-
-  // Work around a bug where sizeToContent() leaves a border outside of the content
-  var contentDim = document.getElementById("alertBox").boxObject;
-  if (window.innerWidth == contentDim.width + 1)
-    --window.innerWidth;
 
   // Start with a 1px width/height, because 0 causes trouble with gtk1/2
   gCurrentSize = 1;

@@ -20,22 +20,31 @@ static JSClass CustomClass = {
 
 static const uint32_t CUSTOM_SLOT = 0;
 
+static bool
+IsCustomClass(const Value &v)
+{
+  return v.isObject() && JS_GetClass(&v.toObject()) == &CustomClass;
+}
+
+static bool
+CustomMethodImpl(JSContext *cx, CallArgs args)
+{
+  JS_ASSERT(IsCustomClass(args.thisv()));
+  args.rval() = JS_GetReservedSlot(&args.thisv().toObject(), CUSTOM_SLOT);
+  return true;
+}
+
 static JSBool
 CustomMethod(JSContext *cx, unsigned argc, Value *vp)
 {
-  const Value &thisv = JS_THIS_VALUE(cx, vp);
-  JSObject *thisObj;
-  if (!thisv.isObject() || JS_GetClass((thisObj = &thisv.toObject())) != &CustomClass)
-    return JS_CallNonGenericMethodOnProxy(cx, argc, vp, CustomMethod, &CustomClass);
-
-  JS_SET_RVAL(cx, vp, JS_GetReservedSlot(thisObj, CUSTOM_SLOT));
-  return true;
+  CallArgs args = CallArgsFromVp(argc, vp);
+  return CallNonGenericMethod(cx, IsCustomClass, CustomMethodImpl, args);
 }
 
 BEGIN_TEST(test_CallNonGenericMethodOnProxy)
 {
   // Create the first global object and compartment
-  JSObject *globalA = JS_NewCompartmentAndGlobalObject(cx, getGlobalClass(), NULL);
+  JSObject *globalA = JS_NewGlobalObject(cx, getGlobalClass(), NULL);
   CHECK(globalA);
 
   JSObject *customA = JS_NewObject(cx, &CustomClass, NULL, NULL);
@@ -51,7 +60,7 @@ BEGIN_TEST(test_CallNonGenericMethodOnProxy)
 
   // Now create the second global object and compartment...
   {
-    JSObject *globalB = JS_NewCompartmentAndGlobalObject(cx, getGlobalClass(), NULL);
+    JSObject *globalB = JS_NewGlobalObject(cx, getGlobalClass(), NULL);
     CHECK(globalB);
 
     // ...and enter it.

@@ -34,7 +34,6 @@ LOCAL_INCLUDES += \
   -I$(topsrcdir)/dom/bindings \
   $(NULL)
 
-include $(topsrcdir)/config/rules.mk
 
 # If you change bindinggen_dependencies here, change it in
 # dom/bindings/Makefile.in too.  But note that we include ../Makefile
@@ -50,23 +49,32 @@ bindinggen_dependencies := \
   $(GLOBAL_DEPS) \
   $(NULL)
 
+# Include rules.mk before any of our targets so our first target is coming from
+# rules.mk and running make with no target in this dir does the right thing.
+include $(topsrcdir)/config/rules.mk
+
 $(CPPSRCS): ../%Binding.cpp: $(bindinggen_dependencies) \
                              ../%.webidl \
                              $(NULL)
 	$(MAKE) -C .. $*Binding.h
 	$(MAKE) -C .. $*Binding.cpp
 
-_TEST_FILES = \
+MOCHITEST_FILES = \
+  test_enums.html \
+  test_integers.html \
   test_interfaceToString.html \
   test_lookupGetter.html \
   test_InstanceOf.html \
   test_traceProtos.html \
+  test_forOf.html \
+  forOf_iframe.html \
   $(NULL)
 
 
-libs:: $(_TEST_FILES)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/tests/$(relativesrcdir)
-
 check::
-	PYTHONDONTWRITEBYTECODE=1 $(PYTHON_PATH) $(PLY_INCLUDE) \
-	  $(srcdir)/../parser/runtests.py
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) $(topsrcdir)/config/pythonpath.py \
+	  $(PLY_INCLUDE) $(srcdir)/../parser/runtests.py
+
+check-interactive:
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) $(topsrcdir)/config/pythonpath.py \
+	  $(PLY_INCLUDE) $(srcdir)/../parser/runtests.py -q

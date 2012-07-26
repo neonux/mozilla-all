@@ -41,6 +41,7 @@
 #include "mozilla/Services.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/LookAndFeel.h"
+#include "mozilla/Attributes.h"
 
 using namespace mozilla;
 
@@ -211,7 +212,7 @@ nsMenuFrame::InitMenuParent(nsIFrame* aParent)
   }
 }
 
-class nsASyncMenuInitialization : public nsIReflowCallback
+class nsASyncMenuInitialization MOZ_FINAL : public nsIReflowCallback
 {
 public:
   nsASyncMenuInitialization(nsIFrame* aFrame)
@@ -1093,12 +1094,14 @@ nsMenuFrame::BuildAcceleratorText(bool aNotify)
   nsAutoString altText;
   nsAutoString metaText;
   nsAutoString controlText;
+  nsAutoString osText;
   nsAutoString modifierSeparator;
 
   nsContentUtils::GetShiftText(shiftText);
   nsContentUtils::GetAltText(altText);
   nsContentUtils::GetMetaText(metaText);
   nsContentUtils::GetControlText(controlText);
+  nsContentUtils::GetOSText(osText);
   nsContentUtils::GetModifierSeparatorText(modifierSeparator);
 
   while (token) {
@@ -1109,6 +1112,8 @@ nsMenuFrame::BuildAcceleratorText(bool aNotify)
       accelText += altText; 
     else if (PL_strcmp(token, "meta") == 0) 
       accelText += metaText; 
+    else if (PL_strcmp(token, "os") == 0)
+      accelText += osText; 
     else if (PL_strcmp(token, "control") == 0) 
       accelText += controlText; 
     else if (PL_strcmp(token, "accel") == 0) {
@@ -1116,6 +1121,10 @@ nsMenuFrame::BuildAcceleratorText(bool aNotify)
       {
         case nsIDOMKeyEvent::DOM_VK_META:
           accelText += metaText;
+          break;
+
+        case nsIDOMKeyEvent::DOM_VK_WIN:
+          accelText += osText;
           break;
 
         case nsIDOMKeyEvent::DOM_VK_ALT:

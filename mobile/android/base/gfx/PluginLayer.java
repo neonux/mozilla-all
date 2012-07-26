@@ -6,8 +6,6 @@ package org.mozilla.gecko.gfx;
 
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.Point;
-import android.graphics.PointF;
 import android.graphics.PixelFormat;
 import android.view.View;
 import android.view.Surface;
@@ -250,6 +248,7 @@ public class PluginLayer extends TileLayer
         int positionHandle = context.positionHandle;
         int textureHandle = context.textureHandle;
 
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getTextureID());
 
         // Make sure we are at position zero in the buffer

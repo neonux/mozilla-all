@@ -203,8 +203,7 @@ nsCoreUtils::GetDOMNodeFromDOMPoint(nsINode *aNode, PRUint32 aOffset)
 {
   if (aNode && aNode->IsElement()) {
     PRUint32 childCount = aNode->GetChildCount();
-    NS_ASSERTION(aOffset >= 0 && aOffset <= childCount,
-                 "Wrong offset of the DOM point!");
+    NS_ASSERTION(aOffset <= childCount, "Wrong offset of the DOM point!");
 
     // The offset can be after last child of container node that means DOM point
     // is placed immediately after the last child. In this case use the DOM node
@@ -258,37 +257,28 @@ nsCoreUtils::IsAncestorOf(nsINode *aPossibleAncestorNode,
 }
 
 nsresult
-nsCoreUtils::ScrollSubstringTo(nsIFrame *aFrame,
-                               nsIDOMNode *aStartNode, PRInt32 aStartIndex,
-                               nsIDOMNode *aEndNode, PRInt32 aEndIndex,
+nsCoreUtils::ScrollSubstringTo(nsIFrame* aFrame, nsRange* aRange,
                                PRUint32 aScrollType)
 {
   nsIPresShell::ScrollAxis vertical, horizontal;
   ConvertScrollTypeToPercents(aScrollType, &vertical, &horizontal);
 
-  return ScrollSubstringTo(aFrame, aStartNode, aStartIndex, aEndNode, aEndIndex,
-                           vertical, horizontal);
+  return ScrollSubstringTo(aFrame, aRange, vertical, horizontal);
 }
 
 nsresult
-nsCoreUtils::ScrollSubstringTo(nsIFrame *aFrame,
-                               nsIDOMNode *aStartNode, PRInt32 aStartIndex,
-                               nsIDOMNode *aEndNode, PRInt32 aEndIndex,
+nsCoreUtils::ScrollSubstringTo(nsIFrame* aFrame, nsRange* aRange,
                                nsIPresShell::ScrollAxis aVertical,
                                nsIPresShell::ScrollAxis aHorizontal)
 {
-  if (!aFrame || !aStartNode || !aEndNode)
+  if (!aFrame)
     return NS_ERROR_FAILURE;
 
   nsPresContext *presContext = aFrame->PresContext();
 
-  nsRefPtr<nsIDOMRange> scrollToRange = new nsRange();
   nsCOMPtr<nsISelectionController> selCon;
   aFrame->GetSelectionController(presContext, getter_AddRefs(selCon));
   NS_ENSURE_TRUE(selCon, NS_ERROR_FAILURE);
-
-  scrollToRange->SetStart(aStartNode, aStartIndex);
-  scrollToRange->SetEnd(aEndNode, aEndIndex);
 
   nsCOMPtr<nsISelection> selection;
   selCon->GetSelection(nsISelectionController::SELECTION_ACCESSIBILITY,
@@ -296,7 +286,7 @@ nsCoreUtils::ScrollSubstringTo(nsIFrame *aFrame,
 
   nsCOMPtr<nsISelectionPrivate> privSel(do_QueryInterface(selection));
   selection->RemoveAllRanges();
-  selection->AddRange(scrollToRange);
+  selection->AddRange(aRange);
 
   privSel->ScrollIntoViewInternal(
     nsISelectionController::SELECTION_ANCHOR_REGION,

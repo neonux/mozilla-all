@@ -41,6 +41,8 @@
 
 #include "nsIDOMMouseEvent.h"
 
+#include "nsIIdleServiceInternal.h"
+
 /**
  * Forward class definitions
  */
@@ -90,7 +92,7 @@ public:
   virtual nsIWidget*      GetParent(void);
   virtual float           GetDPI();
   NS_IMETHOD              Show(bool bState);
-  NS_IMETHOD              IsVisible(bool & aState);
+  virtual bool            IsVisible() const;
   NS_IMETHOD              ConstrainPosition(bool aAllowSlop, PRInt32 *aX, PRInt32 *aY);
   NS_IMETHOD              Move(PRInt32 aX, PRInt32 aY);
   NS_IMETHOD              Resize(PRInt32 aWidth, PRInt32 aHeight, bool aRepaint);
@@ -99,7 +101,7 @@ public:
   NS_IMETHOD              PlaceBehind(nsTopLevelWidgetZPlacement aPlacement, nsIWidget *aWidget, bool aActivate);
   NS_IMETHOD              SetSizeMode(PRInt32 aMode);
   NS_IMETHOD              Enable(bool aState);
-  NS_IMETHOD              IsEnabled(bool *aState);
+  virtual bool            IsEnabled() const;
   NS_IMETHOD              SetFocus(bool aRaise);
   NS_IMETHOD              GetBounds(nsIntRect &aRect);
   NS_IMETHOD              GetScreenBounds(nsIntRect &aRect);
@@ -130,7 +132,7 @@ public:
   NS_IMETHOD              GetAttention(PRInt32 aCycleCount);
   virtual bool            HasPendingInputEvent();
   virtual LayerManager*   GetLayerManager(PLayersChild* aShadowManager = nsnull,
-                                          LayersBackend aBackendHint = LayerManager::LAYERS_NONE,
+                                          LayersBackend aBackendHint = mozilla::layers::LAYERS_NONE,
                                           LayerManagerPersistence aPersistence = LAYER_MANAGER_CURRENT,
                                           bool* aAllowRetaining = nsnull);
   gfxASurface             *GetThebesSurface();
@@ -429,6 +431,7 @@ private:
   nsTransparencyMode      GetWindowTranslucencyInner() const { return mTransparencyMode; }
   void                    ResizeTranslucentWindow(PRInt32 aNewWidth, PRInt32 aNewHeight, bool force = false);
   nsresult                UpdateTranslucentWindow();
+  void                    ClearTranslucentWindow();
   void                    SetupTranslucentWindowMemoryBitmap(nsTransparencyMode aMode);
   void                    UpdateGlass();
 protected:
@@ -448,8 +451,6 @@ protected:
                                            PAINTSTRUCT ps, HDC aDC);
   static void             ActivateOtherWindowHelper(HWND aWnd);
   void                    ClearCachedResources();
-
-  nsPopupType PopupType() { return mPopupType; }
 
 protected:
   nsCOMPtr<nsIWidget>   mParent;
@@ -476,12 +477,13 @@ protected:
   InputContext mInputContext;
   nsNativeDragTarget*   mNativeDragTarget;
   HKL                   mLastKeyboardLayout;
-  nsPopupType           mPopupType;
   nsSizeMode            mOldSizeMode;
   nsSizeMode            mLastSizeMode;
   WindowHook            mWindowHook;
   DWORD                 mAssumeWheelIsZoomUntil;
   PRUint32              mPickerDisplayCount;
+  HICON                 mIconSmall;
+  HICON                 mIconBig;
   static bool           sDropShadowEnabled;
   static PRUint32       sInstanceCount;
   static TriStateBool   sCanQuit;
@@ -517,7 +519,7 @@ protected:
   // Height of the caption plus border
   PRInt32               mCaptionHeight;
 
-  nsCOMPtr<nsIdleService> mIdleService;
+  nsCOMPtr<nsIIdleServiceInternal> mIdleService;
 
   // Hook Data Memebers for Dropdowns. sProcessHook Tells the
   // hook methods whether they should be processing the hook

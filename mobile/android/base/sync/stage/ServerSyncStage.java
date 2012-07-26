@@ -40,6 +40,7 @@ import org.mozilla.gecko.sync.repositories.delegates.RepositorySessionWipeDelega
 import org.mozilla.gecko.sync.synchronizer.ServerLocalSynchronizer;
 import org.mozilla.gecko.sync.synchronizer.Synchronizer;
 import org.mozilla.gecko.sync.synchronizer.SynchronizerDelegate;
+import org.mozilla.gecko.sync.synchronizer.SynchronizerSession;
 
 import android.content.Context;
 
@@ -57,6 +58,9 @@ public abstract class ServerSyncStage implements
   protected static final String LOG_TAG = "ServerSyncStage";
 
   protected final GlobalSession session;
+
+  protected long stageStartTimestamp = -1;
+  protected long stageCompleteTimestamp = -1;
 
   public ServerSyncStage(GlobalSession session) {
     if (session == null) {
@@ -80,8 +84,23 @@ public abstract class ServerSyncStage implements
       // Fall through; null engineSettings will pass below.
     }
 
+    // We can be disabled by the server's meta/global record, or malformed in the server's meta/global record.
     // We catch the subclasses of MetaGlobalException to trigger various resets and wipes in execute().
-    return session.engineIsEnabled(this.getEngineName(), engineSettings);
+    boolean enabledInMetaGlobal = session.engineIsEnabled(this.getEngineName(), engineSettings);
+    if (!enabledInMetaGlobal) {
+      Logger.debug(LOG_TAG, "Stage " + this.getEngineName() + " disabled by server meta/global.");
+      return false;
+    }
+
+    // We can also be disabled just for this sync.
+    if (session.config.stagesToSync == null) {
+      return true;
+    }
+    boolean enabledThisSync = session.config.stagesToSync.contains(this.getEngineName()); // For ServerSyncStage, stage name == engine name.
+    if (!enabledThisSync) {
+      Logger.debug(LOG_TAG, "Stage " + this.getEngineName() + " disabled just for this sync.");
+    }
+    return enabledThisSync;
   }
 
   protected EngineSettings getEngineSettings() throws NonObjectJSONException, IOException, ParseException {
@@ -160,7 +179,7 @@ public abstract class ServerSyncStage implements
    * Reset timestamps and possibly set syncID.
    * @param syncID if non-null, new syncID to persist.
    */
-  public void resetLocal(String syncID) {
+  protected void resetLocal(String syncID) {
     // Clear both timestamps.
     SynchronizerConfiguration config;
     try {
@@ -435,9 +454,11 @@ public abstract class ServerSyncStage implements
     final String name = getEngineName();
     Logger.debug(LOG_TAG, "Starting execute for " + name);
 
+    stageStartTimestamp = System.currentTimeMillis();
+
     try {
       if (!this.isEnabled()) {
-        Logger.info(LOG_TAG, "Stage " + name + " disabled; skipping.");
+        Logger.info(LOG_TAG, "Skipping stage " + name + ".");
         session.advance();
         return;
       }
@@ -497,12 +518,22 @@ public abstract class ServerSyncStage implements
   }
 
   /**
+   * Express the duration taken by this stage as a String, like "0.56 seconds".
+   *
+   * @return formatted string.
+   */
+  protected String getStageDurationString() {
+    return Utils.formatDuration(stageStartTimestamp, stageCompleteTimestamp);
+  }
+
+  /**
    * We synced this engine!  Persist timestamps and advance the session.
    *
    * @param synchronizer the <code>Synchronizer</code> that succeeded.
    */
   @Override
   public void onSynchronized(Synchronizer synchronizer) {
+    stageCompleteTimestamp = System.currentTimeMillis();
     Logger.debug(LOG_TAG, "onSynchronized.");
 
     SynchronizerConfiguration newConfig = synchronizer.save();
@@ -512,6 +543,11 @@ public abstract class ServerSyncStage implements
       Logger.warn(LOG_TAG, "Didn't get configuration from synchronizer after success.");
     }
 
+    final SynchronizerSession synchronizerSession = synchronizer.getSynchronizerSession();
+    int inboundCount = synchronizerSession.getInboundCount();
+    int outboundCount = synchronizerSession.getOutboundCount();
+    Logger.info(LOG_TAG, "Received " + inboundCount + " and sent " + outboundCount +
+        " records in " + getStageDurationString() + ".");
     Logger.info(LOG_TAG, "Advancing session.");
     session.advance();
   }
@@ -526,6 +562,7 @@ public abstract class ServerSyncStage implements
   @Override
   public void onSynchronizeFailed(Synchronizer synchronizer,
                                   Exception lastException, String reason) {
+    stageCompleteTimestamp = System.currentTimeMillis();
     Logger.warn(LOG_TAG, "Synchronize failed: " + reason, lastException);
 
     // This failure could be due to a 503 or a 401 and it could have headers.
@@ -540,7 +577,8 @@ public abstract class ServerSyncStage implements
       }
     }
 
-    Logger.info(LOG_TAG, "Advancing session even though stage failed. Timestamps not persisted.");
+    Logger.info(LOG_TAG, "Advancing session even though stage failed (took " + getStageDurationString() +
+        "). Timestamps not persisted.");
     session.advance();
   }
 }

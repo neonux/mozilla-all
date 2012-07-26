@@ -17,7 +17,7 @@ namespace dom {
 void
 CrashReporterParent::ActorDestroy(ActorDestroyReason why)
 {
-#if defined(__ANDROID__) && defined(MOZ_CRASHREPORTER)
+#if defined(MOZ_WIDGET_ANDROID) && defined(MOZ_CRASHREPORTER)
   CrashReporter::RemoveLibraryMappingsForChild(ProcessId(OtherProcess()));
 #endif
 }
@@ -25,7 +25,7 @@ CrashReporterParent::ActorDestroy(ActorDestroyReason why)
 bool
 CrashReporterParent::RecvAddLibraryMappings(const InfallibleTArray<Mapping>& mappings)
 {
-#if defined(__ANDROID__) && defined(MOZ_CRASHREPORTER)
+#if defined(MOZ_WIDGET_ANDROID) && defined(MOZ_CRASHREPORTER)
   for (PRUint32 i = 0; i < mappings.Length(); i++) {
     const Mapping& m = mappings[i];
     CrashReporter::AddLibraryMappingForChild(ProcessId(OtherProcess()),
@@ -96,6 +96,15 @@ CrashReporterParent::GenerateHangCrashReport(const AnnotationTable* processNotes
     if (!CrashReporter::AppendExtraData(mParentDumpID, notes))
         NS_WARNING("problem appending parent data to .extra");
     return true;
+}
+
+bool
+CrashReporterParent::GenerateCrashReportForMinidump(nsIFile* minidump,
+    const AnnotationTable* processNotes)
+{
+    if (!CrashReporter::GetIDFromMinidump(minidump, mChildDumpID))
+        return false;
+    return GenerateChildData(processNotes);
 }
 
 bool

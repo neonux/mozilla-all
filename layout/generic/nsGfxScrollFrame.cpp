@@ -16,6 +16,7 @@
 #include "nsGfxScrollFrame.h"
 #include "nsGkAtoms.h"
 #include "nsINameSpaceManager.h"
+#include "nsContentList.h"
 #include "nsIDocument.h"
 #include "nsFontMetrics.h"
 #include "nsIDocumentObserver.h"
@@ -51,6 +52,7 @@
 #include "nsSMILKeySpline.h"
 #include "nsSubDocumentFrame.h"
 #include "nsSVGOuterSVGFrame.h"
+#include "mozilla/Attributes.h"
 
 using namespace mozilla;
 using namespace mozilla::dom;
@@ -296,7 +298,8 @@ static nsSize ComputeInsideBorderSize(ScrollReflowState* aState,
       aState->mReflowState.mComputedPadding.TopBottom();
   }
 
-  aState->mReflowState.ApplyMinMaxConstraints(&contentWidth, &contentHeight);
+  contentWidth  = aState->mReflowState.ApplyMinMaxWidth(contentWidth);
+  contentHeight = aState->mReflowState.ApplyMinMaxHeight(contentHeight);
   return nsSize(contentWidth + aState->mReflowState.mComputedPadding.LeftRight(),
                 contentHeight + aState->mReflowState.mComputedPadding.TopBottom());
 }
@@ -929,7 +932,7 @@ nsHTMLScrollFrame::Reflow(nsPresContext*           aPresContext,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifdef NS_DEBUG
+#ifdef DEBUG
 NS_IMETHODIMP
 nsHTMLScrollFrame::GetFrameName(nsAString& aResult) const
 {
@@ -1248,7 +1251,7 @@ nsXULScrollFrame::GetMaxSize(nsBoxLayoutState& aState)
   return maxSize;
 }
 
-#ifdef NS_DEBUG
+#ifdef DEBUG
 NS_IMETHODIMP
 nsXULScrollFrame::GetFrameName(nsAString& aResult) const
 {
@@ -1281,7 +1284,7 @@ const double kCurrentVelocityWeighting = 0.25;
 const double kStopDecelerationWeighting = 0.4;
 
 // AsyncScroll has ref counting.
-class nsGfxScrollFrameInner::AsyncScroll : public nsARefreshObserver {
+class nsGfxScrollFrameInner::AsyncScroll MOZ_FINAL : public nsARefreshObserver {
 public:
   typedef mozilla::TimeStamp TimeStamp;
   typedef mozilla::TimeDuration TimeDuration;
@@ -1553,7 +1556,7 @@ IsSmoothScrollingEnabled()
   return Preferences::GetBool(SMOOTH_SCROLL_PREF_NAME, false);
 }
 
-class ScrollFrameActivityTracker : public nsExpirationTracker<nsGfxScrollFrameInner,4> {
+class ScrollFrameActivityTracker MOZ_FINAL : public nsExpirationTracker<nsGfxScrollFrameInner,4> {
 public:
   // Wait for 3-4s between scrolls before we remove our layers.
   // That's 4 generations of 1s each.
@@ -1663,6 +1666,9 @@ nsGfxScrollFrameInner::AsyncScrollCallback(void* anInstance, mozilla::TimeStamp 
   // Apply desired destination range since this is the last step of scrolling.
   self->mAsyncScroll = nsnull;
   self->ScrollToImpl(self->mDestination, range);
+  // We are done scrolling, set our destination to wherever we actually ended
+  // up scrolling to.
+  self->mDestination = self->GetScrollPosition();
 }
 
 void
@@ -1710,6 +1716,9 @@ nsGfxScrollFrameInner::ScrollToWithOrigin(nsPoint aScrollPosition,
     // async-scrolling process and do an instant scroll.
     mAsyncScroll = nsnull;
     ScrollToImpl(mDestination, range);
+    // We are done scrolling, set our destination to wherever we actually ended
+    // up scrolling to.
+    mDestination = GetScrollPosition();
     return;
   }
 
@@ -1730,6 +1739,9 @@ nsGfxScrollFrameInner::ScrollToWithOrigin(nsPoint aScrollPosition,
       mAsyncScroll = nsnull;
       // Observer setup failed. Scroll the normal way.
       ScrollToImpl(mDestination, range);
+      // We are done scrolling, set our destination to wherever we actually
+      // ended up scrolling to.
+      mDestination = GetScrollPosition();
       return;
     }
   }
@@ -1785,7 +1797,8 @@ CanScrollWithBlitting(nsIFrame* aFrame)
   for (nsIFrame* f = aFrame; f;
        f = nsLayoutUtils::GetCrossDocParentFrame(f)) {
     if (nsSVGIntegrationUtils::UsingEffectsForFrame(f) ||
-        f->IsFrameOfType(nsIFrame::eSVG)) {
+        f->IsFrameOfType(nsIFrame::eSVG) ||
+        f->GetStateBits() & NS_FRAME_NO_COMPONENT_ALPHA) {
       return false;
     }
     if (nsLayoutUtils::IsPopup(f))
@@ -3179,9 +3192,12 @@ void nsGfxScrollFrameInner::PostOverflowEvent()
     return;
   }
 
-  nsRefPtr<AsyncScrollPortEvent> ev = new AsyncScrollPortEvent(this);
-  if (NS_SUCCEEDED(NS_DispatchToCurrentThread(ev)))
-    mAsyncScrollPortEvent = ev;
+  nsRootPresContext* rpc = mOuter->PresContext()->GetRootPresContext();
+  if (!rpc)
+    return;
+
+  mAsyncScrollPortEvent = new AsyncScrollPortEvent(this);
+  rpc->AddWillPaintObserver(mAsyncScrollPortEvent.get());
 }
 
 bool

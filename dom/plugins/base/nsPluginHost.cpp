@@ -54,6 +54,7 @@
 #include "nsVersionComparator.h"
 #include "nsIObjectLoadingContent.h"
 #include "nsIWritablePropertyBag2.h"
+#include "nsICategoryManager.h"
 #include "nsPluginStreamListenerPeer.h"
 #include "mozilla/Preferences.h"
 
@@ -152,6 +153,9 @@ using mozilla::TimeStamp;
 // to cache temporary files.
 #define kPluginTmpDirName NS_LITERAL_CSTRING("plugtmp")
 
+static const char *kPrefWhitelist = "plugin.allowed_types";
+static const char *kPrefDisableFullPage = "plugin.disable_full_page_plugin_for_types";
+
 // Version of cached plugin info
 // 0.01 first implementation
 // 0.02 added caching of CanUnload to fix bug 105935
@@ -227,6 +231,28 @@ nsInvalidPluginTag::nsInvalidPluginTag(const char* aFullPath, PRInt64 aLastModif
 nsInvalidPluginTag::~nsInvalidPluginTag()
 {
   
+}
+
+// Helper to check for a MIME in a comma-delimited preference
+static bool
+IsTypeInList(nsCString &aMimeType, nsCString aTypeList)
+{
+  nsCAutoString searchStr;
+  searchStr.Assign(',');
+  searchStr.Append(aTypeList);
+  searchStr.Append(',');
+
+  nsACString::const_iterator start, end;
+
+  searchStr.BeginReading(start);
+  searchStr.EndReading(end);
+
+  nsCAutoString commaSeparated;
+  commaSeparated.Assign(',');
+  commaSeparated += aMimeType;
+  commaSeparated.Append(',');
+
+  return FindInReadable(commaSeparated, start, end);
 }
 
 // flat file reg funcs
@@ -316,8 +342,10 @@ nsPluginHost::nsPluginHost()
     Preferences::GetBool("plugin.override_internal_types", false);
 
   mPluginsDisabled = Preferences::GetBool("plugin.disable", false);
+  mPluginsClickToPlay = Preferences::GetBool("plugins.click_to_play", false);
 
   Preferences::AddStrongObserver(this, "plugin.disable");
+  Preferences::AddStrongObserver(this, "plugins.click_to_play");
 
   nsCOMPtr<nsIObserverService> obsService =
     mozilla::services::GetObserverService();
@@ -561,7 +589,7 @@ nsresult nsPluginHost::GetURL(nsISupports* pluginInst,
 {
   return GetURLWithHeaders(static_cast<nsNPAPIPluginInstance*>(pluginInst),
                            url, target, streamListener, altHost, referrer,
-                           forceJSEnabled, nsnull, nsnull);
+                           forceJSEnabled, 0, nsnull);
 }
 
 nsresult nsPluginHost::GetURLWithHeaders(nsNPAPIPluginInstance* pluginInst,
@@ -1268,6 +1296,36 @@ nsPluginHost::IsPluginEnabledForType(const char* aMimeType)
 
   return NS_OK;
 }
+ 
+bool
+nsPluginHost::IsPluginClickToPlayForType(const char* aMimeType)
+{
+  nsPluginTag *plugin = FindPluginForType(aMimeType, true);
+  if (plugin && 
+      (plugin->HasFlag(NS_PLUGIN_FLAG_CLICKTOPLAY) || mPluginsClickToPlay)) {
+    return true;
+  }
+  else {
+    return false;
+  }
+}
+
+nsresult
+nsPluginHost::GetBlocklistStateForType(const char *aMimeType, PRUint32 *aState) 
+{
+  nsPluginTag *plugin = FindPluginForType(aMimeType, true);
+  if (plugin) {
+    nsCOMPtr<nsIBlocklistService> blocklist = do_GetService("@mozilla.org/extensions/blocklist;1");
+    if (blocklist) {
+      // The EmptyString()s are so we use the currently running application
+      // and toolkit versions
+      return blocklist->GetPluginBlocklistState(plugin, EmptyString(),
+                                                EmptyString(), aState);
+    }
+  }
+
+  return NS_ERROR_FAILURE;
+}
 
 // check comma delimitered extensions
 static int CompareExtensions(const char *aExtensionList, const char *aExtension)
@@ -1493,6 +1551,11 @@ nsPluginTag*
 nsPluginHost::FindPreferredPlugin(const InfallibleTArray<nsPluginTag*>& matches)
 {
   // We prefer the plugin with the highest version number.
+  /// XXX(johns): This seems to assume the only time multiple plugins will have
+  ///             the same MIME type is if they're multiple versions of the same
+  ///             plugin -- but since plugin filenames and pretty names can both
+  ///             update, it's probably less arbitrary than just going at it
+  ///             alphabetically.
 
   if (matches.IsEmpty()) {
     return nsnull;
@@ -1636,7 +1699,7 @@ nsresult nsPluginHost::GetPlugin(const char *aMimeType, nsNPAPIPlugin** aPlugin)
     ("nsPluginHost::GetPlugin Begin mime=%s, plugin=%s\n",
     aMimeType, pluginTag->mFileName.get()));
 
-#ifdef NS_DEBUG
+#ifdef DEBUG
     if (aMimeType && !pluginTag->mFileName.IsEmpty())
       printf("For %s found plugin %s\n", aMimeType, pluginTag->mFileName.get());
 #endif
@@ -1884,6 +1947,68 @@ nsPluginHost::IsLiveTag(nsIPluginTag* aPluginTag)
   return false;
 }
 
+nsPluginTag*
+nsPluginHost::HaveSamePlugin(const nsPluginTag* aPluginTag)
+{
+  for (nsPluginTag* tag = mPlugins; tag; tag = tag->mNext) {
+    if (tag->HasSameNameAndMimes(aPluginTag)) {
+        return tag;
+    }
+  }
+  return nsnull;
+}
+
+nsPluginTag*
+nsPluginHost::FirstPluginWithPath(const nsCString& path)
+{
+  for (nsPluginTag* tag = mPlugins; tag; tag = tag->mNext) {
+    if (tag->mFullPath.Equals(path)) {
+      return tag;
+    }
+  }
+  return nsnull;
+}
+
+namespace {
+
+PRInt64 GetPluginLastModifiedTime(const nsCOMPtr<nsIFile>& localfile)
+{
+  PRInt64 fileModTime = LL_ZERO;
+
+#if defined(XP_MACOSX)
+  // On OS X the date of a bundle's "contents" (i.e. of its Info.plist file)
+  // is a much better guide to when it was last modified than the date of
+  // its package directory.  See bug 313700.
+  nsCOMPtr<nsILocalFileMac> localFileMac = do_QueryInterface(localfile);
+  if (localFileMac) {
+    localFileMac->GetBundleContentsLastModifiedTime(&fileModTime);
+  } else {
+    localfile->GetLastModifiedTime(&fileModTime);
+  }
+#else
+  localfile->GetLastModifiedTime(&fileModTime);
+#endif
+
+  return fileModTime;
+}
+
+struct CompareFilesByTime 
+{
+  bool 
+  LessThan(const nsCOMPtr<nsIFile>& a, const nsCOMPtr<nsIFile>& b) const 
+  {
+    return LL_CMP(GetPluginLastModifiedTime(a), <, GetPluginLastModifiedTime(b));
+  }
+
+  bool
+  Equals(const nsCOMPtr<nsIFile>& a, const nsCOMPtr<nsIFile>& b) const
+  {
+    return LL_EQ(GetPluginLastModifiedTime(a), GetPluginLastModifiedTime(b));
+  }
+};
+
+} // anonymous namespace
+
 typedef NS_NPAPIPLUGIN_CALLBACK(char *, NP_GETMIMEDESCRIPTION)(void);
 
 nsresult nsPluginHost::ScanPluginsDirectory(nsIFile *pluginsDir,
@@ -1928,9 +2053,11 @@ nsresult nsPluginHost::ScanPluginsDirectory(nsIFile *pluginsDir,
     }
   }
 
+  pluginFiles.Sort(CompareFilesByTime());
+
   bool warnOutdated = false;
 
-  for (PRUint32 i = 0; i < pluginFiles.Length(); i++) {
+  for (PRInt32 i = (pluginFiles.Length() - 1); i >= 0; i--) {
     nsCOMPtr<nsIFile>& localfile = pluginFiles[i];
 
     nsString utf16FilePath;
@@ -1938,21 +2065,8 @@ nsresult nsPluginHost::ScanPluginsDirectory(nsIFile *pluginsDir,
     if (NS_FAILED(rv))
       continue;
 
-    PRInt64 fileModTime = LL_ZERO;
-#if defined(XP_MACOSX)
-    // On OS X the date of a bundle's "contents" (i.e. of its Info.plist file)
-    // is a much better guide to when it was last modified than the date of
-    // its package directory.  See bug 313700.
-    nsCOMPtr<nsILocalFileMac> localFileMac = do_QueryInterface(localfile);
-    if (localFileMac) {
-      localFileMac->GetBundleContentsLastModifiedTime(&fileModTime);
-    } else {
-      localfile->GetLastModifiedTime(&fileModTime);
-    }
-#else
-    localfile->GetLastModifiedTime(&fileModTime);
-#endif
-
+    PRInt64 fileModTime = GetPluginLastModifiedTime(localfile);
+    
     // Look for it in our cache
     NS_ConvertUTF16toUTF8 filePath(utf16FilePath);
     nsRefPtr<nsPluginTag> pluginTag;
@@ -2043,19 +2157,32 @@ nsresult nsPluginHost::ScanPluginsDirectory(nsIFile *pluginsDir,
                                                 EmptyString(), &state);
 
         if (NS_SUCCEEDED(rv)) {
-          // If the blocklist says so then block the plugin. If the blocklist says
-          // it is risky and we have never seen this plugin before then disable it
-          if (state == nsIBlocklistService::STATE_BLOCKED)
-            pluginTag->Mark(NS_PLUGIN_FLAG_BLOCKLISTED);
-          else if (state == nsIBlocklistService::STATE_SOFTBLOCKED && !seenBefore)
-            enabled = false;
-          else if (state == nsIBlocklistService::STATE_OUTDATED && !seenBefore)
-            warnOutdated = true;
+          // If the blocklist says so, block the plugin.
+          // If the blocklist says it is risky and we have never seen this
+          // plugin before, then disable it.
+          // If the blocklist says this is an outdated plugin, warn about
+          // outdated plugins.
+          // If the blocklist says the plugin is one of the click-to-play
+          // states, set the click-to-play flag.
+          if (state == nsIBlocklistService::STATE_BLOCKED) {
+             pluginTag->Mark(NS_PLUGIN_FLAG_BLOCKLISTED);
+          }
+          if (state == nsIBlocklistService::STATE_SOFTBLOCKED && !seenBefore) {
+             enabled = false;
+          }
+          if (state == nsIBlocklistService::STATE_OUTDATED && !seenBefore) {
+             warnOutdated = true;
+          }
+          if (state == nsIBlocklistService::STATE_VULNERABLE_UPDATE_AVAILABLE ||
+              state == nsIBlocklistService::STATE_VULNERABLE_NO_UPDATE) {
+            pluginTag->Mark(NS_PLUGIN_FLAG_CLICKTOPLAY);
+          }
         }
       }
 
-      if (!enabled)
+      if (!enabled) {
         pluginTag->UnMark(NS_PLUGIN_FLAG_ENABLED);
+      }
 
       // Plugin unloading is tag-based. If we created a new tag and loaded
       // the library in the process then we want to attempt to unload it here.
@@ -2069,6 +2196,21 @@ nsresult nsPluginHost::ScanPluginsDirectory(nsIFile *pluginsDir,
     if (!seenBefore) {
       // We have a valid new plugin so report that plugins have changed.
       *aPluginsChanged = true;
+    }
+    
+    // Avoid adding different versions of the same plugin if they are running 
+    // in-process, otherwise we risk undefined behaviour.
+    if (!nsNPAPIPlugin::RunPluginOOP(pluginTag)) {
+      if (nsPluginTag *duplicate = HaveSamePlugin(pluginTag)) {
+        continue;
+      }
+    }
+    
+    // Don't add the same plugin again if it hasn't changed
+    if (nsPluginTag* duplicate = FirstPluginWithPath(pluginTag->mFullPath)) {
+      if (LL_EQ(pluginTag->mLastModifiedTime, duplicate->mLastModifiedTime)) {
+        continue;
+      }
     }
 
     // If we're not creating a plugin list, simply looking for changes,
@@ -2106,7 +2248,14 @@ nsresult nsPluginHost::ScanPluginsDirectory(nsIFile *pluginsDir,
     }
 
     if (pluginTag->IsEnabled()) {
-      pluginTag->RegisterWithCategoryManager(mOverrideInternalTypes);
+      nsAdoptingCString disableFullPage =
+        Preferences::GetCString(kPrefDisableFullPage);
+      for (PRUint32 i = 0; i < pluginTag->mMimeTypes.Length(); i++) {
+        if (!IsTypeInList(pluginTag->mMimeTypes[i], disableFullPage)) {
+          RegisterWithCategoryManager(pluginTag->mMimeTypes[i],
+                                      ePluginRegister);
+        }
+      }
     }
   }
 
@@ -2358,8 +2507,31 @@ nsPluginHost::UpdatePluginInfo(nsPluginTag* aPluginTag)
   NS_ITERATIVE_UNREF_LIST(nsRefPtr<nsPluginTag>, mCachedPlugins, mNext);
   NS_ITERATIVE_UNREF_LIST(nsRefPtr<nsInvalidPluginTag>, mInvalidPlugins, mNext);
 
-  if (!aPluginTag || aPluginTag->IsEnabled())
+  if (!aPluginTag) {
     return NS_OK;
+  }
+
+  // Update types with category manager
+  nsAdoptingCString disableFullPage =
+    Preferences::GetCString(kPrefDisableFullPage);
+  for (PRUint32 i = 0; i < aPluginTag->mMimeTypes.Length(); i++) {
+    nsRegisterType shouldRegister;
+
+    if (IsTypeInList(aPluginTag->mMimeTypes[i], disableFullPage)) {
+      shouldRegister = ePluginUnregister;
+    } else {
+      nsPluginTag *plugin = FindPluginForType(aPluginTag->mMimeTypes[i].get(),
+                                              true);
+      shouldRegister = plugin ? ePluginRegister : ePluginUnregister;
+    }
+
+    RegisterWithCategoryManager(aPluginTag->mMimeTypes[i], shouldRegister);
+  }
+
+  // Reload instances if needed
+  if (aPluginTag->IsEnabled()) {
+    return NS_OK;
+  }
 
   nsCOMPtr<nsISupportsArray> instsToReload;
   NS_NewISupportsArray(getter_AddRefs(instsToReload));
@@ -2373,6 +2545,55 @@ nsPluginHost::UpdatePluginInfo(nsPluginTag* aPluginTag)
   }
 
   return NS_OK;
+}
+
+/* static */ bool
+nsPluginHost::IsTypeWhitelisted(const char *aMimeType)
+{
+  nsAdoptingCString whitelist = Preferences::GetCString(kPrefWhitelist);
+  if (!whitelist.Length()) {
+    return true;
+  }
+  nsDependentCString wrap(aMimeType);
+  return IsTypeInList(wrap, whitelist);
+}
+
+void
+nsPluginHost::RegisterWithCategoryManager(nsCString &aMimeType,
+                                          nsRegisterType aType)
+{
+  PLUGIN_LOG(PLUGIN_LOG_NORMAL,
+             ("nsPluginTag::RegisterWithCategoryManager type = %s, removing = %s\n",
+              aMimeType.get(), aType == ePluginUnregister ? "yes" : "no"));
+
+  nsCOMPtr<nsICategoryManager> catMan =
+    do_GetService(NS_CATEGORYMANAGER_CONTRACTID);
+  if (!catMan) {
+    return;
+  }
+
+  const char *contractId =
+    "@mozilla.org/content/plugin/document-loader-factory;1";
+
+  if (aType == ePluginRegister) {
+    catMan->AddCategoryEntry("Gecko-Content-Viewers",
+                             aMimeType.get(),
+                             contractId,
+                             false, /* persist: broken by bug 193031 */
+                             mOverrideInternalTypes,
+                             nsnull);
+  } else {
+    // Only delete the entry if a plugin registered for it
+    nsXPIDLCString value;
+    nsresult rv = catMan->GetCategoryEntry("Gecko-Content-Viewers",
+                                           aMimeType.get(),
+                                           getter_Copies(value));
+    if (NS_SUCCEEDED(rv) && strcmp(value, contractId) == 0) {
+      catMan->DeleteCategoryEntry("Gecko-Content-Viewers",
+                                  aMimeType.get(),
+                                  true);
+    }
+  }
 }
 
 nsresult
@@ -3192,6 +3413,7 @@ NS_IMETHODIMP nsPluginHost::Observe(nsISupports *aSubject,
   }
   if (!nsCRT::strcmp(NS_PREFBRANCH_PREFCHANGE_TOPIC_ID, aTopic)) {
     mPluginsDisabled = Preferences::GetBool("plugin.disable", false);
+    mPluginsClickToPlay = Preferences::GetBool("plugins.click_to_play", false);
     // Unload or load plugins as needed
     if (mPluginsDisabled) {
       UnloadPlugins();
@@ -3713,13 +3935,12 @@ CheckForDisabledWindows()
     windowList->GetNext(getter_AddRefs(supportsWindow));
     nsCOMPtr<nsIBaseWindow> baseWin(do_QueryInterface(supportsWindow));
     if (baseWin) {
-      bool aFlag;
       nsCOMPtr<nsIWidget> widget;
       baseWin->GetMainWidget(getter_AddRefs(widget));
       if (widget && !widget->GetParent() &&
-          NS_SUCCEEDED(widget->IsVisible(aFlag)) && aFlag == true &&
-          NS_SUCCEEDED(widget->IsEnabled(&aFlag)) && aFlag == false) {
-        nsIWidget * child = widget->GetFirstChild();
+          widget->IsVisible() &&
+          !widget->IsEnabled()) {
+        nsIWidget* child = widget->GetFirstChild();
         bool enable = true;
         while (child)  {
           nsWindowType aType;

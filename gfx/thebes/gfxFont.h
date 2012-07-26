@@ -441,7 +441,7 @@ private:
         typedef KeyClass::KeyTypePointer KeyTypePointer;
 
         FontTableHashEntry(KeyTypePointer aTag)
-            : KeyClass(aTag), mBlob() { };
+            : KeyClass(aTag), mBlob() { }
         // Copying transfers blob association.
         FontTableHashEntry(FontTableHashEntry& toCopy)
             : KeyClass(toCopy), mBlob(toCopy.mBlob)
@@ -642,6 +642,17 @@ public:
     // so we can use simplified style-matching;
     // if so set the mIsSimpleFamily flag (defaults to False before we've checked)
     void CheckForSimpleFamily();
+
+    // check whether the family has any faces that are marked as Italic
+    bool HasItalicFace() const {
+        size_t count = mAvailableFonts.Length();
+        for (size_t i = 0; i < count; ++i) {
+            if (mAvailableFonts[i] && mAvailableFonts[i]->IsItalic()) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     // For memory reporter
     virtual void SizeOfExcludingThis(nsMallocSizeOfFun aMallocSizeOf,
@@ -2974,7 +2985,8 @@ public:
 
         return static_cast<gfxFont*>(mFonts[i]);
     }
-    virtual PRUint32 FontListLength() const {
+
+    PRUint32 FontListLength() const {
         return mFonts.Length();
     }
 
@@ -3168,6 +3180,12 @@ protected:
                                bool aUseFontSet,
                                FontCreationCallback fc,
                                void *closure);
+
+    // Helper for font-matching:
+    // see if aCh is supported in any of the other faces from aFont's family;
+    // if so return the best style match, else return null.
+    already_AddRefed<gfxFont> TryOtherFamilyMembers(gfxFont* aFont,
+                                                    PRUint32 aCh);
 
     static bool FontResolverProc(const nsAString& aName, void *aClosure);
 

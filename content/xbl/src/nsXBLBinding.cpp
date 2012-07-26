@@ -55,7 +55,7 @@
 #include "nsNodeUtils.h"
 
 // Nasty hack.  Maybe we could move some of the classinfo utility methods
-// (e.g. WrapNative and ThrowJSException) over to nsContentUtils?
+// (e.g. WrapNative) over to nsContentUtils?
 #include "nsDOMClassInfo.h"
 #include "nsJSUtils.h"
 
@@ -78,101 +78,274 @@ XBLFinalize(JSFreeOp *fop, JSObject *obj)
   c->Drop();
 }
 
-static JSBool
-XBLResolve(JSContext *cx, JSHandleObject obj, JSHandleId id, unsigned flags,
-           JSObject **objp)
+// XBL fields are represented on elements inheriting that field a bit trickily.
+// Initially the element itself won't have a property for the field.  When an
+// attempt is made to access the field, the element's resolve hook won't find
+// it.  But the XBL prototype object, in the prototype chain of the element,
+// will resolve an accessor property for the field on the XBL prototype object.
+// That accessor, when used, will then (via InstallXBLField below) reify a
+// property for the field onto the actual XBL-backed element.
+//
+// The accessor property is a plain old property backed by a getter function and
+// a setter function.  These properties are backed by the FieldGetter and
+// FieldSetter natives; they're created by XBLResolve.  The precise field to be
+// reified is identified using two extra slots on the getter/setter functions.
+// XBLPROTO_SLOT stores the XBL prototype object that provides the field.
+// FIELD_SLOT stores the name of the field, i.e. its JavaScript property name.
+//
+// This two-step field installation process -- reify an accessor on the
+// prototype, then have that reify an own property on the actual element -- is
+// admittedly convoluted.  Better would be for XBL-backed elements to be proxies
+// that could resolve fields onto themselves.  But given that XBL bindings are
+// associated with elements mutably -- you can add/remove/change -moz-binding
+// whenever you want, alas -- doing so would require all elements to be proxies,
+// which isn't performant now.  So we do this two-step instead.
+static const uint32_t XBLPROTO_SLOT = 0;
+static const uint32_t FIELD_SLOT = 1;
+
+static bool
+ValueHasISupportsPrivate(const JS::Value &v)
 {
-  // Note: if we get here, that means that the implementation for some binding
-  // was installed, which means that AllowScripts() tested true.  Hence no need
-  // to do checks like that here.
-  
-  // Default to not resolving things.
-  NS_ASSERTION(*objp, "Must have starting object");
-
-  JSObject* origObj = *objp;
-  *objp = NULL;
-
-  if (!JSID_IS_STRING(id)) {
-    return JS_TRUE;
+  if (!v.isObject()) {
+    return false;
   }
 
-  nsDependentJSString fieldName(id);
+  JSClass* clasp = ::JS_GetClass(&v.toObject());
+  const uint32_t HAS_PRIVATE_NSISUPPORTS =
+    JSCLASS_HAS_PRIVATE | JSCLASS_PRIVATE_IS_NSISUPPORTS;
+  return (clasp->flags & HAS_PRIVATE_NSISUPPORTS) == HAS_PRIVATE_NSISUPPORTS;
+}
 
-  jsval slotVal = ::JS_GetReservedSlot(obj, 0);
-  NS_ASSERTION(!JSVAL_IS_VOID(slotVal), "How did that happen?");
-    
-  nsXBLPrototypeBinding* protoBinding =
-    static_cast<nsXBLPrototypeBinding*>(JSVAL_TO_PRIVATE(slotVal));
-  NS_ASSERTION(protoBinding, "Must have prototype binding!");
+// Define a shadowing property on |this| for the XBL field defined by the
+// contents of the callee's reserved slots.  If the property was defined,
+// *installed will be true, and idp will be set to the property name that was
+// defined.
+static JSBool
+InstallXBLField(JSContext* cx,
+                JS::Handle<JSObject*> callee, JS::Handle<JSObject*> thisObj,
+                jsid* idp, bool* installed)
+{
+  *installed = false;
 
-  nsXBLProtoImplField* field = protoBinding->FindField(fieldName);
-  if (!field) {
-    return JS_TRUE;
-  }
+  // First ensure |this| is a reasonable XBL bound node.
+  //
+  // FieldAccessorGuard already determined whether |thisObj| was acceptable as
+  // |this| in terms of not throwing a TypeError.  Assert this for good measure.
+  MOZ_ASSERT(ValueHasISupportsPrivate(JS::ObjectValue(*thisObj)));
 
-  // We have this field.  Time to install it.  Get our node.
-  JSClass* nodeClass = ::JS_GetClass(origObj);
-  if (!nodeClass) {
-    return JS_FALSE;
-  }
-  
-  if (~nodeClass->flags &
-      (JSCLASS_HAS_PRIVATE | JSCLASS_PRIVATE_IS_NSISUPPORTS)) {
-    nsDOMClassInfo::ThrowJSException(cx, NS_ERROR_UNEXPECTED);
-    return JS_FALSE;
-  }
-
+  // But there are some cases where we must accept |thisObj| but not install a
+  // property on it, or otherwise touch it.  Hence this split of |this|-vetting
+  // duties.
   nsCOMPtr<nsIXPConnectWrappedNative> xpcWrapper =
-    do_QueryInterface(static_cast<nsISupports*>(::JS_GetPrivate(origObj)));
+    do_QueryInterface(static_cast<nsISupports*>(::JS_GetPrivate(thisObj)));
   if (!xpcWrapper) {
-    // Looks like whatever |origObj| is it's not our nsIContent.  It might well
+    // Looks like whatever |thisObj| is it's not our nsIContent.  It might well
     // be the proto our binding installed, however, where the private is the
     // nsXBLDocumentInfo, so just baul out quietly.  Do NOT throw an exception
     // here.
-    // We could make this stricter by checking the class maybe, but whatever
-    return JS_TRUE;
+    //
+    // We could make this stricter by checking the class maybe, but whatever.
+    return true;
   }
 
-  nsCOMPtr<nsIContent> content = do_QueryWrappedNative(xpcWrapper);
-  if (!content) {
-    nsDOMClassInfo::ThrowJSException(cx, NS_ERROR_UNEXPECTED);
-    return JS_FALSE;
+  nsCOMPtr<nsIContent> xblNode = do_QueryWrappedNative(xpcWrapper);
+  if (!xblNode) {
+    xpc::Throw(cx, NS_ERROR_UNEXPECTED);
+    return false;
   }
+
+  // Now that |this| is okay, actually install the field.  Some of this
+  // installation work could have been done in XBLResolve, but this splitting
+  // of work seems simplest to implement and friendliest regarding lifetimes
+  // and potential cycles.
+
+  // Because of the possibility (due to XBL binding inheritance, because each
+  // XBL binding lives in its own global object) that |this| might be in a
+  // different compartment from the callee (not to mention that this method can
+  // be called with an arbitrary |this| regardless of how insane XBL is), and
+  // because in this method we've entered |this|'s compartment (see in
+  // Field[GS]etter where we attempt a cross-compartment call), we must enter
+  // the callee's compartment to access its reserved slots.
+  nsXBLPrototypeBinding* protoBinding;
+  nsDependentJSString fieldName;
+  {
+    JSAutoEnterCompartment ac;
+    if (!ac.enter(cx, callee)) {
+      return false;
+    }
+
+    JS::Rooted<JSObject*> xblProto(cx);
+    xblProto = &js::GetFunctionNativeReserved(callee, XBLPROTO_SLOT).toObject();
+
+    JS::Value name = js::GetFunctionNativeReserved(callee, FIELD_SLOT);
+    JSFlatString* fieldStr = JS_ASSERT_STRING_IS_FLAT(name.toString());
+    fieldName.init(fieldStr);
+
+    MOZ_ALWAYS_TRUE(JS_ValueToId(cx, name, idp));
+
+    JS::Value slotVal = ::JS_GetReservedSlot(xblProto, 0);
+    protoBinding = static_cast<nsXBLPrototypeBinding*>(slotVal.toPrivate());
+    MOZ_ASSERT(protoBinding);
+  }
+
+  nsXBLProtoImplField* field = protoBinding->FindField(fieldName);
+  MOZ_ASSERT(field);
 
   // This mirrors code in nsXBLProtoImpl::InstallImplementation
-  nsIDocument* doc = content->OwnerDoc();
-
-  nsIScriptGlobalObject* global = doc->GetScriptGlobalObject();
+  nsIScriptGlobalObject* global = xblNode->OwnerDoc()->GetScriptGlobalObject();
   if (!global) {
-    return JS_TRUE;
+    return true;
   }
 
   nsCOMPtr<nsIScriptContext> context = global->GetContext();
   if (!context) {
-    return JS_TRUE;
+    return true;
   }
 
-
-  // Now we either resolve or fail
-  bool didInstall;
-  nsresult rv = field->InstallField(context, origObj,
-                                    content->NodePrincipal(),
-                                    protoBinding->DocURI(),
-                                    &didInstall);
-  if (NS_FAILED(rv)) {
-    if (!::JS_IsExceptionPending(cx)) {
-      nsDOMClassInfo::ThrowJSException(cx, rv);
-    }
-
-    return JS_FALSE;
+  nsresult rv = field->InstallField(context, thisObj, xblNode->NodePrincipal(),
+                                    protoBinding->DocURI(), installed);
+  if (NS_SUCCEEDED(rv)) {
+    return true;
   }
 
-  if (didInstall) {
-    *objp = origObj;
+  if (!::JS_IsExceptionPending(cx)) {
+    xpc::Throw(cx, rv);
   }
-  // else we didn't resolve this field after all
+  return false;
+}
 
-  return JS_TRUE;
+static bool
+FieldGetterImpl(JSContext *cx, JS::CallArgs args)
+{
+  const JS::Value &thisv = args.thisv();
+  MOZ_ASSERT(ValueHasISupportsPrivate(thisv));
+
+  JS::Rooted<JSObject*> thisObj(cx, &thisv.toObject());
+
+  bool installed = false;
+  JS::Rooted<JSObject*> callee(cx, &args.calleev().toObject());
+  JS::Rooted<jsid> id(cx);
+  if (!InstallXBLField(cx, callee, thisObj, id.address(), &installed)) {
+    return false;
+  }
+
+  if (!installed) {
+    args.rval() = JS::UndefinedValue();
+    return true;
+  }
+
+  JS::Rooted<JS::Value> v(cx);
+  if (!JS_GetPropertyById(cx, thisObj, id, v.address())) {
+    return false;
+  }
+  args.rval() = v;
+  return true;
+}
+
+static JSBool
+FieldGetter(JSContext *cx, unsigned argc, JS::Value *vp)
+{
+  JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+  return JS::CallNonGenericMethod(cx, ValueHasISupportsPrivate, FieldGetterImpl,
+                                  args);
+}
+
+static bool
+FieldSetterImpl(JSContext *cx, JS::CallArgs args)
+{
+  const JS::Value &thisv = args.thisv();
+  MOZ_ASSERT(ValueHasISupportsPrivate(thisv));
+
+  JS::Rooted<JSObject*> thisObj(cx, &thisv.toObject());
+
+  bool installed = false;
+  JS::Rooted<JSObject*> callee(cx, &args.calleev().toObject());
+  JS::Rooted<jsid> id(cx);
+  if (!InstallXBLField(cx, callee, thisObj, id.address(), &installed)) {
+    return false;
+  }
+
+  JS::Rooted<JS::Value> v(cx,
+                          args.length() > 0 ? args[0] : JS::UndefinedValue());
+  return JS_SetPropertyById(cx, thisObj, id, v.address());
+}
+
+static JSBool
+FieldSetter(JSContext *cx, unsigned argc, JS::Value *vp)
+{
+  JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+  return JS::CallNonGenericMethod(cx, ValueHasISupportsPrivate, FieldSetterImpl,
+                                  args);
+}
+
+static JSBool
+XBLResolve(JSContext *cx, JSHandleObject obj, JSHandleId id, unsigned flags,
+           JSMutableHandleObject objp)
+{
+  objp.set(NULL);
+
+  if (!JSID_IS_STRING(id)) {
+    return true;
+  }
+
+  nsXBLPrototypeBinding* protoBinding =
+    static_cast<nsXBLPrototypeBinding*>(::JS_GetReservedSlot(obj, 0).toPrivate());
+  MOZ_ASSERT(protoBinding);
+
+  // If the field's not present, don't resolve it.  Also don't resolve it if the
+  // field is empty; see also nsXBLProtoImplField::InstallField which also must
+  // implement the not-empty requirement.
+  nsDependentJSString fieldName(id);
+  nsXBLProtoImplField* field = protoBinding->FindField(fieldName);
+  if (!field || field->IsEmpty()) {
+    return true;
+  }
+
+  // We have a field: now install a getter/setter pair which will resolve the
+  // field onto the actual object, when invoked.
+  JS::Rooted<JSObject*> global(cx, JS_GetGlobalForObject(cx, obj));
+
+  JS::Rooted<JSObject*> get(cx);
+  get = ::JS_GetFunctionObject(js::NewFunctionByIdWithReserved(cx, FieldGetter,
+                                                               0, 0, global,
+                                                               id));
+  if (!get) {
+    return false;
+  }
+  js::SetFunctionNativeReserved(get, XBLPROTO_SLOT, JS::ObjectValue(*obj));
+  js::SetFunctionNativeReserved(get, FIELD_SLOT,
+                                JS::StringValue(JSID_TO_STRING(id)));
+
+  JS::Rooted<JSObject*> set(cx);
+  set = ::JS_GetFunctionObject(js::NewFunctionByIdWithReserved(cx, FieldSetter,
+                                                               1, 0, global,
+                                                               id));
+  if (!set) {
+    return false;
+  }
+  js::SetFunctionNativeReserved(set, XBLPROTO_SLOT, JS::ObjectValue(*obj));
+  js::SetFunctionNativeReserved(set, FIELD_SLOT,
+                                JS::StringValue(JSID_TO_STRING(id)));
+
+  if (!::JS_DefinePropertyById(cx, obj, id, JS::UndefinedValue(),
+                               JS_DATA_TO_FUNC_PTR(JSPropertyOp, get.get()),
+                               JS_DATA_TO_FUNC_PTR(JSStrictPropertyOp, set.get()),
+                               field->AccessorAttributes())) {
+    return false;
+  }
+
+  objp.set(obj);
+  return true;
+}
+
+static JSBool
+XBLEnumerate(JSContext *cx, JS::Handle<JSObject*> obj)
+{
+  nsXBLPrototypeBinding* protoBinding =
+    static_cast<nsXBLPrototypeBinding*>(::JS_GetReservedSlot(obj, 0).toPrivate());
+  MOZ_ASSERT(protoBinding);
+
+  return protoBinding->ResolveAllFields(cx, obj);
 }
 
 nsXBLJSClass::nsXBLJSClass(const nsAFlatCString& aClassName)
@@ -182,12 +355,12 @@ nsXBLJSClass::nsXBLJSClass(const nsAFlatCString& aClassName)
   name = ToNewCString(aClassName);
   flags =
     JSCLASS_HAS_PRIVATE | JSCLASS_PRIVATE_IS_NSISUPPORTS |
-    JSCLASS_NEW_RESOLVE | JSCLASS_NEW_RESOLVE_GETS_START |
+    JSCLASS_NEW_RESOLVE |
     // Our one reserved slot holds the relevant nsXBLPrototypeBinding
     JSCLASS_HAS_RESERVED_SLOTS(1);
   addProperty = delProperty = getProperty = ::JS_PropertyStub;
   setProperty = ::JS_StrictPropertyStub;
-  enumerate = ::JS_EnumerateStub;
+  enumerate = XBLEnumerate;
   resolve = (JSResolveOp)XBLResolve;
   convert = ::JS_ConvertStub;
   finalize = XBLFinalize;
@@ -257,7 +430,7 @@ TraverseKey(nsISupports* aKey, nsInsertionPointList* aData, void* aClosure)
   return PL_DHASH_NEXT;
 }
 
-NS_IMPL_CYCLE_COLLECTION_CLASS(nsXBLBinding)
+NS_IMPL_CYCLE_COLLECTION_NATIVE_CLASS(nsXBLBinding)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_NATIVE(nsXBLBinding)
   // XXX Probably can't unlink mPrototypeBinding->XBLDocumentInfo(), because
   //     mPrototypeBinding is weak.

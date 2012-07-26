@@ -328,32 +328,27 @@ public:
                                                 const nsRect &aUnfilteredRect);
 
   /**
-   * Figures out the worst case invalidation area for a frame, taking
-   * filters into account.
-   * Note that the caller is responsible for making sure that any cached
-   * covered regions in the frame tree rooted at aFrame are up to date.
-   * @param aRect the area in app units that needs to be invalidated in aFrame
-   * @return the rect in app units that should be invalidated, taking
-   * filters into account. Will return aRect when no filters are present.
-   */
-  static nsRect FindFilterInvalidation(nsIFrame *aFrame, const nsRect& aRect);
-
-  /**
    * Invalidates the area that is painted by the frame without updating its
    * bounds.
    *
    * This is similar to InvalidateOverflowRect(). It will go away when we
    * support display list based invalidation of SVG.
+   *
+   * @param aBoundsSubArea If non-null, a sub-area of aFrame's pre-filter
+   *   visual overflow rect that should be invalidated instead of aFrame's
+   *   entire visual overflow rect.
    */
-  static void InvalidateBounds(nsIFrame *aFrame, bool aDuringUpdate = false);
+  static void InvalidateBounds(nsIFrame *aFrame, bool aDuringUpdate = false,
+                               const nsRect *aBoundsSubArea = nsnull,
+                               PRUint32 aFlags = 0);
 
   /**
    * Schedules an update of the frame's bounds (which will in turn invalidate
    * the new area that the frame should paint to).
    *
    * This does nothing when passed an NS_STATE_SVG_NONDISPLAY_CHILD frame.
-   * In future we may want to allow UpdateBounds to be called on such frames,
-   * but that would be better implemented as a ForceUpdateBounds function to
+   * In future we may want to allow ReflowSVG to be called on such frames,
+   * but that would be better implemented as a ForceReflowSVG function to
    * be called synchronously while painting them without marking or paying
    * attention to dirty bits like this function.
    *
@@ -375,20 +370,20 @@ public:
    * handle nsSVGForeignObjectFrame specially. It would also do unnecessary work
    * descending into NS_STATE_SVG_NONDISPLAY_CHILD frames.
    */
-  static void ScheduleBoundsUpdate(nsIFrame *aFrame);
+  static void ScheduleReflowSVG(nsIFrame *aFrame);
 
   /**
    * Invalidates the area that the frame last painted to, then schedules an
    * update of the frame's bounds (which will in turn invalidate the new area
    * that the frame should paint to).
    */
-  static void InvalidateAndScheduleBoundsUpdate(nsIFrame *aFrame);
+  static void InvalidateAndScheduleReflowSVG(nsIFrame *aFrame);
 
   /**
-   * Returns true if the frame or any of its children need UpdateBounds
+   * Returns true if the frame or any of its children need ReflowSVG
    * to be called on them.
    */
-  static bool NeedsUpdatedBounds(nsIFrame *aFrame);
+  static bool NeedsReflowSVG(nsIFrame *aFrame);
 
   /*
    * Update the filter invalidation region for ancestor frames, if relevant.
@@ -475,10 +470,28 @@ public:
    * child SVG frame, container SVG frame, or a regular frame.
    * For regular frames, we just return an identity matrix.
    */
-  static gfxMatrix GetCanvasTM(nsIFrame* aFrame);
+  static gfxMatrix GetCanvasTM(nsIFrame* aFrame, PRUint32 aFor);
 
-  /*
-   * Tells child frames that something that might affect them has changed
+  /**
+   * Returns the transform from aFrame's user space to canvas space. Only call
+   * with SVG frames. This is like GetCanvasTM, except that it only includes
+   * the transforms from aFrame's user space (i.e. the coordinate context
+   * established by its 'transform' attribute, or else the coordinate context
+   * that its _parent_ establishes for its children) to outer-<svg> device
+   * space. Specifically, it does not include any other transforms introduced
+   * by the frame such as x/y offsets and viewBox attributes.
+   */
+  static gfxMatrix GetUserToCanvasTM(nsIFrame* aFrame, PRUint32 aFor);
+
+  /**
+   * Notify the descendants of aFrame of a change to one of their ancestors
+   * that might affect them.
+   *
+   * If the changed ancestor renders and needs to be invalidated, it should
+   * call nsSVGUtils::InvalidateAndScheduleBoundsUpdate or
+   * nsSVGUtils::InvalidateBounds _before_ calling this method. That makes it
+   * cheaper when descendants schedule their own bounds update because the code
+   * that walks up the parent chain marking dirty bits can stop earlier.
    */
   static void
   NotifyChildrenOfSVGChange(nsIFrame *aFrame, PRUint32 aFlags);
@@ -578,17 +591,18 @@ public:
                        nsIFrame *aFrame);
 
   enum BBoxFlags {
-    eBBoxIncludeFill          = 1 << 0,
-    eBBoxIgnoreFillIfNone     = 1 << 1,
-    eBBoxIncludeStroke        = 1 << 2,
-    eBBoxIgnoreStrokeIfNone   = 1 << 3,
-    eBBoxIncludeMarkers       = 1 << 4
+    eBBoxIncludeFill           = 1 << 0,
+    eBBoxIncludeFillGeometry   = 1 << 1,
+    eBBoxIncludeStroke         = 1 << 2,
+    eBBoxIncludeStrokeGeometry = 1 << 3,
+    eBBoxIncludeMarkers        = 1 << 4
   };
   /**
    * Get the SVG bbox (the SVG spec's simplified idea of bounds) of aFrame in
    * aFrame's userspace.
    */
-  static gfxRect GetBBox(nsIFrame *aFrame, PRUint32 aFlags = eBBoxIncludeFill);
+  static gfxRect GetBBox(nsIFrame *aFrame,
+                         PRUint32 aFlags = eBBoxIncludeFillGeometry);
 
   /**
    * Convert a userSpaceOnUse/objectBoundingBoxUnits rectangle that's specified
@@ -614,9 +628,9 @@ public:
 #ifdef DEBUG
   static void
   WritePPM(const char *fname, gfxImageSurface *aSurface);
-
-  static bool OuterSVGIsCallingUpdateBounds(nsIFrame *aFrame);
 #endif
+
+  static bool OuterSVGIsCallingReflowSVG(nsIFrame *aFrame);
 
   /*
    * Get any additional transforms that apply only to stroking

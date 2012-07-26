@@ -4,9 +4,17 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "DeleteTextTxn.h"
+#include "mozilla/Assertions.h"
 #include "mozilla/Selection.h"
-#include "nsSelectionState.h"
+#include "nsAutoPtr.h"
+#include "nsDebug.h"
 #include "nsEditor.h"
+#include "nsError.h"
+#include "nsIEditor.h"
+#include "nsISelection.h"
+#include "nsISupportsImpl.h"
+#include "nsSelectionState.h"
+#include "nsAString.h"
 
 using namespace mozilla;
 
@@ -40,7 +48,7 @@ DeleteTextTxn::Init(nsEditor* aEditor,
                     PRUint32 aNumCharsToDelete,
                     nsRangeUpdater* aRangeUpdater)
 {
-  MOZ_ASSERT(aEditor && aCharData && aNumCharsToDelete);
+  MOZ_ASSERT(aEditor && aCharData);
 
   mEditor = aEditor;
   mCharData = aCharData;
@@ -71,7 +79,7 @@ DeleteTextTxn::DoTransaction()
   // get the text that we're about to delete
   nsresult res = mCharData->SubstringData(mOffset, mNumCharsToDelete,
                                           mDeletedText);
-  NS_ASSERTION(NS_SUCCEEDED(res), "could not get text to delete.");
+  MOZ_ASSERT(NS_SUCCEEDED(res));
   res = mCharData->DeleteData(mOffset, mNumCharsToDelete);
   NS_ENSURE_SUCCESS(res, res);
 

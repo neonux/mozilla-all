@@ -16,11 +16,6 @@
   border-top-left-radius: 6px;
   border-top-right-radius: 6px;
 }
-
-#downloadsPanel > .panel-arrowcontainer > .panel-arrowcontent {
-  /* Avoid that the arrow overlaps the selection on first item */
-  padding-top: 5px;
-}
 %endif
 
 #downloadsPanel > .panel-arrowcontainer > .panel-arrowcontent {
@@ -28,14 +23,13 @@
 }
 
 #downloadsListBox {
-  width: 60ch;
   background-color: transparent;
   padding: 4px;
   color: inherit;
 }
 
 #downloadsHistory {
-  background: inherit;
+  background: transparent;
   color: -moz-nativehyperlinktext;
   cursor: pointer;
 }
@@ -230,25 +224,25 @@ richlistitem[type="download"][state="1"] > .downloadInfo:hover {
   background-size: 16px;
 }
 
-@-moz-keyframes downloadsIndicatorNotificationRight {
-  from { opacity: 0; -moz-transform: translate(-128px, 128px) scale(8); }
-  20%  { opacity: .85; -moz-animation-timing-function: ease-out; }
-  to   { opacity: 0; -moz-transform: translate(0) scale(1); }
+@keyframes downloadsIndicatorNotificationRight {
+  from { opacity: 0; transform: translate(-128px, 128px) scale(8); }
+  20%  { opacity: .85; animation-timing-function: ease-out; }
+  to   { opacity: 0; transform: translate(0) scale(1); }
 }
 
-@-moz-keyframes downloadsIndicatorNotificationLeft {
-  from { opacity: 0; -moz-transform: translate(128px, 128px) scale(8); }
-  20%  { opacity: .85; -moz-animation-timing-function: ease-out; }
-  to   { opacity: 0; -moz-transform: translate(0) scale(1); }
+@keyframes downloadsIndicatorNotificationLeft {
+  from { opacity: 0; transform: translate(128px, 128px) scale(8); }
+  20%  { opacity: .85; animation-timing-function: ease-out; }
+  to   { opacity: 0; transform: translate(0) scale(1); }
 }
 
 #downloads-indicator[notification] > #downloads-indicator-anchor > #downloads-indicator-notification {
-  -moz-animation-name: downloadsIndicatorNotificationRight;
-  -moz-animation-duration: 1s;
+  animation-name: downloadsIndicatorNotificationRight;
+  animation-duration: 1s;
 }
 
 #downloads-indicator[notification]:-moz-locale-dir(rtl) > #downloads-indicator-anchor > #downloads-indicator-notification {
-  -moz-animation-name: downloadsIndicatorNotificationLeft;
+  animation-name: downloadsIndicatorNotificationLeft;
 }
 
 /*** Progress bar and text ***/

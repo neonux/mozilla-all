@@ -87,3 +87,75 @@ function waitForCondition(condition, nextTest, errorMsg) {
   }, 100);
   var moveOn = function() { clearInterval(interval); nextTest(); };
 }
+
+function runSocialTestWithProvider(manifest, callback) {
+  let oldProvider;
+  function saveOldProviderAndStartTestWith(provider) {
+    oldProvider = Social.provider;
+    Social.provider = provider;
+
+    // Now that we've set the UI's provider, enable the social functionality
+    Services.prefs.setBoolPref("social.enabled", true);
+
+    registerCleanupFunction(function () {
+      Social.provider = oldProvider;
+      Services.prefs.clearUserPref("social.enabled");
+    });
+
+    callback();
+  }
+
+  SocialService.addProvider(manifest, function(provider) {
+    // If the UI is already active, run the test immediately, otherwise wait
+    // for initialization.
+    if (Social.provider) {
+      saveOldProviderAndStartTestWith(provider);
+    } else {
+      Services.obs.addObserver(function obs() {
+        Services.obs.removeObserver(obs, "test-social-ui-ready");
+        saveOldProviderAndStartTestWith(provider);
+      }, "test-social-ui-ready", false);
+    }
+  });
+}
+
+
+function runSocialTests(tests, cbPreTest, cbPostTest, cbFinish) {
+  let testIter = Iterator(tests);
+
+  if (cbPreTest === undefined) {
+    cbPreTest = function(cb) {cb()};
+  }
+  if (cbPostTest === undefined) {
+    cbPostTest = function(cb) {cb()};
+  }
+
+  function runNextTest() {
+    let name, func;
+    try {
+      [name, func] = testIter.next();
+    } catch (err if err instanceof StopIteration) {
+      // out of items:
+      (cbFinish || finish)();
+      return;
+    }
+    // We run on a timeout as the frameworker also makes use of timeouts, so
+    // this helps keep the debug messages sane.
+    executeSoon(function() {
+      function cleanupAndRunNextTest() {
+        info("sub-test " + name + " complete");
+        cbPostTest(runNextTest);
+      }
+      cbPreTest(function() {
+        info("sub-test " + name + " starting");
+        try {
+          func.call(tests, cleanupAndRunNextTest);
+        } catch (ex) {
+          ok(false, "sub-test " + name + " failed: " + ex.toString() +"\n"+ex.stack);
+          cleanupAndRunNextTest();
+        }
+      })
+    });
+  }
+  runNextTest();
+}

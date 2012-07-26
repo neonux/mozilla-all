@@ -14,6 +14,7 @@
 #include "nsCOMPtr.h"
 // We don't export TestCodeGenBinding.h, but it's right in our parent dir.
 #include "../TestCodeGenBinding.h"
+#include "mozilla/dom/UnionTypes.h"
 
 namespace mozilla {
 namespace dom {
@@ -34,6 +35,26 @@ public:
   virtual nsISupports* GetParentObject();
 };
 
+// IID for the IndirectlyImplementedInterface
+#define NS_INDIRECTLY_IMPLEMENTED_INTERFACE_IID \
+{ 0xfed55b69, 0x7012, 0x4849, \
+ { 0xaf, 0x56, 0x4b, 0xa9, 0xee, 0x41, 0x30, 0x89 } }
+
+class IndirectlyImplementedInterface : public nsISupports,
+                                       public nsWrapperCache
+{
+public:
+  NS_DECLARE_STATIC_IID_ACCESSOR(NS_INDIRECTLY_IMPLEMENTED_INTERFACE_IID)
+  NS_DECL_ISUPPORTS
+
+  // We need a GetParentObject to make binding codegen happy
+  virtual nsISupports* GetParentObject();
+
+  bool GetIndirectlyImplementedProperty(ErrorResult&);
+  void SetIndirectlyImplementedProperty(bool, ErrorResult&);
+  void IndirectlyImplementedMethod(ErrorResult&);
+};
+
 // IID for the TestExternalInterface
 #define NS_TEST_EXTERNAL_INTERFACE_IID \
 { 0xd5ba0c99, 0x9b1d, 0x4e71, \
@@ -42,6 +63,17 @@ class TestExternalInterface : public nsISupports
 {
 public:
   NS_DECLARE_STATIC_IID_ACCESSOR(NS_TEST_EXTERNAL_INTERFACE_IID)
+  NS_DECL_ISUPPORTS
+};
+
+// IID for the TestCallbackInterface
+#define NS_TEST_CALLBACK_INTERFACE_IID \
+{ 0xbf711ba4, 0xc8f6, 0x46cf, \
+ { 0xba, 0x5b, 0xaa, 0xe2, 0x78, 0x18, 0xe6, 0x4a } }
+class TestCallbackInterface : public nsISupports
+{
+public:
+  NS_DECLARE_STATIC_IID_ACCESSOR(NS_TEST_CALLBACK_INTERFACE_IID)
   NS_DECL_ISUPPORTS
 };
 
@@ -201,6 +233,24 @@ public:
   void PassOptionalNonNullExternal(const Optional<TestExternalInterface*>&, ErrorResult&);
   void PassOptionalExternalWithDefault(TestExternalInterface*, ErrorResult&);
 
+  already_AddRefed<TestCallbackInterface> ReceiveCallbackInterface(ErrorResult&);
+  already_AddRefed<TestCallbackInterface> ReceiveNullableCallbackInterface(ErrorResult&);
+  TestCallbackInterface* ReceiveWeakCallbackInterface(ErrorResult&);
+  TestCallbackInterface* ReceiveWeakNullableCallbackInterface(ErrorResult&);
+  void PassCallbackInterface(TestCallbackInterface&, ErrorResult&);
+  void PassCallbackInterface2(OwningNonNull<TestCallbackInterface>, ErrorResult&);
+  void PassNullableCallbackInterface(TestCallbackInterface*, ErrorResult&);
+  already_AddRefed<TestCallbackInterface> GetNonNullCallbackInterface(ErrorResult&);
+  void SetNonNullCallbackInterface(TestCallbackInterface&, ErrorResult&);
+  already_AddRefed<TestCallbackInterface> GetNullableCallbackInterface(ErrorResult&);
+  void SetNullableCallbackInterface(TestCallbackInterface*, ErrorResult&);
+  void PassOptionalCallbackInterface(const Optional<nsRefPtr<TestCallbackInterface> >&, ErrorResult&);
+  void PassOptionalNonNullCallbackInterface(const Optional<OwningNonNull<TestCallbackInterface> >&, ErrorResult&);
+  void PassOptionalCallbackInterfaceWithDefault(TestCallbackInterface*, ErrorResult&);
+
+  already_AddRefed<IndirectlyImplementedInterface> ReceiveConsequentialInterface(ErrorResult&);
+  void PassConsequentialInterface(IndirectlyImplementedInterface&, ErrorResult&);
+
   // Sequence types
   void ReceiveSequence(nsTArray<int32_t>&, ErrorResult&);
   void ReceiveNullableSequence(Nullable< nsTArray<int32_t> >&, ErrorResult&);
@@ -219,8 +269,6 @@ public:
                                              ErrorResult&);
   void ReceiveCastableObjectNullableSequence(Nullable< nsTArray< nsRefPtr<TestInterface> > >&,
                                              ErrorResult&);
-  void ReceiveWeakNullableCastableObjectNullableSequence(Nullable< nsTArray< nsRefPtr<TestInterface> > >&,
-                                                         ErrorResult&);
   void ReceiveNullableCastableObjectNullableSequence(Nullable< nsTArray< nsRefPtr<TestInterface> > >&,
                                              ErrorResult&);
   void ReceiveWeakCastableObjectSequence(nsTArray<TestInterface*> &,
@@ -279,6 +327,9 @@ public:
   void PassEnum(TestEnum, ErrorResult&);
   void PassOptionalEnum(const Optional<TestEnum>&, ErrorResult&);
   TestEnum ReceiveEnum(ErrorResult&);
+  TestEnum GetEnumAttribute(ErrorResult&);
+  TestEnum GetReadonlyEnumAttribute(ErrorResult&);
+  void SetEnumAttribute(TestEnum, ErrorResult&);
 
   // Callback types
   void PassCallback(JSContext*, JSObject*, ErrorResult&);
@@ -297,6 +348,7 @@ public:
   void PassOptionalAny(JSContext*, const Optional<JS::Value>&, ErrorResult&);
   JS::Value ReceiveAny(JSContext*, ErrorResult&);
 
+  // object types
   void PassObject(JSContext*, JSObject&, ErrorResult&);
   void PassNullableObject(JSContext*, JSObject*, ErrorResult&);
   void PassOptionalObject(JSContext*, const Optional<NonNull<JSObject> >&, ErrorResult&);
@@ -304,6 +356,33 @@ public:
   void PassOptionalNullableObjectWithDefaultValue(JSContext*, JSObject*, ErrorResult&);
   JSObject* ReceiveObject(JSContext*, ErrorResult&);
   JSObject* ReceiveNullableObject(JSContext*, ErrorResult&);
+
+  // Union types
+  void PassUnion(JSContext*, const ObjectOrLong& arg, ErrorResult&);
+  void PassUnionWithNullable(JSContext*, const ObjectOrNullOrLong& arg, ErrorResult&)
+  {
+    ObjectOrLong returnValue;
+    if (arg.IsNull()) {
+    } else if (arg.IsObject()) {
+      JSObject& obj = (JSObject&)arg.GetAsObject();
+      JS_GetClass(&obj);
+      //returnValue.SetAsObject(&obj);
+    } else {
+      int32_t i = arg.GetAsLong();
+      i += 1;
+    }
+  }
+  void PassNullableUnion(JSContext*, const Nullable<ObjectOrLong>&, ErrorResult&);
+  void PassOptionalUnion(JSContext*, const Optional<ObjectOrLong>&, ErrorResult&);
+  void PassOptionalNullableUnion(JSContext*, const Optional<Nullable<ObjectOrLong> >&, ErrorResult&);
+  void PassOptionalNullableUnionWithDefaultValue(JSContext*, const Nullable<ObjectOrLong>&, ErrorResult&);
+  //void PassUnionWithInterfaces(const TestInterfaceOrTestExternalInterface& arg, ErrorResult&);
+  //void PassUnionWithInterfacesAndNullable(const TestInterfaceOrNullOrTestExternalInterface& arg, ErrorResult&);
+  void PassUnionWithArrayBuffer(const ArrayBufferOrLong&, ErrorResult&);
+  void PassUnionWithString(JSContext*, const StringOrObject&, ErrorResult&);
+  //void PassUnionWithEnum(JSContext*, const TestEnumOrObject&, ErrorResult&);
+  void PassUnionWithCallback(JSContext*, const TestCallbackOrLong&, ErrorResult&);
+  void PassUnionWithObject(JSContext*, const ObjectOrLong&, ErrorResult&);
 
   // binaryNames tests
   void MethodRenamedTo(ErrorResult&);
@@ -314,11 +393,10 @@ public:
 
   // Dictionary tests
   void PassDictionary(const Dict&, ErrorResult&);
-  void PassOptionalDictionary(const Optional<Dict>&, ErrorResult&);
-  void PassNullableDictionary(const Nullable<Dict>&, ErrorResult&);
-  void PassOptionalNullableDictionary(const Optional<Nullable<Dict> >&, ErrorResult&);
   void PassOtherDictionary(const GrandparentDict&, ErrorResult&);
   void PassSequenceOfDictionaries(const Sequence<Dict>&, ErrorResult&);
+  void PassDictionaryOrLong(const Dict&, ErrorResult&);
+  void PassDictionaryOrLong(int32_t, ErrorResult&);
 
   // Methods and properties imported via "implements"
   bool GetImplementedProperty(ErrorResult&);

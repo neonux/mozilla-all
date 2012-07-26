@@ -27,6 +27,7 @@
 #undef JS_KEYWORD
 
 namespace js {
+namespace frontend {
 
 enum TokenKind {
     TOK_ERROR = -1,                /* well-known as the only code < EOF */
@@ -413,20 +414,53 @@ enum TokenStreamFlags
 
 struct Parser;
 
+struct CompileError {
+    JSContext *cx;
+    JSErrorReport report;
+    char *message;
+    bool hasCharArgs;
+    CompileError(JSContext *cx)
+     : cx(cx), message(NULL), hasCharArgs(false)
+    {
+        PodZero(&report);
+    }
+    ~CompileError();
+    void throwError();
+};
+
+namespace StrictMode {
+/* For an explanation of how these are used, see the comment in the FunctionBox definition. */
+enum StrictModeState {
+    NOTSTRICT,
+    UNKNOWN,
+    STRICT
+};
+}
+
+inline StrictMode::StrictModeState
+StrictModeFromContext(JSContext *cx)
+{
+    return cx->hasRunOption(JSOPTION_STRICT_MODE) ? StrictMode::STRICT : StrictMode::UNKNOWN;
+}
+
 // Ideally, tokenizing would be entirely independent of context.  But the
 // strict mode flag, which is in SharedContext, affects tokenizing, and
 // TokenStream needs to see it.
 //
-// This class constitutes a tiny back-channel from TokenStream to the strict
-// mode flag that avoids exposing the rest of SharedContext to TokenStream.  
-// get() is implemented in Parser.cpp.
+// This class is a tiny back-channel from TokenStream to the strict mode flag
+// that avoids exposing the rest of SharedContext to TokenStream. get()
+// returns the current strict mode state. The other two methods get and set
+// the queuedStrictModeError member of TreeContext. StrictModeGetter's
+// non-inline methods are implemented in Parser.cpp.
 //
 class StrictModeGetter {
     Parser *parser;
   public:
     StrictModeGetter(Parser *p) : parser(p) { }
 
-    bool get() const;
+    StrictMode::StrictModeState get() const;
+    CompileError *queuedStrictModeError() const;
+    void setQueuedStrictModeError(CompileError *e);
 };
 
 class TokenStream
@@ -437,16 +471,15 @@ class TokenStream
         PARA_SEPARATOR = 0x2029
     };
 
-    static const size_t ntokens = 4;                /* 1 current + 2 lookahead, rounded
+    static const size_t ntokens = 4;                /* 1 current + 3 lookahead, rounded
                                                        to power of 2 to avoid divmod by 3 */
     static const unsigned ntokensMask = ntokens - 1;
 
   public:
     typedef Vector<jschar, 32> CharBuffer;
 
-    TokenStream(JSContext *cx, JSPrincipals *principals, JSPrincipals *originPrincipals,
-                const jschar *base, size_t length, const char *filename, unsigned lineno,
-                JSVersion version, StrictModeGetter *smg);
+    TokenStream(JSContext *cx, const CompileOptions &options,
+                const jschar *base, size_t length, StrictModeGetter *smg);
 
     ~TokenStream();
 
@@ -461,13 +494,18 @@ class TokenStream
         TokenKind type = currentToken().type;
         return type == type1 || type == type2;
     }
+    size_t offsetOfToken(const Token &tok) const {
+        return tok.ptr - userbuf.base();
+    }
     const CharBuffer &getTokenbuf() const { return tokenbuf; }
     const char *getFilename() const { return filename; }
     unsigned getLineno() const { return lineno; }
     /* Note that the version and hasMoarXML can get out of sync via setMoarXML. */
     JSVersion versionNumber() const { return VersionNumber(version); }
     JSVersion versionWithFlags() const { return version; }
-    bool allowsXML() const { return allowXML && !isStrictMode(); }
+    // TokenStream::allowsXML() can be true even if Parser::allowsXML() is
+    // false. Read the comment at Parser::allowsXML() to find out why.
+    bool allowsXML() const { return allowXML && strictModeState() != StrictMode::STRICT; }
     bool hasMoarXML() const { return moarXML || VersionShouldParseXML(versionNumber()); }
     void setMoarXML(bool enabled) { moarXML = enabled; }
 
@@ -491,16 +529,28 @@ class TokenStream
     void setXMLTagMode(bool enabled = true) { setFlag(enabled, TSF_XMLTAGMODE); }
     void setXMLOnlyMode(bool enabled = true) { setFlag(enabled, TSF_XMLONLYMODE); }
     void setUnexpectedEOF(bool enabled = true) { setFlag(enabled, TSF_UNEXPECTED_EOF); }
-    void setOctalCharacterEscape(bool enabled = true) { setFlag(enabled, TSF_OCTAL_CHAR); }
 
-    bool isStrictMode() const { return strictModeGetter ? strictModeGetter->get() : false; }
+    StrictMode::StrictModeState strictModeState() const
+    {
+        return strictModeGetter ? strictModeGetter->get() : StrictMode::NOTSTRICT;
+    }
     bool isXMLTagMode() const { return !!(flags & TSF_XMLTAGMODE); }
     bool isXMLOnlyMode() const { return !!(flags & TSF_XMLONLYMODE); }
     bool isUnexpectedEOF() const { return !!(flags & TSF_UNEXPECTED_EOF); }
     bool isEOF() const { return !!(flags & TSF_EOF); }
-    bool hasOctalCharacterEscape() const { return flags & TSF_OCTAL_CHAR; }
 
-    bool reportCompileErrorNumberVA(ParseNode *pn, unsigned flags, unsigned errorNumber, va_list ap);
+    // TokenStream-specific error reporters.
+    bool reportError(unsigned errorNumber, ...);
+    bool reportWarning(unsigned errorNumber, ...);
+    bool reportStrictWarning(unsigned errorNumber, ...);
+    bool reportStrictModeError(unsigned errorNumber, ...);
+
+    // General-purpose error reporters.  You should avoid calling these
+    // directly, and instead use the more succinct alternatives (e.g.
+    // reportError()) in TokenStream, Parser, and BytecodeEmitter.
+    bool reportCompileErrorNumberVA(ParseNode *pn, unsigned flags, unsigned errorNumber,
+                                    va_list args);
+    bool reportStrictModeErrorNumberVA(ParseNode *pn, unsigned errorNumber, va_list args);
 
   private:
     static JSAtom *atomize(JSContext *cx, CharBuffer &cb);
@@ -565,7 +615,7 @@ class TokenStream
 
     TokenKind peekToken() {
         if (lookahead != 0) {
-            JS_ASSERT(lookahead == 1);
+            JS_ASSERT(lookahead <= 2);
             return tokens[(cursor + lookahead) & ntokensMask].type;
         }
         TokenKind tt = getTokenInternal();
@@ -583,7 +633,7 @@ class TokenStream
             return TOK_EOL;
 
         if (lookahead != 0) {
-            JS_ASSERT(lookahead == 1);
+            JS_ASSERT(lookahead <= 2);
             return tokens[(cursor + lookahead) & ntokensMask].type;
         }
 
@@ -619,6 +669,12 @@ class TokenStream
     void consumeKnownToken(TokenKind tt) {
         JS_ALWAYS_TRUE(matchToken(tt));
     }
+
+
+    /*
+     * Return the offset into the source buffer of the end of the token.
+     */
+    size_t endOffset(const Token &tok);
 
     /*
      * Give up responsibility for managing the sourceMap filename's memory.
@@ -656,14 +712,22 @@ class TokenStream
     class TokenBuf {
       public:
         TokenBuf(const jschar *buf, size_t length)
-          : base(buf), limit(buf + length), ptr(buf) { }
+          : base_(buf), limit_(buf + length), ptr(buf) { }
 
         bool hasRawChars() const {
-            return ptr < limit;
+            return ptr < limit_;
         }
 
         bool atStart() const {
-            return ptr == base;
+            return ptr == base_;
+        }
+
+        const jschar *base() const {
+            return base_;
+        }
+
+        const jschar *limit() const {
+            return limit_;
         }
 
         jschar getRawChar() {
@@ -723,8 +787,8 @@ class TokenStream
         const jschar *findEOLMax(const jschar *p, size_t max);
 
       private:
-        const jschar *base;             /* base of buffer */
-        const jschar *limit;            /* limit for quick bounds check */
+        const jschar *base_;            /* base of buffer */
+        const jschar *limit_;           /* limit for quick bounds check */
         const jschar *ptr;              /* next char to get */
     };
 
@@ -818,7 +882,7 @@ FindKeyword(const jschar *s, size_t length);
  * Check that str forms a valid JS identifier name. The function does not
  * check if str is a JS keyword.
  */
-JSBool
+bool
 IsIdentifier(JSLinearString *str);
 
 /*
@@ -827,22 +891,7 @@ IsIdentifier(JSLinearString *str);
  */
 #define JSREPORT_UC 0x100
 
-/*
- * Report a compile-time error by its number. Return true for a warning, false
- * for an error. When pn is not null, use it to report error's location.
- * Otherwise use ts, which must not be null.
- */
-bool
-ReportCompileErrorNumber(JSContext *cx, TokenStream *ts, ParseNode *pn, unsigned flags,
-                         unsigned errorNumber, ...);
-
-/*
- * Report a condition that should elicit a warning with JSOPTION_STRICT,
- * or an error if the current context is handling strict mode code.
- */
-bool
-ReportStrictModeError(JSContext *cx, TokenStream *ts, ParseNode *pn, unsigned errorNumber, ...);
-
+} /* namespace frontend */
 } /* namespace js */
 
 extern JS_FRIEND_API(int)
@@ -850,7 +899,7 @@ js_fgets(char *buf, int size, FILE *file);
 
 #ifdef DEBUG
 extern const char *
-TokenKindToString(js::TokenKind tt);
+TokenKindToString(js::frontend::TokenKind tt);
 #endif
 
 #endif /* TokenStream_h__ */

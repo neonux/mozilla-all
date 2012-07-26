@@ -18,6 +18,7 @@ XPCOMUtils.defineLazyModuleGetter(this, "Rect",
 let {
   links: gLinks,
   allPages: gAllPages,
+  linkChecker: gLinkChecker,
   pinnedLinks: gPinnedLinks,
   blockedLinks: gBlockedLinks
 } = NewTabUtils;
@@ -29,6 +30,21 @@ XPCOMUtils.defineLazyGetter(this, "gStringBundle", function() {
 
 function newTabString(name) gStringBundle.GetStringFromName('newtab.' + name);
 
+function inPrivateBrowsingMode() {
+  let chromeWin = window.QueryInterface(Ci.nsIInterfaceRequestor)
+                        .getInterface(Ci.nsIWebNavigation)
+                        .QueryInterface(Ci.nsIDocShellTreeItem)
+                        .rootTreeItem
+                        .QueryInterface(Ci.nsIInterfaceRequestor)
+                        .getInterface(Ci.nsIDOMWindow)
+                        .wrappedJSObject;
+
+  if ("gPrivateBrowsingUI" in chromeWin)
+    return chromeWin.gPrivateBrowsingUI.privateWindow;
+
+  return false;
+}
+
 const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 
 #include batch.js
@@ -38,6 +54,7 @@ const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 #include cells.js
 #include sites.js
 #include drag.js
+#include dragDataHelper.js
 #include drop.js
 #include dropTargetShim.js
 #include dropPreview.js

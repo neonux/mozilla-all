@@ -9,12 +9,13 @@ const Ci = Components.interfaces;
 const Cu = Components.utils;
 const Cr = Components.results;
 
+Cu.import('resource://gre/modules/accessibility/Utils.jsm');
 Cu.import('resource://gre/modules/accessibility/UtteranceGenerator.jsm');
-Cu.import('resource://gre/modules/Services.jsm');
 
 var EXPORTED_SYMBOLS = ['VisualPresenter',
                         'AndroidPresenter',
                         'DummyAndroidPresenter',
+                        'SpeechPresenter',
                         'PresenterContext'];
 
 /**
@@ -39,8 +40,10 @@ Presenter.prototype = {
    * The virtual cursor's position changed.
    * @param {PresenterContext} aContext the context object for the new pivot
    *   position.
+   * @param {int} aReason the reason for the pivot change.
+   *   See nsIAccessiblePivot.
    */
-  pivotChanged: function pivotChanged(aContext) {},
+  pivotChanged: function pivotChanged(aContext, aReason) {},
 
   /**
    * An object's action has been invoked.
@@ -89,7 +92,12 @@ Presenter.prototype = {
    * The viewport has changed, either a scroll, pan, zoom, or
    *    landscape/portrait toggle.
    */
-  viewportChanged: function viewportChanged() {}
+  viewportChanged: function viewportChanged() {},
+
+  /**
+   * We have entered or left text editing mode.
+   */
+  editingModeChanged: function editingModeChanged(aIsEditing) {}
 };
 
 /**
@@ -140,7 +148,7 @@ VisualPresenter.prototype = {
       this._highlight(this._currentObject);
   },
 
-  pivotChanged: function VisualPresenter_pivotChanged(aContext) {
+  pivotChanged: function VisualPresenter_pivotChanged(aContext, aReason) {
     this._currentObject = aContext.accessible;
 
     if (!aContext.accessible) {
@@ -153,13 +161,13 @@ VisualPresenter.prototype = {
         Ci.nsIAccessibleScrollType.SCROLL_TYPE_ANYWHERE);
       this._highlight(aContext.accessible);
     } catch (e) {
-      dump('Error getting bounds: ' + e);
+      Logger.error('Failed to get bounds: ' + e);
       return;
     }
   },
 
   tabSelected: function VisualPresenter_tabSelected(aDocContext, aVCContext) {
-    this.pivotChanged(aVCContext);
+    this.pivotChanged(aVCContext, Ci.nsIAccessiblePivot.REASON_NONE);
   },
 
   tabStateChanged: function VisualPresenter_tabStateChanged(aDocObj,
@@ -175,10 +183,7 @@ VisualPresenter.prototype = {
   },
 
   _highlight: function _highlight(aObject) {
-    let vp = (Services.appinfo.OS == 'Android') ?
-      this.chromeWin.BrowserApp.selectedTab.getViewport() :
-      { zoom: 1.0, offsetY: 0 };
-
+    let vp = Utils.getViewport(this.chromeWin) || { zoom: 1.0, offsetY: 0 };
     let bounds = this._getBounds(aObject, vp.zoom);
 
     // First hide it to avoid flickering when changing the style.
@@ -232,14 +237,37 @@ AndroidPresenter.prototype = {
   ANDROID_VIEW_FOCUSED: 0x08,
   ANDROID_VIEW_TEXT_CHANGED: 0x10,
   ANDROID_WINDOW_STATE_CHANGED: 0x20,
+  ANDROID_VIEW_HOVER_ENTER: 0x80,
+  ANDROID_VIEW_HOVER_EXIT: 0x100,
+  ANDROID_VIEW_SCROLLED: 0x1000,
 
-  pivotChanged: function AndroidPresenter_pivotChanged(aContext) {
+  attach: function AndroidPresenter_attach(aWindow) {
+    this.chromeWin = aWindow;
+  },
+
+  pivotChanged: function AndroidPresenter_pivotChanged(aContext, aReason) {
     if (!aContext.accessible)
       return;
 
+    let isExploreByTouch = (aReason == Ci.nsIAccessiblePivot.REASON_POINT &&
+                            Utils.AndroidSdkVersion >= 14);
+
+    if (isExploreByTouch) {
+      // This isn't really used by TalkBack so this is a half-hearted attempt
+      // for now.
+      this.sendMessageToJava({
+         gecko: {
+           type: 'Accessibility:Event',
+           eventType: this.ANDROID_VIEW_HOVER_EXIT,
+           text: []
+         }
+      });
+    }
+
     let output = [];
+
     aContext.newAncestry.forEach(
-      function (acc) {
+      function(acc) {
         output.push.apply(output, UtteranceGenerator.genForObject(acc));
       }
     );
@@ -248,7 +276,7 @@ AndroidPresenter.prototype = {
                       UtteranceGenerator.genForObject(aContext.accessible));
 
     aContext.subtreePreorder.forEach(
-      function (acc) {
+      function(acc) {
         output.push.apply(output, UtteranceGenerator.genForObject(acc));
       }
     );
@@ -256,7 +284,9 @@ AndroidPresenter.prototype = {
     this.sendMessageToJava({
       gecko: {
         type: 'Accessibility:Event',
-        eventType: this.ANDROID_VIEW_FOCUSED,
+        eventType: isExploreByTouch ?
+          this.ANDROID_VIEW_HOVER_ENTER :
+          this.ANDROID_VIEW_FOCUSED,
         text: output
       }
     });
@@ -274,27 +304,13 @@ AndroidPresenter.prototype = {
 
   tabSelected: function AndroidPresenter_tabSelected(aDocContext, aVCContext) {
     // Send a pivot change message with the full context utterance for this doc.
-    this.pivotChanged(aVCContext);
+    this.pivotChanged(aVCContext, Ci.nsIAccessiblePivot.REASON_NONE);
   },
 
   tabStateChanged: function AndroidPresenter_tabStateChanged(aDocObj,
                                                              aPageState) {
-    let stateUtterance = UtteranceGenerator.
-      genForTabStateChange(aDocObj, aPageState);
-
-    if (!stateUtterance.length)
-      return;
-
-    this.sendMessageToJava({
-      gecko: {
-        type: 'Accessibility:Event',
-        eventType: this.ANDROID_VIEW_TEXT_CHANGED,
-        text: stateUtterance,
-        addedCount: stateUtterance.join(' ').length,
-        removedCount: 0,
-        fromIndex: 0
-      }
-    });
+    this._appAnnounce(
+      UtteranceGenerator.genForTabStateChange(aDocObj, aPageState));
   },
 
   textChanged: function AndroidPresenter_textChanged(aIsInserted, aStart,
@@ -322,6 +338,44 @@ AndroidPresenter.prototype = {
     this.sendMessageToJava({gecko: androidEvent});
   },
 
+  viewportChanged: function AndroidPresenter_viewportChanged() {
+    if (Utils.AndroidSdkVersion < 14)
+      return;
+
+    let win = Utils.getBrowserApp(this.chromeWin).selectedBrowser.contentWindow;
+    this.sendMessageToJava({
+      gecko: {
+        type: 'Accessibility:Event',
+        eventType: this.ANDROID_VIEW_SCROLLED,
+        text: [],
+        scrollX: win.scrollX,
+        scrollY: win.scrollY,
+        maxScrollX: win.scrollMaxX,
+        maxScrollY: win.scrollMaxY
+      }
+    });
+  },
+
+  editingModeChanged: function AndroidPresenter_editingModeChanged(aIsEditing) {
+    this._appAnnounce(UtteranceGenerator.genForEditingMode(aIsEditing));
+  },
+
+  _appAnnounce: function _appAnnounce(aUtterance) {
+    if (!aUtterance.length)
+      return;
+
+    this.sendMessageToJava({
+      gecko: {
+        type: 'Accessibility:Event',
+        eventType: this.ANDROID_VIEW_TEXT_CHANGED,
+        text: aUtterance,
+        addedCount: aUtterance.join(' ').length,
+        removedCount: 0,
+        fromIndex: 0
+      }
+    });
+  },
+
   sendMessageToJava: function AndroidPresenter_sendMessageTojava(aMessage) {
     return Cc['@mozilla.org/android/bridge;1'].
       getService(Ci.nsIAndroidBridge).
@@ -339,9 +393,44 @@ DummyAndroidPresenter.prototype = {
   __proto__: AndroidPresenter.prototype,
 
   sendMessageToJava: function DummyAndroidPresenter_sendMessageToJava(aMsg) {
-    dump(JSON.stringify(aMsg, null, 2) + '\n');
+    Logger.debug('Android event:\n' + JSON.stringify(aMsg, null, 2));
   }
 };
+
+/**
+ * A speech presenter for direct TTS output
+ */
+
+function SpeechPresenter() {}
+
+SpeechPresenter.prototype = {
+  __proto__: Presenter.prototype,
+
+
+  pivotChanged: function SpeechPresenter_pivotChanged(aContext, aReason) {
+    if (!aContext.accessible)
+      return;
+
+    let output = [];
+
+    aContext.newAncestry.forEach(
+      function(acc) {
+        output.push.apply(output, UtteranceGenerator.genForObject(acc));
+      }
+    );
+
+    output.push.apply(output,
+                      UtteranceGenerator.genForObject(aContext.accessible));
+
+    aContext.subtreePreorder.forEach(
+      function(acc) {
+        output.push.apply(output, UtteranceGenerator.genForObject(acc));
+      }
+    );
+
+    Logger.info('SPEAK', '"' + output.join(' ') + '"');
+  }
+}
 
 /**
  * PresenterContext: An object that generates and caches context information

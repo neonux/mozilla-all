@@ -7,6 +7,7 @@
 
 #include "mozilla/layers/PLayers.h"
 #include "mozilla/layers/ShadowLayers.h"
+#include "mozilla/layers/ImageBridgeChild.h" // TODO: temp
 
 #include "ImageLayers.h"
 #include "Layers.h"
@@ -181,6 +182,12 @@ LayerManager::CreateOptimalSurface(const gfxIntSize &aSize,
     CreateOffscreenSurface(aSize, gfxASurface::ContentFromFormat(aFormat));
 }
 
+already_AddRefed<gfxASurface>
+LayerManager::CreateOptimalMaskSurface(const gfxIntSize &aSize)
+{
+  return CreateOptimalSurface(aSize, gfxASurface::ImageFormatA8);
+}
+
 TemporaryRef<DrawTarget>
 LayerManager::CreateDrawTarget(const IntSize &aSize,
                                SurfaceFormat aFormat)
@@ -199,7 +206,14 @@ LayerManager::Mutated(Layer* aLayer)
 already_AddRefed<ImageContainer>
 LayerManager::CreateImageContainer()
 {
-  nsRefPtr<ImageContainer> container = new ImageContainer();
+  nsRefPtr<ImageContainer> container = new ImageContainer(ImageContainer::DISABLE_ASYNC);
+  return container.forget();
+}
+
+already_AddRefed<ImageContainer>
+LayerManager::CreateAsynchronousImageContainer()
+{
+  nsRefPtr<ImageContainer> container = new ImageContainer(ImageContainer::ENABLE_ASYNC);
   return container.forget();
 }
 
@@ -376,8 +390,6 @@ Layer::ComputeEffectiveTransformForMaskLayer(const gfx3DMatrix& aTransformToSurf
     gfxMatrix maskTranslation;
     bool maskIs2D = mMaskLayer->GetTransform().CanDraw2D(&maskTranslation);
     NS_ASSERTION(maskIs2D, "How did we end up with a 3D transform here?!");
-    NS_ASSERTION(maskTranslation.HasOnlyIntegerTranslation(),
-                 "Mask layer has invalid transform.");
 #endif
     mMaskLayer->mEffectiveTransform.PreMultiply(mMaskLayer->GetTransform());
   }
@@ -463,8 +475,10 @@ ContainerLayer::DefaultComputeEffectiveTransforms(const gfx3DMatrix& aTransformT
           /* We can't (easily) forward our transform to children with a non-empty clip
            * rect since it would need to be adjusted for the transform. See
            * the calculations performed by CalculateScissorRect above.
+           * Nor for a child with a mask layer.
            */
-          if (clipRect && !clipRect->IsEmpty() && !child->GetVisibleRegion().IsEmpty()) {
+          if ((clipRect && !clipRect->IsEmpty() && !child->GetVisibleRegion().IsEmpty()) ||
+              child->GetMaskLayer()) {
             useIntermediateSurface = true;
             break;
           }
@@ -518,7 +532,13 @@ ContainerLayer::DidInsertChild(Layer* aLayer)
     mMayHaveReadbackChild = true;
   }
 }
-                        
+
+void
+RefLayer::FillSpecificAttributes(SpecificLayerAttributes& aAttrs)
+{
+  aAttrs = RefLayerAttributes(GetReferentId());
+}
+
 void
 LayerManager::StartFrameTimeRecording()
 {
@@ -738,6 +758,16 @@ ImageLayer::PrintInfo(nsACString& aTo, const char* aPrefix)
 }
 
 nsACString&
+RefLayer::PrintInfo(nsACString& aTo, const char* aPrefix)
+{
+  ContainerLayer::PrintInfo(aTo, aPrefix);
+  if (-1 != mId) {
+    AppendToString(aTo, mId, " [id=", "]");
+  }
+  return aTo;
+}
+
+nsACString&
 ReadbackLayer::PrintInfo(nsACString& aTo, const char* aPrefix)
 {
   Layer::PrintInfo(aTo, aPrefix);
@@ -763,12 +793,12 @@ LayerManager::Dump(FILE* aFile, const char* aPrefix)
  
   fprintf(file, "<ul><li><a ");
 #ifdef MOZ_DUMP_PAINTING
-  WriteSnapshotLinkToDumpFile(this, aFile);
+  WriteSnapshotLinkToDumpFile(this, file);
 #endif
   fprintf(file, ">");
   DumpSelf(file, aPrefix);
 #ifdef MOZ_DUMP_PAINTING
-  fprintf(aFile, "</a>");
+  fprintf(file, "</a>");
 #endif
 
   nsCAutoString pfx(aPrefix);
@@ -885,6 +915,10 @@ CanvasLayer::PrintInfo(nsACString& aTo, const char* aPrefix)
 
 nsACString&
 ImageLayer::PrintInfo(nsACString& aTo, const char* aPrefix)
+{ return aTo; }
+
+nsACString&
+RefLayer::PrintInfo(nsACString& aTo, const char* aPrefix)
 { return aTo; }
 
 nsACString&

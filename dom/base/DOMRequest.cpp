@@ -11,6 +11,7 @@
 #include "DOMError.h"
 #include "nsEventDispatcher.h"
 #include "nsDOMEvent.h"
+#include "nsContentUtils.h"
 
 using mozilla::dom::DOMRequest;
 using mozilla::dom::DOMRequestService;
@@ -19,6 +20,21 @@ DOMRequest::DOMRequest(nsIDOMWindow* aWindow)
   : mResult(JSVAL_VOID)
   , mDone(false)
   , mRooted(false)
+{
+  Init(aWindow);
+}
+
+// We need this constructor for dom::Activity that inherits from DOMRequest
+// but has no window available from the constructor.
+DOMRequest::DOMRequest()
+  : mResult(JSVAL_VOID)
+  , mDone(false)
+  , mRooted(false)
+{
+}
+
+void
+DOMRequest::Init(nsIDOMWindow* aWindow)
 {
   nsCOMPtr<nsPIDOMWindow> window = do_QueryInterface(aWindow);
   BindToOwner(window->IsInnerWindow() ? window.get() :

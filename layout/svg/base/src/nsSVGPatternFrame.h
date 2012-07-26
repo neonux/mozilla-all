@@ -40,6 +40,7 @@ public:
   // nsSVGPaintServerFrame methods:
   virtual already_AddRefed<gfxPattern>
     GetPaintServerPattern(nsIFrame *aSource,
+                          const gfxMatrix& aContextMatrix,
                           nsStyleSVGPaint nsStyleSVG::*aFillOrStroke,
                           float aOpacity,
                           const gfxRect *aOverrideBounds);
@@ -48,7 +49,7 @@ public:
   typedef mozilla::SVGAnimatedPreserveAspectRatio SVGAnimatedPreserveAspectRatio;
 
   // nsSVGContainerFrame methods:
-  virtual gfxMatrix GetCanvasTM();
+  virtual gfxMatrix GetCanvasTM(PRUint32 aFor);
 
   // nsIFrame interface:
   virtual void DidSetStyleContext(nsStyleContext* aOldStyleContext);
@@ -108,6 +109,7 @@ protected:
 
   nsresult PaintPattern(gfxASurface **surface,
                         gfxMatrix *patternMatrix,
+                        const gfxMatrix &aContextMatrix,
                         nsIFrame *aSource,
                         nsStyleSVGPaint nsStyleSVG::*aFillOrStroke,
                         float aGraphicOpacity,
@@ -123,9 +125,9 @@ protected:
   gfxMatrix  ConstructCTM(const gfxRect &callerBBox,
                           const gfxMatrix &callerCTM,
                           nsIFrame *aTarget);
-  nsresult   GetTargetGeometry(gfxMatrix *aCTM,
-                               gfxRect *aBBox,
+  nsresult   GetTargetGeometry(gfxRect *aBBox,
                                nsIFrame *aTarget,
+                               const gfxMatrix &aContextMatrix,
                                const gfxRect *aOverrideBounds);
 
 private:

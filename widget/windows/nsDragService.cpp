@@ -367,6 +367,9 @@ nsDragService::GetNumDropItems(PRUint32 * aNumItems)
         *aNumItems = ::DragQueryFileW(hdrop, 0xFFFFFFFF, NULL, 0);
         ::GlobalUnlock(stm.hGlobal);
         ::ReleaseStgMedium(&stm);
+        // Data may be provided later, so assume we have 1 item
+        if (*aNumItems == 0)
+          *aNumItems = 1;
       }
       else
         *aNumItems = 1;
@@ -451,7 +454,7 @@ nsDragService::IsDataFlavorSupported(const char *aDataFlavor, bool *_retval)
   if (!aDataFlavor || !mDataObject || !_retval)
     return NS_ERROR_FAILURE;
 
-#ifdef NS_DEBUG
+#ifdef DEBUG
   if (strcmp(aDataFlavor, kTextMime) == 0)
     NS_WARNING("DO NOT USE THE text/plain DATA FLAVOR ANY MORE. USE text/unicode INSTEAD");
 #endif

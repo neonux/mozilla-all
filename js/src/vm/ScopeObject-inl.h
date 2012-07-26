@@ -10,6 +10,8 @@
 
 #include "ScopeObject.h"
 
+#include "jsscriptinlines.h"
+
 namespace js {
 
 inline
@@ -39,18 +41,15 @@ inline const Value &
 ScopeObject::aliasedVar(ScopeCoordinate sc)
 {
     JS_ASSERT(isCall() || isClonedBlock());
-    JS_STATIC_ASSERT(CALL_BLOCK_RESERVED_SLOTS == CallObject::RESERVED_SLOTS);
-    JS_STATIC_ASSERT(CALL_BLOCK_RESERVED_SLOTS == BlockObject::RESERVED_SLOTS);
-    return getSlot(CALL_BLOCK_RESERVED_SLOTS + sc.slot);
+    return getSlot(sc.slot);
 }
 
 inline void
 ScopeObject::setAliasedVar(ScopeCoordinate sc, const Value &v)
 {
     JS_ASSERT(isCall() || isClonedBlock());
-    JS_STATIC_ASSERT(CALL_BLOCK_RESERVED_SLOTS == CallObject::RESERVED_SLOTS);
-    JS_STATIC_ASSERT(CALL_BLOCK_RESERVED_SLOTS == BlockObject::RESERVED_SLOTS);
-    setSlot(CALL_BLOCK_RESERVED_SLOTS + sc.slot, v);
+    JS_STATIC_ASSERT(CallObject::RESERVED_SLOTS == BlockObject::RESERVED_SLOTS);
+    setSlot(sc.slot, v);
 }
 
 /*static*/ inline size_t
@@ -68,70 +67,40 @@ CallObject::isForEval() const
     return getReservedSlot(CALLEE_SLOT).isNull();
 }
 
-inline void
-CallObject::setCallee(JSObject *callee)
+inline JSFunction &
+CallObject::callee() const
 {
-    JS_ASSERT_IF(callee, callee->isFunction());
-    setFixedSlot(CALLEE_SLOT, ObjectOrNullValue(callee));
-}
-
-inline JSObject *
-CallObject::getCallee() const
-{
-    return getReservedSlot(CALLEE_SLOT).toObjectOrNull();
-}
-
-inline JSFunction *
-CallObject::getCalleeFunction() const
-{
-    return getReservedSlot(CALLEE_SLOT).toObject().toFunction();
+    return *getReservedSlot(CALLEE_SLOT).toObject().toFunction();
 }
 
 inline const Value &
-CallObject::arg(unsigned i, MaybeCheckAliasing checkAliasing) const
+CallObject::formal(unsigned i, MaybeCheckAliasing checkAliasing) const
 {
-    JS_ASSERT_IF(checkAliasing, getCalleeFunction()->script()->formalLivesInCallObject(i));
+    JS_ASSERT_IF(checkAliasing, callee().script()->formalLivesInCallObject(i));
     return getSlot(RESERVED_SLOTS + i);
 }
 
 inline void
-CallObject::setArg(unsigned i, const Value &v, MaybeCheckAliasing checkAliasing)
+CallObject::setFormal(unsigned i, const Value &v, MaybeCheckAliasing checkAliasing)
 {
-    JS_ASSERT_IF(checkAliasing, getCalleeFunction()->script()->formalLivesInCallObject(i));
+    JS_ASSERT_IF(checkAliasing, callee().script()->formalLivesInCallObject(i));
     setSlot(RESERVED_SLOTS + i, v);
 }
 
 inline const Value &
 CallObject::var(unsigned i, MaybeCheckAliasing checkAliasing) const
 {
-    JSFunction *fun = getCalleeFunction();
-    JS_ASSERT_IF(checkAliasing, fun->script()->varIsAliased(i));
-    return getSlot(RESERVED_SLOTS + fun->nargs + i);
+    JSFunction &fun = callee();
+    JS_ASSERT_IF(checkAliasing, fun.script()->varIsAliased(i));
+    return getSlot(RESERVED_SLOTS + fun.nargs + i);
 }
 
 inline void
 CallObject::setVar(unsigned i, const Value &v, MaybeCheckAliasing checkAliasing)
 {
-    JSFunction *fun = getCalleeFunction();
-    JS_ASSERT_IF(checkAliasing, fun->script()->varIsAliased(i));
-    setSlot(RESERVED_SLOTS + fun->nargs + i, v);
-}
-
-inline HeapSlotArray
-CallObject::argArray()
-{
-    DebugOnly<JSFunction*> fun = getCalleeFunction();
-    JS_ASSERT(hasContiguousSlots(RESERVED_SLOTS, fun->nargs));
-    return HeapSlotArray(getSlotAddress(RESERVED_SLOTS));
-}
-
-inline HeapSlotArray
-CallObject::varArray()
-{
-    JSFunction *fun = getCalleeFunction();
-    JS_ASSERT(hasContiguousSlots(RESERVED_SLOTS + fun->nargs,
-                                 fun->script()->bindings.numVars()));
-    return HeapSlotArray(getSlotAddress(RESERVED_SLOTS + fun->nargs));
+    JSFunction &fun = callee();
+    JS_ASSERT_IF(checkAliasing, fun.script()->varIsAliased(i));
+    setSlot(RESERVED_SLOTS + fun.nargs + i, v);
 }
 
 inline uint32_t
@@ -159,10 +128,16 @@ BlockObject::slotCount() const
 }
 
 inline unsigned
-BlockObject::slotToFrameLocal(JSScript *script, unsigned i)
+BlockObject::slotToLocalIndex(const Bindings &bindings, unsigned slot)
 {
-    JS_ASSERT(i < slotCount());
-    return script->nfixed + stackDepth() + i;
+    JS_ASSERT(slot < RESERVED_SLOTS + slotCount());
+    return bindings.numVars() + stackDepth() + (slot - RESERVED_SLOTS);
+}
+
+inline unsigned
+BlockObject::localIndexToSlot(const Bindings &bindings, unsigned i)
+{
+    return RESERVED_SLOTS + (i - (bindings.numVars() + stackDepth()));
 }
 
 inline const Value &
@@ -179,17 +154,36 @@ BlockObject::setSlotValue(unsigned i, const Value &v)
     setSlot(RESERVED_SLOTS + i, v);
 }
 
+inline void
+StaticBlockObject::initPrevBlockChainFromParser(StaticBlockObject *prev)
+{
+    setReservedSlot(SCOPE_CHAIN_SLOT, ObjectOrNullValue(prev));
+}
+
+inline void
+StaticBlockObject::resetPrevBlockChainFromParser()
+{
+    setReservedSlot(SCOPE_CHAIN_SLOT, UndefinedValue());
+}
+
+inline void
+StaticBlockObject::initEnclosingStaticScope(JSObject *obj)
+{
+    JS_ASSERT(getReservedSlot(SCOPE_CHAIN_SLOT).isUndefined());
+    setReservedSlot(SCOPE_CHAIN_SLOT, ObjectOrNullValue(obj));
+}
+
 inline StaticBlockObject *
 StaticBlockObject::enclosingBlock() const
 {
     JSObject *obj = getReservedSlot(SCOPE_CHAIN_SLOT).toObjectOrNull();
-    return obj ? &obj->asStaticBlock() : NULL;
+    return obj && obj->isStaticBlock() ? &obj->asStaticBlock() : NULL;
 }
 
-inline void
-StaticBlockObject::setEnclosingBlock(StaticBlockObject *blockObj)
+inline JSObject *
+StaticBlockObject::enclosingStaticScope() const
 {
-    setFixedSlot(SCOPE_CHAIN_SLOT, ObjectOrNullValue(blockObj));
+    return getReservedSlot(SCOPE_CHAIN_SLOT).toObjectOrNull();
 }
 
 inline void
@@ -200,17 +194,17 @@ StaticBlockObject::setStackDepth(uint32_t depth)
 }
 
 inline void
-StaticBlockObject::setDefinitionParseNode(unsigned i, Definition *def)
+StaticBlockObject::setDefinitionParseNode(unsigned i, frontend::Definition *def)
 {
     JS_ASSERT(slotValue(i).isUndefined());
     setSlotValue(i, PrivateValue(def));
 }
 
-inline Definition *
+inline frontend::Definition *
 StaticBlockObject::maybeDefinitionParseNode(unsigned i)
 {
     Value v = slotValue(i);
-    return v.isUndefined() ? NULL : reinterpret_cast<Definition *>(v.toPrivate());
+    return v.isUndefined() ? NULL : reinterpret_cast<frontend::Definition *>(v.toPrivate());
 }
 
 inline void

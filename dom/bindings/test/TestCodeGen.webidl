@@ -9,6 +9,11 @@ interface TestExternalInterface;
 interface TestNonCastableInterface {
 };
 
+callback interface TestCallbackInterface {
+  readonly attribute long foo;
+  void doSomething();
+};
+
 enum TestEnum {
   "a",
   "b"
@@ -150,6 +155,27 @@ interface TestInterface {
   void passOptionalNonNullExternal(optional TestExternalInterface arg);
   void passOptionalExternalWithDefault(optional TestExternalInterface? arg = null);
 
+  // Callback interface types
+  TestCallbackInterface receiveCallbackInterface();
+  TestCallbackInterface? receiveNullableCallbackInterface();
+  TestCallbackInterface receiveWeakCallbackInterface();
+  TestCallbackInterface? receiveWeakNullableCallbackInterface();
+  // A verstion to test for casting to TestCallbackInterface&
+  void passCallbackInterface(TestCallbackInterface arg);
+  // A version we can use to test for the exact type passed in
+  void passCallbackInterface2(TestCallbackInterface arg);
+  void passNullableCallbackInterface(TestCallbackInterface? arg);
+  attribute TestCallbackInterface nonNullCallbackInterface;
+  attribute TestCallbackInterface? nullableCallbackInterface;
+  // Optional arguments
+  void passOptionalCallbackInterface(optional TestCallbackInterface? arg);
+  void passOptionalNonNullCallbackInterface(optional TestCallbackInterface arg);
+  void passOptionalCallbackInterfaceWithDefault(optional TestCallbackInterface? arg = null);
+
+  // Miscellaneous interface tests
+  IndirectlyImplementedInterface receiveConsequentialInterface();
+  void passConsequentialInterface(IndirectlyImplementedInterface arg);
+
   // Sequence types
   sequence<long> receiveSequence();
   sequence<long>? receiveNullableSequence();
@@ -212,6 +238,8 @@ interface TestInterface {
   // void passOptionalNullableEnum(optional TestEnum? arg);
   // void passOptionalNullableEnumWithDefaultValue(optional TestEnum? arg = null);
   TestEnum receiveEnum();
+  attribute TestEnum enumAttribute;
+  readonly attribute TestEnum readonlyEnumAttribute;
 
   // Callback types
   void passCallback(TestCallback arg);
@@ -236,18 +264,34 @@ interface TestInterface {
   object receiveObject();
   object? receiveNullableObject();
 
+  // Union types
+  void passUnion((object or long) arg);
+  void passUnionWithNullable((object? or long) arg);
+  void passNullableUnion((object or long)? arg);
+  void passOptionalUnion(optional (object or long) arg);
+  void passOptionalNullableUnion(optional (object or long)? arg);
+  void passOptionalNullableUnionWithDefaultValue(optional (object or long)? arg = null);
+  //void passUnionWithInterfaces((TestInterface or TestExternalInterface) arg);
+  //void passUnionWithInterfacesAndNullable((TestInterface? or TestExternalInterface) arg);
+  //void passUnionWithSequence((sequence<object> or long) arg);
+  void passUnionWithArrayBuffer((ArrayBuffer or long) arg);
+  void passUnionWithString((DOMString or object) arg);
+  //void passUnionWithEnum((TestEnum or object) arg);
+  void passUnionWithCallback((TestCallback or long) arg);
+  void passUnionWithObject((object or long) arg);
+  //void passUnionWithDict((Dict or long) arg);
+
   // binaryNames tests
   void methodRenamedFrom();
   void methodRenamedFrom(byte argument);
   readonly attribute byte attributeGetterRenamedFrom;
   attribute byte attributeRenamedFrom;
 
-  void passDictionary(Dict x);
-  void passOptionalDictionary(optional Dict x);
-  void passNullableDictionary(Dict? x);
-  void passOptionalNullableDictionary(optional Dict? x);
-  void passOtherDictionary(GrandparentDict x);
+  void passDictionary(optional Dict x);
+  void passOtherDictionary(optional GrandparentDict x);
   void passSequenceOfDictionaries(sequence<Dict> x);
+  void passDictionaryOrLong(optional Dict x);
+  void passDictionaryOrLong(long x);
 };
 
 interface TestNonWrapperCacheInterface {
@@ -262,6 +306,7 @@ interface ImplementedInterfaceParent {
 
 ImplementedInterfaceParent implements IndirectlyImplementedInterface;
 
+[NoInterfaceObject]
 interface IndirectlyImplementedInterface {
   void indirectlyImplementedMethod();
   attribute boolean indirectlyImplementedProperty;
@@ -295,6 +340,7 @@ DiamondBranch1A implements DiamondImplements;
 DiamondBranch1B implements DiamondImplements;
 
 dictionary Dict : ParentDict {
+  TestEnum someEnum;
   long x;
   long a;
   long b = 8;
@@ -304,4 +350,6 @@ dictionary Dict : ParentDict {
 
 dictionary ParentDict : GrandparentDict {
   long c = 5;
+  TestInterface someInterface;
+  TestExternalInterface someExternalInterface;
 };

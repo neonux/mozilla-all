@@ -11,7 +11,6 @@
 
 #include "builtin/RegExp.h"
 
-#include "vm/MethodGuard-inl.h"
 #include "vm/RegExpObject-inl.h"
 #include "vm/RegExpStatics-inl.h"
 
@@ -23,8 +22,8 @@ class RegExpMatchBuilder
     JSContext   * const cx;
     RootedObject array;
 
-    bool setProperty(JSAtom *name, Value v) {
-        return !!baseops::DefineProperty(cx, array, RootedId(cx, AtomToId(name)), &v,
+    bool setProperty(Handle<PropertyName*> name, Value v) {
+        return !!baseops::DefineProperty(cx, array, name, &v,
                                          JS_PropertyStub, JS_StrictPropertyStub, JSPROP_ENUMERATE);
     }
 
@@ -38,12 +37,14 @@ class RegExpMatchBuilder
     }
 
     bool setIndex(int index) {
-        return setProperty(cx->runtime->atomState.indexAtom, Int32Value(index));
+        Rooted<PropertyName*> name(cx, cx->runtime->atomState.indexAtom);
+        return setProperty(name, Int32Value(index));
     }
 
     bool setInput(JSString *str) {
         JS_ASSERT(str);
-        return setProperty(cx->runtime->atomState.inputAtom, StringValue(str));
+        Rooted<PropertyName*> name(cx, cx->runtime->atomState.inputAtom);
+        return setProperty(name, StringValue(str));
     }
 };
 
@@ -194,8 +195,8 @@ CompileRegExpObject(JSContext *cx, RegExpObjectBuilder &builder, CallArgs args)
 {
     if (args.length() == 0) {
         RegExpStatics *res = cx->regExpStatics();
-        RegExpObject *reobj = builder.build(RootedAtom(cx, cx->runtime->emptyString),
-                                            res->getFlags());
+        Rooted<JSAtom*> empty(cx, cx->runtime->emptyString);
+        RegExpObject *reobj = builder.build(empty, res->getFlags());
         if (!reobj)
             return false;
         args.rval() = ObjectValue(*reobj);
@@ -242,7 +243,8 @@ CompileRegExpObject(JSContext *cx, RegExpObjectBuilder &builder, CallArgs args)
         if (!sourceObj.getProperty(cx, cx->runtime->atomState.sourceAtom, &v))
             return false;
 
-        RegExpObject *reobj = builder.build(RootedAtom(cx, &v.toString()->asAtom()), flags);
+        Rooted<JSAtom*> sourceAtom(cx, &v.toString()->asAtom());
+        RegExpObject *reobj = builder.build(sourceAtom, flags);
         if (!reobj)
             return false;
 
@@ -250,7 +252,7 @@ CompileRegExpObject(JSContext *cx, RegExpObjectBuilder &builder, CallArgs args)
         return true;
     }
 
-    JSAtom *source;
+    RootedAtom source(cx);
     if (sourceValue.isUndefined()) {
         source = cx->runtime->emptyString;
     } else {
@@ -290,19 +292,25 @@ CompileRegExpObject(JSContext *cx, RegExpObjectBuilder &builder, CallArgs args)
     return true;
 }
 
+static bool
+IsRegExp(const Value &v)
+{
+    return v.isObject() && v.toObject().hasClass(&RegExpClass);
+}
+
+static bool
+regexp_compile_impl(JSContext *cx, CallArgs args)
+{
+    JS_ASSERT(IsRegExp(args.thisv()));
+    RegExpObjectBuilder builder(cx, &args.thisv().toObject().asRegExp());
+    return CompileRegExpObject(cx, builder, args);
+}
+
 static JSBool
 regexp_compile(JSContext *cx, unsigned argc, Value *vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
-
-    JSObject *thisObj;
-    if (!NonGenericMethodGuard(cx, args, regexp_compile, &RegExpClass, &thisObj))
-        return false;
-    if (!thisObj)
-        return true;
-
-    RegExpObjectBuilder builder(cx, &thisObj->asRegExp());
-    return CompileRegExpObject(cx, builder, args);
+    return CallNonGenericMethod(cx, IsRegExp, regexp_compile_impl, args);
 }
 
 static JSBool
@@ -329,23 +337,24 @@ regexp_construct(JSContext *cx, unsigned argc, Value *vp)
     return CompileRegExpObject(cx, builder, args);
 }
 
+static bool
+regexp_toString_impl(JSContext *cx, CallArgs args)
+{
+    JS_ASSERT(IsRegExp(args.thisv()));
+
+    JSString *str = args.thisv().toObject().asRegExp().toString(cx);
+    if (!str)
+        return false;
+
+    args.rval() = StringValue(str);
+    return true;
+}
+
 static JSBool
 regexp_toString(JSContext *cx, unsigned argc, Value *vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
-
-    JSObject *thisObj;
-    if (!NonGenericMethodGuard(cx, args, regexp_toString, &RegExpClass, &thisObj))
-        return false;
-    if (!thisObj)
-        return true;
-
-    JSString *str = thisObj->asRegExp().toString(cx);
-    if (!str)
-        return false;
-
-    *vp = StringValue(str);
-    return true;
+    return CallNonGenericMethod(cx, IsRegExp, regexp_toString_impl, args);
 }
 
 static JSFunctionSpec regexp_methods[] = {
@@ -462,7 +471,8 @@ js_InitRegExpClass(JSContext *cx, JSObject *obj)
     proto->setPrivate(NULL);
 
     RegExpObjectBuilder builder(cx, &proto->asRegExp());
-    if (!builder.build(RootedAtom(cx, cx->runtime->emptyString), RegExpFlag(0)))
+    Rooted<JSAtom*> empty(cx, cx->runtime->emptyString);
+    if (!builder.build(empty, RegExpFlag(0)))
         return NULL;
 
     if (!DefinePropertiesAndBrand(cx, proto, NULL, regexp_methods))
@@ -537,18 +547,10 @@ GetSharedForGreedyStar(JSContext *cx, JSAtom *source, RegExpFlag flags, RegExpGu
  * |execType| to perform this optimization.
  */
 static bool
-ExecuteRegExp(JSContext *cx, Native native, unsigned argc, Value *vp)
+ExecuteRegExp(JSContext *cx, RegExpExecType execType, CallArgs args)
 {
-    CallArgs args = CallArgsFromVp(argc, vp);
-
-    /* Step 1. */
-    JSObject *thisObj;
-    if (!NonGenericMethodGuard(cx, args, native, &RegExpClass, &thisObj))
-        return false;
-    if (!thisObj)
-        return true;
-
-    Rooted<RegExpObject*> reobj(cx, &thisObj->asRegExp());
+    /* Step 1 was performed by CallNonGenericMethod. */
+    Rooted<RegExpObject*> reobj(cx, &args.thisv().toObject().asRegExp());
 
     RegExpGuard re;
     if (StartsWithGreedyStar(reobj->getSource())) {
@@ -567,14 +569,12 @@ ExecuteRegExp(JSContext *cx, Native native, unsigned argc, Value *vp)
         return false;
 
     /* Step 3. */
-    JSLinearString *linearInput = input->ensureLinear(cx);
+    Rooted<JSLinearString*> linearInput(cx, input->ensureLinear(cx));
     if (!linearInput)
         return false;
-    const jschar *chars = linearInput->chars();
-    size_t length = input->length();
 
     /* Step 4. */
-    const Value &lastIndex = reobj->getLastIndex();
+    Value lastIndex = reobj->getLastIndex();
 
     /* Step 5. */
     double i;
@@ -585,6 +585,9 @@ ExecuteRegExp(JSContext *cx, Native native, unsigned argc, Value *vp)
     if (!re->global() && !re->sticky())
         i = 0;
 
+    const jschar *chars = linearInput->chars();
+    size_t length = linearInput->length();
+
     /* Step 9a. */
     if (i < 0 || i > length) {
         reobj->zeroLastIndex();
@@ -593,7 +596,6 @@ ExecuteRegExp(JSContext *cx, Native native, unsigned argc, Value *vp)
     }
 
     /* Steps 8-21. */
-    RegExpExecType execType = (native == regexp_test) ? RegExpTest : RegExpExec;
     size_t lastIndexInt(i);
     if (!ExecuteRegExp(cx, res, *re, linearInput, chars, length, &lastIndexInt, execType,
                        &args.rval())) {
@@ -612,19 +614,33 @@ ExecuteRegExp(JSContext *cx, Native native, unsigned argc, Value *vp)
 }
 
 /* ES5 15.10.6.2. */
+static bool
+regexp_exec_impl(JSContext *cx, CallArgs args)
+{
+    return ExecuteRegExp(cx, RegExpExec, args);
+}
+
 JSBool
 js::regexp_exec(JSContext *cx, unsigned argc, Value *vp)
 {
-    return ExecuteRegExp(cx, regexp_exec, argc, vp);
+    CallArgs args = CallArgsFromVp(argc, vp);
+    return CallNonGenericMethod(cx, IsRegExp, regexp_exec_impl, args);
 }
 
 /* ES5 15.10.6.3. */
+static bool
+regexp_test_impl(JSContext *cx, CallArgs args)
+{
+    if (!ExecuteRegExp(cx, RegExpTest, args))
+        return false;
+    if (!args.rval().isTrue())
+        args.rval().setBoolean(false);
+    return true;
+}
+
 JSBool
 js::regexp_test(JSContext *cx, unsigned argc, Value *vp)
 {
-    if (!ExecuteRegExp(cx, regexp_test, argc, vp))
-        return false;
-    if (!vp->isTrue())
-        vp->setBoolean(false);
-    return true;
+    CallArgs args = CallArgsFromVp(argc, vp);
+    return CallNonGenericMethod(cx, IsRegExp, regexp_test_impl, args);
 }

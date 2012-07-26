@@ -55,10 +55,10 @@
 #define INCL_NLS
 #define INCL_GPI
 #include <os2.h>
+#include <os2im.h>
 
 //-----------------------------------------------------------------------------
 // Items that may not be in the OS/2 Toolkit headers
-
 // For WM_MOUSEENTER/LEAVE, mp2 is the other window.
 #ifndef WM_MOUSEENTER
 #define WM_MOUSEENTER   0x041E
@@ -138,9 +138,9 @@ public:
   virtual nsIWidget*    GetParent();
   virtual float         GetDPI();
   NS_IMETHOD            Enable(bool aState);
-  NS_IMETHOD            IsEnabled(bool* aState);
+  virtual bool          IsEnabled() const;
   NS_IMETHOD            Show(bool aState);
-  NS_IMETHOD            IsVisible(bool& aState);
+  virtual bool          IsVisible() const;
   NS_IMETHOD            SetFocus(bool aRaise);
   NS_IMETHOD            Invalidate(const nsIntRect& aRect);
   gfxASurface*          GetThebesSurface();
@@ -230,6 +230,10 @@ protected:
   bool                  CheckDragStatus(PRUint32 aAction, HPS* aHps);
   bool                  ReleaseIfDragHPS(HPS aHps);
   bool                  OnTranslateAccelerator(PQMSG pQmsg);
+  bool                  OnQueryConvertPos(MPARAM mp1, MRESULT& mresult);
+  bool                  ImeResultString(HIMI himi);
+  bool                  ImeConversionString(HIMI himi);
+  bool                  OnImeRequest(MPARAM mp1, MPARAM mp2);
   bool                  DispatchKeyEvent(MPARAM mp1, MPARAM mp2);
   void                  InitEvent(nsGUIEvent& event, nsIntPoint* pt = 0);
   bool                  DispatchWindowEvent(nsGUIEvent* event);
@@ -266,6 +270,8 @@ protected:
   HPOINTER      mCssCursorHPtr;     // created by SetCursor(imgIContainer*)
   nsCOMPtr<imgIContainer> mCssCursorImg;// saved by SetCursor(imgIContainer*)
   nsRefPtr<gfxOS2Surface> mThebesSurface;
+  bool          mIsComposing;
+  nsString      mLastDispatchedCompositionString;
 #ifdef DEBUG_FOCUS
   int           mWindowIdentifier;  // a serial number for each new window
 #endif

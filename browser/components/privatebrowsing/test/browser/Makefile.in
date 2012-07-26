@@ -9,12 +9,13 @@ VPATH		= @srcdir@
 relativesrcdir  = browser/components/privatebrowsing/test/browser
 
 include $(DEPTH)/config/autoconf.mk
-include $(topsrcdir)/config/rules.mk
 
-_BROWSER_TEST_FILES =  \
+MOCHITEST_BROWSER_FILES =  \
 		head.js \
 		browser_console_clear.js \
 		browser_privatebrowsing_certexceptionsui.js \
+		browser_privatebrowsing_clearplugindata.js \
+		browser_privatebrowsing_clearplugindata.html \
 		browser_privatebrowsing_commandline_toggle.js \
 		browser_privatebrowsing_concurrent.js \
 		browser_privatebrowsing_concurrent_page.html \
@@ -35,6 +36,7 @@ _BROWSER_TEST_FILES =  \
 		browser_privatebrowsing_newwindow_stopcmd.js \
 		browser_privatebrowsing_opendir.js \
 		browser_privatebrowsing_openlocation.js \
+		browser_privatebrowsing_openLocationLastURL.js \
 		browser_privatebrowsing_pageinfo.js \
 		browser_privatebrowsing_placestitle.js \
 		browser_privatebrowsing_popupblocker.js \
@@ -53,8 +55,6 @@ _BROWSER_TEST_FILES =  \
 		browser_privatebrowsing_windowtitle_page.html \
 		browser_privatebrowsing_zoom.js \
 		browser_privatebrowsing_zoomrestore.js \
-		browser_privatebrowsing_clearplugindata.js \
-		browser_privatebrowsing_clearplugindata.html \
 		ctxmenu.html \
 		ctxmenu-image.png \
 		popup.html \
@@ -67,11 +67,10 @@ _BROWSER_TEST_FILES =  \
 
 # Turn off private browsing tests that perma-timeout on Linux.
 ifneq (Linux,$(OS_ARCH))
-_BROWSER_TEST_FILES += \
+MOCHITEST_BROWSER_FILES += \
 		browser_privatebrowsing_beforeunload.js \
 		browser_privatebrowsing_cookieacceptdialog.js \
 		$(NULL)
 endif
 
-libs:: $(_BROWSER_TEST_FILES)
-	$(INSTALL) $(foreach f,$^,"$f") $(DEPTH)/_tests/testing/mochitest/browser/$(relativesrcdir)
+include $(topsrcdir)/config/rules.mk

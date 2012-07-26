@@ -52,6 +52,7 @@
 #include "ThirdPartyUtil.h"
 #include "mozilla/Services.h"
 #include "nsStructuredCloneContainer.h"
+#include "mozilla/Attributes.h"
 
 #include "nsIEventListenerService.h"
 #include "nsIFrameMessageManager.h"
@@ -88,9 +89,12 @@
 #include "nsJSON.h"
 #include "mozilla/dom/indexedDB/IndexedDatabaseManager.h"
 #include "mozilla/dom/DOMRequest.h"
+#include "mozilla/OSFileConstants.h"
+#include "mozilla/dom/Activity.h"
 
 using mozilla::dom::indexedDB::IndexedDatabaseManager;
 using mozilla::dom::DOMRequestService;
+using mozilla::dom::Activity;
 
 #ifdef MOZ_B2G_RIL
 #include "SystemWorkerManager.h"
@@ -104,6 +108,8 @@ using mozilla::dom::gonk::SystemWorkerManager;
 #ifdef MOZ_WIDGET_GONK
 #include "AudioManager.h"
 using mozilla::dom::gonk::AudioManager;
+#include "nsVolumeService.h"
+using mozilla::system::nsVolumeService;
 #endif
 #include "nsDOMMutationObserver.h"
 
@@ -216,12 +222,17 @@ static void Shutdown();
 #include "mozilla/dom/sms/SmsRequestManager.h"
 #include "mozilla/dom/sms/SmsServicesFactory.h"
 #include "nsIPowerManagerService.h"
+#include "nsIAlarmHalService.h"
 
 using namespace mozilla::dom::sms;
 
 #include "mozilla/dom/power/PowerManagerService.h"
 
 using mozilla::dom::power::PowerManagerService;
+
+#include "mozilla/dom/alarm/AlarmHalService.h"
+
+using mozilla::dom::alarm::AlarmHalService;
 
 // Transformiix
 /* 5d5d92cd-6bf8-11d9-bf4a-000a95dc234c */
@@ -239,6 +250,7 @@ NS_GENERIC_FACTORY_CONSTRUCTOR(nsDOMSerializer)
 NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsXMLHttpRequest, Init)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsEventSource)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsWebSocket)
+NS_GENERIC_FACTORY_CONSTRUCTOR(Activity)
 NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsDOMFileReader, Init)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsFormData)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsBlobProtocolHandler)
@@ -258,6 +270,7 @@ NS_GENERIC_FACTORY_CONSTRUCTOR(nsDOMMutationObserver)
 
 #ifdef MOZ_WIDGET_GONK
 NS_GENERIC_FACTORY_CONSTRUCTOR(AudioManager)
+NS_GENERIC_FACTORY_CONSTRUCTOR(nsVolumeService)
 #endif
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsDeviceSensors)
 
@@ -272,6 +285,8 @@ NS_GENERIC_FACTORY_SINGLETON_CONSTRUCTOR(nsISmsDatabaseService, SmsServicesFacto
 NS_GENERIC_FACTORY_SINGLETON_CONSTRUCTOR(nsIPowerManagerService,
                                          PowerManagerService::GetInstance)
 NS_GENERIC_FACTORY_CONSTRUCTOR(SmsRequestManager)
+NS_GENERIC_FACTORY_SINGLETON_CONSTRUCTOR(nsIAlarmHalService,
+                                         AlarmHalService::GetInstance)
 
 //-----------------------------------------------------------------------------
 
@@ -281,7 +296,7 @@ NS_GENERIC_FACTORY_CONSTRUCTOR(SmsRequestManager)
 // references to objects in other component libraries that have already been
 // shutdown (and possibly unloaded if 60709 is ever fixed).
 
-class LayoutShutdownObserver : public nsIObserver
+class LayoutShutdownObserver MOZ_FINAL : public nsIObserver
 {
 public:
   NS_DECL_ISUPPORTS
@@ -370,7 +385,7 @@ Shutdown()
   nsLayoutStatics::Release();
 }
 
-#ifdef NS_DEBUG
+#ifdef DEBUG
 nsresult NS_NewFrameUtil(nsIFrameUtil** aResult);
 nsresult NS_NewLayoutDebugger(nsILayoutDebugger** aResult);
 #endif
@@ -617,6 +632,8 @@ NS_GENERIC_FACTORY_SINGLETON_CONSTRUCTOR(nsSystemPrincipal,
 NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsNullPrincipal, Init)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsStructuredCloneContainer)
 
+NS_GENERIC_FACTORY_CONSTRUCTOR(OSFileConstantsService)
+
 static nsresult
 Construct_nsIScriptSecurityManager(nsISupports *aOuter, REFNSIID aIID, 
                                    void **aResult)
@@ -719,6 +736,7 @@ NS_DEFINE_NAMED_CID(NS_BLOBPROTOCOLHANDLER_CID);
 NS_DEFINE_NAMED_CID(NS_XMLHTTPREQUEST_CID);
 NS_DEFINE_NAMED_CID(NS_EVENTSOURCE_CID);
 NS_DEFINE_NAMED_CID(NS_WEBSOCKET_CID);
+NS_DEFINE_NAMED_CID(NS_DOMACTIVITY_CID);
 NS_DEFINE_NAMED_CID(NS_DOMPARSER_CID);
 NS_DEFINE_NAMED_CID(NS_DOMSTORAGE2_CID);
 NS_DEFINE_NAMED_CID(NS_DOMSTORAGEMANAGER_CID);
@@ -731,6 +749,7 @@ NS_DEFINE_NAMED_CID(SYSTEMWORKERMANAGER_CID);
 #endif
 #ifdef MOZ_WIDGET_GONK
 NS_DEFINE_NAMED_CID(NS_AUDIOMANAGER_CID);
+NS_DEFINE_NAMED_CID(NS_VOLUMESERVICE_CID);
 #endif
 #ifdef ENABLE_EDITOR_API_LOG
 NS_DEFINE_NAMED_CID(NS_HTMLEDITOR_CID);
@@ -770,6 +789,8 @@ NS_DEFINE_NAMED_CID(SMS_SERVICE_CID);
 NS_DEFINE_NAMED_CID(SMS_DATABASE_SERVICE_CID);
 NS_DEFINE_NAMED_CID(SMS_REQUEST_MANAGER_CID);
 NS_DEFINE_NAMED_CID(NS_POWERMANAGERSERVICE_CID);
+NS_DEFINE_NAMED_CID(OSFILECONSTANTSSERVICE_CID);
+NS_DEFINE_NAMED_CID(NS_ALARMHALSERVICE_CID);
 
 static nsresult
 CreateWindowCommandTableConstructor(nsISupports *aOuter,
@@ -987,6 +1008,7 @@ static const mozilla::Module::CIDEntry kLayoutCIDs[] = {
   { &kNS_XMLHTTPREQUEST_CID, false, NULL, nsXMLHttpRequestConstructor },
   { &kNS_EVENTSOURCE_CID, false, NULL, nsEventSourceConstructor },
   { &kNS_WEBSOCKET_CID, false, NULL, nsWebSocketConstructor },
+  { &kNS_DOMACTIVITY_CID, false, NULL, ActivityConstructor },
   { &kNS_DOMPARSER_CID, false, NULL, nsDOMParserConstructor },
   { &kNS_DOMSTORAGE2_CID, false, NULL, NS_NewDOMStorage2 },
   { &kNS_DOMSTORAGEMANAGER_CID, false, NULL, nsDOMStorageManagerConstructor },
@@ -999,6 +1021,7 @@ static const mozilla::Module::CIDEntry kLayoutCIDs[] = {
 #endif
 #ifdef MOZ_WIDGET_GONK
   { &kNS_AUDIOMANAGER_CID, true, NULL, AudioManagerConstructor },
+  { &kNS_VOLUMESERVICE_CID, true, NULL, nsVolumeServiceConstructor },
 #endif
 #ifdef ENABLE_EDITOR_API_LOG
   { &kNS_HTMLEDITOR_CID, false, NULL, nsHTMLEditorLogConstructor },
@@ -1037,6 +1060,8 @@ static const mozilla::Module::CIDEntry kLayoutCIDs[] = {
   { &kSMS_DATABASE_SERVICE_CID, false, NULL, nsISmsDatabaseServiceConstructor },
   { &kSMS_REQUEST_MANAGER_CID, false, NULL, SmsRequestManagerConstructor },
   { &kNS_POWERMANAGERSERVICE_CID, false, NULL, nsIPowerManagerServiceConstructor },
+  { &kOSFILECONSTANTSSERVICE_CID, true, NULL, OSFileConstantsServiceConstructor },
+  { &kNS_ALARMHALSERVICE_CID, false, NULL, nsIAlarmHalServiceConstructor },
   { NULL }
 };
 
@@ -1120,6 +1145,7 @@ static const mozilla::Module::ContractIDEntry kLayoutContracts[] = {
   { NS_XMLHTTPREQUEST_CONTRACTID, &kNS_XMLHTTPREQUEST_CID },
   { NS_EVENTSOURCE_CONTRACTID, &kNS_EVENTSOURCE_CID },
   { NS_WEBSOCKET_CONTRACTID, &kNS_WEBSOCKET_CID },
+  { NS_DOMACTIVITY_CONTRACTID, &kNS_DOMACTIVITY_CID },
   { NS_DOMPARSER_CONTRACTID, &kNS_DOMPARSER_CID },
   { "@mozilla.org/dom/storage;2", &kNS_DOMSTORAGE2_CID },
   { "@mozilla.org/dom/storagemanager;1", &kNS_DOMSTORAGEMANAGER_CID },
@@ -1132,6 +1158,7 @@ static const mozilla::Module::ContractIDEntry kLayoutContracts[] = {
 #endif
 #ifdef MOZ_WIDGET_GONK
   { NS_AUDIOMANAGER_CONTRACTID, &kNS_AUDIOMANAGER_CID },
+  { NS_VOLUMESERVICE_CONTRACTID, &kNS_VOLUMESERVICE_CID },
 #endif
 #ifdef ENABLE_EDITOR_API_LOG
   { "@mozilla.org/editor/htmleditor;1", &kNS_HTMLEDITOR_CID },
@@ -1169,6 +1196,8 @@ static const mozilla::Module::ContractIDEntry kLayoutContracts[] = {
   { SMS_DATABASE_SERVICE_CONTRACTID, &kSMS_DATABASE_SERVICE_CID },
   { SMS_REQUEST_MANAGER_CONTRACTID, &kSMS_REQUEST_MANAGER_CID },
   { POWERMANAGERSERVICE_CONTRACTID, &kNS_POWERMANAGERSERVICE_CID },
+  { OSFILECONSTANTSSERVICE_CONTRACTID, &kOSFILECONSTANTSSERVICE_CID },
+  { ALARMHALSERVICE_CONTRACTID, &kNS_ALARMHALSERVICE_CID },
   { NULL }
 };
 

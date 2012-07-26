@@ -4,14 +4,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "nsIDOMHTMLAreaElement.h"
-#include "nsIDOMEventTarget.h"
 #include "nsGenericHTMLElement.h"
 #include "nsILink.h"
 #include "nsGkAtoms.h"
-#include "nsStyleConsts.h"
 #include "nsIURL.h"
-#include "nsNetUtil.h"
-#include "nsReadableUtils.h"
 #include "nsIDocument.h"
 
 #include "Link.h"
@@ -40,21 +36,21 @@ public:
 
   // nsIDOMHTMLElement
   NS_FORWARD_NSIDOMHTMLELEMENT_BASIC(nsGenericHTMLElement::)
-  NS_SCRIPTABLE NS_IMETHOD Click() {
+  NS_IMETHOD Click() {
     return nsGenericHTMLElement::Click();
   }
-  NS_SCRIPTABLE NS_IMETHOD GetTabIndex(PRInt32* aTabIndex);
-  NS_SCRIPTABLE NS_IMETHOD SetTabIndex(PRInt32 aTabIndex);
-  NS_SCRIPTABLE NS_IMETHOD Focus() {
+  NS_IMETHOD GetTabIndex(PRInt32* aTabIndex);
+  NS_IMETHOD SetTabIndex(PRInt32 aTabIndex);
+  NS_IMETHOD Focus() {
     return nsGenericHTMLElement::Focus();
   }
-  NS_SCRIPTABLE NS_IMETHOD GetDraggable(bool* aDraggable) {
+  NS_IMETHOD GetDraggable(bool* aDraggable) {
     return nsGenericHTMLElement::GetDraggable(aDraggable);
   }
-  NS_SCRIPTABLE NS_IMETHOD GetInnerHTML(nsAString& aInnerHTML) {
+  NS_IMETHOD GetInnerHTML(nsAString& aInnerHTML) {
     return nsGenericHTMLElement::GetInnerHTML(aInnerHTML);
   }
-  NS_SCRIPTABLE NS_IMETHOD SetInnerHTML(const nsAString& aInnerHTML) {
+  NS_IMETHOD SetInnerHTML(const nsAString& aInnerHTML) {
     return nsGenericHTMLElement::SetInnerHTML(aInnerHTML);
   }
 

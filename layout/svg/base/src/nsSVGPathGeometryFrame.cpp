@@ -9,10 +9,12 @@
 // Keep others in (case-insensitive) order:
 #include "gfxContext.h"
 #include "gfxPlatform.h"
+#include "nsDisplayList.h"
 #include "nsGkAtoms.h"
 #include "nsRenderingContext.h"
 #include "nsSVGEffects.h"
 #include "nsSVGGraphicElement.h"
+#include "nsSVGIntegrationUtils.h"
 #include "nsSVGMarkerFrame.h"
 #include "nsSVGPathGeometryElement.h"
 #include "nsSVGUtils.h"
@@ -40,6 +42,61 @@ NS_QUERYFRAME_HEAD(nsSVGPathGeometryFrame)
 NS_QUERYFRAME_TAIL_INHERITING(nsSVGPathGeometryFrameBase)
 
 //----------------------------------------------------------------------
+// Display list item:
+
+class nsDisplaySVGPathGeometry : public nsDisplayItem {
+public:
+  nsDisplaySVGPathGeometry(nsDisplayListBuilder* aBuilder,
+                           nsSVGPathGeometryFrame* aFrame)
+    : nsDisplayItem(aBuilder, aFrame)
+  {
+    MOZ_COUNT_CTOR(nsDisplaySVGPathGeometry);
+    NS_ABORT_IF_FALSE(aFrame, "Must have a frame!");
+  }
+#ifdef NS_BUILD_REFCNT_LOGGING
+  virtual ~nsDisplaySVGPathGeometry() {
+    MOZ_COUNT_DTOR(nsDisplaySVGPathGeometry);
+  }
+#endif
+ 
+  NS_DISPLAY_DECL_NAME("nsDisplaySVGPathGeometry", TYPE_SVG_PATH_GEOMETRY)
+
+  virtual void HitTest(nsDisplayListBuilder* aBuilder, const nsRect& aRect,
+                       HitTestState* aState, nsTArray<nsIFrame*> *aOutFrames);
+  virtual void Paint(nsDisplayListBuilder* aBuilder,
+                     nsRenderingContext* aCtx);
+};
+
+void
+nsDisplaySVGPathGeometry::HitTest(nsDisplayListBuilder* aBuilder, const nsRect& aRect,
+                                  HitTestState* aState, nsTArray<nsIFrame*> *aOutFrames)
+{
+  nsSVGPathGeometryFrame *frame = static_cast<nsSVGPathGeometryFrame*>(mFrame);
+  nsPoint pointRelativeToReferenceFrame = aRect.Center();
+  // ToReferenceFrame() includes frame->GetPosition(), our user space position.
+  nsPoint userSpacePt = pointRelativeToReferenceFrame -
+                          (ToReferenceFrame() - frame->GetPosition());
+  if (frame->GetFrameForPoint(userSpacePt)) {
+    aOutFrames->AppendElement(frame);
+  }
+}
+
+void
+nsDisplaySVGPathGeometry::Paint(nsDisplayListBuilder* aBuilder,
+                                nsRenderingContext* aCtx)
+{
+  // ToReferenceFrame includes our mRect offset, but painting takes
+  // account of that too. To avoid double counting, we subtract that
+  // here.
+  nsPoint offset = ToReferenceFrame() - mFrame->GetPosition();
+
+  aCtx->PushState();
+  aCtx->Translate(offset);
+  static_cast<nsSVGPathGeometryFrame*>(mFrame)->PaintSVG(aCtx, nsnull);
+  aCtx->PopState();
+}
+
+//----------------------------------------------------------------------
 // nsIFrame methods
 
 NS_IMETHODIMP
@@ -51,7 +108,7 @@ nsSVGPathGeometryFrame::AttributeChanged(PRInt32         aNameSpaceID,
       (static_cast<nsSVGPathGeometryElement*>
                   (mContent)->AttributeDefinesGeometry(aAttribute) ||
        aAttribute == nsGkAtoms::transform))
-    nsSVGUtils::InvalidateAndScheduleBoundsUpdate(this);
+    nsSVGUtils::InvalidateAndScheduleReflowSVG(this);
 
   return NS_OK;
 }
@@ -67,7 +124,7 @@ nsSVGPathGeometryFrame::DidSetStyleContext(nsStyleContext* aOldStyleContext)
   // style_hints don't map very well onto svg. Here seems to be the
   // best place to deal with style changes:
 
-  nsSVGUtils::InvalidateAndScheduleBoundsUpdate(this);
+  nsSVGUtils::InvalidateAndScheduleReflowSVG(this);
 }
 
 nsIAtom *
@@ -91,8 +148,8 @@ nsSVGPathGeometryFrame::IsSVGTransformed(gfxMatrix *aOwnTransform,
   }
 
   nsSVGElement *content = static_cast<nsSVGElement*>(mContent);
-  const SVGAnimatedTransformList *list = content->GetAnimatedTransformList();
-  if (list && !list->GetAnimValue().IsEmpty()) {
+  if (content->GetAnimatedTransformList() ||
+      content->GetAnimateMotionTransform()) {
     if (aOwnTransform) {
       *aOwnTransform = content->PrependLocalTransformsTo(gfxMatrix(),
                                   nsSVGElement::eUserSpaceToParent);
@@ -100,6 +157,18 @@ nsSVGPathGeometryFrame::IsSVGTransformed(gfxMatrix *aOwnTransform,
     foundTransform = true;
   }
   return foundTransform;
+}
+
+NS_IMETHODIMP
+nsSVGPathGeometryFrame::BuildDisplayList(nsDisplayListBuilder*   aBuilder,
+                                         const nsRect&           aDirtyRect,
+                                         const nsDisplayListSet& aLists)
+{
+  if (!static_cast<const nsSVGElement*>(mContent)->HasValidDimensions()) {
+    return NS_OK;
+  }
+  return aLists.Content()->AppendNewToTop(
+           new (aBuilder) nsDisplaySVGPathGeometry(aBuilder, this));
 }
 
 //----------------------------------------------------------------------
@@ -151,6 +220,10 @@ nsSVGPathGeometryFrame::PaintSVG(nsRenderingContext *aContext,
 NS_IMETHODIMP_(nsIFrame*)
 nsSVGPathGeometryFrame::GetFrameForPoint(const nsPoint &aPoint)
 {
+  gfxMatrix canvasTM = GetCanvasTM(FOR_HIT_TESTING);
+  if (canvasTM.IsSingular()) {
+    return nsnull;
+  }
   PRUint16 fillRule, hitTestFlags;
   if (GetStateBits() & NS_STATE_SVG_CLIPPATH_CHILD) {
     hitTestFlags = SVG_HIT_TEST_FILL;
@@ -159,10 +232,6 @@ nsSVGPathGeometryFrame::GetFrameForPoint(const nsPoint &aPoint)
     hitTestFlags = GetHitTestFlags();
     // XXX once bug 614732 is fixed, aPoint won't need any conversion in order
     // to compare it with mRect.
-    gfxMatrix canvasTM = GetCanvasTM();
-    if (canvasTM.IsSingular()) {
-      return nsnull;
-    }
     nsPoint point =
       nsSVGUtils::TransformOuterSVGPointToChildFrame(aPoint, canvasTM, PresContext());
     if (!hitTestFlags || ((hitTestFlags & SVG_HIT_TEST_CHECK_MRECT) &&
@@ -176,7 +245,7 @@ nsSVGPathGeometryFrame::GetFrameForPoint(const nsPoint &aPoint)
   nsRefPtr<gfxContext> tmpCtx =
     new gfxContext(gfxPlatform::GetPlatform()->ScreenReferenceSurface());
 
-  GeneratePath(tmpCtx);
+  GeneratePath(tmpCtx, canvasTM);
   gfxPoint userSpacePoint =
     tmpCtx->DeviceToUser(gfxPoint(PresContext()->AppUnitsToGfxUnits(aPoint.x),
                                   PresContext()->AppUnitsToGfxUnits(aPoint.y)));
@@ -202,34 +271,41 @@ nsSVGPathGeometryFrame::GetFrameForPoint(const nsPoint &aPoint)
 NS_IMETHODIMP_(nsRect)
 nsSVGPathGeometryFrame::GetCoveredRegion()
 {
-  // See bug 614732 comment 32:
-  //return nsSVGUtils::TransformFrameRectToOuterSVG(mRect, GetCanvasTM(), PresContext());
-  return mCoveredRegion;
+  return nsSVGUtils::TransformFrameRectToOuterSVG(
+           mRect, GetCanvasTM(FOR_OUTERSVG_TM), PresContext());
 }
 
 void
-nsSVGPathGeometryFrame::UpdateBounds()
+nsSVGPathGeometryFrame::ReflowSVG()
 {
-  NS_ASSERTION(nsSVGUtils::OuterSVGIsCallingUpdateBounds(this),
-               "This call is probaby a wasteful mistake");
+  NS_ASSERTION(nsSVGUtils::OuterSVGIsCallingReflowSVG(this),
+               "This call is probably a wasteful mistake");
 
   NS_ABORT_IF_FALSE(!(GetStateBits() & NS_STATE_SVG_NONDISPLAY_CHILD),
-                    "UpdateBounds mechanism not designed for this");
+                    "ReflowSVG mechanism not designed for this");
 
-  if (!nsSVGUtils::NeedsUpdatedBounds(this)) {
+  if (!nsSVGUtils::NeedsReflowSVG(this)) {
     return;
   }
 
-  gfxRect extent = GetBBoxContribution(gfxMatrix(),
-    nsSVGUtils::eBBoxIncludeFill | nsSVGUtils::eBBoxIgnoreFillIfNone |
-    nsSVGUtils::eBBoxIncludeStroke | nsSVGUtils::eBBoxIgnoreStrokeIfNone |
-    nsSVGUtils::eBBoxIncludeMarkers);
+  PRUint32 flags = nsSVGUtils::eBBoxIncludeFill |
+                   nsSVGUtils::eBBoxIncludeStroke |
+                   nsSVGUtils::eBBoxIncludeMarkers;
+  // Our "visual" overflow rect needs to be valid for building display lists
+  // for hit testing, which means that for certain values of 'pointer-events'
+  // it needs to include the geometry of the fill or stroke even when the fill/
+  // stroke don't actually render (e.g. when stroke="none" or
+  // stroke-opacity="0"). GetHitTestFlags() accounts for 'pointer-events'.
+  PRUint16 hitTestFlags = GetHitTestFlags();
+  if ((hitTestFlags & SVG_HIT_TEST_FILL)) {
+   flags |= nsSVGUtils::eBBoxIncludeFillGeometry;
+  }
+  if ((hitTestFlags & SVG_HIT_TEST_STROKE)) {
+   flags |= nsSVGUtils::eBBoxIncludeStrokeGeometry;
+  }
+  gfxRect extent = GetBBoxContribution(gfxMatrix(), flags);
   mRect = nsLayoutUtils::RoundGfxRectToAppRect(extent,
             PresContext()->AppUnitsPerCSSPixel());
-
-  // See bug 614732 comment 32.
-  mCoveredRegion = nsSVGUtils::TransformFrameRectToOuterSVG(
-    mRect, GetCanvasTM(), PresContext());
 
   if (mState & NS_FRAME_FIRST_REFLOW) {
     // Make sure we have our filter property (if any) before calling
@@ -238,6 +314,15 @@ nsSVGPathGeometryFrame::UpdateBounds()
     nsSVGEffects::UpdateEffects(this);
   }
 
+  // We only invalidate if we are dirty, if our outer-<svg> has already had its
+  // initial reflow (since if it hasn't, its entire area will be invalidated
+  // when it gets that initial reflow), and if our parent is not dirty (since
+  // if it is, then it will invalidate its entire new area, which will include
+  // our new area).
+  bool invalidate = (mState & NS_FRAME_IS_DIRTY) &&
+    !(GetParent()->GetStateBits() &
+       (NS_FRAME_FIRST_REFLOW | NS_FRAME_IS_DIRTY));
+
   nsRect overflow = nsRect(nsPoint(0,0), mRect.Size());
   nsOverflowAreas overflowAreas(overflow, overflow);
   FinishAndStoreOverflow(overflowAreas, mRect.Size());
@@ -245,12 +330,8 @@ nsSVGPathGeometryFrame::UpdateBounds()
   mState &= ~(NS_FRAME_FIRST_REFLOW | NS_FRAME_IS_DIRTY |
               NS_FRAME_HAS_DIRTY_CHILDREN);
 
-  // XXXSDL get rid of this in favor of the invalidate call in
-  // FinishAndStoreOverflow?
-  if (!(GetParent()->GetStateBits() & NS_FRAME_FIRST_REFLOW)) {
-    // We only invalidate if our outer-<svg> has already had its
-    // initial reflow (since if it hasn't, its entire area will be
-    // invalidated when it gets that initial reflow):
+  if (invalidate) {
+    // XXXSDL Let FinishAndStoreOverflow do this.
     nsSVGUtils::InvalidateBounds(this, true);
   }
 }
@@ -258,16 +339,15 @@ nsSVGPathGeometryFrame::UpdateBounds()
 void
 nsSVGPathGeometryFrame::NotifySVGChanged(PRUint32 aFlags)
 {
-  NS_ABORT_IF_FALSE(!(aFlags & DO_NOT_NOTIFY_RENDERING_OBSERVERS) ||
-                    (GetStateBits() & NS_STATE_SVG_NONDISPLAY_CHILD),
-                    "Must be NS_STATE_SVG_NONDISPLAY_CHILD!");
-
   NS_ABORT_IF_FALSE(aFlags & (TRANSFORM_CHANGED | COORD_CONTEXT_CHANGED),
                     "Invalidation logic may need adjusting");
 
-  if (!(aFlags & DO_NOT_NOTIFY_RENDERING_OBSERVERS)) {
-    nsSVGUtils::InvalidateAndScheduleBoundsUpdate(this);
-  }
+  // Ancestor changes can't affect how we render from the perspective of
+  // any rendering observers that we may have, so we don't need to
+  // invalidate them. We also don't need to invalidate ourself, since our
+  // changed ancestor will have invalidated its entire area, which includes
+  // our area.
+  nsSVGUtils::ScheduleReflowSVG(this);
 }
 
 SVGBBox
@@ -284,7 +364,7 @@ nsSVGPathGeometryFrame::GetBBoxContribution(const gfxMatrix &aToBBoxUserspace,
   nsRefPtr<gfxContext> tmpCtx =
     new gfxContext(gfxPlatform::GetPlatform()->ScreenReferenceSurface());
 
-  GeneratePath(tmpCtx, &aToBBoxUserspace);
+  GeneratePath(tmpCtx, aToBBoxUserspace);
   tmpCtx->IdentityMatrix();
 
   // Be careful when replacing the following logic to get the fill and stroke
@@ -302,15 +382,15 @@ nsSVGPathGeometryFrame::GetBBoxContribution(const gfxMatrix &aToBBoxUserspace,
   gfxRect pathExtents = tmpCtx->GetUserPathExtent();
 
   // Account for fill:
-  if ((aFlags & nsSVGUtils::eBBoxIncludeFill) != 0 &&
-      ((aFlags & nsSVGUtils::eBBoxIgnoreFillIfNone) == 0 ||
+  if ((aFlags & nsSVGUtils::eBBoxIncludeFillGeometry) ||
+      ((aFlags & nsSVGUtils::eBBoxIncludeFill) &&
        GetStyleSVG()->mFill.mType != eStyleSVGPaintType_None)) {
     bbox = pathExtents;
   }
 
   // Account for stroke:
-  if ((aFlags & nsSVGUtils::eBBoxIncludeStroke) != 0 &&
-      ((aFlags & nsSVGUtils::eBBoxIgnoreStrokeIfNone) == 0 || HasStroke())) {
+  if ((aFlags & nsSVGUtils::eBBoxIncludeStrokeGeometry) ||
+      ((aFlags & nsSVGUtils::eBBoxIncludeStroke) && HasStroke())) {
     // We can't use tmpCtx->GetUserStrokeExtent() since it doesn't work for
     // device space extents. Instead we approximate the stroke extents from
     // pathExtents using PathExtentsToMaxStrokeExtents.
@@ -379,14 +459,21 @@ nsSVGPathGeometryFrame::GetBBoxContribution(const gfxMatrix &aToBBoxUserspace,
 // nsSVGGeometryFrame methods:
 
 gfxMatrix
-nsSVGPathGeometryFrame::GetCanvasTM()
+nsSVGPathGeometryFrame::GetCanvasTM(PRUint32 aFor)
 {
+  if (!(GetStateBits() & NS_STATE_SVG_NONDISPLAY_CHILD)) {
+    if ((aFor == FOR_PAINTING && NS_SVGDisplayListPaintingEnabled()) ||
+        (aFor == FOR_HIT_TESTING && NS_SVGDisplayListHitTestingEnabled())) {
+      return nsSVGIntegrationUtils::GetCSSPxToDevPxMatrix(this);
+    }
+  }
+
   NS_ASSERTION(mParent, "null parent");
 
   nsSVGContainerFrame *parent = static_cast<nsSVGContainerFrame*>(mParent);
   nsSVGGraphicElement *content = static_cast<nsSVGGraphicElement*>(mContent);
 
-  return content->PrependLocalTransformsTo(parent->GetCanvasTM());
+  return content->PrependLocalTransformsTo(parent->GetCanvasTM(aFor));
 }
 
 //----------------------------------------------------------------------
@@ -458,7 +545,7 @@ nsSVGPathGeometryFrame::Render(nsRenderingContext *aContext)
   /* save/restore the state so we don't screw up the xform */
   gfx->Save();
 
-  GeneratePath(gfx);
+  GeneratePath(gfx, GetCanvasTM(FOR_PAINTING));
 
   if (renderMode != SVGAutoRenderState::NORMAL) {
     NS_ABORT_IF_FALSE(renderMode == SVGAutoRenderState::CLIP ||
@@ -495,22 +582,15 @@ nsSVGPathGeometryFrame::Render(nsRenderingContext *aContext)
 
 void
 nsSVGPathGeometryFrame::GeneratePath(gfxContext* aContext,
-                                     const gfxMatrix *aOverrideTransform)
+                                     const gfxMatrix &aTransform)
 {
-  gfxMatrix matrix;
-  if (aOverrideTransform) {
-    matrix = *aOverrideTransform;
-  } else {
-    matrix = GetCanvasTM();
-  }
-
-  if (matrix.IsSingular()) {
+  if (aTransform.IsSingular()) {
     aContext->IdentityMatrix();
     aContext->NewPath();
     return;
   }
 
-  aContext->Multiply(matrix);
+  aContext->Multiply(aTransform);
 
   // Hack to let SVGPathData::ConstructPath know if we have square caps:
   const nsStyleSVG* style = GetStyleSVG();

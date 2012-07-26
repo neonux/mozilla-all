@@ -19,6 +19,7 @@ body {
   width: 100%;
   padding: 6px 9px;
   display: -moz-box;
+  vertical-align: top;
 }
 
 body[dir=rtl] > #header {
@@ -44,7 +45,7 @@ body[dir=rtl] > #header > #element-size {
 #main {
   margin: 0 10px 10px 10px;
   -moz-box-sizing: border-box;
-  width: -moz-calc(100% - 2 * 10px);
+  width: calc(100% - 2 * 10px);
   position: absolute;
   border-width: 1px;
   font: 10px/12px monospace;
@@ -107,7 +108,7 @@ body[dir=rtl] > #header > #element-size {
 }
 
 .top, .bottom {
-  width: -moz-calc(100% - 2px);
+  width: calc(100% - 2px);
   text-align: center;
 }
 
@@ -137,7 +138,7 @@ body[dir=rtl] > #header > #element-size {
 }
 
 .size {
-  width: -moz-calc(100% - 2px);
+  width: calc(100% - 2px);
 }
 
 .margin.right,

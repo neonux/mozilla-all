@@ -16,11 +16,8 @@
 #include "nsCOMPtr.h"
 #include "nsAString.h"
 #include "nsPrintfCString.h"
-#include "nsUnicharUtils.h"
-#include "nsServiceManagerUtils.h"
 #include "nsIScriptGlobalObject.h"
 #include "nsIScriptContext.h"
-#include "nsIDOMScriptObjectFactory.h"
 #include "nsDOMCID.h"
 #include "nsContentUtils.h"
 #include "nsIXPConnect.h"
@@ -28,7 +25,7 @@
 #include "mozilla/dom/Element.h"
 #include "nsIDocument.h"
 #include "nsINodeInfo.h"
-#include "nsReadableUtils.h"
+#include "nsIIdleService.h"
 #include "nsIDOMDocument.h"
 #include "nsIDOMNodeList.h"
 #include "nsIDOMNode.h"
@@ -36,7 +33,6 @@
 #include "nsNetCID.h"
 #include "nsNetUtil.h"
 #include "nsIScriptSecurityManager.h"
-#include "nsDOMError.h"
 #include "nsPIDOMWindow.h"
 #include "nsIJSContextStack.h"
 #include "nsIDocShell.h"
@@ -45,21 +41,13 @@
 #include "nsIParser.h"
 #include "nsIFragmentContentSink.h"
 #include "nsIContentSink.h"
-#include "nsIHTMLContentSink.h"
-#include "nsIXMLContentSink.h"
-#include "nsHTMLParts.h"
-#include "nsIServiceManager.h"
-#include "nsIAttribute.h"
 #include "nsContentList.h"
 #include "nsIHTMLDocument.h"
-#include "nsIDOMHTMLDocument.h"
-#include "nsIDOMHTMLCollection.h"
 #include "nsIDOMHTMLFormElement.h"
 #include "nsIDOMHTMLElement.h"
 #include "nsIForm.h"
 #include "nsIFormControl.h"
 #include "nsGkAtoms.h"
-#include "nsISupportsPrimitives.h"
 #include "imgIDecoderObserver.h"
 #include "imgIRequest.h"
 #include "imgIContainer.h"
@@ -87,19 +75,14 @@ static NS_DEFINE_CID(kXTFServiceCID, NS_XTFSERVICE_CID);
 #include "nsUnicodeProperties.h"
 #include "harfbuzz/hb.h"
 #include "nsIJSRuntimeService.h"
-#include "nsIDOMDocumentXBL.h"
 #include "nsBindingManager.h"
 #include "nsIURI.h"
 #include "nsIURL.h"
-#include "nsXBLBinding.h"
-#include "nsXBLPrototypeBinding.h"
-#include "nsEscape.h"
 #include "nsICharsetConverterManager.h"
 #include "nsEventListenerManager.h"
 #include "nsAttrName.h"
 #include "nsIDOMUserDataHandler.h"
 #include "nsContentCreatorFunctions.h"
-#include "nsGUIEvent.h"
 #include "nsMutationEvent.h"
 #include "nsIMEStateManager.h"
 #include "nsContentErrors.h"
@@ -108,7 +91,6 @@ static NS_DEFINE_CID(kXTFServiceCID, NS_XTFSERVICE_CID);
 #include "nsIDOMNSEvent.h"
 #include "nsXULPopupManager.h"
 #include "nsIPermissionManager.h"
-#include "nsIContentPrefService.h"
 #include "nsIScriptObjectPrincipal.h"
 #include "nsNullPrincipal.h"
 #include "nsIRunnable.h"
@@ -123,16 +105,11 @@ static NS_DEFINE_CID(kXTFServiceCID, NS_XTFSERVICE_CID);
 #include "nsCPrefetchService.h"
 #include "nsIChromeRegistry.h"
 #include "nsEventDispatcher.h"
-#include "nsIMIMEHeaderParam.h"
 #include "nsIDOMXULCommandEvent.h"
-#include "nsIDOMDragEvent.h"
 #include "nsDOMDataTransfer.h"
 #include "nsHtml5Module.h"
 #include "nsPresContext.h"
 #include "nsLayoutStatics.h"
-#include "nsLayoutUtils.h"
-#include "nsFrameManager.h"
-#include "BasicLayers.h"
 #include "nsFocusManager.h"
 #include "nsTextEditorState.h"
 #include "nsIPluginHost.h"
@@ -142,6 +119,7 @@ static NS_DEFINE_CID(kXTFServiceCID, NS_XTFSERVICE_CID);
 #include "nsIDOMHTMLInputElement.h"
 #include "nsParserConstants.h"
 #include "nsIWebNavigation.h"
+#include "nsTextFragment.h"
 #include "mozilla/Selection.h"
 
 #ifdef IBMBIDI
@@ -166,21 +144,24 @@ static NS_DEFINE_CID(kXTFServiceCID, NS_XTFSERVICE_CID);
 #include "nsHTMLMediaElement.h"
 #endif
 #include "nsDOMTouchEvent.h"
-#include "nsIScriptElement.h"
 #include "nsIContentViewer.h"
 #include "nsIObjectLoadingContent.h"
 #include "nsCCUncollectableMarker.h"
 #include "mozilla/Base64.h"
 #include "mozilla/Preferences.h"
 #include "nsDOMMutationObserver.h"
-
-#include "nsWrapperCacheInlines.h"
 #include "nsIDOMDocumentType.h"
 #include "nsCharSeparatedTokenizer.h"
-
 #include "nsICharsetDetector.h"
 #include "nsICharsetDetectionObserver.h"
 #include "nsIPlatformCharset.h"
+#include "nsIEditor.h"
+#include "nsIEditorDocShell.h"
+#include "mozilla/Attributes.h"
+#include "nsIParserService.h"
+#include "nsIDOMScriptObjectFactory.h"
+
+#include "nsWrapperCacheInlines.h"
 
 extern "C" int MOZ_XMLTranslateEntity(const char* ptr, const char* end,
                                       const char** next, PRUnichar* result);
@@ -235,12 +216,14 @@ bool nsContentUtils::sAllowXULXBL_for_file = false;
 nsString* nsContentUtils::sShiftText = nsnull;
 nsString* nsContentUtils::sControlText = nsnull;
 nsString* nsContentUtils::sMetaText = nsnull;
+nsString* nsContentUtils::sOSText = nsnull;
 nsString* nsContentUtils::sAltText = nsnull;
 nsString* nsContentUtils::sModifierSeparator = nsnull;
 
 bool nsContentUtils::sInitialized = false;
 bool nsContentUtils::sIsFullScreenApiEnabled = false;
 bool nsContentUtils::sTrustedFullScreenOnly = true;
+bool nsContentUtils::sIsIdleObserverAPIEnabled = false;
 
 PRUint32 nsContentUtils::sHandlingInputTimeout = 1000;
 
@@ -307,15 +290,15 @@ EventListenerManagerHashClearEntry(PLDHashTable *table, PLDHashEntryHdr *entry)
   lm->~EventListenerManagerMapEntry();
 }
 
-class SameOriginChecker : public nsIChannelEventSink,
-                          public nsIInterfaceRequestor
+class SameOriginChecker MOZ_FINAL : public nsIChannelEventSink,
+                                    public nsIInterfaceRequestor
 {
   NS_DECL_ISUPPORTS
   NS_DECL_NSICHANNELEVENTSINK
   NS_DECL_NSIINTERFACEREQUESTOR
 };
 
-class CharsetDetectionObserver : public nsICharsetDetectionObserver
+class CharsetDetectionObserver MOZ_FINAL : public nsICharsetDetectionObserver
 {
 public:
   NS_DECL_ISUPPORTS
@@ -416,6 +399,8 @@ nsContentUtils::Init()
   Preferences::AddBoolVarCache(&sTrustedFullScreenOnly,
                                "full-screen-api.allow-trusted-requests-only");
 
+  sIsIdleObserverAPIEnabled = Preferences::GetBool("dom.idle-observers-api.enabled", true);
+
   Preferences::AddUintVarCache(&sHandlingInputTimeout,
                                "dom.event.handling-user-input-time-limit",
                                1000);
@@ -452,6 +437,15 @@ nsContentUtils::GetMetaText(nsAString& text)
 }
 
 void
+nsContentUtils::GetOSText(nsAString& text)
+{
+  if (!sOSText) {
+    InitializeModifierStrings();
+  }
+  text.Assign(*sOSText);
+}
+
+void
 nsContentUtils::GetAltText(nsAString& text)
 {
   if (!sAltText)
@@ -483,6 +477,7 @@ nsContentUtils::InitializeModifierStrings()
   NS_ASSERTION(NS_SUCCEEDED(rv) && bundle, "chrome://global/locale/platformKeys.properties could not be loaded");
   nsXPIDLString shiftModifier;
   nsXPIDLString metaModifier;
+  nsXPIDLString osModifier;
   nsXPIDLString altModifier;
   nsXPIDLString controlModifier;
   nsXPIDLString modifierSeparator;
@@ -490,6 +485,7 @@ nsContentUtils::InitializeModifierStrings()
     //macs use symbols for each modifier key, so fetch each from the bundle, which also covers i18n
     bundle->GetStringFromName(NS_LITERAL_STRING("VK_SHIFT").get(), getter_Copies(shiftModifier));
     bundle->GetStringFromName(NS_LITERAL_STRING("VK_META").get(), getter_Copies(metaModifier));
+    bundle->GetStringFromName(NS_LITERAL_STRING("VK_WIN").get(), getter_Copies(osModifier));
     bundle->GetStringFromName(NS_LITERAL_STRING("VK_ALT").get(), getter_Copies(altModifier));
     bundle->GetStringFromName(NS_LITERAL_STRING("VK_CONTROL").get(), getter_Copies(controlModifier));
     bundle->GetStringFromName(NS_LITERAL_STRING("MODIFIER_SEPARATOR").get(), getter_Copies(modifierSeparator));
@@ -497,6 +493,7 @@ nsContentUtils::InitializeModifierStrings()
   //if any of these don't exist, we get  an empty string
   sShiftText = new nsString(shiftModifier);
   sMetaText = new nsString(metaModifier);
+  sOSText = new nsString(osModifier);
   sAltText = new nsString(altModifier);
   sControlText = new nsString(controlModifier);
   sModifierSeparator = new nsString(modifierSeparator);  
@@ -865,6 +862,22 @@ nsContentUtils::SplitMimeType(const nsAString& aValue, nsString& aType,
     aType = aValue;
   }
   aType.StripWhitespace();
+}
+
+nsresult 
+nsContentUtils::IsUserIdle(PRUint32 aRequestedIdleTimeInMS, bool* aUserIsIdle)
+{
+  nsresult rv;
+  nsCOMPtr<nsIIdleService> idleService = 
+    do_GetService("@mozilla.org/widget/idleservice;1", &rv);
+  NS_ENSURE_SUCCESS(rv, rv);
+    
+  PRUint32 idleTimeInMS;
+  rv = idleService->GetIdleTime(&idleTimeInMS);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  *aUserIsIdle = idleTimeInMS >= aRequestedIdleTimeInMS;
+  return NS_OK;
 }
 
 /**
@@ -1453,6 +1466,8 @@ nsContentUtils::Shutdown()
   sControlText = nsnull;
   delete sMetaText;  
   sMetaText = nsnull;
+  delete sOSText;
+  sOSText = nsnull;
   delete sAltText;  
   sAltText = nsnull;
   delete sModifierSeparator;
@@ -2774,17 +2789,9 @@ nsContentUtils::IsDraggableLink(const nsIContent* aContent) {
 static bool
 TestSitePerm(nsIPrincipal* aPrincipal, const char* aType, PRUint32 aPerm)
 {
-  if (nsContentUtils::IsSystemPrincipal(aPrincipal)) {
-    // System principal is always allowed and never denied permission.
-    return aPerm == nsIPermissionManager::ALLOW_ACTION;
-  }
-
-  nsCOMPtr<nsIURI> uri;
-  if (NS_FAILED(!aPrincipal ||
-      aPrincipal->GetURI(getter_AddRefs(uri))) ||
-      !uri) {
-    // We always deny (i.e. don't allow) the permission if we don't
-    // have a principal or we don't know the URI.
+  if (!aPrincipal) {
+    // We always deny (i.e. don't allow) the permission if we don't have a
+    // principal.
     return aPerm != nsIPermissionManager::ALLOW_ACTION;
   }
 
@@ -2793,9 +2800,9 @@ TestSitePerm(nsIPrincipal* aPrincipal, const char* aType, PRUint32 aPerm)
   NS_ENSURE_TRUE(permMgr, false);
 
   PRUint32 perm;
-  nsresult rv = permMgr->TestPermission(uri, aType, &perm);
+  nsresult rv = permMgr->TestPermissionFromPrincipal(aPrincipal, aType, &perm);
   NS_ENSURE_SUCCESS(rv, false);
-  
+
   return perm == aPerm;
 }
 
@@ -4453,6 +4460,17 @@ nsContentUtils::DropJSObjects(void* aScriptObjectHolder)
   return rv;
 }
 
+#ifdef DEBUG
+/* static */
+bool
+nsContentUtils::AreJSObjectsHeld(void* aScriptHolder)
+{
+  bool isHeld = false;
+  sXPConnect->TestJSHolder(aScriptHolder, &isHeld);
+  return isHeld;
+}
+#endif
+
 /* static */
 void
 nsContentUtils::NotifyInstalledMenuKeyboardListener(bool aInstalling)
@@ -5454,6 +5472,13 @@ nsContentUtils::GetCurrentJSContext()
 }
 
 /* static */
+JSContext *
+nsContentUtils::GetSafeJSContext()
+{
+  return sThreadJSContextStack->GetSafeJSContext();
+}
+
+/* static */
 nsresult
 nsContentUtils::ASCIIToLower(nsAString& aStr)
 {
@@ -5615,6 +5640,23 @@ nsContentUtils::EqualsLiteralIgnoreASCIICase(const nsAString& aStr1,
   }
   
   return true;
+}
+
+/* static */
+bool
+nsContentUtils::StringContainsASCIIUpper(const nsAString& aStr)
+{
+  const PRUnichar* iter = aStr.BeginReading();
+  const PRUnichar* end = aStr.EndReading();
+  while (iter != end) {
+    PRUnichar c = *iter;
+    if (c >= 'A' && c <= 'Z') {
+      return true;
+    }
+    ++iter;
+  }
+
+  return false;
 }
 
 /* static */
@@ -6240,6 +6282,12 @@ nsContentUtils::IsSubDocumentTabbable(nsIContent* aContent)
   nsIDocument* doc = aContent->GetCurrentDoc();
   if (!doc) {
     return false;
+  }
+
+  // If the subdocument lives in another process, the frame is
+  // tabbable.
+  if (nsEventStateManager::IsRemoteTarget(aContent)) {
+    return true;
   }
 
   // XXXbz should this use OwnerDoc() for GetSubDocumentFor?
@@ -6908,4 +6956,19 @@ nsContentUtils::GetSelectionInTextControl(Selection* aSelection,
   // Make sure aOutStartOffset <= aOutEndOffset.
   aOutStartOffset = NS_MIN(anchorOffset, focusOffset);
   aOutEndOffset = NS_MAX(anchorOffset, focusOffset);
+}
+
+nsIEditor*
+nsContentUtils::GetHTMLEditor(nsPresContext* aPresContext)
+{
+  nsCOMPtr<nsISupports> container = aPresContext->GetContainer();
+  nsCOMPtr<nsIEditorDocShell> editorDocShell(do_QueryInterface(container));
+  bool isEditable;
+  if (!editorDocShell ||
+      NS_FAILED(editorDocShell->GetEditable(&isEditable)) || !isEditable)
+    return nsnull;
+
+  nsCOMPtr<nsIEditor> editor;
+  editorDocShell->GetEditor(getter_AddRefs(editor));
+  return editor;
 }

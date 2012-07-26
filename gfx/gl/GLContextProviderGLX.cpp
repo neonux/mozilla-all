@@ -3,7 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#ifdef MOZ_WIDGET_GTK2
+#ifdef MOZ_WIDGET_GTK
 #include <gdk/gdk.h>
 #include <gdk/gdkx.h>
 #define GET_NATIVE_WINDOW(aWidget) GDK_WINDOW_XID((GdkWindow *) aWidget->GetNativeData(NS_NATIVE_WINDOW))
@@ -32,7 +32,7 @@
 
 #include "gfxCrashReporterUtils.h"
 
-#ifdef MOZ_WIDGET_GTK2
+#ifdef MOZ_WIDGET_GTK
 #include "gfxPlatformGtk.h"
 #endif
 
@@ -70,6 +70,9 @@ GLXLibrary::EnsureInitialized()
         return false;
     }
     mTriedInitializing = true;
+
+    // Force enabling s3 texture compression (http://dri.freedesktop.org/wiki/S3TC)
+    PR_SetEnv("force_s3tc_enable=true");
 
     if (!mOGLLibrary) {
         // see e.g. bug 608526: it is intrinsically interesting to know whether we have dynamically linked to libGL.so.1
@@ -224,7 +227,7 @@ GLXLibrary::EnsureInitialized()
         GLLibraryLoader::LoadSymbols(mOGLLibrary, symbols_texturefrompixmap, 
                                          (GLLibraryLoader::PlatformLookupFunction)&xGetProcAddress))
     {
-#ifdef MOZ_WIDGET_GTK2
+#ifdef MOZ_WIDGET_GTK
         mUseTextureFromPixmap = gfxPlatformGtk::UseXRender();
 #else
         mUseTextureFromPixmap = true;
@@ -922,7 +925,7 @@ public:
 
     virtual GLuint GetTextureID() {
         return mTexture;
-    };
+    }
 
 private:
    TextureImageGLX(GLuint aTexture,

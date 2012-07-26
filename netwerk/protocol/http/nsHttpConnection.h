@@ -152,6 +152,8 @@ public:
 
     PRInt64 BytesWritten() { return mTotalBytesWritten; }
 
+    void    PrintDiagnostics(nsCString &log);
+
 private:
     // called to cause the underlying socket to start speaking SSL
     nsresult ProxyStartSSL();
@@ -217,6 +219,7 @@ private:
 
     bool                            mKeepAlive;
     bool                            mKeepAliveMask;
+    bool                            mDontReuse;
     bool                            mSupportsPipelining;
     bool                            mIsReused;
     bool                            mCompletedProxyConnect;

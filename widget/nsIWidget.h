@@ -15,7 +15,6 @@
 #include "nsStringGlue.h"
 
 #include "prthread.h"
-#include "Layers.h"
 #include "nsEvent.h"
 #include "nsCOMPtr.h"
 #include "nsITheme.h"
@@ -23,6 +22,7 @@
 #include "nsWidgetInitData.h"
 #include "nsTArray.h"
 #include "nsXULAppAPI.h"
+#include "LayersBackend.h"
 
 // forward declarations
 class   nsFontMetrics;
@@ -38,9 +38,10 @@ class   ViewWrapper;
 
 namespace mozilla {
 namespace dom {
-class PBrowserChild;
+class TabChild;
 }
 namespace layers {
+class LayerManager;
 class PLayersChild;
 }
 }
@@ -86,8 +87,8 @@ typedef nsEventStatus (* EVENT_CALLBACK)(nsGUIEvent *event);
 #endif
 
 #define NS_IWIDGET_IID \
-  { 0x7c7ff2ff, 0x61f9, 0x4240, \
-    { 0xaa, 0x58, 0x74, 0xb0, 0xcd, 0xa9, 0xe3, 0x05 } }
+  { 0x91aafae4, 0xd814, 0x4803, \
+    { 0x9a, 0xf5, 0xb0, 0x2f, 0x1b, 0x2c, 0xaf, 0x57 } }
 
 /*
  * Window shadow styles
@@ -359,11 +360,11 @@ struct InputContextAction {
  */
 class nsIWidget : public nsISupports {
   protected:
-    typedef mozilla::dom::PBrowserChild PBrowserChild;
+    typedef mozilla::dom::TabChild TabChild;
 
   public:
     typedef mozilla::layers::LayerManager LayerManager;
-    typedef LayerManager::LayersBackend LayersBackend;
+    typedef mozilla::layers::LayersBackend LayersBackend;
     typedef mozilla::layers::PLayersChild PLayersChild;
     typedef mozilla::widget::IMEState IMEState;
     typedef mozilla::widget::InputContext InputContext;
@@ -608,7 +609,7 @@ class nsIWidget : public nsISupports {
      * Returns whether the window is visible
      *
      */
-    NS_IMETHOD IsVisible(bool & aState) = 0;
+    virtual bool IsVisible() const = 0;
 
     /**
      * Perform platform-dependent sanity check on a potential window position.
@@ -765,9 +766,8 @@ class nsIWidget : public nsISupports {
 
     /**
      * Ask whether the widget is enabled
-     * @param aState returns true if the widget is enabled
      */
-    NS_IMETHOD IsEnabled(bool *aState) = 0;
+    virtual bool IsEnabled() const = 0;
 
     /**
      * Request activation of this window or give focus to this widget.
@@ -1040,14 +1040,14 @@ class nsIWidget : public nsISupports {
      */
     inline LayerManager* GetLayerManager(bool* aAllowRetaining = nsnull)
     {
-        return GetLayerManager(nsnull, LayerManager::LAYERS_NONE,
+        return GetLayerManager(nsnull, mozilla::layers::LAYERS_NONE,
                                LAYER_MANAGER_CURRENT, aAllowRetaining);
     }
 
     inline LayerManager* GetLayerManager(LayerManagerPersistence aPersistence,
                                          bool* aAllowRetaining = nsnull)
     {
-        return GetLayerManager(nsnull, LayerManager::LAYERS_NONE,
+        return GetLayerManager(nsnull, mozilla::layers::LAYERS_NONE,
                                aPersistence, aAllowRetaining);
     }
 
@@ -1096,7 +1096,7 @@ class nsIWidget : public nsISupports {
      *
      * @param aOpaqueRegion the region of the window that is opaque.
      */
-    virtual void UpdateOpaqueRegion(const nsIntRegion &aOpaqueRegion) {};
+    virtual void UpdateOpaqueRegion(const nsIntRegion &aOpaqueRegion) {}
 
     /** 
      * Internal methods
@@ -1543,7 +1543,7 @@ class nsIWidget : public nsISupports {
      * The returned widget must still be nsIWidget::Create()d.
      */
     static already_AddRefed<nsIWidget>
-    CreatePuppetWidget(PBrowserChild *aTabChild);
+    CreatePuppetWidget(TabChild* aTabChild);
 
     /**
      * Reparent this widget's native widget.
@@ -1569,6 +1569,24 @@ class nsIWidget : public nsISupports {
      * a default background.
      */
     virtual bool WidgetPaintsBackground() { return false; }
+
+    /**
+     * Get the natural bounds of this widget.  This method is only
+     * meaningful for widgets for which Gecko implements screen
+     * rotation natively.  When this is the case, GetBounds() returns
+     * the widget bounds taking rotation into account, and
+     * GetNaturalBounds() returns the bounds *not* taking rotation
+     * into account.
+     *
+     * No code outside of the composition pipeline should know or care
+     * about this.  If you're not an agent of the compositor, you
+     * probably shouldn't call this method.
+     */
+    virtual nsIntRect GetNaturalBounds() {
+        nsIntRect bounds;
+        GetBounds(bounds);
+        return bounds;
+    }
 
 protected:
 

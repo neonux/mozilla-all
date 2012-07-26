@@ -344,7 +344,18 @@ ShadowContainerLayerOGL::ShadowContainerLayerOGL(LayerManagerOGL *aManager)
  
 ShadowContainerLayerOGL::~ShadowContainerLayerOGL()
 {
-  Destroy();
+  // We don't Destroy() on destruction here because this destructor
+  // can be called after remote content has crashed, and it may not be
+  // safe to free the IPC resources of our children.  Those resources
+  // are automatically cleaned up by IPDL-generated code.
+  //
+  // In the common case of normal shutdown, either
+  // LayerManagerOGL::Destroy(), a parent
+  // *ContainerLayerOGL::Destroy(), or Disconnect() will trigger
+  // cleanup of our resources.
+  while (mFirstChild) {
+    ContainerRemoveChild(this, mFirstChild);
+  }
 }
 
 void
@@ -385,6 +396,46 @@ void
 ShadowContainerLayerOGL::CleanupResources()
 {
   ContainerCleanupResources(this);
+}
+
+ShadowRefLayerOGL::ShadowRefLayerOGL(LayerManagerOGL* aManager)
+  : ShadowRefLayer(aManager, NULL)
+  , LayerOGL(aManager)
+{
+  mImplData = static_cast<LayerOGL*>(this);
+}
+
+ShadowRefLayerOGL::~ShadowRefLayerOGL()
+{
+  Destroy();
+}
+
+void
+ShadowRefLayerOGL::Destroy()
+{
+  MOZ_ASSERT(!mFirstChild);
+  mDestroyed = true;
+}
+
+LayerOGL*
+ShadowRefLayerOGL::GetFirstChildOGL()
+{
+  if (!mFirstChild) {
+    return nsnull;
+   }
+  return static_cast<LayerOGL*>(mFirstChild->ImplData());
+}
+
+void
+ShadowRefLayerOGL::RenderLayer(int aPreviousFrameBuffer,
+                               const nsIntPoint& aOffset)
+{
+  ContainerRender(this, aPreviousFrameBuffer, aOffset, mOGLManager);
+}
+
+void
+ShadowRefLayerOGL::CleanupResources()
+{
 }
 
 } /* layers */

@@ -77,7 +77,6 @@
 #include "nsIEditorIMESupport.h"
 #include "nsEventDispatcher.h"
 #include "nsLayoutUtils.h"
-#include "nsContentCreatorFunctions.h"
 #include "mozAutoDocUpdate.h"
 #include "nsHtml5Module.h"
 #include "nsITextControlElement.h"
@@ -85,7 +84,6 @@
 #include "nsHTMLFieldSetElement.h"
 #include "nsHTMLMenuElement.h"
 #include "nsAsyncDOMEvent.h"
-#include "nsIScriptError.h"
 #include "nsDOMMutationObserver.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/dom/FromParser.h"
@@ -95,6 +93,7 @@
 #include "nsVariant.h"
 #include "nsDOMSettableTokenList.h"
 #include "nsThreadUtils.h"
+#include "nsTextFragment.h"
 
 using namespace mozilla;
 using namespace mozilla::dom;
@@ -276,7 +275,7 @@ nsGenericHTMLElement::DOMQueryInterface(nsIDOMHTMLElement *aElement,
 // No closing bracket, because NS_INTERFACE_MAP_END does that for us.
 
 nsresult
-nsGenericHTMLElement::CopyInnerTo(nsGenericElement* aDst) const
+nsGenericHTMLElement::CopyInnerTo(nsGenericElement* aDst)
 {
   nsresult rv;
   PRInt32 i, count = GetAttrCount();
@@ -2450,7 +2449,7 @@ nsGenericHTMLElement::MapCommonAttributesInto(const nsMappedAttributes* aAttribu
   if (aData->mSIDs & NS_STYLE_INHERIT_BIT(Display)) {
     nsCSSValue* display = aData->ValueForDisplay();
     if (display->GetUnit() == eCSSUnit_Null) {
-      if (aAttributes->IndexOfAttr(nsGkAtoms::hidden, kNameSpaceID_None) >= 0) {
+      if (aAttributes->IndexOfAttr(nsGkAtoms::hidden) >= 0) {
         display->SetIntValue(NS_STYLE_DISPLAY_NONE, eCSSUnit_Enumerated);
       }
     }
@@ -4286,3 +4285,41 @@ nsGenericHTMLElement::GetProperties(nsIDOMHTMLPropertiesCollection** aReturn)
   return NS_OK;
 }
 
+nsSize
+nsGenericHTMLElement::GetWidthHeightForImage(imgIRequest *aImageRequest)
+{
+  nsSize size(0,0);
+
+  nsIFrame* frame = GetPrimaryFrame(Flush_Layout);
+
+  if (frame) {
+    size = frame->GetContentRect().Size();
+
+    size.width = nsPresContext::AppUnitsToIntCSSPixels(size.width);
+    size.height = nsPresContext::AppUnitsToIntCSSPixels(size.height);
+  } else {
+    const nsAttrValue* value;
+    nsCOMPtr<imgIContainer> image;
+    if (aImageRequest) {
+      aImageRequest->GetImage(getter_AddRefs(image));
+    }
+
+    if ((value = GetParsedAttr(nsGkAtoms::width)) &&
+        value->Type() == nsAttrValue::eInteger) {
+      size.width = value->GetIntegerValue();
+    } else if (image) {
+      image->GetWidth(&size.width);
+    }
+
+    if ((value = GetParsedAttr(nsGkAtoms::height)) &&
+        value->Type() == nsAttrValue::eInteger) {
+      size.height = value->GetIntegerValue();
+    } else if (image) {
+      image->GetHeight(&size.height);
+    }
+  }
+
+  NS_ASSERTION(size.width >= 0, "negative width");
+  NS_ASSERTION(size.height >= 0, "negative height");
+  return size;
+}

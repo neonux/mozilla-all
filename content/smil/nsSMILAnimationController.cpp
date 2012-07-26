@@ -7,9 +7,7 @@
 #include "nsSMILCompositor.h"
 #include "nsSMILCSSProperty.h"
 #include "nsCSSProps.h"
-#include "nsComponentManagerUtils.h"
 #include "nsITimer.h"
-#include "nsIContent.h"
 #include "mozilla/dom/Element.h"
 #include "nsIDocument.h"
 #include "nsISMILAnimationElement.h"
@@ -772,7 +770,8 @@ nsSMILAnimationController::GetTargetIdentifierForAnimation(
         isCSS = targetElem->GetNameSpaceID() != kNameSpaceID_SVG;
       } else {
         nsCSSProperty prop =
-          nsCSSProps::LookupProperty(nsDependentAtomString(attributeName));
+          nsCSSProps::LookupProperty(nsDependentAtomString(attributeName),
+                                     nsCSSProps::eEnabled);
         isCSS = nsSMILCSSProperty::IsPropertyAnimatable(prop);
       }
     }

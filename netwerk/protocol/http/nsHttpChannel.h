@@ -82,6 +82,7 @@ public:
     NS_IMETHOD SetWWWCredentials(const nsACString & aCredentials);
     NS_IMETHOD OnAuthAvailable();
     NS_IMETHOD OnAuthCancelled(bool userCancel);
+    NS_IMETHOD GetAsciiHostForAuth(nsACString &aHost);
     // Functions we implement from nsIHttpAuthenticableChannel but are
     // declared in HttpBaseChannel must be implemented in this class. We
     // just call the HttpBaseChannel:: impls.
@@ -145,16 +146,6 @@ public: /* internal necko use only */
 
     OfflineCacheEntryAsForeignMarker* GetOfflineCacheEntryAsForeignMarker();
 
-    /**
-     * Returns true if this channel is operating in private browsing mode,
-     * false otherwise.
-     */
-    bool UsingPrivateBrowsing() {
-        bool usingPB;
-        GetUsingPrivateBrowsing(&usingPB);
-        return usingPB;
-    }
-
 private:
     typedef nsresult (nsHttpChannel::*nsContinueRedirectionFunc)(nsresult result);
 
@@ -190,9 +181,7 @@ private:
     void     HandleAsyncFallback();
     nsresult ContinueHandleAsyncFallback(nsresult);
     nsresult PromptTempRedirect();
-    virtual nsresult SetupReplacementChannel(nsIURI *, nsIChannel *,
-                                             bool preserveMethod,
-                                             bool forProxy);
+    virtual nsresult SetupReplacementChannel(nsIURI *, nsIChannel *, bool preserveMethod);
 
     // proxy specific methods
     nsresult ProxyFailover();
@@ -223,7 +212,6 @@ private:
     nsresult UpdateExpirationTime();
     nsresult CheckCache();
     bool ShouldUpdateOfflineCacheEntry();
-    nsresult StartBufferingCachedEntity(bool usingSSL);
     nsresult ReadFromCache(bool alreadyMarkedValid);
     void     CloseCacheEntry(bool doomOnFailure);
     void     CloseOfflineCacheEntry();
@@ -236,7 +224,7 @@ private:
     nsresult InstallCacheListener(PRUint32 offset = 0);
     nsresult InstallOfflineCacheListener();
     void     MaybeInvalidateCacheEntryForSubsequentGet();
-    nsCacheStoragePolicy DetermineStoragePolicy(bool isPrivate);
+    nsCacheStoragePolicy DetermineStoragePolicy();
     nsresult DetermineCacheAccess(nsCacheAccessMode *_retval);
     void     AsyncOnExamineCachedResponse();
 
@@ -294,8 +282,8 @@ private:
     // cache specific data
     nsRefPtr<HttpCacheQuery>          mCacheQuery;
     nsCOMPtr<nsICacheEntryDescriptor> mCacheEntry;
-    // We must close mCacheAsyncInputStream explicitly to avoid leaks.
-    AutoClose<nsIAsyncInputStream>    mCacheAsyncInputStream;
+    // We must close mCacheInputStream explicitly to avoid leaks.
+    AutoClose<nsIInputStream>         mCacheInputStream;
     nsRefPtr<nsInputStreamPump>       mCachePump;
     nsAutoPtr<nsHttpResponseHead>     mCachedResponseHead;
     nsCOMPtr<nsISupports>             mCachedSecurityInfo;
@@ -310,9 +298,8 @@ private:
 
     nsCOMPtr<nsICacheEntryDescriptor> mOfflineCacheEntry;
     nsCacheAccessMode                 mOfflineCacheAccess;
-    nsCString                         mOfflineCacheClientID;
-
-    nsCOMPtr<nsIFile>                 mProfileDirectory;
+    PRUint32                          mOfflineCacheLastModifiedTime;
+    nsCOMPtr<nsIApplicationCache>     mApplicationCacheForWrite;
 
     // auth specific data
     nsCOMPtr<nsIHttpChannelAuthProvider> mAuthProvider;
@@ -340,7 +327,6 @@ private:
     PRUint32                          mAuthRetryPending         : 1;
     PRUint32                          mResuming                 : 1;
     PRUint32                          mInitedCacheEntry         : 1;
-    PRUint32                          mCacheForOfflineUse       : 1;
     // True if we are loading a fallback cache entry from the
     // application cache.
     PRUint32                          mFallbackChannel          : 1;
@@ -375,12 +361,6 @@ protected:
     virtual void DoNotifyListenerCleanup();
 
 private: // cache telemetry
-    enum {
-        kCacheHit = 1,
-        kCacheHitViaReval = 2,
-        kCacheMissedViaReval = 3,
-        kCacheMissed = 4
-    };
     bool mDidReval;
 };
 

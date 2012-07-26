@@ -37,7 +37,6 @@
 #include "nsString.h"
 #include "nsINameSpaceManager.h"
 #include "nsIContent.h"
-#include "nsIDocument.h"
 #include "nsTraceRefcnt.h"
 #include "jArray.h"
 #include "nsHtml5DocumentMode.h"
@@ -549,7 +548,7 @@ nsHtml5TreeBuilder::endTokenization()
       stack[currentPtr]->release();
       currentPtr--;
     }
-    stack = nsnull;
+    stack = 0;
   }
   if (listOfActiveFormattingElements) {
     while (listPtr > -1) {
@@ -558,9 +557,9 @@ nsHtml5TreeBuilder::endTokenization()
       }
       listPtr--;
     }
-    listOfActiveFormattingElements = nsnull;
+    listOfActiveFormattingElements = 0;
   }
-  charBuffer = nsnull;
+  charBuffer = 0;
   end();
 }
 
