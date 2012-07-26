@@ -10,6 +10,8 @@
 #include "GLContext.h"
 #include "LayerManagerOGLProgram.h"
 
+#include "mozilla/TimeStamp.h"
+
 namespace mozilla {
 
 namespace layers {
