@@ -5,6 +5,7 @@
 
 #include "CompositorOGL.h"
 #include "TextureOGL.h"
+#include "SurfaceOGL.h"
 #include "mozilla/Preferences.h"
 
 #include "gfxUtils.h"
@@ -28,6 +29,7 @@ CompositorOGL::CompositorOGL(nsIWidget *aWidget, int aSurfaceWidth,
   , mSurfaceSize(aSurfaceWidth, aSurfaceHeight)
   , mBackBufferFBO(0)
   , mBackBufferTexture(0)
+  , mBoundFBO(0)
   , mHasBGRA(0)
   , mIsRenderingToEGLSurface(aIsRenderingToEGLSurface)
   , mFrameInProgress(false)
@@ -504,6 +506,168 @@ CompositorOGL::CreateDrawableTexture(const TextureIdentifier &aIdentifier)
   return new DrawableTextureHostOGL();
 }
 
+TemporaryRef<Surface>
+CompositorOGL::CreateSurface(const gfx::IntRect &aRect, SurfaceInitMode aInit)
+{
+  RefPtr<SurfaceOGL> surface = new SurfaceOGL();
+  CreateFBOWithTexture(aRect, aInit, 0, &(surface->mFBO), &(surface->mTexture));
+  return surface.forget();
+}
+
+TemporaryRef<Surface>
+CompositorOGL::CreateSurfaceFromSurface(const gfx::IntRect &aRect, const Surface *aSource)
+{
+  RefPtr<SurfaceOGL> surface = new SurfaceOGL();
+  const SurfaceOGL* sourceSurface = static_cast<const SurfaceOGL*>(aSource);
+  CreateFBOWithTexture(aRect, INIT_MODE_COPY, sourceSurface->mFBO,
+                       &(surface->mFBO), &(surface->mTexture));
+  return surface.forget();
+}
+
+void
+CompositorOGL::SetSurfaceTarget(Surface *aSurface)
+{
+  SurfaceOGL* surface = static_cast<SurfaceOGL*>(aSurface);
+  if (mBoundFBO != surface->mFBO) {
+    mGLContext->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, surface->mFBO);
+    mBoundFBO = surface->mFBO;
+  }
+}
+
+void
+CompositorOGL::RemoveSurfaceTarget()
+{
+  if (mBoundFBO != 0) {
+    mGLContext->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, 0);
+    mBoundFBO = 0;
+  }
+}
+
+static GLenum
+GetFrameBufferInternalFormat(GLContext* gl,
+                             GLuint aFrameBuffer,
+                             nsIWidget* aWidget)
+{
+  if (aFrameBuffer == 0) { // default framebuffer
+    return aWidget->GetGLFrameBufferFormat();
+  }
+  return LOCAL_GL_RGBA;
+}
+
+void
+CompositorOGL::CreateFBOWithTexture(const gfx::IntRect& aRect, SurfaceInitMode aInit,
+                                    GLuint aSourceFrameBuffer,
+                                    GLuint *aFBO, GLuint *aTexture)
+{
+  GLuint tex, fbo;
+
+  mGLContext->fActiveTexture(LOCAL_GL_TEXTURE0);
+  mGLContext->fGenTextures(1, &tex);
+  mGLContext->fBindTexture(mFBOTextureTarget, tex);
+
+  if (aInit == INIT_MODE_COPY) {
+
+    if (mBoundFBO != aSourceFrameBuffer) {
+      mGLContext->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, aSourceFrameBuffer);
+    }
+
+    // We're going to create an RGBA temporary fbo.  But to
+    // CopyTexImage() from the current framebuffer, the framebuffer's
+    // format has to be compatible with the new texture's.  So we
+    // check the format of the framebuffer here and take a slow path
+    // if it's incompatible.
+    GLenum format =
+      GetFrameBufferInternalFormat(gl(), aSourceFrameBuffer, mWidget);
+
+    bool isFormatCompatibleWithRGBA
+        = gl()->IsGLES2() ? (format == LOCAL_GL_RGBA)
+                          : true;
+
+    if (isFormatCompatibleWithRGBA) {
+      mGLContext->fCopyTexImage2D(mFBOTextureTarget,
+                                  0,
+                                  LOCAL_GL_RGBA,
+                                  aRect.x, aRect.y,
+                                  aRect.width, aRect.height,
+                                  0);
+    } else {
+      // Curses, incompatible formats.  Take a slow path.
+      //
+      // XXX Technically CopyTexSubImage2D also has the requirement of
+      // matching formats, but it doesn't seem to affect us in the
+      // real world.
+      mGLContext->fTexImage2D(mFBOTextureTarget,
+                              0,
+                              LOCAL_GL_RGBA,
+                              aRect.width, aRect.height,
+                              0,
+                              LOCAL_GL_RGBA,
+                              LOCAL_GL_UNSIGNED_BYTE,
+                              NULL);
+      mGLContext->fCopyTexSubImage2D(mFBOTextureTarget,
+                                     0,    // level
+                                     0, 0, // offset
+                                     aRect.x, aRect.y,
+                                     aRect.width, aRect.height);
+    }
+  } else {
+    mGLContext->fTexImage2D(mFBOTextureTarget,
+                            0,
+                            LOCAL_GL_RGBA,
+                            aRect.width, aRect.height,
+                            0,
+                            LOCAL_GL_RGBA,
+                            LOCAL_GL_UNSIGNED_BYTE,
+                            NULL);
+  }
+  mGLContext->fTexParameteri(mFBOTextureTarget, LOCAL_GL_TEXTURE_MIN_FILTER,
+                             LOCAL_GL_LINEAR);
+  mGLContext->fTexParameteri(mFBOTextureTarget, LOCAL_GL_TEXTURE_MAG_FILTER,
+                             LOCAL_GL_LINEAR);
+  mGLContext->fTexParameteri(mFBOTextureTarget, LOCAL_GL_TEXTURE_WRAP_S, 
+                             LOCAL_GL_CLAMP_TO_EDGE);
+  mGLContext->fTexParameteri(mFBOTextureTarget, LOCAL_GL_TEXTURE_WRAP_T, 
+                             LOCAL_GL_CLAMP_TO_EDGE);
+  mGLContext->fBindTexture(mFBOTextureTarget, 0);
+
+  mGLContext->fGenFramebuffers(1, &fbo);
+  mGLContext->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, fbo);
+  mGLContext->fFramebufferTexture2D(LOCAL_GL_FRAMEBUFFER,
+                                    LOCAL_GL_COLOR_ATTACHMENT0,
+                                    mFBOTextureTarget,
+                                    tex,
+                                    0);
+
+  // Making this call to fCheckFramebufferStatus prevents a crash on
+  // PowerVR. See bug 695246.
+  GLenum result = mGLContext->fCheckFramebufferStatus(LOCAL_GL_FRAMEBUFFER);
+  if (result != LOCAL_GL_FRAMEBUFFER_COMPLETE) {
+    nsCAutoString msg;
+    msg.Append("Framebuffer not complete -- error 0x");
+    msg.AppendInt(result, 16);
+    msg.Append(", mFBOTextureTarget 0x");
+    msg.AppendInt(mFBOTextureTarget, 16);
+    msg.Append(", aRect.width ");
+    msg.AppendInt(aRect.width);
+    msg.Append(", aRect.height ");
+    msg.AppendInt(aRect.height);
+    NS_RUNTIMEABORT(msg.get());
+  }
+
+  SetupPipeline(aRect.width, aRect.height);
+  mGLContext->fScissor(0, 0, aRect.width, aRect.height);
+
+  if (aInit == INIT_MODE_CLEAR) {
+    mGLContext->fClearColor(0.0, 0.0, 0.0, 0.0);
+    mGLContext->fClear(LOCAL_GL_COLOR_BUFFER_BIT);
+  }
+
+  mGLContext->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, mBoundFBO);
+
+  *aFBO = fbo;
+  *aTexture = tex;
+}
+
 void
 CompositorOGL::BeginFrame(const gfx::Rect *aClipRect)
 {
@@ -747,11 +911,15 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
 }
 
 void
-CompositorOGL::FlushToScreen()
+CompositorOGL::EndFrame()
 {
-  mGLContext->SwapBuffers();
-  mGLContext->fBindBuffer(LOCAL_GL_ARRAY_BUFFER, 0);
-  mFrameInProgress = false;
+  if (mGLContext->IsDoubleBuffered()) {
+    mGLContext->SwapBuffers();
+    mGLContext->fBindBuffer(LOCAL_GL_ARRAY_BUFFER, 0);
+    mFrameInProgress = false;
+  } else {
+    // TODO: Handle this case.
+  }
 }
 
 } /* layers */

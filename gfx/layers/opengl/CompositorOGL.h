@@ -44,10 +44,21 @@ public:
   virtual TemporaryRef<DrawableTextureHost>
     CreateDrawableTexture(const TextureIdentifier &aIdentifier) MOZ_OVERRIDE;
 
+  virtual TemporaryRef<Surface> CreateSurface(const gfx::IntRect &aRect,
+                                              SurfaceInitMode aInit) MOZ_OVERRIDE;
+
+  virtual TemporaryRef<Surface> CreateSurfaceFromSurface(const gfx::IntRect &aRect,
+                                                         const Surface *aSource) MOZ_OVERRIDE;
+
+  virtual void SetSurfaceTarget(Surface *aSurface) MOZ_OVERRIDE;
+
+  virtual void RemoveSurfaceTarget() MOZ_OVERRIDE;
+
   virtual void DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
                         const gfx::Rect *aClipRect, const EffectChain &aEffectChain,
                         gfx::Float aOpacity, const gfx::Matrix4x4 &aTransform) MOZ_OVERRIDE;
 
+  virtual void EndFrame() MOZ_OVERRIDE;
   virtual PRInt32 GetMaxTextureSize() const
   {
     return mGLContext->GetMaxTextureSize();
@@ -67,8 +78,6 @@ public:
     }
     mGLContext->MakeCurrent(aForce);
   }
-
-  void FlushToScreen();
 
 private:
   /** Widget associated with this compositor */
@@ -94,6 +103,9 @@ private:
 
   /** Texture target to use for FBOs */
   GLenum mFBOTextureTarget;
+
+  /** Currently bound FBO */
+  GLuint mBoundFBO;
 
   /** VBO that has some basics in it for a textured quad,
    *  including vertex coords and texcoords for both
@@ -133,6 +145,16 @@ private:
                  "Invalid program type.");
     return mPrograms[aType].mVariations[aMask];
   }
+
+  /* Create a FBO backed by a texture.
+   * Note that the texture target type will be
+   * of the type returned by FBOTextureTarget; different
+   * shaders are required to sample from the different
+   * texture types.
+   */
+  void CreateFBOWithTexture(const gfx::IntRect& aRect, SurfaceInitMode aInit,
+                            GLuint aSourceFrameBuffer,
+                            GLuint *aFBO, GLuint *aTexture);
 
   GLuint QuadVBO() { return mQuadVBO; }
   GLintptr QuadVBOVertexOffset() { return 0; }
