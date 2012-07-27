@@ -11,6 +11,7 @@
 #include "mozilla/gfx/Matrix.h"
 #include "base/process.h"
 #include "nsAutoPtr.h"
+#include "nsRegion.h"
 
 class gfxContext;
 class nsIWidget;
@@ -31,28 +32,17 @@ enum TextureFormat
   TEXTUREFORMAT_Y8
 };
 
-enum TextureHostType
-{
-  HOST_SHMEM,
-  HOST_D3D10,
-  HOST_GL
-};
-
-struct TextureHostIdentifier
-{
-  TextureHostType mType;
-  void *mDescriptor;
-  gfx::IntSize mMaxTextureSize;
-};
-
-struct TextureIdentifier
-{
-  TextureHostType mType;
-  void *mDescriptor;
-};
-
 class Texture : public RefCounted<Texture>
 {
+public:
+
+  /* aRegion is the region of the Texture to upload to. aData is a pointer to the
+   * top-left of the bound of the region to be uploaded.
+   */
+  virtual void
+    UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) = 0;
+
+  virtual ~Texture() {}
 };
 
 /* This can be used as an offscreen rendering target by the compositor, and
@@ -181,76 +171,15 @@ struct EffectChain
   }
 };
 
-
-class DrawableTextureHost : public Texture
-{
-  /* This will return an identifier that can be sent accross a process or
-   * thread boundary and used to construct a DrawableTextureClient object
-   * which can then be used for rendering. If the process is identical to the
-   * current process this may return the same object and will only be thread
-   * safe.
-   */
-  virtual TextureIdentifier GetIdentifierForProcess(base::ProcessHandle aProcess) = 0;
-
-  /* Perform any precomputation (e.g. texture upload) that needs to happen to the
-   * texture before rendering.
-   */
-  virtual void PrepareForRendering() = 0;
-};
-
-/* This class allows texture clients to draw into textures through Azure or
- * thebes and applies locking semantics to allow GPU or CPU level
- * synchronization.
- */
-class DrawableTextureClient
-{
-  /* This will return an identifier that can be sent accross a process or
-   * thread boundary and used to construct a DrawableTextureHost object
-   * which can then be used as a texture for rendering by a compatible
-   * compositor. This texture should have been created with the
-   * TextureHostIdentifier specified by the compositor that this identifier
-   * is to be used with. If the process is identical to the current process
-   * this may return the same object and will only be thread safe.
-   */
-  virtual TextureIdentifier GetIdentifierForProcess(base::ProcessHandle aProcess) = 0;
-
-  /* This requests a DrawTarget to draw into the current texture. Once the
-   * user is finished with the DrawTarget it should call Unlock.
-   */
-  virtual TemporaryRef<gfx::DrawTarget> LockDT() = 0;
-
-  /* This requests a gfxContext to draw into the current texture. Once the
-   * user is finished with the gfxContext it should call Unlock.
-   */
-  virtual already_AddRefed<gfxContext> LockContext() = 0;
-
-  /* This unlocks the current DrawableTexture and allows the host to composite
-   * it directly.
-   */
-  virtual void Unlock() = 0;
-};
-
 class Compositor : public RefCounted<Compositor>
 {
 public:
-  /* Request a texture host identifier that may be used for creating textures
-   * accross process or thread boundaries that are compatible with this
-   * compositor.
-   */
-  virtual TextureHostIdentifier
-    GetTextureHostIdentifier() = 0;
 
   /* This creates an immutable texture based on an in-memory bitmap.
    */
   virtual TemporaryRef<Texture>
     CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PRUint32 aStride,
                          TextureFormat aFormat) = 0;
-
-  /* This creates a DrawableTexture that can be sent accross process or thread
-   * boundaries to receive its content.
-   */
-  virtual TemporaryRef<DrawableTextureHost>
-    CreateDrawableTexture(const TextureIdentifier &aIdentifier) = 0;
 
   /* This creates a Surface that can be used as a rendering target by this
    * compositor.
@@ -291,11 +220,6 @@ public:
 class Factory
 {
   static TemporaryRef<Compositor> CreateCompositorForWidget(nsIWidget *aWidget);
-
-  /* This may be called by a Texture client to create a Texture which is
-   * the host whose identifier is specified.
-   */
-  static TemporaryRef<DrawableTextureClient> CreateTextureClient(const TextureHostIdentifier &aIdentifier);
 };
 
 }

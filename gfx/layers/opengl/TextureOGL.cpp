@@ -8,12 +8,10 @@
 namespace mozilla {
 namespace layers {
 
-TextureIdentifier
-DrawableTextureHostOGL::GetIdentifierForProcess(base::ProcessHandle aProcess)
+void
+TextureOGL::UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride)
 {
   // TODO: Implement this.
-
-  return TextureIdentifier();
 }
 
 } /* layers */

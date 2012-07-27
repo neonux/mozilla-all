@@ -22,14 +22,11 @@ public:
   gfx::IntSize mSize;
   GLenum format;
   GLenum internalFormat;
+
+  virtual void
+    UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) MOZ_OVERRIDE;
 };
 
-class DrawableTextureHostOGL : public DrawableTextureHost
-{
-  virtual TextureIdentifier GetIdentifierForProcess(base::ProcessHandle aProcess) MOZ_OVERRIDE;
-
-  virtual void PrepareForRendering() MOZ_OVERRIDE;
-};
 
 }
 }
