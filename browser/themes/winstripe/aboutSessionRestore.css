@@ -14,7 +14,7 @@ body {
 }
 
 #errorPageContainer {
-  background-image: url("chrome://global/skin/icons/warning-large.png");
+  background-image: url("chrome://global/skin/inContentUI/messageBox-Restore-Background.png");
   display: -moz-box;
   width: -moz-available;
   height: 70%;
@@ -34,7 +34,6 @@ body {
 }
 
 #tabList {
-  margin-top: 2.5em;
   width: 100%;
   min-height: 12em;
 }
@@ -61,8 +60,11 @@ treechildren::-moz-tree-image(partial) {
 }
 
 #buttons {
-  width: 100%;
+  -moz-box-pack: end;
+  margin-bottom: 1em;
+  -moz-padding-end: 24px;
 }
-#buttons > button {
-  margin-top: 2em;
+
+#errorTryAgain {
+  -moz-margin-start: 0;
 }
