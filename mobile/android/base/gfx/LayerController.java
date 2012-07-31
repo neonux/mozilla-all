@@ -68,8 +68,12 @@ public class LayerController {
         mForceRedraw = true;
         mViewportMetrics = new ImmutableViewportMetrics(new ViewportMetrics());
         mPanZoomController = new PanZoomController(this);
-        mView = new LayerView(context, this);
         mCheckerboardShouldShowChecks = true;
+    }
+
+    public void setView(LayerView v) {
+        mView = v;
+        mView.connect(this);
     }
 
     public void setRoot(Layer layer) { mRootLayer = layer; }
@@ -120,7 +124,7 @@ public class LayerController {
         return mViewportMetrics.zoomFactor;
     }
 
-    public Bitmap getBackgroundPattern()    { return getDrawable("background"); }
+    public Bitmap getBackgroundPattern()    { return getDrawable("tabs_tray_selected_bg"); }
     public Bitmap getShadowPattern()        { return getDrawable("shadow"); }
 
     public PanZoomController getPanZoomController()                                 { return mPanZoomController; }

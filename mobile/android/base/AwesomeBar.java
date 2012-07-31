@@ -15,6 +15,7 @@ import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.InputType;
@@ -166,6 +167,10 @@ public class AwesomeBar extends GeckoActivity {
                 if (!hasCompositionString(s)) {
                     updateGoButton(text);
                 }
+
+                if (Build.VERSION.SDK_INT >= 11) {
+                    getActionBar().hide();
+                }
             }
 
             public void beforeTextChanged(CharSequence s, int start, int count,
@@ -198,6 +203,32 @@ public class AwesomeBar extends GeckoActivity {
                 if (!hasFocus) {
                     InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
                     imm.hideSoftInputFromWindow(v.getWindowToken(), 0);
+                }
+            }
+        });
+
+        mText.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                if (Build.VERSION.SDK_INT >= 11) {
+                    CustomEditText text = (CustomEditText) v;
+
+                    if (text.getSelectionStart() == text.getSelectionEnd())
+                        return false;
+
+                    getActionBar().show();
+                    return false;
+                }
+
+                return false;
+            }
+        });
+
+        mText.setOnSelectionChangedListener(new CustomEditText.OnSelectionChangedListener() {
+            @Override
+            public void onSelectionChanged(int selStart, int selEnd) {
+                if (Build.VERSION.SDK_INT >= 11 && selStart == selEnd) {
+                    getActionBar().hide();
                 }
             }
         });

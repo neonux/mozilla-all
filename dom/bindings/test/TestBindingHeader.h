@@ -85,6 +85,15 @@ public:
   virtual JSObject* WrapObject(JSContext* cx, JSObject* scope);
 };
 
+class OnlyForUseInConstructor : public nsISupports,
+                                public nsWrapperCache
+{
+public:
+  NS_DECL_ISUPPORTS
+  // We need a GetParentObject to make binding codegen happy
+  virtual nsISupports* GetParentObject();
+};
+
 class TestInterface : public nsISupports,
                       public nsWrapperCache
 {
@@ -109,9 +118,15 @@ public:
                                               ErrorResult&);
   static
   already_AddRefed<TestInterface> Constructor(nsISupports*,
-                                              NonNull<TestNonCastableInterface>&,
+                                              TestNonCastableInterface&,
                                               ErrorResult&);
-
+  /*  static
+  already_AddRefed<TestInterface> Constructor(nsISupports*,
+                                              uint32_t, uint32_t,
+                                              const TestInterfaceOrOnlyForUseInConstructor&,
+                                              ErrorResult&);
+  */
+  
   // Integer types
   int8_t GetReadonlyByte(ErrorResult&);
   int8_t GetWritableByte(ErrorResult&);
@@ -320,12 +335,14 @@ public:
   void PassString(const nsAString&, ErrorResult&);
   void PassNullableString(const nsAString&, ErrorResult&);
   void PassOptionalString(const Optional<nsAString>&, ErrorResult&);
+  void PassOptionalStringWithDefaultValue(const nsAString&, ErrorResult&);
   void PassOptionalNullableString(const Optional<nsAString>&, ErrorResult&);
   void PassOptionalNullableStringWithDefaultValue(const nsAString&, ErrorResult&);
 
   // Enumarated types
   void PassEnum(TestEnum, ErrorResult&);
   void PassOptionalEnum(const Optional<TestEnum>&, ErrorResult&);
+  void PassEnumWithDefault(TestEnum, ErrorResult&);
   TestEnum ReceiveEnum(ErrorResult&);
   TestEnum GetEnumAttribute(ErrorResult&);
   TestEnum GetReadonlyEnumAttribute(ErrorResult&);
@@ -346,6 +363,7 @@ public:
   // Any types
   void PassAny(JSContext*, JS::Value, ErrorResult&);
   void PassOptionalAny(JSContext*, const Optional<JS::Value>&, ErrorResult&);
+  void PassAnyDefaultNull(JSContext*, JS::Value, ErrorResult&);
   JS::Value ReceiveAny(JSContext*, ErrorResult&);
 
   // object types
@@ -397,6 +415,7 @@ public:
   void PassSequenceOfDictionaries(const Sequence<Dict>&, ErrorResult&);
   void PassDictionaryOrLong(const Dict&, ErrorResult&);
   void PassDictionaryOrLong(int32_t, ErrorResult&);
+  void PassDictContainingDict(const DictContainingDict&, ErrorResult&);
 
   // Methods and properties imported via "implements"
   bool GetImplementedProperty(ErrorResult&);
@@ -533,6 +552,7 @@ private:
   void PassString(nsAString&, ErrorResult&) MOZ_DELETE;
   void PassNullableString(nsAString&, ErrorResult&) MOZ_DELETE;
   void PassOptionalString(Optional<nsAString>&, ErrorResult&) MOZ_DELETE;
+  void PassOptionalStringWithDefaultValue(nsAString&, ErrorResult&) MOZ_DELETE;
   void PassOptionalNullableString(Optional<nsAString>&, ErrorResult&) MOZ_DELETE;
   void PassOptionalNullableStringWithDefaultValue(nsAString&, ErrorResult&) MOZ_DELETE;
 

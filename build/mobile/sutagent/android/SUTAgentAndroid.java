@@ -5,12 +5,17 @@
 package com.mozilla.SUTAgentAndroid;
 
 import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.InetAddress;
 import org.apache.http.conn.util.InetAddressUtils;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.Formatter;
 import java.util.List;
@@ -98,6 +103,43 @@ public class SUTAgentAndroid extends Activity
         return(RegSvrIPAddr);
         }
 
+    public void pruneCommandLog(String datestamp, String testroot)
+        {
+
+        String today = "";
+        String yesterday = "";
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss:SSS");
+            Date dateObj = sdf.parse(datestamp);
+            SimpleDateFormat sdf_file = new SimpleDateFormat("yyyy-MM-dd");
+
+            today     = sdf_file.format(dateObj);
+            yesterday = sdf_file.format(new Date(dateObj.getTime() - 1000*60*60*24));
+        } catch (ParseException pe) {}
+
+        File dir = new File(testroot);
+
+        if (!dir.isDirectory())
+            return;
+
+        File [] files = dir.listFiles();
+        if (files == null)
+            return;
+
+        for (int iter = 0; iter < files.length; iter++) {
+            String fName = files[iter].getName();
+            if (fName.endsWith("sutcommands.txt")) {
+                if (fName.endsWith(today + "-sutcommands.txt") || fName.endsWith(yesterday + "-sutcommands.txt"))
+                    continue;
+
+                if (files[iter].delete())
+                    Log.i("SUTAgentAndroid", "Deleted old command logfile: " + files[iter]);
+                else
+                    Log.e("SUTAgentAndroid", "Unable to delete old command logfile: " + files[iter]);
+            }
+        }
+        }
+
     /** Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState)
@@ -109,6 +151,8 @@ public class SUTAgentAndroid extends Activity
         fixScreenOrientation();
 
         DoCommand dc = new DoCommand(getApplication());
+
+        logToFile(dc.GetTestRoot(), dc.GetSystemTime(), "onCreate");
 
         // Get configuration settings from "ini" file
         File dir = getFilesDir();
@@ -249,6 +293,8 @@ public class SUTAgentAndroid extends Activity
         String sTemp = Uri.encode(sRegString,"=&");
         sRegString = "register " + sTemp;
 
+        pruneCommandLog(dc.GetSystemTime(), dc.GetTestRoot());
+
         if (!bNetworkingStarted)
             {
             Thread thread = new Thread(null, doStartService, "StartServiceBkgnd");
@@ -309,8 +355,10 @@ public class SUTAgentAndroid extends Activity
     public void onDestroy()
         {
         super.onDestroy();
+        DoCommand dc = new DoCommand(getApplication());
         if (isFinishing())
             {
+            logToFile(dc.GetTestRoot(), dc.GetSystemTime(), "onDestroy - finishing");
             Intent listenerSvc = new Intent(this, ASMozStub.class);
             listenerSvc.setAction("com.mozilla.SUTAgentAndroid.service.LISTENER_SERVICE");
             stopService(listenerSvc);
@@ -322,6 +370,10 @@ public class SUTAgentAndroid extends Activity
                 wl.release();
 
             System.exit(0);
+            }
+        else
+            {
+            logToFile(dc.GetTestRoot(), dc.GetSystemTime(), "onDestroy - not finishing");
             }
         }
 
@@ -671,5 +723,42 @@ public class SUTAgentAndroid extends Activity
             Toast.makeText(getApplication().getApplicationContext(), ex.toString(), Toast.LENGTH_LONG).show();
             }
         return null;
+        }
+
+    public static void logToFile(String testRoot, String datestamp, String message)
+        {
+        if (testRoot == null ||
+            datestamp == null ||
+            message == null)
+            {
+            Log.e("SUTAgentAndroid", "bad arguments in logToFile()!");
+            return;
+            }
+        Log.i("SUTAgentAndroid", message);
+        String fileDateStr = "00";
+        try 
+            {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss:SSS");
+            Date dateStr = sdf.parse(datestamp);
+            SimpleDateFormat sdf_file = new SimpleDateFormat("yyyy-MM-dd");
+            fileDateStr = sdf_file.format(dateStr);
+            } 
+        catch (ParseException pe) {}
+        String logFile = testRoot + "/" + fileDateStr + "-sutcommands.txt";
+        PrintWriter pw = null;
+        try 
+            {
+            pw = new PrintWriter(new FileWriter(logFile, true));
+            pw.println(datestamp + " : " + message);
+            } 
+            catch (IOException ioe) 
+            {
+                Log.e("SUTAgentAndroid", "exception with file writer on: " + logFile);
+            } 
+            finally 
+            {
+                pw.close();
+            }
+
         }
 }

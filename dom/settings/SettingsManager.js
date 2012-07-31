@@ -60,7 +60,7 @@ SettingsLock.prototype = {
             let checkKeyRequest = store.get(key);
             checkKeyRequest.onsuccess = function (event) {
               if (!event.target.result) {
-                dump("MOZSETTINGS-SET-WARNING: " + key + " is not in the database. Please add it to build/settings.js\n");
+                debug("MOZSETTINGS-SET-WARNING: " + key + " is not in the database. Please add it to build/settings.js\n");
               }
             }
 
@@ -94,7 +94,7 @@ SettingsLock.prototype = {
             debug("result: " + JSON.stringify(event.target.result));
 
             if (event.target.result.length == 0) {
-              dump("MOZSETTINGS-GET-WARNING: " + info.name + " is not in the database. Please add it to build/settings.js\n");
+              debug("MOZSETTINGS-GET-WARNING: " + info.name + " is not in the database. Please add it to build/settings.js\n");
             }
 
             let results = {
@@ -268,11 +268,9 @@ SettingsManager.prototype = {
           }
           if (this._callbacks && this._callbacks[msg.key]) {
             debug("observe callback called! " + msg.key + " " + this._callbacks[msg.key].length);
-            for (let cb in this._callbacks[msg.key]) {
-              this._callbacks[msg.key].forEach(function(cb) {
-                cb({settingName: msg.key, settingValue: msg.value});
-              });
-            }
+            this._callbacks[msg.key].forEach(function(cb) {
+              cb({settingName: msg.key, settingValue: msg.value});
+            });
           }
         } else {
           debug("no observers stored!");
