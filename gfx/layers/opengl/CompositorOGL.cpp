@@ -439,9 +439,10 @@ CompositorOGL::CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PR
                                     TextureFormat aFormat)
 {
   RefPtr<TextureOGL> texture = new TextureOGL();
+  texture->mCompositorOGL = this;
   texture->mSize = aSize;
-  mGLContext->fGenTextures(1, &(texture->mTexture.mTextureHandle));
-  mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, texture->mTexture.mTextureHandle);
+  mGLContext->fGenTextures(1, &(texture->mTextureHandle));
+  mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, texture->mTextureHandle);
   mGLContext->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_MIN_FILTER,
                              LOCAL_GL_LINEAR);
   mGLContext->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_MAG_FILTER,
@@ -451,39 +452,37 @@ CompositorOGL::CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PR
   mGLContext->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_WRAP_T,
                              LOCAL_GL_CLAMP_TO_EDGE);
 
-  GLenum type;
-  PRInt32 pixelSize;
 
   switch (aFormat) {
     case TEXTUREFORMAT_BGRX32:
     case TEXTUREFORMAT_BGRA32:
-      texture->format = LOCAL_GL_RGBA;
-      type = LOCAL_GL_UNSIGNED_BYTE;
-      pixelSize = 4;
+      texture->mFormat = LOCAL_GL_RGBA;
+      texture->mType = LOCAL_GL_UNSIGNED_BYTE;
+      texture->mPixelSize = 4;
       break;
     case TEXTUREFORMAT_BGR16:
-      texture->format = LOCAL_GL_RGB;
-      type = LOCAL_GL_UNSIGNED_SHORT_5_6_5;
-      pixelSize = 2;
+      texture->mFormat = LOCAL_GL_RGB;
+      texture->mType = LOCAL_GL_UNSIGNED_SHORT_5_6_5;
+      texture->mPixelSize = 2;
       break;
     case TEXTUREFORMAT_Y8:
-      texture->format = LOCAL_GL_LUMINANCE;
-      type = LOCAL_GL_UNSIGNED_BYTE;
-      pixelSize = 1;
+      texture->mFormat = LOCAL_GL_LUMINANCE;
+      texture->mType = LOCAL_GL_UNSIGNED_BYTE;
+      texture->mPixelSize = 1;
       break;
     default:
       MOZ_NOT_REACHED("aFormat is not a valid TextureFormat");
   }
 
   if (mGLContext->IsGLES2()) {
-    texture->internalFormat = texture->format;
+    texture->mInternalFormat = texture->mFormat;
   } else {
-    texture->internalFormat = LOCAL_GL_RGBA;
+    texture->mInternalFormat = LOCAL_GL_RGBA;
   }
 
-  mGLContext->TexImage2D(LOCAL_GL_TEXTURE_2D, 0, texture->internalFormat,
-                         aSize.width, aSize.height, aStride, pixelSize,
-                         0, texture->format, type, aData);
+  mGLContext->TexImage2D(LOCAL_GL_TEXTURE_2D, 0, texture->mInternalFormat,
+                         aSize.width, aSize.height, aStride, texture->mPixelSize,
+                         0, texture->mFormat, texture->mType, aData);
 
   return texture.forget();
 }
@@ -754,7 +753,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
     program->SetLayerTransform(aTransform);
     program->SetRenderOffset(nsIntPoint(0,0));
     if (maskType != MaskNone) {
-      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureMask->mTexture.mTextureHandle);
+      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureMask->mTextureHandle);
       program->SetMaskTextureUnit(0);
       program->SetMaskLayerTransform(effectMask->mMaskTransform);
     }
@@ -787,7 +786,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
                                      LOCAL_GL_ONE, LOCAL_GL_ONE);
     }
 
-    mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, texture->mTexture.mTextureHandle);
+    mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, texture->mTextureHandle);
     mGLContext->ApplyFilterToBoundTexture(filter);
 
     program->Activate();
@@ -798,7 +797,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
     program->SetLayerQuadRect(aRect);
     if (maskType != MaskNone) {
       mGLContext->fActiveTexture(LOCAL_GL_TEXTURE1);
-      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureMask->mTexture.mTextureHandle);
+      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureMask->mTextureHandle);
       program->SetMaskTextureUnit(1);
       program->SetMaskLayerTransform(effectMask->mMaskTransform);
     }
@@ -818,13 +817,13 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
     gfxPattern::GraphicsFilter filter = gfx::ThebesFilter(effectYCbCr->mFilter);
 
     mGLContext->fActiveTexture(LOCAL_GL_TEXTURE0);
-    mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureY->mTexture.mTextureHandle);
+    mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureY->mTextureHandle);
     mGLContext->ApplyFilterToBoundTexture(filter);
     mGLContext->fActiveTexture(LOCAL_GL_TEXTURE1);
-    mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureCb->mTexture.mTextureHandle);
+    mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureCb->mTextureHandle);
     mGLContext->ApplyFilterToBoundTexture(filter);
     mGLContext->fActiveTexture(LOCAL_GL_TEXTURE2);
-    mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureCr->mTexture.mTextureHandle);
+    mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureCr->mTextureHandle);
     mGLContext->ApplyFilterToBoundTexture(filter);
 
     ShaderProgramOGL *program = GetProgram(YCbCrLayerProgramType, maskType);
@@ -837,7 +836,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
     program->SetLayerQuadRect(aRect);
     if (maskType != MaskNone) {
       mGLContext->fActiveTexture(LOCAL_GL_TEXTURE3);
-      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureMask->mTexture.mTextureHandle);
+      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureMask->mTextureHandle);
       program->SetMaskTextureUnit(3);
       program->SetMaskLayerTransform(effectMask->mMaskTransform);
     }
@@ -864,9 +863,9 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
       }
 
       mGLContext->fActiveTexture(LOCAL_GL_TEXTURE0);
-      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureOnBlack->mTexture.mTextureHandle);
+      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureOnBlack->mTextureHandle);
       mGLContext->fActiveTexture(LOCAL_GL_TEXTURE1);
-      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureOnWhite->mTexture.mTextureHandle);
+      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureOnWhite->mTextureHandle);
 
       program->Activate();
       program->SetBlackTextureUnit(0);
@@ -877,7 +876,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
       program->SetLayerQuadRect(aRect);
       if (maskType != MaskNone) {
         mGLContext->fActiveTexture(LOCAL_GL_TEXTURE2);
-        mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureMask->mTexture.mTextureHandle);
+        mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureMask->mTextureHandle);
         program->SetMaskTextureUnit(2);
         program->SetMaskLayerTransform(effectMask->mMaskTransform);
       }
@@ -904,7 +903,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
     program->SetLayerQuadRect(aRect);
     if (maskType != MaskNone) {
       mGLContext->fActiveTexture(LOCAL_GL_TEXTURE1);
-      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureMask->mTexture.mTextureHandle);
+      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureMask->mTextureHandle);
       program->SetMaskTextureUnit(1);
       program->SetMaskLayerTransform(effectMask->mMaskTransform);
     }

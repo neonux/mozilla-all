@@ -56,6 +56,12 @@ public:
                         gfx::Float aOpacity, const gfx::Matrix4x4 &aTransform) MOZ_OVERRIDE;
 
   virtual void EndFrame() MOZ_OVERRIDE;
+
+  virtual bool SupportsPartialTextureUpdate() MOZ_OVERRIDE
+  {
+    return mGLContext->CanUploadSubTextures();
+  }
+
   virtual PRInt32 GetMaxTextureSize() const
   {
     return mGLContext->GetMaxTextureSize();

@@ -37,7 +37,9 @@ class Texture : public RefCounted<Texture>
 public:
 
   /* aRegion is the region of the Texture to upload to. aData is a pointer to the
-   * top-left of the bound of the region to be uploaded.
+   * top-left of the bound of the region to be uploaded. If the compositor that
+   * created this texture does not support partial texture upload, aRegion must be
+   * equal to this Texture's rect.
    */
   virtual void
     UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) = 0;
@@ -175,7 +177,7 @@ class Compositor : public RefCounted<Compositor>
 {
 public:
 
-  /* This creates an immutable texture based on an in-memory bitmap.
+  /* This creates a texture based on an in-memory bitmap.
    */
   virtual TemporaryRef<Texture>
     CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PRUint32 aStride,
@@ -213,6 +215,10 @@ public:
   /* Flush the current frame to the screen.
    */
   virtual void EndFrame();
+
+  /* Whether textures created by this compositor can receive partial updates.
+   */
+  virtual bool SupportsPartialTextureUpdate() = 0;
 
   virtual ~Compositor() {}
 };

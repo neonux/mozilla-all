@@ -6,7 +6,7 @@
 #ifndef MOZILLA_GFX_TEXTUREOGL_H
 #define MOZILLA_GFX_TEXTUREOGL_H
 
-#include "Compositor.h"
+#include "CompositorOGL.h"
 #include "TiledThebesLayerOGL.h"
 
 namespace mozilla {
@@ -18,10 +18,13 @@ class TextureOGL : public Texture
   // TODO: Make a better version of TextureOGL.
   // TODO: Release the GL texture on destruction.
 public:
-  TiledTexture mTexture;
+  GLuint mTextureHandle;
   gfx::IntSize mSize;
-  GLenum format;
-  GLenum internalFormat;
+  GLenum mFormat;
+  GLenum mInternalFormat;
+  GLenum mType;
+  PRUint32 mPixelSize;
+  RefPtr<CompositorOGL> mCompositorOGL;
 
   virtual void
     UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) MOZ_OVERRIDE;
