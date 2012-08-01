@@ -7,6 +7,7 @@
 #define GFX_LAYERMANAGEROGL_H
 
 #include "LayerManagerOGLProgram.h"
+#include "CompositorOGL.h"
 
 #include "mozilla/layers/ShadowLayers.h"
 
@@ -56,12 +57,12 @@ class THEBES_API LayerManagerOGL :
 public:
   LayerManagerOGL(nsIWidget *aWidget, int aSurfaceWidth = -1, int aSurfaceHeight = -1,
                   bool aIsRenderingToEGLSurface = false);
-  virtual ~LayerManagerOGL();
+  virtual ~LayerManagerOGL()
+  {
+    Destroy();
+  }
 
-  void CleanupResources();
-
-  void Destroy();
-
+  virtual void Destroy();
 
   /**
    * Initializes the layer manager with a given GLContext. If aContext is null
@@ -71,11 +72,20 @@ public:
    *
    * \return True is initialization was succesful, false when it was not.
    */
-  bool Initialize(bool force = false) {
-    return Initialize(CreateContext(), force);
+  bool Initialize(bool force = false)
+  {
+    return mCompositor->Initialize(force, nullptr);
   }
 
-  bool Initialize(nsRefPtr<GLContext> aContext, bool force = false);
+  bool Initialize(nsRefPtr<GLContext> aContext, bool force = false)
+  {
+    return mCompositor->Initialize(force, aContext);
+  }
+
+  //TODO[nrc] should this be here?
+  // should we be able to have our own GLContext as well as a compositor?
+  GLContext* gl() const { return mCompositor->mGLContext; }
+
 
   /**
    * Sets the clipping region for this layer manager. This is important on 
@@ -86,7 +96,10 @@ public:
    * \param aClippingRegion Region to clip to. Setting an empty region
    * will disable clipping.
    */
-  void SetClippingRegion(const nsIntRegion& aClippingRegion);
+  void SetClippingRegion(const nsIntRegion& aClippingRegion)
+  {
+    mClippingRegion = aClippingRegion;
+  }
 
   /**
    * LayerManager implementation.
@@ -111,15 +124,12 @@ public:
 
   virtual bool CanUseCanvasLayerForSize(const gfxIntSize &aSize)
   {
-      if (!mGLContext)
-          return false;
-      PRInt32 maxSize = mGLContext->GetMaxTextureSize();
-      return aSize <= gfxIntSize(maxSize, maxSize);
+    return mCompositor->CanUseCanvasLayerForSize(aSize);
   }
 
   virtual PRInt32 GetMaxTextureSize() const
   {
-    return mGLContext->GetMaxTextureSize();
+    return mCompositor->GetMaxTextureSize();
   }
 
   virtual already_AddRefed<ThebesLayer> CreateThebesLayer();
@@ -149,43 +159,25 @@ public:
    * Helper methods.
    */
   void MakeCurrent(bool aForce = false) {
-    if (mDestroyed) {
-      NS_WARNING("Call on destroyed layer manager");
-      return;
-    }
-    mGLContext->MakeCurrent(aForce);
+    mCompositor->MakeCurrent(aForce);
   }
 
   ShaderProgramOGL* GetBasicLayerProgram(bool aOpaque, bool aIsRGB,
                                          MaskType aMask = MaskNone)
   {
-    gl::ShaderProgramType format = gl::BGRALayerProgramType;
-    if (aIsRGB) {
-      if (aOpaque) {
-        format = gl::RGBXLayerProgramType;
-      } else {
-        format = gl::RGBALayerProgramType;
-      }
-    } else {
-      if (aOpaque) {
-        format = gl::BGRXLayerProgramType;
-      }
-    }
-    return GetProgram(format, aMask);
+    return mCompositor->GetBasicLayerProgram(aOpaque, aIsRGB, aMask);
   }
 
   ShaderProgramOGL* GetProgram(gl::ShaderProgramType aType,
                                Layer* aMaskLayer) {
     if (aMaskLayer)
-      return GetProgram(aType, Mask2d);
-    return GetProgram(aType, MaskNone);
+      return mCompositor->GetProgram(aType, Mask2d);
+    return mCompositor->GetProgram(aType, MaskNone);
   }
 
   ShaderProgramOGL* GetProgram(gl::ShaderProgramType aType,
                                MaskType aMask = MaskNone) {
-    NS_ASSERTION(ProgramProfileOGL::ProgramExists(aType, aMask),
-                 "Invalid program type.");
-    return mPrograms[aType].mVariations[aMask];
+    return mCompositor->GetProgram(aType, aMask);
   }
 
   ShaderProgramOGL* GetFBOLayerProgram(MaskType aMask = MaskNone) {
@@ -193,12 +185,8 @@ public:
   }
 
   gl::ShaderProgramType GetFBOLayerProgramType() {
-    if (mFBOTextureTarget == LOCAL_GL_TEXTURE_RECTANGLE_ARB)
-      return gl::RGBARectLayerProgramType;
-    return gl::RGBALayerProgramType;
+    return mCompositor->GetFBOLayerProgramType();
   }
-
-  GLContext* gl() const { return mGLContext; }
 
   DrawThebesLayerCallback GetThebesLayerCallback() const
   { return mThebesLayerCallback; }
@@ -220,8 +208,6 @@ public:
                          mThebesLayerCallbackData);
   }
 
-  GLenum FBOTextureTarget() { return mFBOTextureTarget; }
-
   /**
    * Controls how to initialize the texture / FBO created by
    * CreateFBOWithTexture.
@@ -236,6 +222,21 @@ public:
     InitModeCopy
   };
 
+  //TODO[nrc] get rid of this
+  SurfaceInitMode InitModeToSurfaceInitMode(InitMode aInit)
+  {
+    switch (aInit) {
+    case InitModeNone:
+      return INIT_MODE_NONE;
+    case InitModeClear:
+      return INIT_MODE_CLEAR;
+    case InitModeCopy:
+      return INIT_MODE_COPY;
+    default:
+      return INIT_MODE_NONE;
+    }
+  }
+
   /* Create a FBO backed by a texture; will leave the FBO
    * bound.  Note that the texture target type will be
    * of the type returned by FBOTextureTarget; different
@@ -244,33 +245,32 @@ public:
    */
   void CreateFBOWithTexture(const nsIntRect& aRect, InitMode aInit,
                             GLuint aCurrentFrameBuffer,
-                            GLuint *aFBO, GLuint *aTexture);
+                            GLuint *aFBO, GLuint *aTexture)
+  {
+    mCompositor->CreateFBOWithTexture(gfx::IntRect(aRect.x, aRect.y, aRect.width, aRect.height), InitModeToSurfaceInitMode(aInit), aCurrentFrameBuffer, aFBO, aTexture);
+  }
 
-  GLuint QuadVBO() { return mQuadVBO; }
-  GLintptr QuadVBOVertexOffset() { return 0; }
-  GLintptr QuadVBOTexCoordOffset() { return sizeof(float)*4*2; }
-  GLintptr QuadVBOFlippedTexCoordOffset() { return sizeof(float)*8*2; }
+  GLenum FBOTextureTarget() { return mCompositor->mFBOTextureTarget; }
+
+  GLuint QuadVBO() { return mCompositor->QuadVBO(); }
+  GLintptr QuadVBOVertexOffset() { return mCompositor->QuadVBOVertexOffset(); }
+  GLintptr QuadVBOTexCoordOffset() { return mCompositor->QuadVBOTexCoordOffset(); }
+  GLintptr QuadVBOFlippedTexCoordOffset() { mCompositor->QuadVBOFlippedTexCoordOffset(); }
 
   void BindQuadVBO() {
-    mGLContext->fBindBuffer(LOCAL_GL_ARRAY_BUFFER, mQuadVBO);
+    mCompositor->BindQuadVBO();
   }
 
   void QuadVBOVerticesAttrib(GLuint aAttribIndex) {
-    mGLContext->fVertexAttribPointer(aAttribIndex, 2,
-                                     LOCAL_GL_FLOAT, LOCAL_GL_FALSE, 0,
-                                     (GLvoid*) QuadVBOVertexOffset());
+    mCompositor->QuadVBOVerticesAttrib(aAttribIndex);
   }
 
   void QuadVBOTexCoordsAttrib(GLuint aAttribIndex) {
-    mGLContext->fVertexAttribPointer(aAttribIndex, 2,
-                                     LOCAL_GL_FLOAT, LOCAL_GL_FALSE, 0,
-                                     (GLvoid*) QuadVBOTexCoordOffset());
+    mCompositor->QuadVBOTexCoordsAttrib(aAttribIndex);
   }
 
   void QuadVBOFlippedTexCoordsAttrib(GLuint aAttribIndex) {
-    mGLContext->fVertexAttribPointer(aAttribIndex, 2,
-                                     LOCAL_GL_FLOAT, LOCAL_GL_FALSE, 0,
-                                     (GLvoid*) QuadVBOFlippedTexCoordOffset());
+    mCompositor->QuadVBOFlippedTexCoordsAttrib(aAttribIndex);
   }
 
   // Super common
@@ -279,50 +279,41 @@ public:
                        GLuint aTexCoordAttribIndex,
                        bool aFlipped = false)
   {
-    BindQuadVBO();
-    QuadVBOVerticesAttrib(aVertAttribIndex);
-
-    if (aTexCoordAttribIndex != GLuint(-1)) {
-      if (aFlipped)
-        QuadVBOFlippedTexCoordsAttrib(aTexCoordAttribIndex);
-      else
-        QuadVBOTexCoordsAttrib(aTexCoordAttribIndex);
-
-      mGLContext->fEnableVertexAttribArray(aTexCoordAttribIndex);
-    }
-
-    mGLContext->fEnableVertexAttribArray(aVertAttribIndex);
-
-    mGLContext->fDrawArrays(LOCAL_GL_TRIANGLE_STRIP, 0, 4);
-
-    mGLContext->fDisableVertexAttribArray(aVertAttribIndex);
-
-    if (aTexCoordAttribIndex != GLuint(-1)) {
-      mGLContext->fDisableVertexAttribArray(aTexCoordAttribIndex);
-    }
+    mCompositor->BindAndDrawQuad(aVertAttribIndex, aTexCoordAttribIndex, aFlipped);
   }
 
   void BindAndDrawQuad(ShaderProgramOGL *aProg,
                        bool aFlipped = false)
   {
-    NS_ASSERTION(aProg->HasInitialized(), "Shader program not correctly initialized");
-    BindAndDrawQuad(aProg->AttribLocation(ShaderProgramOGL::VertexCoordAttrib),
-                    aProg->AttribLocation(ShaderProgramOGL::TexCoordAttrib),
-                    aFlipped);
+    mCompositor->BindAndDrawQuad(aProg, aFlipped);
   }
 
+  // |aTexCoordRect| is the rectangle from the texture that we want to
+  // draw using the given program.  The program already has a necessary
+  // offset and scale, so the geometry that needs to be drawn is a unit
+  // square from 0,0 to 1,1.
+  //
+  // |aTexSize| is the actual size of the texture, as it can be larger
+  // than the rectangle given by |aTexCoordRect|.
   void BindAndDrawQuadWithTextureRect(ShaderProgramOGL *aProg,
                                       const nsIntRect& aTexCoordRect,
                                       const nsIntSize& aTexSize,
                                       GLenum aWrapMode = LOCAL_GL_REPEAT,
-                                      bool aFlipped = false);
+                                      bool aFlipped = false)
+  {
+    mCompositor->BindAndDrawQuadWithTextureRect(aProg,
+                   gfx::IntRect(aTexCoordRect.x, aTexCoordRect.y, aTexCoordRect.width, aTexCoordRect.height),
+                   gfx::IntSize(aTexSize.width, aTexSize.height),
+                   aWrapMode, aFlipped);
+  }
+
 
 #ifdef MOZ_LAYERS_HAVE_LOG
   virtual const char* Name() const { return "OGL"; }
 #endif // MOZ_LAYERS_HAVE_LOG
 
   const nsIntSize& GetWidgetSize() {
-    return mWidgetSize;
+    return mCompositor->mWidgetSize;
   }
 
   enum WorldTransforPolicy {
@@ -348,56 +339,29 @@ public:
   /**
    * Set the size of the surface we're rendering to.
    */
-  void SetSurfaceSize(int width, int height);
+  void SetSurfaceSize(int width, int height)
+  {
+    mCompositor->SetSurfaceSize(width, height);
+  }
+
 
 private:
-  /** Widget associated with this layer manager */
-  nsIWidget *mWidget;
-  nsIntSize mWidgetSize;
-
-  /** The size of the surface we are rendering to */
-  nsIntSize mSurfaceSize;
-
   /** 
    * Context target, NULL when drawing directly to our swap chain.
    */
   nsRefPtr<gfxContext> mTarget;
 
+  //TODO[nrc] comment
+  RefPtr<CompositorOGL> mCompositor;
   nsRefPtr<GLContext> mGLContext;
-
-  already_AddRefed<mozilla::gl::GLContext> CreateContext();
 
   /** Backbuffer */
   GLuint mBackBufferFBO;
   GLuint mBackBufferTexture;
   nsIntSize mBackBufferSize;
 
-  /** Shader Programs */
-  struct ShaderProgramVariations {
-    ShaderProgramOGL* mVariations[NumMaskTypes];
-  };
-  nsTArray<ShaderProgramVariations> mPrograms;
-
-  /** Texture target to use for FBOs */
-  GLenum mFBOTextureTarget;
-
-  /** VBO that has some basics in it for a textured quad,
-   *  including vertex coords and texcoords for both
-   *  flipped and unflipped textures */
-  GLuint mQuadVBO;
-
   /** Region we're clipping our current drawing to. */
   nsIntRegion mClippingRegion;
-
-  /** Misc */
-  bool mHasBGRA;
-
-  /**
-   * When rendering to an EGL surface (e.g. on Android), we rely on being told
-   * about size changes (via SetSurfaceSize) rather than pulling this information
-   * from the widget, since the widget's information can lag behind.
-   */
-  bool mIsRenderingToEGLSurface;
 
   /** Current root layer. */
   LayerOGL *RootLayer() const;
@@ -417,44 +381,20 @@ private:
    */
   void CopyToTarget(gfxContext *aTarget);
 
-  /**
-   * Updates all layer programs with a new projection matrix.
-   */
-  void SetLayerProgramProjectionMatrix(const gfx3DMatrix& aMatrix);
-
-  /**
-   * Helper method for Initialize, creates all valid variations of a program
-   * and adds them to mPrograms
-   */
-  void AddPrograms(gl::ShaderProgramType aType);
-
   /* Thebes layer callbacks; valid at the end of a transaciton,
    * while rendering */
   DrawThebesLayerCallback mThebesLayerCallback;
   void *mThebesLayerCallbackData;
   gfxMatrix mWorldMatrix;
-
-  struct FPSState
-  {
-      GLuint texture;
-      int fps;
-      bool initialized;
-      int fcount;
-      TimeStamp last;
-
-      FPSState()
-        : texture(0)
-        , fps(0)
-        , initialized(false)
-        , fcount(0)
-      {
-        last = TimeStamp::Now();
-      }
-      void DrawFPS(GLContext*, ShaderProgramOGL*);
-  } mFPS;
-
-  static bool sDrawFPS;
 };
+
+
+
+
+
+
+
+
 
 /**
  * General information and tree management for OGL layers.

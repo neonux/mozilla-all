@@ -16,6 +16,9 @@ namespace mozilla {
 
 namespace layers {
 
+//TODO[nrc] remove this when we remove the friend decl
+class LayerManagerOGL;
+
 class CompositorOGL : public Compositor
 {
   typedef mozilla::gl::GLContext GLContext;
@@ -61,6 +64,15 @@ public:
   {
     return mGLContext->CanUploadSubTextures();
   }
+
+  virtual bool CanUseCanvasLayerForSize(const gfxIntSize &aSize)
+  {
+      if (!mGLContext)
+          return false;
+      PRInt32 maxSize = mGLContext->GetMaxTextureSize();
+      return aSize <= gfxIntSize(maxSize, maxSize);
+  }
+
 
   virtual PRInt32 GetMaxTextureSize() const
   {
@@ -141,6 +153,24 @@ private:
    * and adds them to mPrograms
    */
   void AddPrograms(gl::ShaderProgramType aType);
+
+  ShaderProgramOGL* GetBasicLayerProgram(bool aOpaque, bool aIsRGB,
+                                         MaskType aMask = MaskNone)
+  {
+    gl::ShaderProgramType format = gl::BGRALayerProgramType;
+    if (aIsRGB) {
+      if (aOpaque) {
+        format = gl::RGBXLayerProgramType;
+      } else {
+        format = gl::RGBALayerProgramType;
+      }
+    } else {
+      if (aOpaque) {
+        format = gl::BGRXLayerProgramType;
+      }
+    }
+    return GetProgram(format, aMask);
+  }
 
   ShaderProgramOGL* GetProgram(gl::ShaderProgramType aType,
                                MaskType aMask = MaskNone) {
@@ -264,6 +294,9 @@ private:
   } mFPS;
 
   static bool sDrawFPS;
+
+  //TODO[nrc] remove this when we are using only the compositor API in LayerManagerOGL
+  friend class LayerManagerOGL;
 };
 
 }

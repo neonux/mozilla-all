@@ -22,6 +22,10 @@ namespace layers {
 
 using namespace mozilla::gl;
 
+#ifdef CHECK_CURRENT_PROGRAM
+int ShaderProgramOGL::sCurrentProgramKey = 0;
+#endif
+
 CompositorOGL::CompositorOGL(nsIWidget *aWidget, int aSurfaceWidth,
                              int aSurfaceHeight, bool aIsRenderingToEGLSurface)
   : mWidget(aWidget)
@@ -58,7 +62,7 @@ CompositorOGL::CreateContext()
     context = gl::GLContextProvider::CreateForWindow(mWidget);
 
   if (!context) {
-    NS_WARNING("Failed to create LayerManagerOGL context");
+    NS_WARNING("Failed to create CompositorOGL context");
   }
   return context.forget();
 }
@@ -71,7 +75,7 @@ CompositorOGL::AddPrograms(ShaderProgramType aType)
       mPrograms[aType].mVariations[maskType] = new ShaderProgramOGL(this->gl(),
         ProgramProfileOGL::GetProfileFor(aType, static_cast<MaskType>(maskType)));
     } else {
-      mPrograms[aType].mVariations[maskType] = nsnull;
+      mPrograms[aType].mVariations[maskType] = nullptr;
     }
   }
 }
@@ -122,8 +126,7 @@ CompositorOGL::CleanupResources()
     mQuadVBO = 0;
   }
 
-  mGLContext = nsnull;
-
+  mGLContext = nullptr;
 }
 
 bool
@@ -647,6 +650,139 @@ CompositorOGL::CreateFBOWithTexture(const gfx::IntRect& aRect, SurfaceInitMode a
 
   *aFBO = fbo;
   *aTexture = tex;
+}
+
+/* This function tries to stick to portable C89 as much as possible
+ * so that it can be easily copied into other applications */
+void
+CompositorOGL::FPSState::DrawFPS(GLContext* context, ShaderProgramOGL* copyprog)
+{
+  fcount++;
+
+  int rate = 30;
+  if (fcount >= rate) {
+    TimeStamp now = TimeStamp::Now();
+    TimeDuration duration = now - last;
+    last = now;
+    fps = rate / duration.ToSeconds() + .5;
+    fcount = 0;
+  }
+
+  GLint viewport[4];
+  context->fGetIntegerv(LOCAL_GL_VIEWPORT, viewport);
+
+  static GLuint texture;
+  if (!initialized) {
+    // Bind the number of textures we need, in this case one.
+    context->fGenTextures(1, &texture);
+    context->fBindTexture(LOCAL_GL_TEXTURE_2D, texture);
+    context->fTexParameteri(LOCAL_GL_TEXTURE_2D,LOCAL_GL_TEXTURE_MIN_FILTER,LOCAL_GL_NEAREST);
+    context->fTexParameteri(LOCAL_GL_TEXTURE_2D,LOCAL_GL_TEXTURE_MAG_FILTER,LOCAL_GL_NEAREST);
+
+    unsigned char text[] = {
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+      0, 255, 255, 255,   0, 255, 255,   0,   0, 255, 255, 255,   0, 255, 255, 255,   0, 255,   0, 255,   0, 255, 255, 255,   0, 255, 255, 255,   0, 255, 255, 255,   0, 255, 255, 255,   0, 255, 255, 255,   0,
+      0, 255,   0, 255,   0,   0, 255,   0,   0,   0,   0, 255,   0,   0,   0, 255,   0, 255,   0, 255,   0, 255,   0,   0,   0, 255,   0,   0,   0,   0,   0, 255,   0, 255,   0, 255,   0, 255,   0, 255,   0,
+      0, 255,   0, 255,   0,   0, 255,   0,   0, 255, 255, 255,   0, 255, 255, 255,   0, 255, 255, 255,   0, 255, 255, 255,   0, 255, 255, 255,   0,   0,   0, 255,   0, 255, 255, 255,   0, 255, 255, 255,   0,
+      0, 255,   0, 255,   0,   0, 255,   0,   0, 255,   0,   0,   0,   0,   0, 255,   0,   0,   0, 255,   0,   0,   0, 255,   0, 255,   0, 255,   0,   0,   0, 255,   0, 255,   0, 255,   0,   0,   0, 255,   0,
+      0, 255, 255, 255,   0, 255, 255, 255,   0, 255, 255, 255,   0, 255, 255, 255,   0,   0,   0, 255,   0, 255, 255, 255,   0, 255, 255, 255,   0,   0,   0, 255,   0, 255, 255, 255,   0,   0,   0, 255,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+    };
+
+    // convert from 8 bit to 32 bit so that don't have to write the text above out in 32 bit format
+    // we rely on int being 32 bits
+    unsigned int* buf = (unsigned int*)malloc(64 * 8 * 4);
+    for (int i = 0; i < 7; i++) {
+      for (int j = 0; j < 41; j++) {
+        unsigned int purple = 0xfff000ff;
+        unsigned int white  = 0xffffffff;
+        buf[i * 64 + j] = (text[i * 41 + j] == 0) ? purple : white;
+      }
+    }
+    context->fTexImage2D(LOCAL_GL_TEXTURE_2D, 0, LOCAL_GL_RGBA, 64, 8, 0, LOCAL_GL_RGBA, LOCAL_GL_UNSIGNED_BYTE, buf);
+    free(buf);
+    initialized = true;
+  }
+
+  struct Vertex2D {
+    float x,y;
+  };
+  const Vertex2D vertices[] = {
+    { -1.0f, 1.0f - 42.f / viewport[3] },
+    { -1.0f, 1.0f},
+    { -1.0f + 22.f / viewport[2], 1.0f - 42.f / viewport[3] },
+    { -1.0f + 22.f / viewport[2], 1.0f },
+
+    {  -1.0f + 22.f / viewport[2], 1.0f - 42.f / viewport[3] },
+    {  -1.0f + 22.f / viewport[2], 1.0f },
+    {  -1.0f + 44.f / viewport[2], 1.0f - 42.f / viewport[3] },
+    {  -1.0f + 44.f / viewport[2], 1.0f },
+
+    { -1.0f + 44.f / viewport[2], 1.0f - 42.f / viewport[3] },
+    { -1.0f + 44.f / viewport[2], 1.0f },
+    { -1.0f + 66.f / viewport[2], 1.0f - 42.f / viewport[3] },
+    { -1.0f + 66.f / viewport[2], 1.0f }
+  };
+
+  int v1   = fps % 10;
+  int v10  = (fps % 100) / 10;
+  int v100 = (fps % 1000) / 100;
+
+  // Feel free to comment these texture coordinates out and use one
+  // of the ones below instead, or play around with your own values.
+  const GLfloat texCoords[] = {
+    (v100 * 4.f) / 64, 7.f / 8,
+    (v100 * 4.f) / 64, 0.0f,
+    (v100 * 4.f + 4) / 64, 7.f / 8,
+    (v100 * 4.f + 4) / 64, 0.0f,
+
+    (v10 * 4.f) / 64, 7.f / 8,
+    (v10 * 4.f) / 64, 0.0f,
+    (v10 * 4.f + 4) / 64, 7.f / 8,
+    (v10 * 4.f + 4) / 64, 0.0f,
+
+    (v1 * 4.f) / 64, 7.f / 8,
+    (v1 * 4.f) / 64, 0.0f,
+    (v1 * 4.f + 4) / 64, 7.f / 8,
+    (v1 * 4.f + 4) / 64, 0.0f,
+  };
+
+  // Turn necessary features on
+  context->fEnable(LOCAL_GL_BLEND);
+  context->fBlendFunc(LOCAL_GL_ONE, LOCAL_GL_SRC_COLOR);
+
+  context->fActiveTexture(LOCAL_GL_TEXTURE0);
+  context->fBindTexture(LOCAL_GL_TEXTURE_2D, texture);
+
+  copyprog->Activate();
+  copyprog->SetTextureUnit(0);
+
+  // we're going to use client-side vertex arrays for this.
+  context->fBindBuffer(LOCAL_GL_ARRAY_BUFFER, 0);
+
+  // "COPY"
+  context->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ZERO,
+                              LOCAL_GL_ONE, LOCAL_GL_ZERO);
+
+  // enable our vertex attribs; we'll call glVertexPointer below
+  // to fill with the correct data.
+  GLint vcattr = copyprog->AttribLocation(ShaderProgramOGL::VertexCoordAttrib);
+  GLint tcattr = copyprog->AttribLocation(ShaderProgramOGL::TexCoordAttrib);
+
+  context->fEnableVertexAttribArray(vcattr);
+  context->fEnableVertexAttribArray(tcattr);
+
+  context->fVertexAttribPointer(vcattr,
+                                2, LOCAL_GL_FLOAT,
+                                LOCAL_GL_FALSE,
+                                0, vertices);
+
+  context->fVertexAttribPointer(tcattr,
+                                2, LOCAL_GL_FLOAT,
+                                LOCAL_GL_FALSE,
+                                0, texCoords);
+
+  context->fDrawArrays(LOCAL_GL_TRIANGLE_STRIP, 0, 12);
 }
 
 void
