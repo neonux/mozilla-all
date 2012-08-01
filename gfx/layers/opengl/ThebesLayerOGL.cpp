@@ -6,6 +6,7 @@
 #include "ipc/AutoOpenSurface.h"
 #include "mozilla/layers/PLayers.h"
 #include "TiledLayerBuffer.h"
+#include "TextureOGL.h"
 
 /* This must occur *after* layers/PLayers.h to avoid typedefs conflicts. */
 #include "mozilla/Util.h"
@@ -135,162 +136,143 @@ ThebesLayerBufferOGL::RenderTo(const nsIntPoint& aOffset,
   }
 #endif
 
-  PRInt32 passes = mTexImageOnWhite ? 2 : 1;
-  for (PRInt32 pass = 1; pass <= passes; ++pass) {
-    ShaderProgramOGL *program;
+  // TODO: Fix texture handling.
+  // TODO: Handle mask layers.
+  EffectChain effectChain;
+  RefPtr<Effect> effect;
+  RefPtr<Effect> effectMask;
+  RefPtr<TextureOGL> onBlack = new TextureOGL();
+  RefPtr<TextureOGL> onWhite = new TextureOGL();
+  if (mTexImageOnWhite) {
+    effect = new EffectComponentAlpha(onWhite, onBlack);
+    effectChain.mEffects[EFFECT_COMPONENT_ALPHA] = effect;
+  } else if (mTexImage->GetShaderProgramType() == gl::BGRXLayerProgramType) {
+    effect = new EffectBGRX(onBlack, true, gfx::FILTER_LINEAR);
+    effectChain.mEffects[EFFECT_BGRX] = effect;
+  } else if (mTexImage->GetShaderProgramType() == gl::BGRALayerProgramType) {
+    effect = new EffectBGRA(onBlack, true, gfx::FILTER_LINEAR);
+    effectChain.mEffects[EFFECT_BGRA] = effect;
+  } else {
+    NS_RUNTIMEABORT("Shader type not yet supported by the Compositor API");
+  }
 
-    if (passes == 2) {
-      ShaderProgramOGL* alphaProgram;
-      if (pass == 1) {
-        alphaProgram = aManager->GetProgram(gl::ComponentAlphaPass1ProgramType,
-                                            mLayer->GetMaskLayer());
-        gl()->fBlendFuncSeparate(LOCAL_GL_ZERO, LOCAL_GL_ONE_MINUS_SRC_COLOR,
-                                 LOCAL_GL_ONE, LOCAL_GL_ONE);
-      } else {
-        alphaProgram = aManager->GetProgram(gl::ComponentAlphaPass2ProgramType,
-                                            mLayer->GetMaskLayer());
-        gl()->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE,
-                                 LOCAL_GL_ONE, LOCAL_GL_ONE);
-      }
+  gfx::Matrix4x4 transform;
+  aManager->ToMatrix4x4(mLayer->GetEffectiveTransform(), transform);
 
-      alphaProgram->Activate();
-      alphaProgram->SetBlackTextureUnit(0);
-      alphaProgram->SetWhiteTextureUnit(1);
-      program = alphaProgram;
-    } else {
-      // Note BGR: Cairo's image surfaces are always in what
-      // OpenGL and our shaders consider BGR format.
-      ShaderProgramOGL* basicProgram =
-        aManager->GetProgram(mTexImage->GetShaderProgramType(),
-                             mLayer->GetMaskLayer());
+  // TODO: Call into Compositor::DrawQuad to render.
 
-      basicProgram->Activate();
-      basicProgram->SetTextureUnit(0);
-      program = basicProgram;
-    }
+  /*
+  program->SetLayerOpacity(mLayer->GetEffectiveOpacity());
+  program->SetLayerTransform(mLayer->GetEffectiveTransform());
+  program->SetRenderOffset(aOffset);
+  program->LoadMask(mLayer->GetMaskLayer());
+  */
 
-    program->SetLayerOpacity(mLayer->GetEffectiveOpacity());
-    program->SetLayerTransform(mLayer->GetEffectiveTransform());
-    program->SetRenderOffset(aOffset);
-    program->LoadMask(mLayer->GetMaskLayer());
+  const nsIntRegion& visibleRegion = mLayer->GetEffectiveVisibleRegion();
+  nsIntRegion tmpRegion;
+  const nsIntRegion* renderRegion;
+  if (aFlags & PAINT_WILL_RESAMPLE) {
+    // If we're resampling, then the texture image will contain exactly the
+    // entire visible region's bounds, and we should draw it all in one quad
+    // to avoid unexpected aliasing.
+    tmpRegion = visibleRegion.GetBounds();
+    renderRegion = &tmpRegion;
+  } else {
+    renderRegion = &visibleRegion;
+  }
 
-    const nsIntRegion& visibleRegion = mLayer->GetEffectiveVisibleRegion();
-    nsIntRegion tmpRegion;
-    const nsIntRegion* renderRegion;
-    if (aFlags & PAINT_WILL_RESAMPLE) {
-      // If we're resampling, then the texture image will contain exactly the
-      // entire visible region's bounds, and we should draw it all in one quad
-      // to avoid unexpected aliasing.
-      tmpRegion = visibleRegion.GetBounds();
-      renderRegion = &tmpRegion;
-    } else {
-      renderRegion = &visibleRegion;
-    }
+  nsIntRegion region(*renderRegion);
+  nsIntPoint origin = GetOriginOffset();
+  region.MoveBy(-origin);           // translate into TexImage space, buffer origin might not be at texture (0,0)
 
-    nsIntRegion region(*renderRegion);
-    nsIntPoint origin = GetOriginOffset();
-    region.MoveBy(-origin);           // translate into TexImage space, buffer origin might not be at texture (0,0)
+  // Figure out the intersecting draw region
+  nsIntSize texSize = mTexImage->GetSize();
+  nsIntRect textureRect = nsIntRect(0, 0, texSize.width, texSize.height);
+  textureRect.MoveBy(region.GetBounds().TopLeft());
+  nsIntRegion subregion;
+  subregion.And(region, textureRect);
+  if (subregion.IsEmpty())  // Region is empty, nothing to draw
+    return;
 
-    // Figure out the intersecting draw region
-    nsIntSize texSize = mTexImage->GetSize();
-    nsIntRect textureRect = nsIntRect(0, 0, texSize.width, texSize.height);
-    textureRect.MoveBy(region.GetBounds().TopLeft());
-    nsIntRegion subregion;
-    subregion.And(region, textureRect);
-    if (subregion.IsEmpty())  // Region is empty, nothing to draw
-      return;
+  nsIntRegion screenRects;
+  nsIntRegion regionRects;
 
-    nsIntRegion screenRects;
-    nsIntRegion regionRects;
+  // Collect texture/screen coordinates for drawing
+  nsIntRegionRectIterator iter(subregion);
+  while (const nsIntRect* iterRect = iter.Next()) {
+      nsIntRect regionRect = *iterRect;
+      nsIntRect screenRect = regionRect;
+      screenRect.MoveBy(origin);
 
-    // Collect texture/screen coordinates for drawing
-    nsIntRegionRectIterator iter(subregion);
-    while (const nsIntRect* iterRect = iter.Next()) {
-        nsIntRect regionRect = *iterRect;
-        nsIntRect screenRect = regionRect;
-        screenRect.MoveBy(origin);
+      screenRects.Or(screenRects, screenRect);
+      regionRects.Or(regionRects, regionRect);
+  }
 
-        screenRects.Or(screenRects, screenRect);
-        regionRects.Or(regionRects, regionRect);
-    }
+  mTexImage->BeginTileIteration();
+  if (mTexImageOnWhite) {
+    NS_ASSERTION(mTexImage->GetTileCount() == mTexImageOnWhite->GetTileCount(),
+                 "Tile count mismatch on component alpha texture");
+    mTexImageOnWhite->BeginTileIteration();
+  }
 
-    mTexImage->BeginTileIteration();
+  bool usingTiles = (mTexImage->GetTileCount() > 1);
+  do {
     if (mTexImageOnWhite) {
-      NS_ASSERTION(mTexImage->GetTileCount() == mTexImageOnWhite->GetTileCount(),
-                   "Tile count mismatch on component alpha texture");
-      mTexImageOnWhite->BeginTileIteration();
+      NS_ASSERTION(mTexImageOnWhite->GetTileRect() == mTexImage->GetTileRect(), "component alpha textures should be the same size.");
     }
 
-    bool usingTiles = (mTexImage->GetTileCount() > 1);
-    do {
-      if (mTexImageOnWhite) {
-        NS_ASSERTION(mTexImageOnWhite->GetTileRect() == mTexImage->GetTileRect(), "component alpha textures should be the same size.");
-      }
+    nsIntRect tileRect = mTexImage->GetTileRect();
 
-      nsIntRect tileRect = mTexImage->GetTileRect();
+    // Bind textures.
+    TextureImage::ScopedBindTexture texBind(mTexImage, LOCAL_GL_TEXTURE0);
+    TextureImage::ScopedBindTexture texOnWhiteBind(mTexImageOnWhite, LOCAL_GL_TEXTURE1);
 
-      // Bind textures.
-      TextureImage::ScopedBindTexture texBind(mTexImage, LOCAL_GL_TEXTURE0);
-      TextureImage::ScopedBindTexture texOnWhiteBind(mTexImageOnWhite, LOCAL_GL_TEXTURE1);
+    // Draw texture. If we're using tiles, we do repeating manually, as texture
+    // repeat would cause each individual tile to repeat instead of the
+    // compound texture as a whole. This involves drawing at most 4 sections,
+    // 2 for each axis that has texture repeat.
+    for (int y = 0; y < (usingTiles ? 2 : 1); y++) {
+      for (int x = 0; x < (usingTiles ? 2 : 1); x++) {
+        nsIntRect currentTileRect(tileRect);
+        currentTileRect.MoveBy(x * texSize.width, y * texSize.height);
 
-      // Draw texture. If we're using tiles, we do repeating manually, as texture
-      // repeat would cause each individual tile to repeat instead of the
-      // compound texture as a whole. This involves drawing at most 4 sections,
-      // 2 for each axis that has texture repeat.
-      for (int y = 0; y < (usingTiles ? 2 : 1); y++) {
-        for (int x = 0; x < (usingTiles ? 2 : 1); x++) {
-          nsIntRect currentTileRect(tileRect);
-          currentTileRect.MoveBy(x * texSize.width, y * texSize.height);
+        nsIntRegionRectIterator screenIter(screenRects);
+        nsIntRegionRectIterator regionIter(regionRects);
 
-          nsIntRegionRectIterator screenIter(screenRects);
-          nsIntRegionRectIterator regionIter(regionRects);
+        const nsIntRect* screenRect;
+        const nsIntRect* regionRect;
+        while ((screenRect = screenIter.Next()) &&
+               (regionRect = regionIter.Next())) {
+            nsIntRect tileScreenRect(*screenRect);
+            nsIntRect tileRegionRect(*regionRect);
 
-          const nsIntRect* screenRect;
-          const nsIntRect* regionRect;
-          while ((screenRect = screenIter.Next()) &&
-                 (regionRect = regionIter.Next())) {
-              nsIntRect tileScreenRect(*screenRect);
-              nsIntRect tileRegionRect(*regionRect);
+            // When we're using tiles, find the intersection between the tile
+            // rect and this region rect. Tiling is then handled by the
+            // outer for-loops and modifying the tile rect.
+            if (usingTiles) {
+                tileScreenRect.MoveBy(-origin);
+                tileScreenRect = tileScreenRect.Intersect(currentTileRect);
+                tileScreenRect.MoveBy(origin);
 
-              // When we're using tiles, find the intersection between the tile
-              // rect and this region rect. Tiling is then handled by the
-              // outer for-loops and modifying the tile rect.
-              if (usingTiles) {
-                  tileScreenRect.MoveBy(-origin);
-                  tileScreenRect = tileScreenRect.Intersect(currentTileRect);
-                  tileScreenRect.MoveBy(origin);
+                if (tileScreenRect.IsEmpty())
+                  continue;
 
-                  if (tileScreenRect.IsEmpty())
-                    continue;
-
-                  tileRegionRect = regionRect->Intersect(currentTileRect);
-                  tileRegionRect.MoveBy(-currentTileRect.TopLeft());
-              }
-
-#ifdef ANDROID
-              // Bug 691354
-              // Using the LINEAR filter we get unexplained artifacts.
-              // Use NEAREST when no scaling is required.
-              gfxMatrix matrix;
-              bool is2D = mLayer->GetEffectiveTransform().Is2D(&matrix);
-              if (is2D && !matrix.HasNonTranslationOrFlip()) {
-                gl()->ApplyFilterToBoundTexture(gfxPattern::FILTER_NEAREST);
-              } else {
-                mTexImage->ApplyFilter();
-              }
-#endif
-              program->SetLayerQuadRect(tileScreenRect);
-              aManager->BindAndDrawQuadWithTextureRect(program, tileRegionRect,
-                                                       tileRect.Size(),
-                                                       mTexImage->GetWrapMode());
-          }
+                tileRegionRect = regionRect->Intersect(currentTileRect);
+                tileRegionRect.MoveBy(-currentTileRect.TopLeft());
+            }
+/*
+            program->SetLayerQuadRect(tileScreenRect);
+            aManager->BindAndDrawQuadWithTextureRect(program, tileRegionRect,
+                                                     tileRect.Size(),
+                                                     mTexImage->GetWrapMode());
+*/
         }
       }
+    }
 
-      if (mTexImageOnWhite)
-          mTexImageOnWhite->NextTile();
-    } while (mTexImage->NextTile());
-  }
+    if (mTexImageOnWhite)
+        mTexImageOnWhite->NextTile();
+  } while (mTexImage->NextTile());
 
   if (mTexImageOnWhite) {
     // Restore defaults

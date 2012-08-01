@@ -73,7 +73,7 @@ enum EffectTypes
   EFFECT_MAX
 };
 
-struct Effect
+struct Effect : public RefCounted<Effect>
 {
   Effect(uint32_t aType) : mType(aType) {}
 
