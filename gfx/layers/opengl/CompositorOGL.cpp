@@ -833,7 +833,8 @@ CompositorOGL::BeginFrame(const gfx::Rect *aClipRect)
 void
 CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
                         const gfx::Rect *aClipRect, const EffectChain &aEffectChain,
-                        gfx::Float aOpacity, const gfx::Matrix4x4 &aTransform)
+                        gfx::Float aOpacity, const gfx::Matrix4x4 &aTransform,
+                        const gfx::Point &aOffset)
 {
   if (!mFrameInProgress) {
     BeginFrame(aClipRect);
@@ -887,7 +888,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
     program->SetLayerQuadRect(aRect);
     program->SetRenderColor(effectSolidColor->mColor);
     program->SetLayerTransform(aTransform);
-    program->SetRenderOffset(nsIntPoint(0,0));
+    program->SetRenderOffset(aOffset.x, aOffset.y);
     if (maskType != MaskNone) {
       mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureMask->mTextureHandle);
       program->SetMaskTextureUnit(0);
@@ -929,7 +930,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
     program->SetTextureUnit(0);
     program->SetLayerOpacity(aOpacity);
     program->SetLayerTransform(aTransform);
-    program->SetRenderOffset(nsIntPoint(0,0));
+    program->SetRenderOffset(aOffset.x, aOffset.y);
     program->SetLayerQuadRect(aRect);
     if (maskType != MaskNone) {
       mGLContext->fActiveTexture(LOCAL_GL_TEXTURE1);
@@ -968,7 +969,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
     program->SetYCbCrTextureUnits(0, 1, 2);
     program->SetLayerOpacity(aOpacity);
     program->SetLayerTransform(aTransform);
-    program->SetRenderOffset(nsIntPoint(0,0));
+    program->SetRenderOffset(aOffset.x, aOffset.y);
     program->SetLayerQuadRect(aRect);
     if (maskType != MaskNone) {
       mGLContext->fActiveTexture(LOCAL_GL_TEXTURE3);
@@ -1008,7 +1009,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
       program->SetWhiteTextureUnit(1);
       program->SetLayerOpacity(aOpacity);
       program->SetLayerTransform(aTransform);
-      program->SetRenderOffset(nsIntPoint(0,0));
+      program->SetRenderOffset(aOffset.x, aOffset.y);
       program->SetLayerQuadRect(aRect);
       if (maskType != MaskNone) {
         mGLContext->fActiveTexture(LOCAL_GL_TEXTURE2);
@@ -1035,7 +1036,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
     program->SetTextureUnit(0);
     program->SetLayerOpacity(aOpacity);
     program->SetLayerTransform(aTransform);
-    program->SetRenderOffset(nsIntPoint(0,0));
+    program->SetRenderOffset(aOffset.x, aOffset.y);
     program->SetLayerQuadRect(aRect);
     if (maskType != MaskNone) {
       mGLContext->fActiveTexture(LOCAL_GL_TEXTURE1);

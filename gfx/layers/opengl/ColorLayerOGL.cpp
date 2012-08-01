@@ -12,34 +12,21 @@ static void
 RenderColorLayer(ColorLayer* aLayer, LayerManagerOGL *aManager,
                  const nsIntPoint& aOffset)
 {
-  aManager->MakeCurrent();
-
-  // XXX we might be able to improve performance by using glClear
-
+  EffectChain effects;
+  gfxRGBA color(aLayer->GetColor());
+  EffectSolidColor effectColor(gfx::Color(color.r, color.g, color.b, color.a));
+  effects.mEffects[EFFECT_SOLID_COLOR] = &effectColor;
   nsIntRect visibleRect = aLayer->GetEffectiveVisibleRegion().GetBounds();
 
-  /* Multiply color by the layer opacity, as the shader
-   * ignores layer opacity and expects a final color to
-   * write to the color buffer.  This saves a needless
-   * multiply in the fragment shader.
-   */
-  gfxRGBA color(aLayer->GetColor());
-  float opacity = aLayer->GetEffectiveOpacity() * color.a;
-  color.r *= opacity;
-  color.g *= opacity;
-  color.b *= opacity;
-  color.a = opacity;
+  // TODO: Create an EffectMask (with appropriate transform) for this.
+  // program->LoadMask(aLayer->GetMaskLayer());
 
-  ShaderProgramOGL *program = aManager->GetProgram(gl::ColorLayerProgramType,
-                                                   aLayer->GetMaskLayer());
-  program->Activate();
-  program->SetLayerQuadRect(visibleRect);
-  program->SetLayerTransform(aLayer->GetEffectiveTransform());
-  program->SetRenderOffset(aOffset);
-  program->SetRenderColor(color);
-  program->LoadMask(aLayer->GetMaskLayer());
-
-  aManager->BindAndDrawQuad(program);
+  gfx::Rect rect(visibleRect.x, visibleRect.y, visibleRect.width, visibleRect.height);
+  float opacity = aLayer->GetEffectiveOpacity();
+  gfx::Matrix4x4 transform;
+  aManager->ToMatrix4x4(aLayer->GetEffectiveTransform(), transform);
+  aManager->GetCompositor()->DrawQuad(rect, nullptr, nullptr, effects, opacity, transform,
+                                      gfx::Point(aOffset.x, aOffset.y));
 }
 
 void
