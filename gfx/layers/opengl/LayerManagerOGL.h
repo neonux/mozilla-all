@@ -255,7 +255,7 @@ public:
   GLuint QuadVBO() { return mCompositor->QuadVBO(); }
   GLintptr QuadVBOVertexOffset() { return mCompositor->QuadVBOVertexOffset(); }
   GLintptr QuadVBOTexCoordOffset() { return mCompositor->QuadVBOTexCoordOffset(); }
-  GLintptr QuadVBOFlippedTexCoordOffset() { mCompositor->QuadVBOFlippedTexCoordOffset(); }
+  GLintptr QuadVBOFlippedTexCoordOffset() { return mCompositor->QuadVBOFlippedTexCoordOffset(); }
 
   void BindQuadVBO() {
     mCompositor->BindQuadVBO();
