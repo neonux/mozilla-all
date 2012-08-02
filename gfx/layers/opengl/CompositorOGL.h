@@ -106,9 +106,9 @@ private:
   already_AddRefed<mozilla::gl::GLContext> CreateContext();
 
   /** Backbuffer */
+  //TODO remove these
   GLuint mBackBufferFBO;
   GLuint mBackBufferTexture;
-  nsIntSize mBackBufferSize;
 
   /** Shader Programs */
   struct ShaderProgramVariations {

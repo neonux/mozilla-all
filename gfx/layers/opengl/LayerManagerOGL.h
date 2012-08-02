@@ -6,12 +6,13 @@
 #ifndef GFX_LAYERMANAGEROGL_H
 #define GFX_LAYERMANAGEROGL_H
 
-#include "LayerManagerOGLProgram.h"
 #include "CompositorOGL.h"
+#include "LayerManagerOGLProgram.h"
 
 #include "mozilla/layers/ShadowLayers.h"
 
 #include "mozilla/TimeStamp.h"
+
 
 #ifdef XP_WIN
 #include <windows.h>
@@ -353,12 +354,6 @@ private:
 
   //TODO[nrc] comment
   RefPtr<CompositorOGL> mCompositor;
-  nsRefPtr<GLContext> mGLContext;
-
-  /** Backbuffer */
-  GLuint mBackBufferFBO;
-  GLuint mBackBufferTexture;
-  nsIntSize mBackBufferSize;
 
   /** Region we're clipping our current drawing to. */
   nsIntRegion mClippingRegion;
@@ -370,11 +365,6 @@ private:
    * Render the current layer tree to the active target.
    */
   void Render();
-
-  /**
-   * Setup a backbuffer of the given dimensions.
-   */
-  void SetupBackBuffer(int aWidth, int aHeight);
 
   /**
    * Copies the content of our backbuffer to the set transaction target.

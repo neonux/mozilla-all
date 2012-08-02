@@ -173,7 +173,7 @@ CompositorOGL::Initialize(bool force, nsRefPtr<GLContext> aContext)
     return false;
   }
 
-
+  //TODO can we skip some of this initialisation because we won't do double buffering?
   mGLContext->fGenFramebuffers(1, &mBackBufferFBO);
 
   if (mGLContext->WorkAroundDriverBugs()) {

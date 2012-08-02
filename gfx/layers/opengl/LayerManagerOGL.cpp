@@ -54,6 +54,9 @@ mSurfaceSize
 mIsRenderingToEGLSurface
 shader stuff
 
+back buffer stuff
+  SetupBackBuffer
+
 world transform?
   SetupPipeline
 transactions
@@ -61,8 +64,6 @@ transactions
   Render
     CopyToTarget
     mClippingRegion
-    back buffer stuff
-      SetupBackBuffer
 */
 
 
@@ -71,9 +72,6 @@ transactions
  */
 LayerManagerOGL::LayerManagerOGL(nsIWidget *aWidget, int aSurfaceWidth, int aSurfaceHeight,
                                  bool aIsRenderingToEGLSurface)
-  : mBackBufferFBO(0)
-  , mBackBufferTexture(0)
-  , mBackBufferSize(-1, -1)
 {
   mCompositor = new CompositorOGL(aWidget, aSurfaceWidth, aSurfaceHeight, aIsRenderingToEGLSurface);
 }
@@ -251,9 +249,12 @@ LayerManagerOGL::Render()
     return;
   }
 
-  mCompositor->BeginFrame(mRoot->GetClipRect());
+  //TODO[nrc] is this the right rect?
+  nsIntRect rect = *mRoot->GetClipRect();
+  Rect clipRect = Rect(rect.x, rect.y, rect.width, rect.height);
+  mCompositor->BeginFrame(&clipRect);
 
-//  WorldTransformRect(rect);
+  WorldTransformRect(rect);
 
   // We can't draw anything to something with no area
   // so just return
@@ -264,8 +265,7 @@ LayerManagerOGL::Render()
 #if MOZ_WIDGET_ANDROID
   TexturePoolOGL::Fill(gl());
 #endif
-
-  SetupBackBuffer(width, height);
+  //TODO[nrc] world transform
 //  SetupPipeline(width, height, ApplyWorldTransform);
 
   // If the Java compositor is being used, this clear will be done in
@@ -276,23 +276,23 @@ LayerManagerOGL::Render()
   mCompositor->mGLContext->fClear(LOCAL_GL_COLOR_BUFFER_BIT | LOCAL_GL_DEPTH_BUFFER_BIT);
 #endif
 
+  //TODO[nrc] got to do something about mWidget
   // Allow widget to render a custom background.
-  mWidget->DrawWindowUnderlay(this, rect);
+  mCompositor->mWidget->DrawWindowUnderlay(this, rect);
 
   // Render our layers.
-  RootLayer()->RenderLayer(mCompositor->mGLContext->IsDoubleBuffered() ? 0 : mBackBufferFBO,
-                           nsIntPoint(0, 0));
+  RootLayer()->RenderLayer(0, nsIntPoint(0, 0));
 
   // Allow widget to render a custom foreground too.
-  mWidget->DrawWindowOverlay(this, rect);
+  mCompositor->mWidget->DrawWindowOverlay(this, rect);
 
 #ifdef MOZ_DUMP_PAINTING
   if (gfxUtils::sDumpPainting) {
     nsIntRect rect;
-    if (mIsRenderingToEGLSurface) {
-      rect = nsIntRect(0, 0, mSurfaceSize.width, mSurfaceSize.height);
+    if (mCompositor->mIsRenderingToEGLSurface) {
+      rect = nsIntRect(0, 0, mCompositor->mSurfaceSize.width, mCompositor->mSurfaceSize.height);
     } else {
-      mWidget->GetBounds(rect);
+      mCompositor->mWidget->GetBounds(rect);
     }
     nsRefPtr<gfxASurface> surf = gfxPlatform::GetPlatform()->CreateOffscreenSurface(rect.Size(), gfxASurface::CONTENT_COLOR_ALPHA);
     nsRefPtr<gfxContext> ctx = new gfxContext(surf);
@@ -308,8 +308,8 @@ LayerManagerOGL::Render()
     return;
   }
 
-  if (sDrawFPS) {
-    mFPS.DrawFPS(mCompositor->mGLContext, GetProgram(Copy2DProgramType));
+  if (mCompositor->sDrawFPS) {
+    mCompositor->mFPS.DrawFPS(mCompositor->mGLContext, GetProgram(Copy2DProgramType));
   }
 
   mCompositor->EndFrame();
@@ -318,21 +318,25 @@ LayerManagerOGL::Render()
 
   mCompositor->mGLContext->fActiveTexture(LOCAL_GL_TEXTURE0);
 
+  //TODO[nrc] is this copying all for double buffering? I guess not or it would be guarded.
+
   ShaderProgramOGL *copyprog = GetProgram(Copy2DProgramType);
 
-  if (mFBOTextureTarget == LOCAL_GL_TEXTURE_RECTANGLE_ARB) {
+  if (mCompositor->mFBOTextureTarget == LOCAL_GL_TEXTURE_RECTANGLE_ARB) {
     copyprog = GetProgram(Copy2DRectProgramType);
   }
 
-  mCompositor->mGLContext->fBindTexture(mFBOTextureTarget, mBackBufferTexture);
+  mCompositor->mGLContext->fBindTexture(mCompositor->mFBOTextureTarget, mCompositor->mBackBufferTexture); //TODO[nrc]
 
   copyprog->Activate();
   copyprog->SetTextureUnit(0);
 
+  //TODO[nrc] commented out for width, height
+  /*
   if (copyprog->GetTexCoordMultiplierUniformLocation() != -1) {
     copyprog->SetTexCoordMultiplier(width, height);
   }
-
+  */
   // we're going to use client-side vertex arrays for this.
   mCompositor->mGLContext->fBindBuffer(LOCAL_GL_ARRAY_BUFFER, 0);
 
@@ -347,7 +351,7 @@ LayerManagerOGL::Render()
 
   mCompositor->mGLContext->fEnableVertexAttribArray(vcattr);
   mCompositor->mGLContext->fEnableVertexAttribArray(tcattr);
-
+  /*
   const nsIntRect *r;
   nsIntRegionRectIterator iter(mClippingRegion);
 
@@ -387,7 +391,7 @@ LayerManagerOGL::Render()
 
     mCompositor->mGLContext->fDrawArrays(LOCAL_GL_TRIANGLE_STRIP, 0, 4);
   }
-
+  */
   mCompositor->mGLContext->fDisableVertexAttribArray(vcattr);
   mCompositor->mGLContext->fDisableVertexAttribArray(tcattr);
 
@@ -431,71 +435,22 @@ LayerManagerOGL::SetupPipeline(int aWidth, int aHeight, WorldTransforPolicy aTra
   // though.
 
   //TODO[nrc]
-  if (aTransformPolicy == ApplyWorldTransform) {
-    viewMatrix = mWorldMatrix * viewMatrix;
-  }
+  //if (aTransformPolicy == ApplyWorldTransform) {
+  //  viewMatrix = mWorldMatrix * viewMatrix;
+  //}
 }
 
-//TODO[nrc]
-void
-LayerManagerOGL::SetupBackBuffer(int aWidth, int aHeight)
-{
-  GLContext* ctxt = mCompositor->mGLContext;
 
-  if (mCompositor->mGLContext->IsDoubleBuffered()) {
-    ctxt->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, 0);
-    return;
-  }
-
-  // Do we have a FBO of the right size already?
-  if (mBackBufferSize.width == aWidth &&
-      mBackBufferSize.height == aHeight)
-  {
-    ctxt->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, mBackBufferFBO);
-    return;
-  }
-
-  // we already have a FBO, but we need to resize its texture.
-  ctxt->fActiveTexture(LOCAL_GL_TEXTURE0);
-  ctxt->fBindTexture(mFBOTextureTarget, mBackBufferTexture);
-  ctxt->fTexImage2D(mFBOTextureTarget,
-                          0,
-                          LOCAL_GL_RGBA,
-                          aWidth, aHeight,
-                          0,
-                          LOCAL_GL_RGBA,
-                          LOCAL_GL_UNSIGNED_BYTE,
-                          NULL);
-  ctxt->fBindTexture(mFBOTextureTarget, 0);
-
-  ctxt->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, mBackBufferFBO);
-  ctxt->fFramebufferTexture2D(LOCAL_GL_FRAMEBUFFER,
-                                    LOCAL_GL_COLOR_ATTACHMENT0,
-                                    mFBOTextureTarget,
-                                    mBackBufferTexture,
-                                    0);
-
-  GLenum result = ctxt->fCheckFramebufferStatus(LOCAL_GL_FRAMEBUFFER);
-  if (result != LOCAL_GL_FRAMEBUFFER_COMPLETE) {
-    nsCAutoString msg;
-    msg.Append("Framebuffer not complete -- error 0x");
-    msg.AppendInt(result, 16);
-    NS_RUNTIMEABORT(msg.get());
-  }
-
-  mBackBufferSize.width = aWidth;
-  mBackBufferSize.height = aHeight;
-}
 
 //TODO[nrc]
 void
 LayerManagerOGL::CopyToTarget(gfxContext *aTarget)
 {
   nsIntRect rect;
-  if (mIsRenderingToEGLSurface) {
-    rect = nsIntRect(0, 0, mSurfaceSize.width, mSurfaceSize.height);
+  if (mCompositor->mIsRenderingToEGLSurface) {
+    rect = nsIntRect(0, 0, mCompositor->mSurfaceSize.width, mCompositor->mSurfaceSize.height);
   } else {
-    mWidget->GetBounds(rect);
+    mCompositor->mWidget->GetBounds(rect);
   }
   GLint width = rect.width;
   GLint height = rect.height;
@@ -509,18 +464,12 @@ LayerManagerOGL::CopyToTarget(gfxContext *aTarget)
     new gfxImageSurface(gfxIntSize(width, height),
                         gfxASurface::ImageFormatARGB32);
 
-  mCompositor->mGLContext->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER,
-                               mCompositor->mGLContext->IsDoubleBuffered() ? 0 : mBackBufferFBO);
+  mCompositor->mGLContext->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, 0);
 
   if (!mCompositor->mGLContext->IsGLES2()) {
     // GLES2 promises that binding to any custom FBO will attach
     // to GL_COLOR_ATTACHMENT0 attachment point.
-    if (mCompositor->mGLContext->IsDoubleBuffered()) {
-      mCompositor->mGLContext->fReadBuffer(LOCAL_GL_BACK);
-    }
-    else {
-      mCompositor->mGLContext->fReadBuffer(LOCAL_GL_COLOR_ATTACHMENT0);
-    }
+    mCompositor->mGLContext->fReadBuffer(LOCAL_GL_BACK);
   }
 
   NS_ASSERTION(imageSurface->Stride() == width * 4,
