@@ -652,6 +652,8 @@ CompositorOGL::CreateFBOWithTexture(const gfx::IntRect& aRect, SurfaceInitMode a
   *aTexture = tex;
 }
 
+bool CompositorOGL::sDrawFPS = false;
+
 /* This function tries to stick to portable C89 as much as possible
  * so that it can be easily copied into other applications */
 void

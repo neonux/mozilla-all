@@ -9,7 +9,6 @@
 #include "mozilla/RefPtr.h"
 #include "mozilla/gfx/Rect.h"
 #include "mozilla/gfx/Matrix.h"
-#include "base/process.h"
 #include "nsAutoPtr.h"
 #include "nsRegion.h"
 
