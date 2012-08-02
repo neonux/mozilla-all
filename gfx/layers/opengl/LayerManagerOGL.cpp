@@ -250,9 +250,14 @@ LayerManagerOGL::Render()
   }
 
   //TODO[nrc] is this the right rect?
-  nsIntRect rect = *mRoot->GetClipRect();
-  Rect clipRect = Rect(rect.x, rect.y, rect.width, rect.height);
-  mCompositor->BeginFrame(&clipRect);
+  nsIntRect rect;
+  if (mRoot->GetClipRect()) {
+    rect = *mRoot->GetClipRect();
+    Rect clipRect = Rect(rect.x, rect.y, rect.width, rect.height);
+    mCompositor->BeginFrame(&clipRect);
+  } else {
+    mCompositor->BeginFrame(nullptr);
+  }
 
   WorldTransformRect(rect);
 
