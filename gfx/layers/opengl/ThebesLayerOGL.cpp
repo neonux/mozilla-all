@@ -142,6 +142,7 @@ ThebesLayerBufferOGL::RenderTo(const nsIntPoint& aOffset,
   RefPtr<Effect> effect;
   RefPtr<Effect> effectMask;
   RefPtr<TextureOGL> onBlack = new TextureOGL();
+  onBlack->mWrapMode = mTexImage->GetWrapMode();
   RefPtr<TextureOGL> onWhite = new TextureOGL();
   if (mTexImageOnWhite) {
     effect = new EffectComponentAlpha(onWhite, onBlack);
@@ -158,15 +159,6 @@ ThebesLayerBufferOGL::RenderTo(const nsIntPoint& aOffset,
 
   gfx::Matrix4x4 transform;
   aManager->ToMatrix4x4(mLayer->GetEffectiveTransform(), transform);
-
-  // TODO: Call into Compositor::DrawQuad to render.
-
-  /*
-  program->SetLayerOpacity(mLayer->GetEffectiveOpacity());
-  program->SetLayerTransform(mLayer->GetEffectiveTransform());
-  program->SetRenderOffset(aOffset);
-  program->LoadMask(mLayer->GetMaskLayer());
-  */
 
   const nsIntRegion& visibleRegion = mLayer->GetEffectiveVisibleRegion();
   nsIntRegion tmpRegion;
@@ -223,9 +215,10 @@ ThebesLayerBufferOGL::RenderTo(const nsIntPoint& aOffset,
 
     nsIntRect tileRect = mTexImage->GetTileRect();
 
-    // Bind textures.
-    TextureImage::ScopedBindTexture texBind(mTexImage, LOCAL_GL_TEXTURE0);
-    TextureImage::ScopedBindTexture texOnWhiteBind(mTexImageOnWhite, LOCAL_GL_TEXTURE1);
+    onBlack->mTextureHandle = mTexImage->GetTextureID();
+    if (mTexImageOnWhite) {
+      onWhite->mTextureHandle = mTexImageOnWhite->GetTextureID();
+    }
 
     // Draw texture. If we're using tiles, we do repeating manually, as texture
     // repeat would cause each individual tile to repeat instead of the
@@ -260,12 +253,15 @@ ThebesLayerBufferOGL::RenderTo(const nsIntPoint& aOffset,
                 tileRegionRect = regionRect->Intersect(currentTileRect);
                 tileRegionRect.MoveBy(-currentTileRect.TopLeft());
             }
-/*
-            program->SetLayerQuadRect(tileScreenRect);
-            aManager->BindAndDrawQuadWithTextureRect(program, tileRegionRect,
-                                                     tileRect.Size(),
-                                                     mTexImage->GetWrapMode());
-*/
+            onBlack->mSize = gfx::IntSize(tileRect.width, tileRect.height);
+            gfx::Rect rect(tileScreenRect.x, tileScreenRect.y,
+                           tileScreenRect.width, tileScreenRect.height);
+            gfx::Rect sourceRect(tileRegionRect.x, tileRegionRect.y,
+                                 tileRegionRect.width, tileRegionRect.height);
+            gfx::Point offset(aOffset.x, aOffset.y);
+            aManager->GetCompositor()->DrawQuad(rect, &sourceRect, nullptr, effectChain,
+                                                mLayer->GetEffectiveOpacity(), transform,
+                                                offset);
         }
       }
     }
@@ -274,11 +270,6 @@ ThebesLayerBufferOGL::RenderTo(const nsIntPoint& aOffset,
         mTexImageOnWhite->NextTile();
   } while (mTexImage->NextTile());
 
-  if (mTexImageOnWhite) {
-    // Restore defaults
-    gl()->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
-                             LOCAL_GL_ONE, LOCAL_GL_ONE);
-  }
 }
 
 

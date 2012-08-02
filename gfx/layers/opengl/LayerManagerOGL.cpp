@@ -555,7 +555,7 @@ LayerManagerOGL::CreateShadowRefLayer()
 }
 
 void
-LayerManagerOGL::ToMatrix4x4(const gfx3DMatrix &aIn, gfx::Matrix4x4 aOut)
+LayerManagerOGL::ToMatrix4x4(const gfx3DMatrix &aIn, gfx::Matrix4x4 &aOut)
 {
   aOut._11 = aIn._11;
   aOut._12 = aIn._12;

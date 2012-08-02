@@ -25,6 +25,7 @@ public:
   GLenum mType;
   PRUint32 mPixelSize;
   RefPtr<CompositorOGL> mCompositorOGL;
+  GLenum mWrapMode;
 
   virtual void
     UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) MOZ_OVERRIDE;

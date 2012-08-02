@@ -940,7 +940,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
       program->SetMaskTextureUnit(1);
       program->SetMaskLayerTransform(effectMask->mMaskTransform);
     }
-    BindAndDrawQuadWithTextureRect(program, intSourceRect, texture->mSize);
+    BindAndDrawQuadWithTextureRect(program, intSourceRect, texture->mSize, texture->mWrapMode);
 
     if (!premultiplied) {
       mGLContext->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
@@ -1020,7 +1020,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
         program->SetMaskLayerTransform(effectMask->mMaskTransform);
       }
 
-      BindAndDrawQuadWithTextureRect(program, intSourceRect, textureOnBlack->mSize);
+      BindAndDrawQuadWithTextureRect(program, intSourceRect, textureOnBlack->mSize, textureOnBlack->mWrapMode);
 
       mGLContext->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
                                      LOCAL_GL_ONE, LOCAL_GL_ONE);
