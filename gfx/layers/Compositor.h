@@ -73,7 +73,7 @@ enum EffectTypes
   EFFECT_MAX
 };
 
-struct Effect
+struct Effect : public RefCounted<Effect>
 {
   Effect(uint32_t aType) : mType(aType) {}
 
@@ -210,7 +210,8 @@ public:
    */
   virtual void DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
                         const gfx::Rect *aClipRect, const EffectChain &aEffectChain,
-                        gfx::Float aOpacity, const gfx::Matrix4x4 &aTransform) = 0;
+                        gfx::Float aOpacity, const gfx::Matrix4x4 &aTransform,
+                        const gfx::Point &aOffset) = 0;
 
   /* Flush the current frame to the screen.
    */

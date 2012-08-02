@@ -87,6 +87,7 @@ public:
   // should we be able to have our own GLContext as well as a compositor?
   GLContext* gl() const { return mCompositor->mGLContext; }
 
+  Compositor* GetCompositor() const { return mCompositor; }
 
   /**
    * Sets the clipping region for this layer manager. This is important on 
@@ -256,7 +257,7 @@ public:
   GLuint QuadVBO() { return mCompositor->QuadVBO(); }
   GLintptr QuadVBOVertexOffset() { return mCompositor->QuadVBOVertexOffset(); }
   GLintptr QuadVBOTexCoordOffset() { return mCompositor->QuadVBOTexCoordOffset(); }
-  GLintptr QuadVBOFlippedTexCoordOffset() { mCompositor->QuadVBOFlippedTexCoordOffset(); }
+  GLintptr QuadVBOFlippedTexCoordOffset() { return mCompositor->QuadVBOFlippedTexCoordOffset(); }
 
   void BindQuadVBO() {
     mCompositor->BindQuadVBO();
@@ -344,6 +345,8 @@ public:
   {
     mCompositor->SetSurfaceSize(width, height);
   }
+
+  void ToMatrix4x4(const gfx3DMatrix &aIn, gfx::Matrix4x4 aOut);
 
 
 private:
