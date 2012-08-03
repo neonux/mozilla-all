@@ -21,6 +21,8 @@
 #include "nsSurfaceTexture.h"
 #endif
 
+#include "TextureOGL.h"
+
 using namespace mozilla::gfx;
 using namespace mozilla::gl;
 
@@ -890,43 +892,52 @@ ShadowImageLayerOGL::RenderLayer(int aPreviousFrameBuffer,
     }
   }
 
+  // TODO: Fix texture handling.
+  // TODO: Handle mask layers.
+  EffectChain effectChain;
+  RefPtr<Effect> effect;
+  RefPtr<Effect> effectMask;
+
+  gfx::Matrix4x4 transform;
+  mOGLManager->ToMatrix4x4(GetEffectiveTransform(), transform);
 
   if (mTexImage) {
     NS_ASSERTION(mTexImage->GetContentType() != gfxASurface::CONTENT_ALPHA,
                  "Image layer has alpha image");
 
-    ShaderProgramOGL *colorProgram =
-      mOGLManager->GetProgram(mTexImage->GetShaderProgramType(), GetMaskLayer());
+    RefPtr<TextureOGL> texture = new TextureOGL();
+    texture->mWrapMode = mTexImage->GetWrapMode();
 
-    colorProgram->Activate();
-    colorProgram->SetTextureUnit(0);
-    colorProgram->SetLayerTransform(GetEffectiveTransform());
-    colorProgram->SetLayerOpacity(GetEffectiveOpacity());
-    colorProgram->SetRenderOffset(aOffset);
-    colorProgram->LoadMask(GetMaskLayer());
+    if (mTexImage->GetShaderProgramType() == gl::BGRXLayerProgramType) {
+      effect = new EffectBGRX(texture, true, gfx::ToFilter(mFilter));
+      effectChain.mEffects[EFFECT_BGRX] = effect;
+    } else if (mTexImage->GetShaderProgramType() == gl::BGRALayerProgramType) {
+      effect = new EffectBGRA(texture, true, gfx::ToFilter(mFilter));
+      effectChain.mEffects[EFFECT_BGRA] = effect;
+    } else {
+      NS_RUNTIMEABORT("Shader type not yet supported by the Compositor API");
+    }
 
     mTexImage->SetFilter(mFilter);
     mTexImage->BeginTileIteration();
 
-    if (gl()->CanUploadNonPowerOfTwo()) {
-      do {
-        TextureImage::ScopedBindTextureAndApplyFilter texBind(mTexImage, LOCAL_GL_TEXTURE0);
-        colorProgram->SetLayerQuadRect(mTexImage->GetTileRect());
-        mOGLManager->BindAndDrawQuad(colorProgram);
-      } while (mTexImage->NextTile());
-    } else {
-      do {
-        TextureImage::ScopedBindTextureAndApplyFilter texBind(mTexImage, LOCAL_GL_TEXTURE0);
-        colorProgram->SetLayerQuadRect(mTexImage->GetTileRect());
-        // We can't use BindAndDrawQuad because that always uploads the whole texture from 0.0f -> 1.0f
-        // in x and y. We use BindAndDrawQuadWithTextureRect to actually draw a subrect of the texture
-        mOGLManager->BindAndDrawQuadWithTextureRect(colorProgram,
-                                                    nsIntRect(0, 0, mTexImage->GetTileRect().width,
-                                                                    mTexImage->GetTileRect().height),
-                                                    mTexImage->GetTileRect().Size());
-      } while (mTexImage->NextTile());
-    }
+    do {
+      texture->mTextureHandle = mTexImage->GetTextureID();
+      texture->mSize = gfx::IntSize(mTexImage->GetTileRect().width,
+                                    mTexImage->GetTileRect().height);
+      gfx::Rect rect(mTexImage->GetTileRect().x, mTexImage->GetTileRect().y,
+                     mTexImage->GetTileRect().width, mTexImage->GetTileRect().height);
+      gfx::Rect sourceRect(0, 0, mTexImage->GetTileRect().width,
+                           mTexImage->GetTileRect().height);
+      gfx::Point offset(aOffset.x, aOffset.y);
+      mOGLManager->GetCompositor()->DrawQuad(rect, &sourceRect, nullptr, effectChain,
+                                             GetEffectiveOpacity(), transform,
+                                             offset);
+    } while (mTexImage->NextTile());
   } else if (mSharedHandle) {
+
+    //TODO: Make this case use the Compositor API. To do this, we need new
+    // effects: EffectRGBA and EffectRGBAExternal.
     GLContext::SharedHandleDetails handleDetails;
     if (!gl()->GetSharedHandleDetails(mShareType, mSharedHandle, handleDetails)) {
       NS_ERROR("Failed to get shared handle details");
@@ -960,31 +971,22 @@ ShadowImageLayerOGL::RenderLayer(int aPreviousFrameBuffer,
     gl()->fBindTexture(handleDetails.mTarget, 0);
     gl()->DetachSharedHandle(mShareType, mSharedHandle);
   } else {
-    gl()->fActiveTexture(LOCAL_GL_TEXTURE0);
-    gl()->fBindTexture(LOCAL_GL_TEXTURE_2D, mYUVTexture[0].GetTextureID());
-    gl()->ApplyFilterToBoundTexture(mFilter);
-    gl()->fActiveTexture(LOCAL_GL_TEXTURE1);
-    gl()->fBindTexture(LOCAL_GL_TEXTURE_2D, mYUVTexture[1].GetTextureID());
-    gl()->ApplyFilterToBoundTexture(mFilter);
-    gl()->fActiveTexture(LOCAL_GL_TEXTURE2);
-    gl()->fBindTexture(LOCAL_GL_TEXTURE_2D, mYUVTexture[2].GetTextureID());
-    gl()->ApplyFilterToBoundTexture(mFilter);
+    RefPtr<TextureOGL> textureY = new TextureOGL();
+    textureY->mTextureHandle = mYUVTexture[0].GetTextureID();
+    textureY->mSize = gfx::IntSize(mSize.width, mSize.height);
+    RefPtr<TextureOGL> textureCb = new TextureOGL();
+    textureCb->mTextureHandle = mYUVTexture[1].GetTextureID();
+    textureCb->mSize = gfx::IntSize(mSize.width, mSize.height);
+    RefPtr<TextureOGL> textureCr = new TextureOGL();
+    textureCr->mTextureHandle = mYUVTexture[2].GetTextureID();
+    textureCr->mSize = gfx::IntSize(mSize.width, mSize.height);
 
-    ShaderProgramOGL *yuvProgram = mOGLManager->GetProgram(YCbCrLayerProgramType, GetMaskLayer());
-
-    yuvProgram->Activate();
-    yuvProgram->SetLayerQuadRect(nsIntRect(0, 0,
-                                           mPictureRect.width,
-                                           mPictureRect.height));
-    yuvProgram->SetYCbCrTextureUnits(0, 1, 2);
-    yuvProgram->SetLayerTransform(GetEffectiveTransform());
-    yuvProgram->SetLayerOpacity(GetEffectiveOpacity());
-    yuvProgram->SetRenderOffset(aOffset);
-    yuvProgram->LoadMask(GetMaskLayer());
-
-    mOGLManager->BindAndDrawQuadWithTextureRect(yuvProgram,
-                                                mPictureRect,
-                                                nsIntSize(mSize.width, mSize.height));
+    effect = new EffectYCbCr(textureY, textureCb, textureCr, ToFilter(mFilter));
+    effectChain.mEffects[EFFECT_YCBCR] = effect;
+    gfx::Rect rect(0, 0, mPictureRect.width, mPictureRect.height);
+    gfx::Rect sourceRect(mPictureRect.x, mPictureRect.y, mPictureRect.width, mPictureRect.height);
+    gfx::Point offset(aOffset.x, aOffset.y);
+    mOGLManager->GetCompositor()->DrawQuad(rect, &sourceRect, nullptr, effectChain, GetEffectiveOpacity(), transform, offset);
  }
 }
 

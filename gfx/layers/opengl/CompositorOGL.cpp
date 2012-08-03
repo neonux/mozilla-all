@@ -925,12 +925,14 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
     bool premultiplied;
     gfxPattern::GraphicsFilter filter;
     ShaderProgramOGL *program;
+    bool flipped;
 
     if (aEffectChain.mEffects[EFFECT_BGRA]) {
       EffectBGRA* effectBGRA =
         static_cast<EffectBGRA*>(aEffectChain.mEffects[EFFECT_BGRA]);
       texture = static_cast<TextureOGL*>(effectBGRA->mBGRATexture.get());
       premultiplied = effectBGRA->mPremultiplied;
+      flipped = effectBGRA->mFlipped;
       filter = gfx::ThebesFilter(effectBGRA->mFilter);
       program = GetProgram(gl::BGRALayerProgramType, maskType);
     } else {
@@ -938,6 +940,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
         static_cast<EffectBGRX*>(aEffectChain.mEffects[EFFECT_BGRX]);
       texture = static_cast<TextureOGL*>(effectBGRX->mBGRXTexture.get());
       premultiplied = effectBGRX->mPremultiplied;
+      flipped = effectBGRX->mFlipped;
       filter = gfx::ThebesFilter(effectBGRX->mFilter);
       program = GetProgram(gl::BGRXLayerProgramType, maskType);
     }
@@ -962,7 +965,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
       program->SetMaskTextureUnit(1);
       program->SetMaskLayerTransform(effectMask->mMaskTransform);
     }
-    BindAndDrawQuadWithTextureRect(program, intSourceRect, texture->mSize, texture->mWrapMode);
+    BindAndDrawQuadWithTextureRect(program, intSourceRect, texture->mSize, texture->mWrapMode, flipped);
 
     if (!premultiplied) {
       mGLContext->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE_MINUS_SRC_ALPHA,

@@ -104,28 +104,34 @@ struct EffectBGRX : public Effect
 {
   EffectBGRX(Texture *aBGRXTexture,
              bool aPremultiplied,
-             mozilla::gfx::Filter aFilter)
+             mozilla::gfx::Filter aFilter,
+             bool aFlipped = false)
     : Effect(EFFECT_BGRX), mBGRXTexture(aBGRXTexture)
     , mPremultiplied(aPremultiplied), mFilter(aFilter)
+    , mFlipped(aFlipped)
   {}
 
   RefPtr<Texture> mBGRXTexture;
   bool mPremultiplied;
   mozilla::gfx::Filter mFilter;
+  bool mFlipped;
 };
 
 struct EffectBGRA : public Effect
 {
   EffectBGRA(Texture *aBGRATexture,
              bool aPremultiplied,
-             mozilla::gfx::Filter aFilter)
+             mozilla::gfx::Filter aFilter,
+             bool aFlipped = false)
     : Effect(EFFECT_BGRA), mBGRATexture(aBGRATexture)
     , mPremultiplied(aPremultiplied), mFilter(aFilter)
+    , mFlipped(aFlipped)
   {}
 
   RefPtr<Texture> mBGRATexture;
   bool mPremultiplied;
   mozilla::gfx::Filter mFilter;
+  bool mFlipped;
 };
 
 struct EffectYCbCr : public Effect
