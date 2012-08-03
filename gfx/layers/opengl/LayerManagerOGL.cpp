@@ -228,7 +228,8 @@ LayerManagerOGL::Render()
   if (mRoot->GetClipRect()) {
     nsIntRect clipRect = *mRoot->GetClipRect();
     WorldTransformRect(clipRect);
-    mCompositor->BeginFrame(&Rect(clipRect.x, clipRect.y, clipRect.width, clipRect.height), mWorldMatrix);
+    Rect rect(clipRect.x, clipRect.y, clipRect.width, clipRect.height);
+    mCompositor->BeginFrame(&rect, mWorldMatrix);
   } else {
     mCompositor->BeginFrame(nullptr, mWorldMatrix);
   }
