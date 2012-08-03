@@ -261,10 +261,8 @@ CompositorOGL::Initialize(bool force, nsRefPtr<GLContext> aContext)
   }
 
   // If we're double-buffered, we don't need this fbo anymore.
-  if (mGLContext->IsDoubleBuffered()) {
-    mGLContext->fDeleteFramebuffers(1, &mBackBufferFBO);
-    mBackBufferFBO = 0;
-  }
+  mGLContext->fDeleteFramebuffers(1, &mBackBufferFBO);
+  mBackBufferFBO = 0;
 
   /* Create a simple quad VBO */
 
@@ -403,7 +401,7 @@ CompositorOGL::BindAndDrawQuadWithTextureRect(ShaderProgramOGL *aProg,
 }
 
 void
-CompositorOGL::SetupPipeline(int aWidth, int aHeight)
+CompositorOGL::SetupPipeline(int aWidth, int aHeight, const gfxMatrix& aWorldTransform)
 {
   // Set the viewport correctly.
   mGLContext->fViewport(0, 0, aWidth, aHeight);
@@ -411,6 +409,10 @@ CompositorOGL::SetupPipeline(int aWidth, int aHeight)
   // We flip the view matrix around so that everything is right-side up; we're
   // drawing directly into the window's back buffer, so this keeps things
   // looking correct.
+  // XXX: We keep track of whether the window size changed, so we could skip
+  // this update if it hadn't changed since the last call. We will need to
+  // track changes to aTransformPolicy and mWorldMatrix for this to work
+  // though.
 
   // Matrix to transform (0, 0, aWidth, aHeight) to viewport space (-1.0, 1.0,
   // 2, 2) and flip the contents.
@@ -418,6 +420,8 @@ CompositorOGL::SetupPipeline(int aWidth, int aHeight)
   viewMatrix.Translate(-gfxPoint(1.0, -1.0));
   viewMatrix.Scale(2.0f / float(aWidth), 2.0f / float(aHeight));
   viewMatrix.Scale(1.0f, -1.0f);
+
+  viewMatrix = aWorldTransform * viewMatrix;
 
   gfx3DMatrix matrix3d = gfx3DMatrix::From2D(viewMatrix);
   matrix3d._33 = 0.0f;
@@ -638,7 +642,7 @@ CompositorOGL::CreateFBOWithTexture(const gfx::IntRect& aRect, SurfaceInitMode a
     NS_RUNTIMEABORT(msg.get());
   }
 
-  SetupPipeline(aRect.width, aRect.height);
+  SetupPipeline(aRect.width, aRect.height, gfxMatrix());
   mGLContext->fScissor(0, 0, aRect.width, aRect.height);
 
   if (aInit == INIT_MODE_CLEAR) {
@@ -788,7 +792,7 @@ CompositorOGL::FPSState::DrawFPS(GLContext* context, ShaderProgramOGL* copyprog)
 }
 
 void
-CompositorOGL::BeginFrame(const gfx::Rect *aClipRect)
+CompositorOGL::BeginFrame(const gfx::Rect *aClipRect, const gfxMatrix& aTransform)
 {
   mFrameInProgress = true;
   nsIntRect rect;
@@ -798,8 +802,18 @@ CompositorOGL::BeginFrame(const gfx::Rect *aClipRect)
     mWidget->GetClientBounds(rect);
   }
 
+  //TODO[nrc] sort this rect bullshit
+  gfxRect grect(rect);
+  grect = aTransform.TransformBounds(grect);
+  rect.SetRect(grect.X(), grect.Y(), grect.Width(), grect.Height());
+
   GLint width = rect.width;
   GLint height = rect.height;
+
+  // We can't draw anything to something with no area
+  // so just return
+  if (width == 0 || height == 0)
+    return;
 
   // If the widget size changed, we have to force a MakeCurrent
   // to make sure that GL sees the updated widget size.
@@ -814,8 +828,12 @@ CompositorOGL::BeginFrame(const gfx::Rect *aClipRect)
     MakeCurrent();
   }
 
+#if MOZ_WIDGET_ANDROID
+  TexturePoolOGL::Fill(gl());
+#endif
+
   mGLContext->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, 0);
-  SetupPipeline(width, height);
+  SetupPipeline(width, height, aTransform);
 
   // Default blend function implements "OVER"
   mGLContext->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
@@ -830,6 +848,10 @@ CompositorOGL::BeginFrame(const gfx::Rect *aClipRect)
 
   mGLContext->fClearColor(0.0, 0.0, 0.0, 0.0);
   mGLContext->fClear(LOCAL_GL_COLOR_BUFFER_BIT | LOCAL_GL_DEPTH_BUFFER_BIT);
+
+  // Allow widget to render a custom background.
+  //TODO[nrc] DrawWindowUnderlay doesn't use its params, can we change its interface?
+  mWidget->DrawWindowUnderlay(nullptr, nsIntRect());
 }
 
 void
@@ -839,7 +861,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
                         const gfx::Point &aOffset)
 {
   if (!mFrameInProgress) {
-    BeginFrame(aClipRect);
+    BeginFrame(aClipRect, gfxMatrix());
   }
 
   gfx::IntRect intSourceRect;
@@ -1063,14 +1085,84 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
 void
 CompositorOGL::EndFrame()
 {
-  if (mGLContext->IsDoubleBuffered()) {
-    mGLContext->SwapBuffers();
+  // Allow widget to render a custom foreground.
+  //TODO[nrc] DrawWindowOverlay does not use its params, can we change its interface?
+  mWidget->DrawWindowOverlay(nullptr, nsIntRect());
+
+#ifdef MOZ_DUMP_PAINTING
+  if (gfxUtils::sDumpPainting) {
+    nsIntRect rect;
+    if (mIsRenderingToEGLSurface) {
+      rect = nsIntRect(0, 0, mSurfaceSize.width, mSurfaceSize.height);
+    } else {
+      mWidget->GetBounds(rect);
+    }
+    nsRefPtr<gfxASurface> surf = gfxPlatform::GetPlatform()->CreateOffscreenSurface(rect.Size(), gfxASurface::CONTENT_COLOR_ALPHA);
+    nsRefPtr<gfxContext> ctx = new gfxContext(surf);
+    CopyToTarget(ctx);
+
+    WriteSnapshotToDumpFile(this, surf);
+  }
+#endif
+
+  if (mTarget) {
+    CopyToTarget(mTarget);
     mGLContext->fBindBuffer(LOCAL_GL_ARRAY_BUFFER, 0);
     mFrameInProgress = false;
-  } else {
-    // TODO: Handle this case.
+    return;
   }
+
+  if (sDrawFPS) {
+    mFPS.DrawFPS(mGLContext, GetProgram(Copy2DProgramType));
+  }
+
+  mGLContext->SwapBuffers();
+  mGLContext->fBindBuffer(LOCAL_GL_ARRAY_BUFFER, 0);
+  mFrameInProgress = false;
 }
+
+
+void
+CompositorOGL::CopyToTarget(gfxContext *aTarget)
+{
+  nsIntRect rect;
+  if (mIsRenderingToEGLSurface) {
+    rect = nsIntRect(0, 0, mSurfaceSize.width, mSurfaceSize.height);
+  } else {
+    mWidget->GetBounds(rect);
+  }
+  GLint width = rect.width;
+  GLint height = rect.height;
+
+  if ((PRInt64(width) * PRInt64(height) * PRInt64(4)) > PR_INT32_MAX) {
+    NS_ERROR("Widget size too big - integer overflow!");
+    return;
+  }
+
+  nsRefPtr<gfxImageSurface> imageSurface =
+    new gfxImageSurface(gfxIntSize(width, height),
+                        gfxASurface::ImageFormatARGB32);
+
+  mGLContext->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, 0);
+
+  if (!mGLContext->IsGLES2()) {
+    // GLES2 promises that binding to any custom FBO will attach
+    // to GL_COLOR_ATTACHMENT0 attachment point.
+    mGLContext->fReadBuffer(LOCAL_GL_BACK);
+  }
+
+  NS_ASSERTION(imageSurface->Stride() == width * 4,
+               "Image Surfaces being created with weird stride!");
+
+  mGLContext->ReadPixelsIntoImageSurface(0, 0, width, height, imageSurface);
+
+  aTarget->SetOperator(gfxContext::OPERATOR_SOURCE);
+  aTarget->Scale(1.0, -1.0);
+  aTarget->Translate(-gfxPoint(0.0, height));
+  aTarget->SetSource(imageSurface);
+  aTarget->Paint();
+}
+
 
 } /* layers */
 } /* mozilla */

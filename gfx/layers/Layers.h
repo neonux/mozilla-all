@@ -61,6 +61,7 @@ class ShadowableLayer;
 class ShadowLayerForwarder;
 class ShadowLayerManager;
 class SpecificLayerAttributes;
+class Compositor;
 
 #define MOZ_LAYER_DECL_NAME(n, e)                           \
   virtual const char* Name() const { return n; }            \
@@ -1421,6 +1422,7 @@ protected:
 #ifdef MOZ_DUMP_PAINTING
 void WriteSnapshotToDumpFile(Layer* aLayer, gfxASurface* aSurf);
 void WriteSnapshotToDumpFile(LayerManager* aManager, gfxASurface* aSurf);
+void WriteSnapshotToDumpFile(Compositor* aCompositor, gfxASurface* aSurf);
 #endif
 
 }

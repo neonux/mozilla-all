@@ -5,6 +5,7 @@
 
 #include "ContainerLayerOGL.h"
 #include "gfxUtils.h"
+#include "Compositor.h"
 
 namespace mozilla {
 namespace layers {
@@ -154,14 +155,14 @@ ContainerRender(Container* aContainer,
   const gfx3DMatrix& transform = aContainer->GetEffectiveTransform();
   bool needsFramebuffer = aContainer->UseIntermediateSurface();
   if (needsFramebuffer) {
-    LayerManagerOGL::InitMode mode = LayerManagerOGL::InitModeClear;
+    SurfaceInitMode mode = INIT_MODE_CLEAR;
     nsIntRect framebufferRect = visibleRect;
     if (aContainer->GetEffectiveVisibleRegion().GetNumRects() == 1 && 
         (aContainer->GetContentFlags() & Layer::CONTENT_OPAQUE))
     {
       // don't need a background, we're going to paint all opaque stuff
       aContainer->mSupportsComponentAlphaChildren = true;
-      mode = LayerManagerOGL::InitModeNone;
+      mode = INIT_MODE_NONE;
     } else {
       const gfx3DMatrix& transform3D = aContainer->GetEffectiveTransform();
       gfxMatrix transform;
@@ -171,7 +172,7 @@ ContainerRender(Container* aContainer,
       // not safe.
       if (HasOpaqueAncestorLayer(aContainer) &&
           transform3D.Is2D(&transform) && !transform.HasNonIntegerTranslation()) {
-        mode = LayerManagerOGL::InitModeCopy;
+        mode = INIT_MODE_COPY;
         framebufferRect.x += transform.x0;
         framebufferRect.y += transform.y0;
         aContainer->mSupportsComponentAlphaChildren = true;
@@ -236,8 +237,7 @@ ContainerRender(Container* aContainer,
     // Restore the viewport
     aContainer->gl()->PopViewportRect();
     nsIntRect viewport = aContainer->gl()->ViewportRect();
-    aManager->SetupPipeline(viewport.width, viewport.height,
-                            LayerManagerOGL::ApplyWorldTransform);
+    aManager->SetupPipeline(viewport.width, viewport.height);
     aContainer->gl()->PopScissorRect();
 
     aContainer->gl()->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, aPreviousFrameBuffer);

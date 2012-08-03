@@ -95,7 +95,21 @@ public:
     mGLContext->MakeCurrent(aForce);
   }
 
+  void SetTarget(gfxContext* aTarget)
+  {
+    mTarget = aTarget;
+  }
+
+#ifdef MOZ_DUMP_PAINTING
+  virtual const char* Name() const { return "OGL"; }
+#endif // MOZ_DUMP_PAINTING
+
 private:
+  /** 
+   * Context target, NULL when drawing directly to our swap chain.
+   */
+  nsRefPtr<gfxContext> mTarget;
+
   /** Widget associated with this compositor */
   nsIWidget *mWidget;  // TODO: Do we really need to keep this?
   nsIntSize mWidgetSize;
@@ -142,7 +156,7 @@ private:
    */
   bool mFrameInProgress;
 
-  void BeginFrame(const gfx::Rect *aClipRect);
+  void BeginFrame(const gfx::Rect *aClipRect, const gfxMatrix& aTransform);
 
   /**
    * Updates all layer programs with a new projection matrix.
@@ -269,9 +283,14 @@ private:
    * Setup the viewport and projection matrix for rendering
    * to a window of the given dimensions.
    */
-  void SetupPipeline(int aWidth, int aHeight);
+  void SetupPipeline(int aWidth, int aHeight, const gfxMatrix& aWorldTransform);
 
   void CleanupResources();
+
+  /**
+   * Copies the content of our backbuffer to the set transaction target.
+   */
+  void CopyToTarget(gfxContext *aTarget);
 
   bool mDestroyed;
 

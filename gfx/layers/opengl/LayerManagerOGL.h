@@ -69,22 +69,15 @@ public:
    * Initializes the layer manager with a given GLContext. If aContext is null
    * then the layer manager will try to create one for the associated widget.
    *
-   * \param aContext an existing GL context to use. Can be created with CreateContext()
+   * \param aContext an existing GL context to use. USe nullptr to create a new context
    *
    * \return True is initialization was succesful, false when it was not.
    */
-  bool Initialize(bool force = false)
-  {
-    return mCompositor->Initialize(force, nullptr);
-  }
-
-  bool Initialize(nsRefPtr<GLContext> aContext, bool force = false)
+  bool Initialize(nsRefPtr<GLContext> aContext = nullptr, bool force = false)
   {
     return mCompositor->Initialize(force, aContext);
   }
 
-  //TODO[nrc] should this be here?
-  // should we be able to have our own GLContext as well as a compositor?
   GLContext* gl() const { return mCompositor->mGLContext; }
 
   Compositor* GetCompositor() const { return mCompositor; }
@@ -157,38 +150,6 @@ public:
   virtual already_AddRefed<gfxASurface>
     CreateOptimalMaskSurface(const gfxIntSize &aSize);
 
-  /**
-   * Helper methods.
-   */
-  void MakeCurrent(bool aForce = false) {
-    mCompositor->MakeCurrent(aForce);
-  }
-
-  ShaderProgramOGL* GetBasicLayerProgram(bool aOpaque, bool aIsRGB,
-                                         MaskType aMask = MaskNone)
-  {
-    return mCompositor->GetBasicLayerProgram(aOpaque, aIsRGB, aMask);
-  }
-
-  ShaderProgramOGL* GetProgram(gl::ShaderProgramType aType,
-                               Layer* aMaskLayer) {
-    if (aMaskLayer)
-      return mCompositor->GetProgram(aType, Mask2d);
-    return mCompositor->GetProgram(aType, MaskNone);
-  }
-
-  ShaderProgramOGL* GetProgram(gl::ShaderProgramType aType,
-                               MaskType aMask = MaskNone) {
-    return mCompositor->GetProgram(aType, aMask);
-  }
-
-  ShaderProgramOGL* GetFBOLayerProgram(MaskType aMask = MaskNone) {
-    return GetProgram(GetFBOLayerProgramType(), aMask);
-  }
-
-  gl::ShaderProgramType GetFBOLayerProgramType() {
-    return mCompositor->GetFBOLayerProgramType();
-  }
 
   DrawThebesLayerCallback GetThebesLayerCallback() const
   { return mThebesLayerCallback; }
@@ -210,6 +171,37 @@ public:
                          mThebesLayerCallbackData);
   }
 
+
+
+  /////////////////////////////////////
+  //TODO get rid of these once the individual layers are done
+
+  void MakeCurrent(bool aForce = false) {
+    mCompositor->MakeCurrent(aForce);
+  }
+
+  ShaderProgramOGL* GetBasicLayerProgram(bool aOpaque, bool aIsRGB,
+                                         MaskType aMask = MaskNone)
+  {
+    return mCompositor->GetBasicLayerProgram(aOpaque, aIsRGB, aMask);
+  }
+
+  ShaderProgramOGL* GetProgram(gl::ShaderProgramType aType,
+                               Layer* aMaskLayer) {
+    if (aMaskLayer)
+      return mCompositor->GetProgram(aType, Mask2d);
+    return mCompositor->GetProgram(aType, MaskNone);
+  }
+
+  ShaderProgramOGL* GetFBOLayerProgram(MaskType aMask = MaskNone) {
+    return mCompositor->GetProgram(GetFBOLayerProgramType(), aMask);
+  }
+
+  gl::ShaderProgramType GetFBOLayerProgramType() {
+    return mCompositor->GetFBOLayerProgramType();
+  }
+
+
   /**
    * Controls how to initialize the texture / FBO created by
    * CreateFBOWithTexture.
@@ -224,32 +216,17 @@ public:
     InitModeCopy
   };
 
-  //TODO[nrc] get rid of this
-  SurfaceInitMode InitModeToSurfaceInitMode(InitMode aInit)
-  {
-    switch (aInit) {
-    case InitModeNone:
-      return INIT_MODE_NONE;
-    case InitModeClear:
-      return INIT_MODE_CLEAR;
-    case InitModeCopy:
-      return INIT_MODE_COPY;
-    default:
-      return INIT_MODE_NONE;
-    }
-  }
-
   /* Create a FBO backed by a texture; will leave the FBO
    * bound.  Note that the texture target type will be
    * of the type returned by FBOTextureTarget; different
    * shaders are required to sample from the different
    * texture types.
    */
-  void CreateFBOWithTexture(const nsIntRect& aRect, InitMode aInit,
+  void CreateFBOWithTexture(const nsIntRect& aRect, SurfaceInitMode aInit,
                             GLuint aCurrentFrameBuffer,
                             GLuint *aFBO, GLuint *aTexture)
   {
-    mCompositor->CreateFBOWithTexture(gfx::IntRect(aRect.x, aRect.y, aRect.width, aRect.height), InitModeToSurfaceInitMode(aInit), aCurrentFrameBuffer, aFBO, aTexture);
+    mCompositor->CreateFBOWithTexture(gfx::IntRect(aRect.x, aRect.y, aRect.width, aRect.height), aInit, aCurrentFrameBuffer, aFBO, aTexture);
   }
 
   GLenum FBOTextureTarget() { return mCompositor->mFBOTextureTarget; }
@@ -309,14 +286,21 @@ public:
                    aWrapMode, aFlipped);
   }
 
-
-#ifdef MOZ_LAYERS_HAVE_LOG
-  virtual const char* Name() const { return "OGL"; }
-#endif // MOZ_LAYERS_HAVE_LOG
-
   const nsIntSize& GetWidgetSize() {
     return mCompositor->mWidgetSize;
   }
+
+
+
+  ///////////////////////////////
+
+
+
+
+#ifdef MOZ_LAYERS_HAVE_LOG
+  virtual const char* Name() const { return "OGL(Compositor)"; }
+#endif // MOZ_LAYERS_HAVE_LOG
+
 
   enum WorldTransforPolicy {
     ApplyWorldTransform,
@@ -327,7 +311,10 @@ public:
    * Setup the viewport and projection matrix for rendering
    * to a window of the given dimensions.
    */
-  void SetupPipeline(int aWidth, int aHeight, WorldTransforPolicy aTransformPolicy);
+  void SetupPipeline(int aWidth, int aHeight)
+  {
+    mCompositor->SetupPipeline(aWidth, aHeight, mWorldMatrix);
+  }
 
   /**
    * Setup World transform matrix.
@@ -336,7 +323,6 @@ public:
    */
   void SetWorldTransform(const gfxMatrix& aMatrix);
   gfxMatrix& GetWorldTransform(void);
-  void WorldTransformRect(nsIntRect& aRect);
 
   /**
    * Set the size of the surface we're rendering to.
@@ -350,12 +336,6 @@ public:
 
 
 private:
-  /** 
-   * Context target, NULL when drawing directly to our swap chain.
-   */
-  nsRefPtr<gfxContext> mTarget;
-
-  //TODO[nrc] comment
   RefPtr<CompositorOGL> mCompositor;
 
   /** Region we're clipping our current drawing to. */
@@ -369,10 +349,7 @@ private:
    */
   void Render();
 
-  /**
-   * Copies the content of our backbuffer to the set transaction target.
-   */
-  void CopyToTarget(gfxContext *aTarget);
+  void WorldTransformRect(nsIntRect& aRect);
 
   /* Thebes layer callbacks; valid at the end of a transaciton,
    * while rendering */

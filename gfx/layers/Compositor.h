@@ -220,6 +220,10 @@ public:
    */
   virtual bool SupportsPartialTextureUpdate() = 0;
 
+#ifdef MOZ_DUMP_PAINTING
+  virtual const char* Name() const =0;
+#endif // MOZ_DUMP_PAINTING
+
   virtual ~Compositor() {}
 };
 
