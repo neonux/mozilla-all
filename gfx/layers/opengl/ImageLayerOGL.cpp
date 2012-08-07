@@ -915,7 +915,7 @@ ShadowImageLayerOGL::RenderLayer(int aPreviousFrameBuffer,
       effect = new EffectBGRA(texture, true, gfx::ToFilter(mFilter));
       effectChain.mEffects[EFFECT_BGRA] = effect;
     } else {
-      NS_RUNTIMEABORT("Shader type not yet supported by the Compositor API");
+      NS_RUNTIMEABORT("Shader type not yet supported");
     }
 
     mTexImage->SetFilter(mFilter);
@@ -936,39 +936,44 @@ ShadowImageLayerOGL::RenderLayer(int aPreviousFrameBuffer,
     } while (mTexImage->NextTile());
   } else if (mSharedHandle) {
 
-    //TODO: Make this case use the Compositor API. To do this, we need new
-    // effects: EffectRGBA and EffectRGBAExternal.
     GLContext::SharedHandleDetails handleDetails;
     if (!gl()->GetSharedHandleDetails(mShareType, mSharedHandle, handleDetails)) {
       NS_ERROR("Failed to get shared handle details");
       return;
     }
 
-    ShaderProgramOGL* program = mOGLManager->GetProgram(handleDetails.mProgramType, GetMaskLayer());
-   
-    program->Activate();
-    program->SetLayerTransform(GetEffectiveTransform());
-    program->SetLayerOpacity(GetEffectiveOpacity());
-    program->SetRenderOffset(aOffset);
-    program->SetTextureUnit(0);
-    program->SetTextureTransform(handleDetails.mTextureTransform);
-    program->LoadMask(GetMaskLayer());
+    RefPtr<TextureOGL> texture = new TextureOGL();
+    texture->mTextureHandle = mTexture;
+    texture->mSize = gfx::IntSize(mSize.width, mSize.height);
+    if (handleDetails.mProgramType == gl::RGBALayerProgramType) {
+      effect = new EffectRGBA(texture, true, gfx::ToFilter(mFilter), mInverted);
+      effectChain.mEffects[EFFECT_RGBA] = effect;
+    } else if (handleDetails.mProgramType == gl::RGBALayerExternalProgramType) {
+      gfx::Matrix4x4 textureTransform;
+      mOGLManager->ToMatrix4x4(handleDetails.mTextureTransform, textureTransform);
+      effect = new EffectRGBAExternal(texture, textureTransform, true, gfx::ToFilter(mFilter), mInverted);
+      effectChain.mEffects[EFFECT_RGBA_EXTERNAL] = effect;
+    } else {
+      NS_RUNTIMEABORT("Shader type not yet supported");
+    }
+
+    gfx::Rect rect(0, 0, mSize.width, mSize.height);
+    gfx::Point offset(aOffset.x, aOffset.y);
 
     MakeTextureIfNeeded(gl(), mTexture);
-    gl()->fActiveTexture(LOCAL_GL_TEXTURE0);
+
+    // TODO: Call AttachSharedHandle from CompositorOGL, not here.
     gl()->fBindTexture(handleDetails.mTarget, mTexture);
-    
     if (!gl()->AttachSharedHandle(mShareType, mSharedHandle)) {
       NS_ERROR("Failed to bind shared texture handle");
       return;
     }
 
-    gl()->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
-                             LOCAL_GL_ONE, LOCAL_GL_ONE);
-    gl()->ApplyFilterToBoundTexture(mFilter);
-    program->SetLayerQuadRect(nsIntRect(nsIntPoint(0, 0), mSize));
-    mOGLManager->BindAndDrawQuad(program, mInverted);
-    gl()->fBindTexture(handleDetails.mTarget, 0);
+    mOGLManager->GetCompositor()->DrawQuad(rect, nullptr, nullptr, effectChain,
+                                           GetEffectiveOpacity(), transform,
+                                           offset);
+
+    // TODO:: Call this from CompositorOGL, not here.
     gl()->DetachSharedHandle(mShareType, mSharedHandle);
   } else {
     RefPtr<TextureOGL> textureY = new TextureOGL();

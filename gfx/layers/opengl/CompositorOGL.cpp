@@ -920,9 +920,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
     }
     BindAndDrawQuad(program);
 
-  } else if (aEffectChain.mEffects[EFFECT_BGRA] || aEffectChain.mEffects[EFFECT_BGRX] ||
-             aEffectChain.mEffects[EFFECT_RGBA] || aEffectChain.mEffects[EFFECT_RGBX] ||
-             aEffectChain.mEffects[EFFECT_RGBA_EXTERNAL]) {
+  } else if (aEffectChain.mEffects[EFFECT_BGRA] || aEffectChain.mEffects[EFFECT_BGRX]) {
     RefPtr<TextureOGL> texture;
     bool premultiplied;
     gfxPattern::GraphicsFilter filter;
@@ -945,7 +943,46 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
       flipped = effectBGRX->mFlipped;
       filter = gfx::ThebesFilter(effectBGRX->mFilter);
       program = GetProgram(gl::BGRXLayerProgramType, maskType);
-    } else if (aEffectChain.mEffects[EFFECT_RGBA]) {
+    }
+
+    if (!premultiplied) {
+      mGLContext->fBlendFuncSeparate(LOCAL_GL_SRC_ALPHA, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
+                                     LOCAL_GL_ONE, LOCAL_GL_ONE);
+    }
+
+    mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, texture->mTextureHandle);
+
+    mGLContext->ApplyFilterToBoundTexture(filter);
+
+    program->Activate();
+    program->SetTextureUnit(0);
+    program->SetLayerOpacity(aOpacity);
+    program->SetLayerTransform(aTransform);
+    program->SetRenderOffset(aOffset.x, aOffset.y);
+    program->SetLayerQuadRect(aRect);
+    if (maskType != MaskNone) {
+      mGLContext->fActiveTexture(LOCAL_GL_TEXTURE1);
+      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureMask->mTextureHandle);
+      program->SetMaskTextureUnit(1);
+      program->SetMaskLayerTransform(effectMask->mMaskTransform);
+    }
+    BindAndDrawQuadWithTextureRect(program, intSourceRect, texture->mSize, texture->mWrapMode, flipped);
+
+    if (!premultiplied) {
+      mGLContext->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
+                                     LOCAL_GL_ONE, LOCAL_GL_ONE);
+    }
+
+
+  } else if (aEffectChain.mEffects[EFFECT_RGBA] || aEffectChain.mEffects[EFFECT_RGBX] ||
+             aEffectChain.mEffects[EFFECT_RGBA_EXTERNAL]) {
+    RefPtr<TextureOGL> texture;
+    bool premultiplied;
+    gfxPattern::GraphicsFilter filter;
+    ShaderProgramOGL *program;
+    bool flipped;
+
+    if (aEffectChain.mEffects[EFFECT_RGBA]) {
       EffectRGBA* effectRGBA =
         static_cast<EffectRGBA*>(aEffectChain.mEffects[EFFECT_RGBA]);
       texture = static_cast<TextureOGL*>(effectRGBA->mRGBATexture.get());
@@ -972,14 +1009,17 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
       program->SetTextureTransform(effectRGBAExternal->mTextureTransform);
     }
 
-
-
     if (!premultiplied) {
       mGLContext->fBlendFuncSeparate(LOCAL_GL_SRC_ALPHA, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
                                      LOCAL_GL_ONE, LOCAL_GL_ONE);
     }
 
-    mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, texture->mTextureHandle);
+    if (aEffectChain.mEffects[EFFECT_RGBA_EXTERNAL]) {
+      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_EXTERNAL, texture->mTextureHandle);
+    } else {
+      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, texture->mTextureHandle);
+    }
+
     mGLContext->ApplyFilterToBoundTexture(filter);
 
     program->Activate();
@@ -994,13 +1034,16 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
       program->SetMaskTextureUnit(1);
       program->SetMaskLayerTransform(effectMask->mMaskTransform);
     }
-    BindAndDrawQuadWithTextureRect(program, intSourceRect, texture->mSize, texture->mWrapMode, flipped);
+    BindAndDrawQuad(program, flipped);
 
     if (!premultiplied) {
       mGLContext->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
                                      LOCAL_GL_ONE, LOCAL_GL_ONE);
     }
 
+    if (aEffectChain.mEffects[EFFECT_RGBA_EXTERNAL]) {
+      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_EXTERNAL, 0);
+    }
   } else if (aEffectChain.mEffects[EFFECT_YCBCR]) {
     EffectYCbCr* effectYCbCr =
       static_cast<EffectYCbCr*>(aEffectChain.mEffects[EFFECT_YCBCR]);
