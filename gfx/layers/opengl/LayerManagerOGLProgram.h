@@ -270,6 +270,11 @@ public:
       SetMatrixUniform(mProfile.LookupUniformLocation("uTextureTransform"), aMatrix);
   }
 
+  void SetTextureTransform(const gfx::Matrix4x4& aMatrix) {
+    if (mProfile.mHasTextureTransform)
+      SetMatrixUniform(mProfile.LookupUniformLocation("uTextureTransform"), aMatrix);
+  }
+
   void SetRenderOffset(const nsIntPoint& aOffset) {
     float vals[4] = { float(aOffset.x), float(aOffset.y), 0.0f, 0.0f };
     SetUniform(mProfile.LookupUniformLocation("uRenderTargetOffset"), 4, vals);

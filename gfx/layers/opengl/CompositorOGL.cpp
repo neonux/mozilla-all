@@ -920,7 +920,9 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
     }
     BindAndDrawQuad(program);
 
-  } else if (aEffectChain.mEffects[EFFECT_BGRA] || aEffectChain.mEffects[EFFECT_BGRX])  {
+  } else if (aEffectChain.mEffects[EFFECT_BGRA] || aEffectChain.mEffects[EFFECT_BGRX] ||
+             aEffectChain.mEffects[EFFECT_RGBA] || aEffectChain.mEffects[EFFECT_RGBX] ||
+             aEffectChain.mEffects[EFFECT_RGBA_EXTERNAL]) {
     RefPtr<TextureOGL> texture;
     bool premultiplied;
     gfxPattern::GraphicsFilter filter;
@@ -935,7 +937,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
       flipped = effectBGRA->mFlipped;
       filter = gfx::ThebesFilter(effectBGRA->mFilter);
       program = GetProgram(gl::BGRALayerProgramType, maskType);
-    } else {
+    } else if (aEffectChain.mEffects[EFFECT_BGRX]) {
       EffectBGRX* effectBGRX =
         static_cast<EffectBGRX*>(aEffectChain.mEffects[EFFECT_BGRX]);
       texture = static_cast<TextureOGL*>(effectBGRX->mBGRXTexture.get());
@@ -943,7 +945,34 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
       flipped = effectBGRX->mFlipped;
       filter = gfx::ThebesFilter(effectBGRX->mFilter);
       program = GetProgram(gl::BGRXLayerProgramType, maskType);
+    } else if (aEffectChain.mEffects[EFFECT_RGBA]) {
+      EffectRGBA* effectRGBA =
+        static_cast<EffectRGBA*>(aEffectChain.mEffects[EFFECT_RGBA]);
+      texture = static_cast<TextureOGL*>(effectRGBA->mRGBATexture.get());
+      premultiplied = effectRGBA->mPremultiplied;
+      flipped = effectRGBA->mFlipped;
+      filter = gfx::ThebesFilter(effectRGBA->mFilter);
+      program = GetProgram(gl::RGBALayerProgramType, maskType);
+    } else if (aEffectChain.mEffects[EFFECT_RGBX]) {
+      EffectRGBX* effectRGBX =
+        static_cast<EffectRGBX*>(aEffectChain.mEffects[EFFECT_RGBX]);
+      texture = static_cast<TextureOGL*>(effectRGBX->mRGBXTexture.get());
+      premultiplied = effectRGBX->mPremultiplied;
+      flipped = effectRGBX->mFlipped;
+      filter = gfx::ThebesFilter(effectRGBX->mFilter);
+      program = GetProgram(gl::RGBXLayerProgramType, maskType);
+    } else {
+      EffectRGBAExternal* effectRGBAExternal =
+        static_cast<EffectRGBAExternal*>(aEffectChain.mEffects[EFFECT_RGBA_EXTERNAL]);
+      texture = static_cast<TextureOGL*>(effectRGBAExternal->mRGBATexture.get());
+      premultiplied = effectRGBAExternal->mPremultiplied;
+      flipped = effectRGBAExternal->mFlipped;
+      filter = gfx::ThebesFilter(effectRGBAExternal->mFilter);
+      program = GetProgram(gl::RGBALayerExternalProgramType, maskType);
+      program->SetTextureTransform(effectRGBAExternal->mTextureTransform);
     }
+
+
 
     if (!premultiplied) {
       mGLContext->fBlendFuncSeparate(LOCAL_GL_SRC_ALPHA, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
