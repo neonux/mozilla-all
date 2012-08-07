@@ -63,7 +63,10 @@ enum SurfaceInitMode
 enum EffectTypes
 {
   EFFECT_BGRX,
+  EFFECT_RGBX,
   EFFECT_BGRA,
+  EFFECT_RGBA,
+  EFFECT_RGBA_EXTERNAL,
   EFFECT_YCBCR,
   EFFECT_COMPONENT_ALPHA,
   EFFECT_SOLID_COLOR,
@@ -117,6 +120,23 @@ struct EffectBGRX : public Effect
   bool mFlipped;
 };
 
+struct EffectRGBX : public Effect
+{
+  EffectRGBX(Texture *aRGBXTexture,
+             bool aPremultiplied,
+             mozilla::gfx::Filter aFilter,
+             bool aFlipped = false)
+    : Effect(EFFECT_RGBX), mRGBXTexture(aRGBXTexture)
+    , mPremultiplied(aPremultiplied), mFilter(aFilter)
+    , mFlipped(aFlipped)
+  {}
+
+  RefPtr<Texture> mRGBXTexture;
+  bool mPremultiplied;
+  mozilla::gfx::Filter mFilter;
+  bool mFlipped;
+};
+
 struct EffectBGRA : public Effect
 {
   EffectBGRA(Texture *aBGRATexture,
@@ -129,6 +149,42 @@ struct EffectBGRA : public Effect
   {}
 
   RefPtr<Texture> mBGRATexture;
+  bool mPremultiplied;
+  mozilla::gfx::Filter mFilter;
+  bool mFlipped;
+};
+
+struct EffectRGBA : public Effect
+{
+  EffectRGBA(Texture *aRGBATexture,
+             bool aPremultiplied,
+             mozilla::gfx::Filter aFilter,
+             bool aFlipped = false)
+    : Effect(EFFECT_RGBA), mRGBATexture(aRGBATexture)
+    , mPremultiplied(aPremultiplied), mFilter(aFilter)
+    , mFlipped(aFlipped)
+  {}
+
+  RefPtr<Texture> mRGBATexture;
+  bool mPremultiplied;
+  mozilla::gfx::Filter mFilter;
+  bool mFlipped;
+};
+
+struct EffectRGBAExternal : public Effect
+{
+  EffectRGBAExternal(Texture *aRGBATexture,
+                     const gfx::Matrix4x4 &aTextureTransform,
+                     bool aPremultiplied,
+                     mozilla::gfx::Filter aFilter,
+                     bool aFlipped = false)
+    : Effect(EFFECT_RGBA_EXTERNAL), mRGBATexture(aRGBATexture)
+    , mTextureTransform(aTextureTransform), mPremultiplied(aPremultiplied)
+    , mFilter(aFilter), mFlipped(aFlipped)
+  {}
+
+  RefPtr<Texture> mRGBATexture;
+  gfx::Matrix4x4 mTextureTransform;
   bool mPremultiplied;
   mozilla::gfx::Filter mFilter;
   bool mFlipped;
