@@ -9,7 +9,7 @@ namespace mozilla {
 namespace layers {
 
 void
-ImageTextureOGL::ImageTextureOGL(const SurfaceDescriptor& aSurface, bool aForceSingleTile)
+ImageSourceOGL::ImageSourceOGL(const SurfaceDescriptor& aSurface, bool aForceSingleTile)
 : mForceSingleTile(aForceSingleTile)
 {
   AutoOpenSurface autoSurf(OPEN_READ_ONLY, aSurface);
@@ -23,7 +23,7 @@ ImageTextureOGL::ImageTextureOGL(const SurfaceDescriptor& aSurface, bool aForceS
 }
 
 void
-ImageTextureOGL::Composite(Compositor* aCompositor,
+ImageSourceOGL::Composite(Compositor* aCompositor,
                            EffectChain& aEffectChain,
                            float aOpacity,
                            const gfx::Matrix4x4* aTransform,
@@ -61,7 +61,7 @@ ImageTextureOGL::Composite(Compositor* aCompositor,
 }
 
 void
-ImageTextureOGL::UpdateImage(const SharedImage& aImage)
+ImageSourceOGL::UpdateImage(const SharedImage& aImage)
 {
   SurfaceDescriptor surface = aNewFront.get_SurfaceDescriptor();
 
@@ -85,7 +85,7 @@ ImageTextureOGL::UpdateImage(const SharedImage& aImage)
   mTexImage->DirectUpdate(surf.Get(), updateRegion);
 }
 
-ImageTextureOGLShared::ImageTextureOGLShared(CompositorOGL* aCompositorOGL, const SharedTextureDescriptor& aTexture)
+ImageSourceOGLShared::ImageSourceOGLShared(CompositorOGL* aCompositorOGL, const SharedTextureDescriptor& aTexture)
   : mCompositorOGL(aCompositorOGL)
   , mSize(aTexture.size())
   , mSharedHandle(aTexture.handle())
@@ -95,7 +95,7 @@ ImageTextureOGLShared::ImageTextureOGLShared(CompositorOGL* aCompositorOGL, cons
 }
 
 void
-ImageTextureOGLShared::Composite(Compositor* aCompositor,
+ImageSourceOGLShared::Composite(Compositor* aCompositor,
                                  EffectChain& aEffectChain,
                                  float aOpacity,
                                  const gfx::Matrix4x4* aTransform,
@@ -140,7 +140,7 @@ ImageTextureOGLShared::Composite(Compositor* aCompositor,
 }
 
 void
-ImageTextureOGLShared::UpdateImage(const SharedImage& aImage)
+ImageSourceOGLShared::UpdateImage(const SharedImage& aImage)
 {
   SurfaceDescriptor surface = aNewFront.get_SurfaceDescriptor();
   SharedTextureDescriptor texture = surface.get_SharedTextureDescriptor();

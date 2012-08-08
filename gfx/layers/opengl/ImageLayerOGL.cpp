@@ -547,10 +547,10 @@ ImageLayerOGL::AllocateTexturesYCbCr(PlanarYCbCrImage *aImage)
   mTextureRecycleBin->GetTexture(TextureRecycleBin::TEXTURE_C, data.mCbCrSize, gl(), &backendData->mTextures[2]);
   SetClamping(gl(), backendData->mTextures[2].GetTextureID());
 
-  CompositorOGL::UploadYUVToTexture(gl(), aImage->mData,
-                                    &backendData->mTextures[0],
-                                    &backendData->mTextures[1],
-                                    &backendData->mTextures[2]);
+  UploadYUVToTexture(gl(), aImage->mData,
+                     &backendData->mTextures[0],
+                     &backendData->mTextures[1],
+                     &backendData->mTextures[2]);
 
   backendData->mYSize = aImage->mData.mYSize;
   backendData->mCbCrSize = aImage->mData.mCbCrSize;
@@ -698,7 +698,7 @@ ImageLayerOGL::LoadAsTexture(GLuint aTextureUnit, gfxIntSize* aSize)
 ShadowImageLayerOGL::ShadowImageLayerOGL(LayerManagerOGL* aManager)
   : ShadowImageLayer(aManager, nullptr)
   , LayerOGL(aManager)
-  , mImage(nullptr)
+  , mImageSource(nullptr)
 {
   mImplData = static_cast<LayerOGL*>(this);
 }
@@ -721,28 +721,28 @@ ShadowImageLayerOGL::Init(const SharedImage& aFront)
   if (aFront.type() == SharedImage::TSurfaceDescriptor) {
     SurfaceDescriptor surface = aFront.get_SurfaceDescriptor();
     if (surface.type() == SurfaceDescriptor::TSharedTextureDescriptor) {
-      if (mImage &&
-          mImage->GetType() == IMAGE_OGL_SHARED) {
+      if (mImageSource &&
+          mImageSource->GetType() == IMAGE_OGL_SHARED) {
         return false;
       }
-      mImage = new ImageTextureOGLShared(surface.get_SharedTextureDescriptor());
+      mImageSource = new ImageSourceOGLShared(static_cast<CompositorOGL*>(mOGLManager->GetCompositor()), surface.get_SharedTextureDescriptor());
       return true;
     }
 
-    if (mImage &&
-        mImage->GetType() == IMAGE_OGL) {
+    if (mImageSource &&
+        mImageSource->GetType() == IMAGE_OGL) {
       return false;
     }
-    mImage = new ImageTextureOGL(surface, mForceSingleTile);
+    mImageSource = new ImageSourceOGL(surface, mForceSingleTile);
     return true;
   }
 
   // otherwise we have a YUV texture
-  if (mImage &&
-      mImage->GetType() == IMAGE_YUV) {
+  if (mImageSource &&
+      mImageSource->GetType() == IMAGE_YUV) {
     return false;
   }
-  mImage = new YUVImageTexture<TextureOGLRaw, CompositorOGL>(aFront.get_YUVImage(), static_cast<CompositorOGL>(mOGLManager->GetCompositor()));
+  mImageSource = new YUVImageSource<TextureOGLRaw, CompositorOGL>(aFront.get_YUVImage(), static_cast<CompositorOGL*>(mOGLManager->GetCompositor()));
   return true;
 }
 
@@ -772,7 +772,7 @@ ShadowImageLayerOGL::Swap(const SharedImage& aNewFront,
     return;
   }
 
-  mImage->UpdateImage(*aNewBack);
+  mImageSource->UpdateImage(*aNewBack);
 }
 
 void
@@ -808,8 +808,8 @@ ShadowImageLayerOGL::RenderLayer(int aPreviousFrameBuffer,
     if (imgVersion != mImageVersion) {
       SharedImage* img = ImageContainerParent::GetSharedImage(mImageContainerID);
       if (img && (img->type() == SharedImage::TYUVImage)) {
-        mImage = new YUVImage<TextureOGLRaw, CompositorOGL>(img, static_cast<CompositorOGL>(mOGLManager->GetCompositor()));
-        mImage->UpdateImage(img);
+        mImageSource = new YUVImageSource<TextureOGLRaw, CompositorOGL>(img->get_YUVImage(), static_cast<CompositorOGL*>(mOGLManager->GetCompositor()));
+        mImageSource->UpdateImage(*img);
   
         mImageVersion = imgVersion;
       }
@@ -827,19 +827,19 @@ ShadowImageLayerOGL::RenderLayer(int aPreviousFrameBuffer,
   gfx::Matrix4x4 transform;
   LayerManagerOGL::ToMatrix4x4(GetEffectiveTransform(), transform);
 
-  mImage->Composite(mOGLManager->GetCompositor(),
-                    effectChain,
-                    GetEffectiveOpacity(),
-                    transform,
-                    gfx::Point(aOffset.x, aOffset.y),
-                    gfx::ToFilter(mFilter));
+  mImageSource->Composite(mOGLManager->GetCompositor(),
+                          effectChain,
+                          GetEffectiveOpacity(),
+                          &transform,
+                          gfx::Point(aOffset.x, aOffset.y),
+                          gfx::ToFilter(mFilter));
 }
 
 bool
 ShadowImageLayerOGL::LoadAsTexture(GLuint aTextureUnit, gfxIntSize* aSize)
 {
-  //TODO: mImage should be an ImageOGL and thus have the mTexImage used here
-  if (!mTexImage) {
+  //TODO: mImageSource should be an ImageOGL and thus have the mTexImage used here
+/*  if (!mTexImage) {
     return false;
   }
 
@@ -851,14 +851,14 @@ ShadowImageLayerOGL::LoadAsTexture(GLuint aTextureUnit, gfxIntSize* aSize)
   // We're assuming that the gl backend won't cheat and use NPOT
   // textures when glContext says it can't (which seems to happen
   // on a mac when you force POT textures)
-  *aSize = CalculatePOTSize(mTexImage->GetSize(), gl());
+  *aSize = CalculatePOTSize(mTexImage->GetSize(), gl());*/
   return true;
 }
 
 void
 ShadowImageLayerOGL::CleanupResources()
 {
-  mImage = nullptr;
+  mImageSource = nullptr;
 }
 
 } /* layers */

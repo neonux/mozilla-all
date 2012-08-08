@@ -179,7 +179,7 @@ private:
 
   //TODO[nrc] rename to mImage
   // maybe move to ShadowImageLayer like the image container things?
-  RefPtr<ImageTexture> mImage;
+  RefPtr<ImageSource> mImageSource;
 };
 
 } /* layers */

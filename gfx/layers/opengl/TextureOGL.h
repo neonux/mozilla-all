@@ -8,19 +8,24 @@
 
 #include "CompositorOGL.h"
 #include "TiledThebesLayerOGL.h"
+#include "ImageLayerOGL.h"
 
 namespace mozilla {
 
 namespace layers {
 
-//TODO[nrc] unbreak CompositorOGL::DrawQuad and effects now that textures are a bit more heavyweight
-// The image things should be textures and inherit from TextureOGL
-// what about UpdateTexture?
-// Not sure how the graph should look though
-// what about YUVImage?
+class ATextureOGL : public Texture
+{
+public:
+  virtual GLuint GetTextureHandle() = 0;
 
+  //TODO[nrc] will UpdateTexture work with the other kinds of textures?
+  //default = no op
+  virtual void
+    UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) {}
+};
 
-class TextureOGL : public Texture
+class TextureOGL : public ATextureOGL
 {
   // TODO: Make a better version of TextureOGL.
 public:
@@ -30,27 +35,26 @@ public:
   }
 
   //TODO[nrc] where do these get set?
-  //TODO[nrc] will UpdateTexture work with the other kinds of textures?
-
   GLenum mFormat;
   GLenum mInternalFormat;
   GLenum mType;
   PRUint32 mPixelSize;
   gfx::IntSize mSize;
-  GLuint mTextureHandle;
+  RefPtr<CompositorOGL> mCompositorOGL;
 
   virtual void
     UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) MOZ_OVERRIDE;
 
+//private:
+  GLuint mTextureHandle;
 };
 
-// TODO[nrc] move to ImageLayer ?
-class ImageTextureOGL : public Image
+class ImageSourceOGL : public ImageSource, public ATextureOGL
 {
 public:
-  ImageTextureOGL(const SurfaceDescriptor& aSurface, bool aForceSingleTile);
+  ImageSourceOGL(const SurfaceDescriptor& aSurface, bool aForceSingleTile);
 
-  virtual ImageTextureType GetType() { return IMAGE_OGL; }
+  virtual ImageSourceType GetType() { return IMAGE_OGL; }
 
   virtual void UpdateImage(const SharedImage& aImage);
 
@@ -58,10 +62,10 @@ public:
                          EffectChain& aEffectChain,
                          float aOpacity,
                          const gfx::Matrix4x4* aTransform,
-                         const nsIntPoint& aOffset,
+                         const gfx::Point& aOffset,
                          const gfx::Filter aFilter);
 
-  GLuint GetTextureHandle()
+  virtual GLuint GetTextureHandle()
   {
     return mTexImage->GetTextureID();
   }
@@ -72,17 +76,17 @@ private:
   nsRefPtr<TextureImage> mTexImage;
 };
 
-class ImageTextureOGLShared : public Image
+class ImageSourceOGLShared : public ImageSource, public ATextureOGL
 {
 public:
-  ImageTextureOGLShared(CompositorOGL* aCompositorOGL, const SharedTextureDescriptor& aTexture);
+  ImageSourceOGLShared(CompositorOGL* aCompositorOGL, const SharedTextureDescriptor& aTexture);
 
-  ~ImageTextureOGLShared()
+  ~ImageSourceOGLShared()
   {
     mCompositorOGL->gl()->ReleaseSharedHandle(mShareType, mSharedHandle);
   }
 
-  virtual ImageTextureType GetType() { return IMAGE_OGL_SHARED; }
+  virtual ImageSourceType GetType() { return IMAGE_OGL_SHARED; }
 
 
   virtual void UpdateImage(const SharedImage& aImage);
@@ -91,10 +95,10 @@ public:
                          EffectChain& aEffectChain,
                          float aOpacity,
                          const gfx::Matrix4x4* aTransform,
-                         const nsIntPoint& aOffset,
+                         const gfx::Point& aOffset,
                          const gfx::Filter aFilter);
 
-  GLuint GetTextureHandle()
+  virtual GLuint GetTextureHandle()
   {
     return mTextureHandle;
   }
@@ -109,10 +113,7 @@ private:
 };
 
 
-//TODO[nrc] not sure if this is the best place for this
-// or even if it should exist in this form
-// used for YUV textures
-class TextureOGLRaw
+class TextureOGLRaw : public ATextureOGL
 {
 public:
   ~TextureOGLRaw()
@@ -120,7 +121,7 @@ public:
     mTexture.Release();
   }
 
-  GLuint GetTextureHandle()
+  virtual GLuint GetTextureHandle()
   {
     return mTexture.GetTextureID();
   }
@@ -130,7 +131,7 @@ public:
     mSize = aSize;
 
     if (!mTexture.IsAllocated()) {
-      mTexture.Allocate(gl());
+      mTexture.Allocate(aCompositor->gl());
     }
 
     NS_ASSERTION(mTexture.IsAllocated(),
@@ -140,17 +141,19 @@ public:
     aCompositor->SetClamping(mTexture.GetTextureID());
   }
 
-  void Upload(CompositorOGL* aCompositor, gfxASurface aSurface)
+  void Upload(CompositorOGL* aCompositor, gfxASurface* aSurface)
   {
     //TODO[nrc] I don't see why we need a new image surface here, but should check
     /*nsRefPtr<gfxASurface> surf = new gfxImageSurface(aData.mYChannel,
                                                      mSize,
                                                      aData.mYStride,
                                                      gfxASurface::ImageFormatA8);*/
-    aCompositor->gl->UploadSurfaceToTexture(aSurface,
-                                            nsIntRect(0, 0, mSize.width, mSize.height),
-                                            mTexture.GetTextureID(),
-                                            true);
+    GLuint textureId = mTexture.GetTextureID();
+    aCompositor->gl()->UploadSurfaceToTexture(aSurface,
+                                              nsIntRect(0, 0, mSize.width, mSize.height),
+                                              textureId,
+                                              true);
+    NS_ASSERTION(textureId == mTexture.GetTextureID(), "texture handle id changed");
   }
 
 private:
