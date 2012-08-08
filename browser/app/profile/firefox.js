@@ -600,7 +600,11 @@ pref("plugins.update.notifyUser", false);
 
 pref("plugins.click_to_play", false);
 
+#ifdef XP_WIN
+pref("browser.preferences.instantApply", false);
+#else
 pref("browser.preferences.instantApply", true);
+#endif
 #ifdef XP_MACOSX
 pref("browser.preferences.animateFadeIn", true);
 #else
@@ -608,7 +612,7 @@ pref("browser.preferences.animateFadeIn", false);
 #endif
 
 // Toggles between the two Preferences implementations, pop-up window and in-content
-pref("browser.preferences.inContent", true);
+pref("browser.preferences.inContent", false);
 
 pref("browser.download.show_plugins_in_list", true);
 pref("browser.download.hide_plugins_without_extensions", true);

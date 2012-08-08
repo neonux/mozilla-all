@@ -8,11 +8,11 @@
  * The default namespace for this file is XUL. Be sure to prefix rules that
  * are applicable to both XUL and HTML with '*|'.
  */
-@namespace xul url("http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul");
+@namespace url("http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul");
 @namespace html url("http://www.w3.org/1999/xhtml");
 
 /* Page background */
-xul|*:root, html|html > html|body {
+*|*:root {
   -moz-appearance: none;
   padding: 18px;
   background-image: /* Texture */

@@ -128,7 +128,7 @@
       /* Style warning button to look like a small text link in the
          bottom right. This is preferable to just using a text link
          since there is already a mechanism in browser.js for trapping
-         onclick events from unprivileged chrome pages (BrowserOnClick).*/
+         oncommand events from unprivileged chrome pages (BrowserOnCommand).*/
       #ignoreWarningButton {
         -moz-appearance: none;
         background: transparent;
@@ -137,13 +137,14 @@
         text-decoration: underline;
         margin: 0;
         padding: 0;
-        font-size: 75%;
-        cursor: pointer;
-        box-shadow: none;
+        position: relative;
+        top: 23px;
+        left: 20px;
+        font-size: smaller;
       }
-
+      
       #ignoreWarning {
-        text-align: end;
+        text-align: right;
       }
     </style>
   </head>
@@ -174,12 +175,12 @@
         <!-- Action buttons -->
         <div id="buttons">
           <!-- Commands handled in browser.js -->
-          <button class="blockedSite" id="getMeOutButton">&safeb.palm.accept.label;</button>
-          <button class="blockedSite" id="reportButton">&safeb.palm.reportPage.label;</button>
+          <button id="getMeOutButton">&safeb.palm.accept.label;</button>
+          <button id="reportButton">&safeb.palm.reportPage.label;</button>
         </div>
-        <div id="ignoreWarning">
-          <button id="ignoreWarningButton">&safeb.palm.decline.label;</button>
-        </div>
+      </div>
+      <div id="ignoreWarning">
+        <button id="ignoreWarningButton">&safeb.palm.decline.label;</button>
       </div>
     </div>
     <!--

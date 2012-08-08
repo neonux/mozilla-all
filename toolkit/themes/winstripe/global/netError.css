@@ -5,34 +5,27 @@
 /*
  *  This defines the look-and-feel styling of the error pages.
  *  (see: netError.xhtml)
+ *
+ *  Original styling by William Price <bugzilla@mob.rice.edu>
+ *  Updated by: Steven Garrity <steven@silverorange.com>
+ *              Henrik Skupin  <mozilla@hskupin.info>
  */
 
-@import url("chrome://global/skin/inContentUI.css");
-
 html {
-  display: table;
-  height: 100%;
-  width: 100%;
-  font-size: medium;
+  background: -moz-Dialog;
 }
 
 body {
   margin: 0;
   padding: 0 1em;
-}
-
-html > body,
-button {
+  color: -moz-FieldText;
   font: message-box;
-  font-size: 100%; /* default: 16px; */
-  color: rgb(64,68,72);
 }
 
 h1 {
-  text-align: center;
-  font-size: 100%;
-  line-height: 2.25;
-  margin-bottom: 0;
+  margin: 0 0 .6em 0;
+  border-bottom: 1px solid ThreeDLightShadow;
+  font-size: 160%;
 }
 
 ul, ol {
@@ -42,103 +35,78 @@ ul, ol {
 }
 
 ul > li, ol > li {
-  margin-bottom: 14px;
+  margin-bottom: .5em;
+}
+
+ul {
+  list-style: square;
 }
 
 #errorPageContainer {
+  position: relative;
   min-width: 13em;
-  max-width: 36em;
+  max-width: 52em;
   margin: 4em auto;
-  border-radius: 4px;
-  background-image: url(chrome://global/skin/inContentUI/messageBox-Warning-Background.png),
-                    -moz-linear-gradient(rgb(234,236,239), rgb(226,229,233));
-  background-position: right bottom, left top;
-  background-repeat: no-repeat, repeat-x;
-  box-shadow: 0 1px 0 rgba(255,255,255,0.8) inset,
-              0 -2px 0 rgba(10,12,15,0.1) inset,
-              0 0 10px rgba(255,255,255,0.5) inset,
-              0 0 0 1px rgba(10,12,15,0.1),
-              0 2px 4px rgba(10,12,15,0.15);
+  border: 1px solid ThreeDShadow;
+  border-radius: 10px;
+  padding: 3em;
+  -moz-padding-start: 30px;
+  background: url("chrome://global/skin/icons/warning-large.png") left 0 no-repeat -moz-Field;
+  background-origin: content-box;
+}
+
+#errorPageContainer.certerror {
+  background-image: url("chrome://global/skin/icons/sslWarning.png");
 }
 
 body[dir="rtl"] #errorPageContainer {
-  background-position: left bottom, right top;
+  background-position: right 0;
 }
 
 #errorTitle {
-  background-color: rgba(255,255,255,0.4);
-  background-image: url(chrome://global/skin/inContentUI/messageBox-Header-Stripes.png);
-  background-size: auto 100%;
-  border-bottom: 2px solid;
-  -moz-border-bottom-colors: rgba(255,255,255,0.2) rgba(12,23,38,0.13);
-}
-
-.certerror > #errorTitle {
-  background-color: rgba(255,189,9,0.4);
+  -moz-margin-start: 80px;
 }
 
 #errorLongContent {
-  line-height: 1.3;
-  padding: 0 24px 24px;
+  -moz-margin-start: 80px;
 }
 
 #errorShortDesc > p {
+  overflow: auto;
+  border-bottom: 1px solid ThreeDLightShadow;
+  padding-bottom: 1em;
+  font-size: 130%;
   white-space: pre-wrap;
 }
 
 #errorLongDesc {
   -moz-padding-end: 3em;
-  font-size: 81.25%; /* default: 16px; */
+  font-size: 110%;
+}
+
+#errorLongDesc > p {
 }
 
 #errorTryAgain {
-  display: block;
-  -moz-margin-start: auto;
-  margin-top: 1px;
-  margin-bottom: 1px;
+  margin-top: 2em;
+  -moz-margin-start: 80px;
 }
 
-button {
-  -moz-appearance: none;
-  -moz-user-select: none;
-  font: message-box;
-  padding: 2px 6px;
-  background-color: hsla(210,30%,95%,.1);
-  background-image: -moz-linear-gradient(hsla(0,0%,100%,.6), hsla(0,0%,100%,.1));
-  background-clip: padding-box;
-  border: 1px solid hsla(210,15%,25%,.4);
-  border-color: hsla(210,15%,25%,.3) hsla(210,15%,25%,.35) hsla(210,15%,25%,.4);
-  border-radius: 3px;
-  box-shadow: 0 1px 0 hsla(0,0%,100%,.3) inset,
-              0 0 0 1px hsla(0,0%,100%,.3) inset,
-              0 1px 0 hsla(0,0%,100%,.1);
-  font-size: 81.25%; /* default: 16px; */
-  line-height: 1.5;
-  text-align: center;
-  -moz-transition-property: background-color, border-color, box-shadow;
-  -moz-transition-duration: 150ms;
-  -moz-transition-timing-function: ease;
+#brand {
+  position: absolute;
+  right: 0;
+  bottom: -1.5em;
+  -moz-margin-end: 10px;
+  opacity: .4;
 }
 
-button:hover {
-  background-color: hsla(210,30%,95%,.8);
-  border-color: hsla(210,15%,25%,.45) hsla(210,15%,25%,.5) hsla(210,15%,25%,.55);
-  box-shadow: 0 1px 0 hsla(0,0%,100%,.3) inset,
-              0 0 0 1px hsla(0,0%,100%,.3) inset,
-              0 1px 0 hsla(0,0%,100%,.1),
-              0 0 3px hsla(210,15%,25%,.1);
-  -moz-transition-property: background-color, border-color, box-shadow;
-  -moz-transition-duration: 150ms;
-  -moz-transition-timing-function: ease;
+body[dir="rtl"] #brand {
+  right: auto;
+  left: 0;
 }
 
-button:hover:active {
-  background-color: hsla(210,15%,25%,.2);
-  box-shadow: 0 1px 1px hsla(210,15%,25%,.2) inset,
-              0 0 2px hsla(210,15%,25%,.4) inset;
-  -moz-transition-property: background-color, border-color, box-shadow;
-  -moz-transition-duration: 10ms;
-  -moz-transition-timing-function: linear;
+#brand > p {
+  margin: 0;
 }
 
 #errorContainer {
@@ -160,68 +128,19 @@ button:hover:active {
 :root.blacklist #errorTitle, :root.blacklist #errorLongContent,
 :root.blacklist #errorShortDesc, :root.blacklist #errorLongDesc,
 :root.blacklist a {
+  background-color: #722; /* Dark red */
   color: white;
 }
 
 :root.blacklist #errorPageContainer {
-  border-radius: 2.5px;
-  background-image: url(chrome://global/skin/inContentUI/messageBox-Blocked-Background.png),
-                    -moz-linear-gradient(rgb(168,50,50), rgb(129,38,38));
-  background-position: right bottom, left top;
-  background-repeat: no-repeat, repeat-x;
-  box-shadow: 0 1px 0 hsla(40,100%,85%,.1) inset,
-              0 -2px 0 hsla(0,100%,10%,.5) inset,
-              0 0 0 1px hsla(40,100%,85%,.05) inset,
-              0 0 10px hsla(0,60%,47%,.5) inset,
-              0 0 0 1px hsla(0,0%,0%,.3),
-              0 2px 4px hsla(0,0%,0%,.3);
+  background-image: url("chrome://global/skin/icons/blacklist_large.png");
+  background-color: #722;
 }
 
-:root.blacklist[dir="rtl"] #errorPageContainer {
-  background-position: left bottom, left top;
-}
-
-:root.blacklist body {
-  background-image: url(chrome://global/skin/inContentUI/background-texture.png),
-                    -moz-linear-gradient(rgb(38,38,38), rgb(64,64,64));
-}
-
-:root.blacklist #errorTitle {
-  background-color: rgba(255,101,102,0.1);
-  -moz-border-bottom-colors: rgba(255,229,178,0.1) rgba(51,0,0,0.3);
-  color: white;
+:root.blacklist {
+  background: #333;
 }
 
 :root.blacklist #errorTryAgain {
   display: none;
-}
-
-:root.blacklist #buttons {
-  margin-top: 2em;
-  margin-bottom: 1em;
-  text-align: end;
-}
-
-:root.blacklist button {
-  color: white;
-  background-image: -moz-linear-gradient(hsla(0,100%,70%,.4), hsla(0,100%,70%,.1));
-  -moz-margin-start: 8px;
-  border: 1px solid hsla(0,100%,10%,.5);
-  box-shadow: 0 1px 0 hsla(40,100%,85%,.1) inset,
-              0 0 0 1px hsla(40,100%,85%,.1) inset,
-              0 1px 0 hsla(0,0%,0%,.05);
-}
-
-:root.blacklist button:hover {
-  background-color: hsla(0,100%,70%,.2);
-  border-color: hsla(0,100%,10%,.6);
-  box-shadow: 0 1px 0 hsla(40,100%,85%,.1) inset,
-              0 0 0 1px hsla(40,100%,85%,.1) inset,
-              0 1px 3px hsla(0,0%,0%,.1);
-}
-
-:root.blacklist button:hover:active {
-  background-color: hsla(0,100%,10%,.4);
-  box-shadow: 0 1px 1px hsla(0,100%,10%,.2) inset,
-              0 0 2px hsla(0,100%,10%,.4) inset;
 }
