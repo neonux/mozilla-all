@@ -168,6 +168,7 @@ DataOffset(PRUint32 aStride, PRUint32 aPixelSize, const nsIntPoint &aPoint)
 void
 TextureOGL::UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride)
 {
+  mCompositorOGL->gl()->fBindTexture(LOCAL_GL_TEXTURE_2D, mTextureHandle);
   if (!mCompositorOGL->SupportsPartialTextureUpdate() ||
       (aRegion.IsEqual(nsIntRect(0, 0, mSize.width, mSize.height)))) {
     mCompositorOGL->gl()->TexImage2D(LOCAL_GL_TEXTURE_2D, 0, mInternalFormat,
