@@ -4,31 +4,48 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "TextureOGL.h"
+#include "ipc/AutoOpenSurface.h"
 
 namespace mozilla {
 namespace layers {
 
-void
-ImageSourceOGL::ImageSourceOGL(const SurfaceDescriptor& aSurface, bool aForceSingleTile)
+
+static void
+MakeTextureIfNeeded(GLContext* gl, GLuint& aTexture)
+{
+  if (aTexture != 0)
+    return;
+
+  gl->fGenTextures(1, &aTexture);
+
+  gl->fBindTexture(LOCAL_GL_TEXTURE_2D, aTexture);
+
+  gl->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_MIN_FILTER, LOCAL_GL_LINEAR);
+  gl->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_MAG_FILTER, LOCAL_GL_LINEAR);
+  gl->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_WRAP_S, LOCAL_GL_CLAMP_TO_EDGE);
+  gl->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_WRAP_T, LOCAL_GL_CLAMP_TO_EDGE);
+}
+
+ImageSourceOGL::ImageSourceOGL(CompositorOGL* aCompositorOGL, const SurfaceDescriptor& aSurface, bool aForceSingleTile)
 : mForceSingleTile(aForceSingleTile)
+, ATextureOGL(aCompositorOGL)
 {
   AutoOpenSurface autoSurf(OPEN_READ_ONLY, aSurface);
   mSize = autoSurf.Size();
-  mTexImage = gl()->CreateTextureImage(nsIntSize(mSize.width, mSize.height),
-                                        autoSurf.ContentType(),
-                                        LOCAL_GL_CLAMP_TO_EDGE,
-                                        mForceSingleTile
-                                        ? TextureImage::ForceSingleTile
-                                        : TextureImage::NoFlags);
+  mTexImage = mCompositorOGL->gl()->CreateTextureImage(nsIntSize(mSize.width, mSize.height),
+                                                       autoSurf.ContentType(),
+                                                       LOCAL_GL_CLAMP_TO_EDGE,
+                                                       mForceSingleTile
+                                                       ? TextureImage::ForceSingleTile
+                                                       : TextureImage::NoFlags);
 }
 
 void
-ImageSourceOGL::Composite(Compositor* aCompositor,
-                           EffectChain& aEffectChain,
-                           float aOpacity,
-                           const gfx::Matrix4x4* aTransform,
-                           const gfx::Point& aOffset,
-                           const gfx::Filter aFilter)
+ImageSourceOGL::Composite(EffectChain& aEffectChain,
+                          float aOpacity,
+                          const gfx::Matrix4x4& aTransform,
+                          const gfx::Point& aOffset,
+                          const gfx::Filter aFilter)
 {
   NS_ASSERTION(mTexImage->GetContentType() != gfxASurface::CONTENT_ALPHA,
                "Image layer has alpha image");
@@ -36,26 +53,26 @@ ImageSourceOGL::Composite(Compositor* aCompositor,
   mWrapMode = mTexImage->GetWrapMode();
 
   if (mTexImage->GetShaderProgramType() == gl::BGRXLayerProgramType) {
-    effect = new EffectBGRX(this, true, aFilter);
+    EffectBGRX* effect = new EffectBGRX(this, true, aFilter);
     aEffectChain.mEffects[EFFECT_BGRX] = effect;
   } else if (mTexImage->GetShaderProgramType() == gl::BGRALayerProgramType) {
-    effect = new EffectBGRA(this, true, aFilter);
+    EffectBGRA* effect = new EffectBGRA(this, true, aFilter);
     aEffectChain.mEffects[EFFECT_BGRA] = effect;
   } else {
     NS_RUNTIMEABORT("Shader type not yet supported");
   }
 
-  mTexImage->SetFilter(gfx::ThebesFilter(mFilter));
+  mTexImage->SetFilter(gfx::ThebesFilter(aFilter));
   mTexImage->BeginTileIteration();
 
   do {
-    mSize = gfx::IntSize(mTexImage->GetTileRect().width,
+    mSize = nsIntSize(mTexImage->GetTileRect().width,
                          mTexImage->GetTileRect().height);
     gfx::Rect rect(mTexImage->GetTileRect().x, mTexImage->GetTileRect().y,
                    mTexImage->GetTileRect().width, mTexImage->GetTileRect().height);
     gfx::Rect sourceRect(0, 0, mTexImage->GetTileRect().width,
                          mTexImage->GetTileRect().height);
-    aCompositor->DrawQuad(rect, &sourceRect, nullptr, aEffectChain,
+    mCompositorOGL->DrawQuad(rect, &sourceRect, nullptr, aEffectChain,
                           aOpacity, aTransform, aOffset);
   } while (mTexImage->NextTile());
 }
@@ -63,7 +80,7 @@ ImageSourceOGL::Composite(Compositor* aCompositor,
 void
 ImageSourceOGL::UpdateImage(const SharedImage& aImage)
 {
-  SurfaceDescriptor surface = aNewFront.get_SurfaceDescriptor();
+  SurfaceDescriptor surface = aImage.get_SurfaceDescriptor();
 
   AutoOpenSurface surf(OPEN_READ_ONLY, surface);
   gfxIntSize size = surf.Size();
@@ -72,12 +89,12 @@ ImageSourceOGL::UpdateImage(const SharedImage& aImage)
   if (mSize != size ||
       mTexImage->GetContentType() != surf.ContentType()) {
     mSize = size;
-    mTexImage = gl()->CreateTextureImage(nsIntSize(mSize.width, mSize.height),
-                                         surf.ContentType(),
-                                         LOCAL_GL_CLAMP_TO_EDGE,
-                                         mForceSingleTile
-                                           ? TextureImage::ForceSingleTile
-                                           : TextureImage::NoFlags);
+    mTexImage = mCompositorOGL->gl()->CreateTextureImage(nsIntSize(mSize.width, mSize.height),
+                                                         surf.ContentType(),
+                                                         LOCAL_GL_CLAMP_TO_EDGE,
+                                                         mForceSingleTile
+                                                           ? TextureImage::ForceSingleTile
+                                                           : TextureImage::NoFlags);
   }
 
   // XXX this is always just ridiculously slow
@@ -86,7 +103,7 @@ ImageSourceOGL::UpdateImage(const SharedImage& aImage)
 }
 
 ImageSourceOGLShared::ImageSourceOGLShared(CompositorOGL* aCompositorOGL, const SharedTextureDescriptor& aTexture)
-  : mCompositorOGL(aCompositorOGL)
+  : ATextureOGL(aCompositorOGL)
   , mSize(aTexture.size())
   , mSharedHandle(aTexture.handle())
   , mShareType(aTexture.shareType())
@@ -95,27 +112,25 @@ ImageSourceOGLShared::ImageSourceOGLShared(CompositorOGL* aCompositorOGL, const 
 }
 
 void
-ImageSourceOGLShared::Composite(Compositor* aCompositor,
-                                 EffectChain& aEffectChain,
-                                 float aOpacity,
-                                 const gfx::Matrix4x4* aTransform,
-                                 const gfx::Point& aOffset,
-                                 const gfx::Filter aFilter)
+ImageSourceOGLShared::Composite(EffectChain& aEffectChain,
+                                float aOpacity,
+                                const gfx::Matrix4x4& aTransform,
+                                const gfx::Point& aOffset,
+                                const gfx::Filter aFilter)
 {
   GLContext::SharedHandleDetails handleDetails;
-  if (!gl()->GetSharedHandleDetails(mShareType, mSharedHandle, handleDetails)) {
+  if (!mCompositorOGL->gl()->GetSharedHandleDetails(mShareType, mSharedHandle, handleDetails)) {
     NS_ERROR("Failed to get shared handle details");
     return;
   }
 
-  mSize = gfx::IntSize(mSize.width, mSize.height);
   if (handleDetails.mProgramType == gl::RGBALayerProgramType) {
-    effect = new EffectRGBA(this, true, aFilter, mInverted);
+    EffectRGBA* effect = new EffectRGBA(this, true, aFilter, mInverted);
     aEffectChain.mEffects[EFFECT_RGBA] = effect;
   } else if (handleDetails.mProgramType == gl::RGBALayerExternalProgramType) {
     gfx::Matrix4x4 textureTransform;
     LayerManagerOGL::ToMatrix4x4(handleDetails.mTextureTransform, textureTransform);
-    effect = new EffectRGBAExternal(this, textureTransform, true, aFilter, mInverted);
+    EffectRGBAExternal* effect = new EffectRGBAExternal(this, textureTransform, true, aFilter, mInverted);
     aEffectChain.mEffects[EFFECT_RGBA_EXTERNAL] = effect;
   } else {
     NS_RUNTIMEABORT("Shader type not yet supported");
@@ -123,26 +138,26 @@ ImageSourceOGLShared::Composite(Compositor* aCompositor,
 
   gfx::Rect rect(0, 0, mSize.width, mSize.height);
 
-  MakeTextureIfNeeded(gl(), mTextureHandle);
+  MakeTextureIfNeeded(mCompositorOGL->gl(), mTextureHandle);
 
   // TODO: Call AttachSharedHandle from CompositorOGL, not here.
-  aCompositor->gl()->fBindTexture(handleDetails.mTarget, mTextureHandle);
-  if (!aCompositor->gl()->AttachSharedHandle(mShareType, mSharedHandle)) {
+  mCompositorOGL->gl()->fBindTexture(handleDetails.mTarget, mTextureHandle);
+  if (!mCompositorOGL->gl()->AttachSharedHandle(mShareType, mSharedHandle)) {
     NS_ERROR("Failed to bind shared texture handle");
     return;
   }
 
-  aCompositor->DrawQuad(rect, nullptr, nullptr, aEffectChain,
-                        aOpacity, aTransform, aOffset);
+  mCompositorOGL->DrawQuad(rect, nullptr, nullptr, aEffectChain,
+                           aOpacity, aTransform, aOffset);
 
   // TODO:: Call this from CompositorOGL, not here.
-  aCompositor->gl()->DetachSharedHandle(mShareType, mSharedHandle);
+  mCompositorOGL->gl()->DetachSharedHandle(mShareType, mSharedHandle);
 }
 
 void
 ImageSourceOGLShared::UpdateImage(const SharedImage& aImage)
 {
-  SurfaceDescriptor surface = aNewFront.get_SurfaceDescriptor();
+  SurfaceDescriptor surface = aImage.get_SurfaceDescriptor();
   SharedTextureDescriptor texture = surface.get_SharedTextureDescriptor();
 
   SharedTextureHandle newHandle = texture.handle();
@@ -150,7 +165,7 @@ ImageSourceOGLShared::UpdateImage(const SharedImage& aImage)
   mInverted = texture.inverted();
 
   if (newHandle != mSharedHandle) {
-    mCompositor->gl()->ReleaseSharedHandle(mShareType, mSharedHandle);
+    mCompositorOGL->gl()->ReleaseSharedHandle(mShareType, mSharedHandle);
     mSharedHandle = newHandle;
   }
 

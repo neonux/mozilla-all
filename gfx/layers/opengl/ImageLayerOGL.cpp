@@ -4,6 +4,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "gfxSharedImageSurface.h"
+#include "YUVImageSource.h"
 #include "mozilla/layers/ImageContainerParent.h"
 
 #include "ipc/AutoOpenSurface.h"
@@ -28,22 +29,6 @@ using namespace mozilla::gl;
 
 namespace mozilla {
 namespace layers {
-
-static void
-MakeTextureIfNeeded(GLContext* gl, GLuint& aTexture)
-{
-  if (aTexture != 0)
-    return;
-
-  gl->fGenTextures(1, &aTexture);
-
-  gl->fBindTexture(LOCAL_GL_TEXTURE_2D, aTexture);
-
-  gl->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_MIN_FILTER, LOCAL_GL_LINEAR);
-  gl->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_MAG_FILTER, LOCAL_GL_LINEAR);
-  gl->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_WRAP_S, LOCAL_GL_CLAMP_TO_EDGE);
-  gl->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_WRAP_T, LOCAL_GL_CLAMP_TO_EDGE);
-}
 
 /**
  * This is an event used to unref a GLContext on the main thread and
@@ -718,6 +703,8 @@ ShadowImageLayerOGL::Init(const SharedImage& aFront)
   // and there is a lot of code shared between here, Swap, UpdateTexture and constructors in the texture classes
   // there is some low-hanging refactor-win to be had here!
 
+  //TODO[nrc] move this to a factory method in the compositor
+
   if (aFront.type() == SharedImage::TSurfaceDescriptor) {
     SurfaceDescriptor surface = aFront.get_SurfaceDescriptor();
     if (surface.type() == SurfaceDescriptor::TSharedTextureDescriptor) {
@@ -733,7 +720,7 @@ ShadowImageLayerOGL::Init(const SharedImage& aFront)
         mImageSource->GetType() == IMAGE_OGL) {
       return false;
     }
-    mImageSource = new ImageSourceOGL(surface, mForceSingleTile);
+    mImageSource = new ImageSourceOGL(static_cast<CompositorOGL*>(mOGLManager->GetCompositor()), surface, mForceSingleTile);
     return true;
   }
 
@@ -827,10 +814,9 @@ ShadowImageLayerOGL::RenderLayer(int aPreviousFrameBuffer,
   gfx::Matrix4x4 transform;
   LayerManagerOGL::ToMatrix4x4(GetEffectiveTransform(), transform);
 
-  mImageSource->Composite(mOGLManager->GetCompositor(),
-                          effectChain,
+  mImageSource->Composite(effectChain,
                           GetEffectiveOpacity(),
-                          &transform,
+                          transform,
                           gfx::Point(aOffset.x, aOffset.y),
                           gfx::ToFilter(mFilter));
 }

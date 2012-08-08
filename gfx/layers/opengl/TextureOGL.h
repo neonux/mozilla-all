@@ -6,9 +6,8 @@
 #ifndef MOZILLA_GFX_TEXTUREOGL_H
 #define MOZILLA_GFX_TEXTUREOGL_H
 
-#include "CompositorOGL.h"
-#include "TiledThebesLayerOGL.h"
 #include "ImageLayerOGL.h"
+#include "CompositorOGL.h"
 
 namespace mozilla {
 
@@ -23,12 +22,24 @@ public:
   //default = no op
   virtual void
     UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) {}
+
+  //TODO[nrc] make protected
+  RefPtr<CompositorOGL> mCompositorOGL;
+
+protected:
+  ATextureOGL(CompositorOGL* aCompositorOGL)
+    : mCompositorOGL(aCompositorOGL)
+  {}
 };
 
 class TextureOGL : public ATextureOGL
 {
   // TODO: Make a better version of TextureOGL.
 public:
+  TextureOGL(CompositorOGL* aCompositorOGL)
+    : ATextureOGL(aCompositorOGL)
+  {}
+
   virtual GLuint GetTextureHandle()
   {
     return mTextureHandle;
@@ -38,9 +49,9 @@ public:
   GLenum mFormat;
   GLenum mInternalFormat;
   GLenum mType;
+  GLenum mWrapMode;
   PRUint32 mPixelSize;
   gfx::IntSize mSize;
-  RefPtr<CompositorOGL> mCompositorOGL;
 
   virtual void
     UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) MOZ_OVERRIDE;
@@ -52,16 +63,15 @@ public:
 class ImageSourceOGL : public ImageSource, public ATextureOGL
 {
 public:
-  ImageSourceOGL(const SurfaceDescriptor& aSurface, bool aForceSingleTile);
+  ImageSourceOGL(CompositorOGL* aCompositorOGL, const SurfaceDescriptor& aSurface, bool aForceSingleTile);
 
   virtual ImageSourceType GetType() { return IMAGE_OGL; }
 
   virtual void UpdateImage(const SharedImage& aImage);
 
-  virtual void Composite(Compositor* aCompositor,
-                         EffectChain& aEffectChain,
+  virtual void Composite(EffectChain& aEffectChain,
                          float aOpacity,
-                         const gfx::Matrix4x4* aTransform,
+                         const gfx::Matrix4x4& aTransform,
                          const gfx::Point& aOffset,
                          const gfx::Filter aFilter);
 
@@ -71,9 +81,10 @@ public:
   }
 
 private:
-  gfx::IntSize mSize;
+  nsIntSize mSize;
   GLenum mWrapMode;
   nsRefPtr<TextureImage> mTexImage;
+  bool mForceSingleTile;
 };
 
 class ImageSourceOGLShared : public ImageSource, public ATextureOGL
@@ -91,10 +102,9 @@ public:
 
   virtual void UpdateImage(const SharedImage& aImage);
 
-  virtual void Composite(Compositor* aCompositor,
-                         EffectChain& aEffectChain,
+  virtual void Composite(EffectChain& aEffectChain,
                          float aOpacity,
-                         const gfx::Matrix4x4* aTransform,
+                         const gfx::Matrix4x4& aTransform,
                          const gfx::Point& aOffset,
                          const gfx::Filter aFilter);
 
@@ -104,10 +114,9 @@ public:
   }
 
 private:
-  RefPtr<CompositorOGL> mCompositorOGL;
   bool mInverted;
   GLuint mTextureHandle;
-  gfx::IntSize mSize;
+  nsIntSize mSize;
   gl::SharedTextureHandle mSharedHandle;
   gl::TextureImage::TextureShareType mShareType;
 };
@@ -116,6 +125,10 @@ private:
 class TextureOGLRaw : public ATextureOGL
 {
 public:
+  TextureOGLRaw()
+    : ATextureOGL(nullptr)
+  {}
+
   ~TextureOGLRaw()
   {
     mTexture.Release();
@@ -126,22 +139,24 @@ public:
     return mTexture.GetTextureID();
   }
 
-  void Init(CompositorOGL* aCompositor, const gfxIntSize& aSize)
+  void Init(CompositorOGL* aCompositorOGL, const gfxIntSize& aSize)
   {
     mSize = aSize;
+    mCompositorOGL = aCompositorOGL;
+
 
     if (!mTexture.IsAllocated()) {
-      mTexture.Allocate(aCompositor->gl());
+      mTexture.Allocate(mCompositorOGL->gl());
     }
 
     NS_ASSERTION(mTexture.IsAllocated(),
                  "Texture allocation failed!");
 
-    aCompositor->gl()->MakeCurrent();
-    aCompositor->SetClamping(mTexture.GetTextureID());
+    mCompositorOGL->gl()->MakeCurrent();
+    mCompositorOGL->SetClamping(mTexture.GetTextureID());
   }
 
-  void Upload(CompositorOGL* aCompositor, gfxASurface* aSurface)
+  void Upload(gfxASurface* aSurface)
   {
     //TODO[nrc] I don't see why we need a new image surface here, but should check
     /*nsRefPtr<gfxASurface> surf = new gfxImageSurface(aData.mYChannel,
@@ -149,10 +164,10 @@ public:
                                                      aData.mYStride,
                                                      gfxASurface::ImageFormatA8);*/
     GLuint textureId = mTexture.GetTextureID();
-    aCompositor->gl()->UploadSurfaceToTexture(aSurface,
-                                              nsIntRect(0, 0, mSize.width, mSize.height),
-                                              textureId,
-                                              true);
+    mCompositorOGL->gl()->UploadSurfaceToTexture(aSurface,
+                                                 nsIntRect(0, 0, mSize.width, mSize.height),
+                                                 textureId,
+                                                 true);
     NS_ASSERTION(textureId == mTexture.GetTextureID(), "texture handle id changed");
   }
 

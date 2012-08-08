@@ -3,8 +3,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "CompositorOGL.h"
 #include "TextureOGL.h"
+#include "CompositorOGL.h"
 #include "SurfaceOGL.h"
 #include "mozilla/Preferences.h"
 
@@ -445,8 +445,7 @@ TemporaryRef<Texture>
 CompositorOGL::CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PRUint32 aStride,
                                     TextureFormat aFormat)
 {
-  RefPtr<TextureOGL> texture = new TextureOGL();
-  texture->mCompositorOGL = this;
+  RefPtr<TextureOGL> texture = new TextureOGL(this);
   texture->mSize = aSize;
   mGLContext->fGenTextures(1, &(texture->mTextureHandle)); //TODO[nrc]
   mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, texture->GetTextureHandle()); 

@@ -141,9 +141,9 @@ ThebesLayerBufferOGL::RenderTo(const nsIntPoint& aOffset,
   EffectChain effectChain;
   RefPtr<Effect> effect;
   RefPtr<Effect> effectMask;
-  RefPtr<TextureOGL> onBlack = new TextureOGL();
+  RefPtr<TextureOGL> onBlack = new TextureOGL(static_cast<CompositorOGL*>(aManager->GetCompositor()));
   onBlack->mWrapMode = mTexImage->GetWrapMode();
-  RefPtr<TextureOGL> onWhite = new TextureOGL();
+  RefPtr<TextureOGL> onWhite = new TextureOGL(static_cast<CompositorOGL*>(aManager->GetCompositor()));
   if (mTexImageOnWhite) {
     effect = new EffectComponentAlpha(onWhite, onBlack);
     effectChain.mEffects[EFFECT_COMPONENT_ALPHA] = effect;

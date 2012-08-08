@@ -6,7 +6,6 @@
 #ifndef MOZILLA_GFX_COMPOSITOR_H
 #define MOZILLA_GFX_COMPOSITOR_H
 
-#include "mozilla/layers/ImageContainerParent.h"
 #include "mozilla/RefPtr.h"
 #include "mozilla/gfx/Rect.h"
 #include "mozilla/gfx/Matrix.h"
@@ -41,6 +40,7 @@ enum ImageSourceType
 
 class Compositor;
 struct EffectChain;
+class SharedImage;
 
 class Texture : public RefCounted<Texture>
 {
@@ -63,10 +63,9 @@ public:
 
   virtual void UpdateImage(const SharedImage& aImage) = 0;
 
-  virtual void Composite(Compositor* aCompositor,
-                         EffectChain& aEffectChain,
+  virtual void Composite(EffectChain& aEffectChain,
                          float aOpacity,
-                         const gfx::Matrix4x4* aTransform,
+                         const gfx::Matrix4x4& aTransform,
                          const gfx::Point& aOffset,
                          const gfx::Filter aFilter) = 0;
 
@@ -319,65 +318,6 @@ public:
 class Factory
 {
   static TemporaryRef<Compositor> CreateCompositorForWidget(nsIWidget *aWidget);
-};
-
-//TODO[nrc] move the code out of the header file
-template <class TextureImpl, class CompositorImpl>
-class YUVImageSource : public ImageSource
-{
-public:
-  YUVImageSource(const YUVImage& aImage, CompositorImpl* aCompositor)
-  {
-    mCompositor = aCompositor;
-
-    AutoOpenSurface surfY(OPEN_READ_ONLY, aImage.Ydata());
-    AutoOpenSurface surfU(OPEN_READ_ONLY, aImage.Udata());
-
-    mTextures[0].Init(aCompositor, surfY.Size());
-    mTextures[1].Init(aCompositor, surfU.Size());
-    mTextures[2].Init(aCompositor, surfU.Size());
-  }
-
-  ~YUVImageSource();
-
-  virtual ImageSourceType GetType() { return IMAGE_YUV; }
-
-  virtual void UpdateImage(const SharedImage& aImage)
-  {
-    const YUVImage& yuv = aImage.get_YUVImage();
-    mPictureRect = yuv.picture();
-
-    AutoOpenSurface asurfY(OPEN_READ_ONLY, yuv.Ydata());
-    AutoOpenSurface asurfU(OPEN_READ_ONLY, yuv.Udata());
-    AutoOpenSurface asurfV(OPEN_READ_ONLY, yuv.Vdata());
-
-    mTextures[0].Init(mCompositor, asurfY.Size());
-    mTextures[1].Init(mCompositor, asurfU.Size());
-    mTextures[2].Init(mCompositor, asurfV.Size());
-
-    mTextures[0].Upload(mCompositor, asurfY.GetAsImage());
-    mTextures[1].Upload(mCompositor, asurfU.GetAsImage());
-    mTextures[2].Upload(mCompositor, asurfV.GetAsImage());
-  }
-
-  virtual void Composite(Compositor* aCompositor,
-                         EffectChain& aEffectChain,
-                         float aOpacity,
-                         const gfx::Matrix4x4* aTransform,
-                         const gfx::Point& aOffset,
-                         const gfx::Filter aFilter)
-  {
-    EffectYCbCr* effect = new EffectYCbCr(&mTextures[0], &mTextures[1], &mTextures[2], aFilter);
-    aEffectChain.mEffects[EFFECT_YCBCR] = effect;
-    gfx::Rect rect(0, 0, mPictureRect.width, mPictureRect.height);
-    gfx::Rect sourceRect(mPictureRect.x, mPictureRect.y, mPictureRect.width, mPictureRect.height);
-    aCompositor->DrawQuad(rect, &sourceRect, nullptr, aEffectChain, aOpacity, *aTransform, aOffset);
-  }
-
-private:
-  TextureImpl mTextures[3];
-  RefPtr<CompositorImpl> mCompositor;
-  nsIntRect mPictureRect;
 };
 
 
