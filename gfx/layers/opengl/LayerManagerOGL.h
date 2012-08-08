@@ -332,7 +332,7 @@ public:
     mCompositor->SetSurfaceSize(width, height);
   }
 
-  void ToMatrix4x4(const gfx3DMatrix &aIn, gfx::Matrix4x4 &aOut);
+  static void ToMatrix4x4(const gfx3DMatrix &aIn, gfx::Matrix4x4 &aOut);
 
 
 private:

@@ -31,10 +31,16 @@ enum TextureFormat
   TEXTUREFORMAT_Y8
 };
 
+enum ImageTextureType
+{
+  IMAGE_YUV,
+  IMAGE_OGL_SHARED,
+  IMAGE_OGL
+};
+
 class Texture : public RefCounted<Texture>
 {
 public:
-
   /* aRegion is the region of the Texture to upload to. aData is a pointer to the
    * top-left of the bound of the region to be uploaded. If the compositor that
    * created this texture does not support partial texture upload, aRegion must be
@@ -44,6 +50,80 @@ public:
     UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) = 0;
 
   virtual ~Texture() {}
+};
+
+class ImageTexture : public RefCounted<Image>
+{
+  virtual ImageTextureType GetType() = 0;
+
+  virtual void UpdateImage(const SharedImage& aImage) = 0;
+
+  virtual void Composite(Compositor* aCompositor,
+                         EffectChain& aEffectChain,
+                         float aOpacity,
+                         const gfx::Matrix4x4* aTransform,
+                         const gfx::Point& aOffset,
+                         const gfx::Filter aFilter) = 0;
+
+};
+
+//TODO[nrc] move the code out of the header file
+template <class TextureImpl, class CompositorImpl>
+class YUVImageTexture : public Image
+{
+public:
+  YUVImageTexture(const YUVImage& aImage, CompositorImpl* aCompositor)
+  {
+    mCompositor = aCompositor;
+
+    AutoOpenSurface surfY(OPEN_READ_ONLY, YUVImage.Ydata());
+    AutoOpenSurface surfU(OPEN_READ_ONLY, YUVImage.Udata());
+
+    mTextures[0].Init(aCompositor, surfY.Size());
+    mTextures[1].Init(aCompositor, surfU.Size());
+    mTextures[2].Init(aCompositor, surfU.Size());
+  }
+
+  ~YUVImageTexture();
+
+  virtual ImageTextureType GetType() { return IMAGE_YUV; }
+
+  virtual void UpdateImage(const SharedImage& aImage)
+  {
+    const YUVImage& yuv = aNewFront.get_YUVImage();
+    mPictureRect = yuv.picture();
+
+    AutoOpenSurface asurfY(OPEN_READ_ONLY, yuv.Ydata());
+    AutoOpenSurface asurfU(OPEN_READ_ONLY, yuv.Udata());
+    AutoOpenSurface asurfV(OPEN_READ_ONLY, yuv.Vdata());
+
+    mTextures[0]->Init(mCompositor, asurfY.Size());
+    mTextures[1]->Init(mCompositor, asurfU.Size());
+    mTextures[2]->Init(mCompositor, asurfV.Size());
+
+    mTextures[0]->Upload(mCompositor, asurfY.GetAsImage());
+    mTextures[1]->Upload(mCompositor, asurfU.GetAsImage());
+    mTextures[2]->Upload(mCompositor, asurfV.GetAsImage());
+  }
+
+  virtual void Composite(Compositor* aCompositor,
+                         EffectChain& aEffectChain,
+                         float aOpacity,
+                         const gfx::Matrix4x4* aTransform,
+                         const gfx::Point& aOffset,
+                         const gfx::Filter aFilter)
+  {
+    effect = new EffectYCbCr(mTextures[0], mTextures[1], mTextures[2], aFilter);
+    aEffectChain.mEffects[EFFECT_YCBCR] = effect;
+    gfx::Rect rect(0, 0, mPictureRect.width, mPictureRect.height);
+    gfx::Rect sourceRect(mPictureRect.x, mPictureRect.y, mPictureRect.width, mPictureRect.height);
+    aCompositor->DrawQuad(rect, &sourceRect, nullptr, aEffectChain, aOpacity, aTransform, aOffset);
+  }
+
+private:
+  TextureImpl mTextures[3]
+  RefPtr<CompositorImpl> mCompositor
+  nsIntRect mPictureRect;
 };
 
 /* This can be used as an offscreen rendering target by the compositor, and

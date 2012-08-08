@@ -329,7 +329,7 @@ LayerManagerOGL::CreateShadowRefLayer()
   return nsRefPtr<ShadowRefLayerOGL>(new ShadowRefLayerOGL(this)).forget();
 }
 
-void
+/* static */ void
 LayerManagerOGL::ToMatrix4x4(const gfx3DMatrix &aIn, gfx::Matrix4x4 &aOut)
 {
   aOut._11 = aIn._11;
