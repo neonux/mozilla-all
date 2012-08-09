@@ -18,26 +18,45 @@ class ATextureOGL : public Texture
 public:
   virtual GLuint GetTextureHandle() = 0;
 
+  gfx::IntSize GetSize()
+  {
+    return mSize;
+  }
+
+
+  GLenum GetWrapMode()
+  {
+    return mWrapMode;
+  }
+
   //TODO[nrc] will UpdateTexture work with the other kinds of textures?
   //default = no op
   virtual void
     UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) {}
 
-  //TODO[nrc] make protected
-  RefPtr<CompositorOGL> mCompositorOGL;
-
 protected:
   ATextureOGL(CompositorOGL* aCompositorOGL)
     : mCompositorOGL(aCompositorOGL)
+    , mWrapMode(LOCAL_GL_REPEAT)
   {}
+
+  ATextureOGL(CompositorOGL* aCompositorOGL, gfx::IntSize aSize)
+    : mCompositorOGL(aCompositorOGL)
+    , mWrapMode(LOCAL_GL_REPEAT)
+    , mSize(aSize)
+  {}
+
+  RefPtr<CompositorOGL> mCompositorOGL;
+  gfx::IntSize mSize;
+  GLenum mWrapMode;
 };
 
 class TextureOGL : public ATextureOGL
 {
-  // TODO: Make a better version of TextureOGL.
 public:
-  TextureOGL(CompositorOGL* aCompositorOGL)
-    : ATextureOGL(aCompositorOGL)
+  TextureOGL(CompositorOGL* aCompositorOGL, GLuint aTextureHandle, const gfx::IntSize& aSize)
+    : ATextureOGL(aCompositorOGL, aSize)
+    , mTextureHandle(aTextureHandle)
   {}
 
   virtual GLuint GetTextureHandle()
@@ -45,27 +64,36 @@ public:
     return mTextureHandle;
   }
 
-  //TODO[nrc] where do these get set?
-  GLenum mFormat;
-  GLenum mInternalFormat;
-  GLenum mType;
-  GLenum mWrapMode;
-  PRUint32 mPixelSize;
-  gfx::IntSize mSize;
 
   virtual void
     UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) MOZ_OVERRIDE;
+  void UpdateTexture(PRInt8 *aData, PRUint32 aStride);
 
-//private:
+  void SetProperties(GLenum aFormat,
+                     GLenum aInternalFormat,
+                     GLenum aType,
+                     PRUint32 aPixelSize)
+  {
+    mFormat = aFormat;
+    mInternalFormat = aInternalFormat;
+    mType = aType;
+    mPixelSize = aPixelSize;
+  }
+
+private:
   GLuint mTextureHandle;
+  GLenum mFormat;
+  GLenum mInternalFormat;
+  GLenum mType;
+  PRUint32 mPixelSize;
 };
 
 class ImageSourceOGL : public ImageSource, public ATextureOGL
 {
 public:
-  ImageSourceOGL(CompositorOGL* aCompositorOGL, const SurfaceDescriptor& aSurface, bool aForceSingleTile);
+  ImageSourceOGL(CompositorOGL* aCompositorOGL);
 
-  virtual ImageSourceType GetType() { return IMAGE_OGL; }
+  virtual ImageSourceType GetType() { return IMAGE_TEXTURE; }
 
   virtual void UpdateImage(const SharedImage& aImage);
 
@@ -75,14 +103,25 @@ public:
                          const gfx::Point& aOffset,
                          const gfx::Filter aFilter);
 
+  virtual void BindTexture(GLuint aTextureUnit)
+  {
+    mTexImage->BindTextureAndApplyFilter(aTextureUnit);
+
+    NS_ASSERTION(mTexImage->GetContentType() == gfxASurface::CONTENT_ALPHA,
+                 "OpenGL mask layers must be backed by alpha surfaces");
+  }
+
   virtual GLuint GetTextureHandle()
   {
     return mTexImage->GetTextureID();
   }
 
+  void SetForceSingleTile(bool aForceSingleTile)
+  {
+    mForceSingleTile = aForceSingleTile;
+  }
+
 private:
-  nsIntSize mSize;
-  GLenum mWrapMode;
   nsRefPtr<TextureImage> mTexImage;
   bool mForceSingleTile;
 };
@@ -90,14 +129,14 @@ private:
 class ImageSourceOGLShared : public ImageSource, public ATextureOGL
 {
 public:
-  ImageSourceOGLShared(CompositorOGL* aCompositorOGL, const SharedTextureDescriptor& aTexture);
+  ImageSourceOGLShared(CompositorOGL* aCompositorOGL);
 
   ~ImageSourceOGLShared()
   {
     mCompositorOGL->gl()->ReleaseSharedHandle(mShareType, mSharedHandle);
   }
 
-  virtual ImageSourceType GetType() { return IMAGE_OGL_SHARED; }
+  virtual ImageSourceType GetType() { return IMAGE_SHARED; }
 
 
   virtual void UpdateImage(const SharedImage& aImage);
@@ -116,7 +155,6 @@ public:
 private:
   bool mInverted;
   GLuint mTextureHandle;
-  nsIntSize mSize;
   gl::SharedTextureHandle mSharedHandle;
   gl::TextureImage::TextureShareType mShareType;
 };
@@ -139,21 +177,21 @@ public:
     return mTexture.GetTextureID();
   }
 
-  void Init(CompositorOGL* aCompositorOGL, const gfxIntSize& aSize)
+  void Ensure(CompositorOGL* aCompositorOGL, const gfxIntSize& aSize)
   {
-    mSize = aSize;
+    mSize = gfx::IntSize(aSize.width, aSize.height);
     mCompositorOGL = aCompositorOGL;
 
 
     if (!mTexture.IsAllocated()) {
       mTexture.Allocate(mCompositorOGL->gl());
+
+      NS_ASSERTION(mTexture.IsAllocated(),
+                   "Texture allocation failed!");
+
+      mCompositorOGL->gl()->MakeCurrent();
+      mCompositorOGL->SetClamping(mTexture.GetTextureID());
     }
-
-    NS_ASSERTION(mTexture.IsAllocated(),
-                 "Texture allocation failed!");
-
-    mCompositorOGL->gl()->MakeCurrent();
-    mCompositorOGL->SetClamping(mTexture.GetTextureID());
   }
 
   void Upload(gfxASurface* aSurface)
@@ -173,7 +211,6 @@ public:
 
 private:
   GLTexture mTexture;
-  gfxIntSize mSize;
 };
 
 

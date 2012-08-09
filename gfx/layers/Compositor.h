@@ -23,6 +23,10 @@ class DrawTarget;
 
 namespace layers {
 
+class Compositor;
+struct EffectChain;
+class SharedImage;
+
 enum TextureFormat
 {
   TEXTUREFORMAT_BGRX32,
@@ -34,13 +38,10 @@ enum TextureFormat
 enum ImageSourceType
 {
   IMAGE_YUV,
-  IMAGE_OGL_SHARED,
-  IMAGE_OGL
+  IMAGE_SHARED,
+  IMAGE_TEXTURE
 };
 
-class Compositor;
-struct EffectChain;
-class SharedImage;
 
 class Texture : public RefCounted<Texture>
 {
@@ -69,6 +70,10 @@ public:
                          const gfx::Point& aOffset,
                          const gfx::Filter aFilter) = 0;
 
+  virtual void BindTexture(GLuint aTextureUnit)
+  {
+    NS_ERROR("BindTexture not implemented for this ImageSource");
+  }
 };
 
 
@@ -269,6 +274,12 @@ public:
   virtual TemporaryRef<Texture>
     CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PRUint32 aStride,
                          TextureFormat aFormat) = 0;
+
+  /**
+   * TODO[nrc] comment
+   */
+  virtual TemporaryRef<ImageSource> 
+    CreateImageSourceForSharedImage(ImageSourceType aType) = 0;
 
   /* This creates a Surface that can be used as a rendering target by this
    * compositor.

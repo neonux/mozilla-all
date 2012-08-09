@@ -5,6 +5,7 @@
 
 #include "TextureOGL.h"
 #include "CompositorOGL.h"
+#include "ImageSource.h"
 #include "SurfaceOGL.h"
 #include "mozilla/Preferences.h"
 
@@ -445,10 +446,12 @@ TemporaryRef<Texture>
 CompositorOGL::CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PRUint32 aStride,
                                     TextureFormat aFormat)
 {
-  RefPtr<TextureOGL> texture = new TextureOGL(this);
-  texture->mSize = aSize;
-  mGLContext->fGenTextures(1, &(texture->mTextureHandle)); //TODO[nrc]
-  mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, texture->GetTextureHandle()); 
+  GLuint textureHandle;
+  mGLContext->fGenTextures(1, &textureHandle);
+
+  RefPtr<TextureOGL> texture = new TextureOGL(this, textureHandle, aSize);
+
+  mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureHandle); 
   mGLContext->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_MIN_FILTER,
                              LOCAL_GL_LINEAR);
   mGLContext->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_MAG_FILTER,
@@ -458,40 +461,45 @@ CompositorOGL::CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PR
   mGLContext->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_WRAP_T,
                              LOCAL_GL_CLAMP_TO_EDGE);
 
-
   switch (aFormat) {
     case TEXTUREFORMAT_BGRX32:
     case TEXTUREFORMAT_BGRA32:
-      texture->mFormat = LOCAL_GL_RGBA;
-      texture->mType = LOCAL_GL_UNSIGNED_BYTE;
-      texture->mPixelSize = 4;
+      texture->SetProperties(LOCAL_GL_RGBA, LOCAL_GL_RGBA,
+                             LOCAL_GL_UNSIGNED_BYTE, 4);
       break;
     case TEXTUREFORMAT_BGR16:
-      texture->mFormat = LOCAL_GL_RGB;
-      texture->mType = LOCAL_GL_UNSIGNED_SHORT_5_6_5;
-      texture->mPixelSize = 2;
+      texture->SetProperties(LOCAL_GL_RGB, mGLContext->IsGLES2() ? LOCAL_GL_RGB : LOCAL_GL_RGBA,
+                             LOCAL_GL_UNSIGNED_SHORT_5_6_5, 2);
       break;
     case TEXTUREFORMAT_Y8:
-      texture->mFormat = LOCAL_GL_LUMINANCE;
-      texture->mType = LOCAL_GL_UNSIGNED_BYTE;
-      texture->mPixelSize = 1;
+      texture->SetProperties(LOCAL_GL_LUMINANCE, mGLContext->IsGLES2() ? LOCAL_GL_LUMINANCE : LOCAL_GL_RGBA,
+                             LOCAL_GL_UNSIGNED_BYTE, 1);
       break;
     default:
       MOZ_NOT_REACHED("aFormat is not a valid TextureFormat");
   }
 
-  if (mGLContext->IsGLES2()) {
-    texture->mInternalFormat = texture->mFormat;
-  } else {
-    texture->mInternalFormat = LOCAL_GL_RGBA;
-  }
-
-  mGLContext->TexImage2D(LOCAL_GL_TEXTURE_2D, 0, texture->mInternalFormat,
-                         aSize.width, aSize.height, aStride, texture->mPixelSize,
-                         0, texture->mFormat, texture->mType, aData);
+  texture->UpdateTexture(aData, aStride);
 
   return texture.forget();
 }
+
+TemporaryRef<ImageSource> 
+CompositorOGL::CreateImageSourceForSharedImage(ImageSourceType aType)
+{
+  switch (aType) {
+  case IMAGE_YUV:
+    return new YUVImageSource<TextureOGLRaw, CompositorOGL>(this);
+  case IMAGE_SHARED:
+    return new ImageSourceOGLShared(this);
+  case IMAGE_TEXTURE:
+    return new ImageSourceOGL(this);
+  default:
+    NS_ERROR("Unknown ImageSourceType");
+    return nullptr;
+  }
+}
+
 
 TemporaryRef<Surface>
 CompositorOGL::CreateSurface(const gfx::IntRect &aRect, SurfaceInitMode aInit)
@@ -966,8 +974,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
       program->SetMaskLayerTransform(effectMask->mMaskTransform);
     }
 
-    //TODO[nrc] texture fields
-    //BindAndDrawQuadWithTextureRect(program, intSourceRect, texture->mSize, texture->mWrapMode, flipped);
+    BindAndDrawQuadWithTextureRect(program, intSourceRect, texture->GetSize(), texture->GetWrapMode(), flipped);
 
     if (!premultiplied) {
       mGLContext->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
@@ -1077,8 +1084,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
       program->SetMaskTextureUnit(3);
       program->SetMaskLayerTransform(effectMask->mMaskTransform);
     }
-    //TODO[nrc] texture fields
-    //BindAndDrawQuadWithTextureRect(program, intSourceRect, textureY->mSize);
+    BindAndDrawQuadWithTextureRect(program, intSourceRect, textureY->GetSize());
 
   } else if (aEffectChain.mEffects[EFFECT_COMPONENT_ALPHA]) {
     EffectComponentAlpha* effectComponentAlpha =
@@ -1119,8 +1125,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
         program->SetMaskLayerTransform(effectMask->mMaskTransform);
       }
 
-      //TODO[nrc] texture fields
-      //BindAndDrawQuadWithTextureRect(program, intSourceRect, textureOnBlack->mSize, textureOnBlack->mWrapMode);
+      BindAndDrawQuadWithTextureRect(program, intSourceRect, textureOnBlack->GetSize(), textureOnBlack->GetWrapMode());
 
       mGLContext->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
                                      LOCAL_GL_ONE, LOCAL_GL_ONE);

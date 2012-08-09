@@ -26,18 +26,36 @@ MakeTextureIfNeeded(GLContext* gl, GLuint& aTexture)
   gl->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_WRAP_T, LOCAL_GL_CLAMP_TO_EDGE);
 }
 
-ImageSourceOGL::ImageSourceOGL(CompositorOGL* aCompositorOGL, const SurfaceDescriptor& aSurface, bool aForceSingleTile)
-: mForceSingleTile(aForceSingleTile)
-, ATextureOGL(aCompositorOGL)
+ImageSourceOGL::ImageSourceOGL(CompositorOGL* aCompositorOGL)
+  : ATextureOGL(aCompositorOGL)
+  , mForceSingleTile(false)
 {
-  AutoOpenSurface autoSurf(OPEN_READ_ONLY, aSurface);
-  mSize = autoSurf.Size();
-  mTexImage = mCompositorOGL->gl()->CreateTextureImage(nsIntSize(mSize.width, mSize.height),
-                                                       autoSurf.ContentType(),
-                                                       LOCAL_GL_CLAMP_TO_EDGE,
-                                                       mForceSingleTile
-                                                       ? TextureImage::ForceSingleTile
-                                                       : TextureImage::NoFlags);
+}
+
+void
+ImageSourceOGL::UpdateImage(const SharedImage& aImage)
+{
+  SurfaceDescriptor surface = aImage.get_SurfaceDescriptor();
+
+  AutoOpenSurface surf(OPEN_READ_ONLY, surface);
+  nsIntSize size = surf.Size();
+
+  NS_ASSERTION(mTexImage, "mTextImage should never be null");
+  if (!mTexImage ||
+      mSize != size ||
+      mTexImage->GetContentType() != surf.ContentType()) {
+    mSize = gfx::IntSize(size.width, size.height);
+    mTexImage = mCompositorOGL->gl()->CreateTextureImage(size,
+                                                         surf.ContentType(),
+                                                         LOCAL_GL_CLAMP_TO_EDGE,
+                                                         mForceSingleTile
+                                                           ? TextureImage::ForceSingleTile
+                                                           : TextureImage::NoFlags);
+  }
+
+  // XXX this is always just ridiculously slow
+  nsIntRegion updateRegion(nsIntRect(0, 0, size.width, size.height));
+  mTexImage->DirectUpdate(surf.Get(), updateRegion);
 }
 
 void
@@ -66,48 +84,19 @@ ImageSourceOGL::Composite(EffectChain& aEffectChain,
   mTexImage->BeginTileIteration();
 
   do {
-    mSize = nsIntSize(mTexImage->GetTileRect().width,
+    mSize = gfx::IntSize(mTexImage->GetTileRect().width,
                          mTexImage->GetTileRect().height);
     gfx::Rect rect(mTexImage->GetTileRect().x, mTexImage->GetTileRect().y,
                    mTexImage->GetTileRect().width, mTexImage->GetTileRect().height);
     gfx::Rect sourceRect(0, 0, mTexImage->GetTileRect().width,
                          mTexImage->GetTileRect().height);
     mCompositorOGL->DrawQuad(rect, &sourceRect, nullptr, aEffectChain,
-                          aOpacity, aTransform, aOffset);
+                             aOpacity, aTransform, aOffset);
   } while (mTexImage->NextTile());
 }
 
-void
-ImageSourceOGL::UpdateImage(const SharedImage& aImage)
-{
-  SurfaceDescriptor surface = aImage.get_SurfaceDescriptor();
-
-  AutoOpenSurface surf(OPEN_READ_ONLY, surface);
-  gfxIntSize size = surf.Size();
-
-  NS_ASSERTION(mTexImage, "mTextImage should never be null");
-  if (mSize != size ||
-      mTexImage->GetContentType() != surf.ContentType()) {
-    mSize = size;
-    mTexImage = mCompositorOGL->gl()->CreateTextureImage(nsIntSize(mSize.width, mSize.height),
-                                                         surf.ContentType(),
-                                                         LOCAL_GL_CLAMP_TO_EDGE,
-                                                         mForceSingleTile
-                                                           ? TextureImage::ForceSingleTile
-                                                           : TextureImage::NoFlags);
-  }
-
-  // XXX this is always just ridiculously slow
-  nsIntRegion updateRegion(nsIntRect(0, 0, size.width, size.height));
-  mTexImage->DirectUpdate(surf.Get(), updateRegion);
-}
-
-ImageSourceOGLShared::ImageSourceOGLShared(CompositorOGL* aCompositorOGL, const SharedTextureDescriptor& aTexture)
+ImageSourceOGLShared::ImageSourceOGLShared(CompositorOGL* aCompositorOGL)
   : ATextureOGL(aCompositorOGL)
-  , mSize(aTexture.size())
-  , mSharedHandle(aTexture.handle())
-  , mShareType(aTexture.shareType())
-  , mInverted(aTexture.inverted())
 {
 }
 
@@ -141,6 +130,7 @@ ImageSourceOGLShared::Composite(EffectChain& aEffectChain,
   MakeTextureIfNeeded(mCompositorOGL->gl(), mTextureHandle);
 
   // TODO: Call AttachSharedHandle from CompositorOGL, not here.
+  // ajuma: I think it is OK from here, concrete textures need to be backend specific, right?
   mCompositorOGL->gl()->fBindTexture(handleDetails.mTarget, mTextureHandle);
   if (!mCompositorOGL->gl()->AttachSharedHandle(mShareType, mSharedHandle)) {
     NS_ERROR("Failed to bind shared texture handle");
@@ -161,15 +151,16 @@ ImageSourceOGLShared::UpdateImage(const SharedImage& aImage)
   SharedTextureDescriptor texture = surface.get_SharedTextureDescriptor();
 
   SharedTextureHandle newHandle = texture.handle();
-  mSize = texture.size();
+  nsIntSize size = texture.size();
+  mSize = gfx::IntSize(size.width, size.height);
   mInverted = texture.inverted();
-
-  if (newHandle != mSharedHandle) {
-    mCompositorOGL->gl()->ReleaseSharedHandle(mShareType, mSharedHandle);
-    mSharedHandle = newHandle;
-  }
-
   mShareType = texture.shareType();
+
+  if (mSharedHandle &&
+      newHandle != mSharedHandle) {
+    mCompositorOGL->gl()->ReleaseSharedHandle(mShareType, mSharedHandle);
+  }
+  mSharedHandle = newHandle;
 }
 
 static PRUint32
@@ -178,6 +169,15 @@ DataOffset(PRUint32 aStride, PRUint32 aPixelSize, const nsIntPoint &aPoint)
   unsigned int data = aPoint.y * aStride;
   data += aPoint.x * aPixelSize;
   return data;
+}
+
+void
+TextureOGL::UpdateTexture(PRInt8 *aData, PRUint32 aStride)
+{
+  mCompositorOGL->gl()->fBindTexture(LOCAL_GL_TEXTURE_2D, mTextureHandle);
+  mCompositorOGL->gl()->TexImage2D(LOCAL_GL_TEXTURE_2D, 0, mInternalFormat,
+                                   mSize.width, mSize.height, aStride, mPixelSize,
+                                   0, mFormat, mType, aData);
 }
 
 void

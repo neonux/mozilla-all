@@ -4,7 +4,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "gfxSharedImageSurface.h"
-#include "YUVImageSource.h"
 #include "mozilla/layers/ImageContainerParent.h"
 
 #include "ipc/AutoOpenSurface.h"
@@ -691,46 +690,21 @@ ShadowImageLayerOGL::ShadowImageLayerOGL(LayerManagerOGL* aManager)
 ShadowImageLayerOGL::~ShadowImageLayerOGL()
 {}
 
-//TODO[nrc] comment on return value
-bool
-ShadowImageLayerOGL::Init(const SharedImage& aFront)
+void
+ShadowImageLayerOGL::EnsureImageSource(const SharedImage& aFront)
 {
-  //TODO[nrc] still working out the invariant for calling this, and probably want to change the name to EnsureTexture or something
-  //for now: should only call if we will use a texture, not an image container
-  //         will try not to re-init where possible
-
-  //TODO[nrc] it seems that we go to a lot of effort here just to avoid creating some new objects
-  // and there is a lot of code shared between here, Swap, UpdateTexture and constructors in the texture classes
-  // there is some low-hanging refactor-win to be had here!
-
-  //TODO[nrc] move this to a factory method in the compositor
-
-  if (aFront.type() == SharedImage::TSurfaceDescriptor) {
-    SurfaceDescriptor surface = aFront.get_SurfaceDescriptor();
-    if (surface.type() == SurfaceDescriptor::TSharedTextureDescriptor) {
-      if (mImageSource &&
-          mImageSource->GetType() == IMAGE_OGL_SHARED) {
-        return false;
-      }
-      mImageSource = new ImageSourceOGLShared(static_cast<CompositorOGL*>(mOGLManager->GetCompositor()), surface.get_SharedTextureDescriptor());
-      return true;
-    }
-
-    if (mImageSource &&
-        mImageSource->GetType() == IMAGE_OGL) {
-      return false;
-    }
-    mImageSource = new ImageSourceOGL(static_cast<CompositorOGL*>(mOGLManager->GetCompositor()), surface, mForceSingleTile);
-    return true;
-  }
-
-  // otherwise we have a YUV texture
+  ImageSourceType type = ImageSourceTypeForSharedImage(aFront);
   if (mImageSource &&
-      mImageSource->GetType() == IMAGE_YUV) {
-    return false;
+      mImageSource->GetType() == type) {
+    return;
   }
-  mImageSource = new YUVImageSource<TextureOGLRaw, CompositorOGL>(aFront.get_YUVImage(), static_cast<CompositorOGL*>(mOGLManager->GetCompositor()));
-  return true;
+
+  mImageSource = mManager->GetCompositor()->CreateImageSourceForSharedImage(type);
+
+  // TODO: YUCK! Everything else about ImageSource can be moved up to ShadowImageLayer
+  if (type == IMAGE_TEXTURE) {
+    static_cast<ImageSourceOGL*>(mImageSource.get())->SetForceSingleTile(mForceSingleTile);
+  }
 }
 
 void
@@ -755,9 +729,7 @@ ShadowImageLayerOGL::Swap(const SharedImage& aNewFront,
     return;
   }
 
-  if (Init(*aNewBack)) {
-    return;
-  }
+  EnsureImageSource(*aNewBack);
 
   mImageSource->UpdateImage(*aNewBack);
 }
@@ -805,7 +777,6 @@ ShadowImageLayerOGL::RenderLayer(int aPreviousFrameBuffer,
     }
   }
 
-  // TODO: Fix texture handling.
   // TODO: Handle mask layers.
   EffectChain effectChain;
   RefPtr<Effect> effect;
@@ -824,20 +795,17 @@ ShadowImageLayerOGL::RenderLayer(int aPreviousFrameBuffer,
 bool
 ShadowImageLayerOGL::LoadAsTexture(GLuint aTextureUnit, gfxIntSize* aSize)
 {
-  //TODO: mImageSource should be an ImageOGL and thus have the mTexImage used here
-/*  if (!mTexImage) {
+  //TODO nrc wonders if there is a better way of doing this? Keep a reference to the ImageSource in the effect maybe?
+  if (!mImageSource) {
     return false;
   }
 
-  mTexImage->BindTextureAndApplyFilter(aTextureUnit);
-
-  NS_ASSERTION(mTexImage->GetContentType() == gfxASurface::CONTENT_ALPHA,
-               "OpenGL mask layers must be backed by alpha surfaces");
+  mImageSource->BindTexture(aTextureUnit);
 
   // We're assuming that the gl backend won't cheat and use NPOT
   // textures when glContext says it can't (which seems to happen
   // on a mac when you force POT textures)
-  *aSize = CalculatePOTSize(mTexImage->GetSize(), gl());*/
+  *aSize = CalculatePOTSize(mImageSource->GetSize(), gl());
   return true;
 }
 

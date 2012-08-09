@@ -175,10 +175,10 @@ public:
   virtual void CleanupResources();
 
 private:
-  bool Init(const SharedImage& aFront);
+  void EnsureImageSource(const SharedImage& aFront);
 
-  //TODO[nrc] rename to mImage
-  // maybe move to ShadowImageLayer like the image container things?
+  // ImageSource, a ShadowImageLayer should use only one of the ImageSource
+  // or ImageBridge mechanisms at one time
   RefPtr<ImageSource> mImageSource;
 };
 

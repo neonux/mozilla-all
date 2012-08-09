@@ -44,6 +44,10 @@ public:
     CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PRUint32 aStride,
                          TextureFormat aFormat) MOZ_OVERRIDE;
 
+  virtual TemporaryRef<ImageSource> 
+    CreateImageSourceForSharedImage(ImageSourceType aType) MOZ_OVERRIDE;
+
+
   virtual TemporaryRef<Surface> CreateSurface(const gfx::IntRect &aRect,
                                               SurfaceInitMode aInit) MOZ_OVERRIDE;
 
