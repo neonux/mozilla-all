@@ -15,6 +15,10 @@
 class gfxContext;
 class nsIWidget;
 
+namespace base {
+class ProcessHandle;
+}
+
 namespace mozilla {
 
 namespace gfx {
@@ -33,6 +37,26 @@ enum TextureFormat
   TEXTUREFORMAT_BGRA32,
   TEXTUREFORMAT_BGR16,
   TEXTUREFORMAT_Y8
+};
+
+enum TextureHostType
+{
+  HOST_SHMEM,
+  HOST_D3D10,
+  HOST_GL
+};
+
+struct TextureHostIdentifier
+{
+  TextureHostType mType;
+  void *mDescriptor;
+  gfx::IntSize mMaxTextureSize;
+};
+
+struct TextureIdentifier
+{
+  TextureHostType mType;
+  void *mDescriptor;
 };
 
 enum ImageSourceType
@@ -74,6 +98,54 @@ public:
   {
     NS_ERROR("BindTexture not implemented for this ImageSource");
   }
+};
+
+class DrawableTextureHost : public Texture
+{
+  /* This will return an identifier that can be sent accross a process or
+   * thread boundary and used to construct a DrawableTextureClient object
+   * which can then be used for rendering. If the process is identical to the
+   * current process this may return the same object and will only be thread
+   * safe.
+   */
+  virtual TextureIdentifier GetIdentifierForProcess(base::ProcessHandle* aProcess) = 0;
+
+  /* Perform any precomputation (e.g. texture upload) that needs to happen to the
+   * texture before rendering.
+   */
+  virtual void PrepareForRendering() = 0;
+};
+
+/* This class allows texture clients to draw into textures through Azure or
+ * thebes and applies locking semantics to allow GPU or CPU level
+ * synchronization.
+ */
+class DrawableTextureClient
+{
+  /* This will return an identifier that can be sent accross a process or
+   * thread boundary and used to construct a DrawableTextureHost object
+   * which can then be used as a texture for rendering by a compatible
+   * compositor. This texture should have been created with the
+   * TextureHostIdentifier specified by the compositor that this identifier
+   * is to be used with. If the process is identical to the current process
+   * this may return the same object and will only be thread safe.
+   */
+  virtual TextureIdentifier GetIdentifierForProcess(base::ProcessHandle* aProcess) = 0;
+
+  /* This requests a DrawTarget to draw into the current texture. Once the
+   * user is finished with the DrawTarget it should call Unlock.
+   */
+  virtual TemporaryRef<gfx::DrawTarget> LockDT() = 0;
+
+  /* This requests a gfxContext to draw into the current texture. Once the
+   * user is finished with the gfxContext it should call Unlock.
+   */
+  virtual already_AddRefed<gfxContext> LockContext() = 0;
+
+  /* This unlocks the current DrawableTexture and allows the host to composite
+   * it directly.
+   */
+  virtual void Unlock() = 0;
 };
 
 
@@ -268,12 +340,24 @@ struct EffectChain
 class Compositor : public RefCounted<Compositor>
 {
 public:
+  /* Request a texture host identifier that may be used for creating textures
+   * accross process or thread boundaries that are compatible with this
+   * compositor.
+   */
+  virtual TextureHostIdentifier
+    GetTextureHostIdentifier() = 0;
 
   /* This creates a texture based on an in-memory bitmap.
    */
   virtual TemporaryRef<Texture>
     CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PRUint32 aStride,
                          TextureFormat aFormat) = 0;
+
+  /* This creates a DrawableTexture that can be sent accross process or thread
+   * boundaries to receive its content.
+   */
+  virtual TemporaryRef<DrawableTextureHost>
+    CreateDrawableTexture(const TextureIdentifier &aIdentifier) = 0;
 
   /**
    * TODO[nrc] comment
@@ -328,6 +412,11 @@ public:
 
 class Factory
 {
+  /* This may be called by a Texture client to create a Texture which is
+   * the host whose identifier is specified.
+   */
+  static TemporaryRef<DrawableTextureClient> CreateTextureClient(const TextureHostIdentifier &aIdentifier);
+
   static TemporaryRef<Compositor> CreateCompositorForWidget(nsIWidget *aWidget);
 };
 
