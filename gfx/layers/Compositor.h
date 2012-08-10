@@ -16,7 +16,7 @@ class gfxContext;
 class nsIWidget;
 
 namespace base {
-class ProcessHandle;
+typedef pid_t ProcessHandle;
 }
 
 namespace mozilla {
@@ -94,6 +94,8 @@ public:
                          const gfx::Point& aOffset,
                          const gfx::Filter aFilter) = 0;
 
+  // TODO: GLuints don't belong in Compositor.h.
+  typedef unsigned int GLuint;
   virtual void BindTexture(GLuint aTextureUnit)
   {
     NS_ERROR("BindTexture not implemented for this ImageSource");

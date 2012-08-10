@@ -6,6 +6,7 @@
 #include "gfxSharedImageSurface.h"
 #include "mozilla/layers/ImageContainerParent.h"
 
+#include "ImageSource.h"
 #include "ipc/AutoOpenSurface.h"
 #include "ImageLayerOGL.h"
 #include "gfxImageSurface.h"
@@ -699,7 +700,7 @@ ShadowImageLayerOGL::EnsureImageSource(const SharedImage& aFront)
     return;
   }
 
-  mImageSource = mManager->GetCompositor()->CreateImageSourceForSharedImage(type);
+  mImageSource = mOGLManager->GetCompositor()->CreateImageSourceForSharedImage(type);
 
   // TODO: YUCK! Everything else about ImageSource can be moved up to ShadowImageLayer
   if (type == IMAGE_TEXTURE) {
@@ -767,7 +768,10 @@ ShadowImageLayerOGL::RenderLayer(int aPreviousFrameBuffer,
     if (imgVersion != mImageVersion) {
       SharedImage* img = ImageContainerParent::GetSharedImage(mImageContainerID);
       if (img && (img->type() == SharedImage::TYUVImage)) {
-        mImageSource = new YUVImageSource<TextureOGLRaw, CompositorOGL>(img->get_YUVImage(), static_cast<CompositorOGL*>(mOGLManager->GetCompositor()));
+        // TODO: Fix this call or implement the corresponding constructor.
+        /*
+        mImageSource = new YUVImageSource<TextureOGLRaw, CompositorOGL>(img->get_YUVImage(), static_cast<CompositorOGL*>(mOGLManager->GetCompositor())); */
+        NS_RUNTIMEABORT("Please fix me!");
         mImageSource->UpdateImage(*img);
   
         mImageVersion = imgVersion;
@@ -805,7 +809,11 @@ ShadowImageLayerOGL::LoadAsTexture(GLuint aTextureUnit, gfxIntSize* aSize)
   // We're assuming that the gl backend won't cheat and use NPOT
   // textures when glContext says it can't (which seems to happen
   // on a mac when you force POT textures)
+  // TODO: Fix this call or implement ImageSource::GetSize.
+  /*
   *aSize = CalculatePOTSize(mImageSource->GetSize(), gl());
+  */
+  NS_RUNTIMEABORT("Please fix me.");
   return true;
 }
 
