@@ -16,6 +16,7 @@
 #include "mozilla/layers/CompositorChild.h"
 #include "mozilla/layers/PLayersChild.h"
 #include "mozilla/layout/RenderFrameChild.h"
+#include "Compositor.h"
 #include "nsComponentManagerUtils.h"
 #include "nsComponentManagerUtils.h"
 #include "nsContentUtils.h"
@@ -1013,7 +1014,7 @@ TabChild::RecvDestroy()
 PRenderFrameChild*
 TabChild::AllocPRenderFrame(ScrollingBehavior* aScrolling,
                             LayersBackend* aBackend,
-                            int32_t* aMaxTextureSize,
+                            TextureHostIdentifier* aTextureHostIdentifier,
                             uint64_t* aLayersId)
 {
     return new RenderFrameChild();
@@ -1082,10 +1083,10 @@ TabChild::InitWidget(const nsIntSize& size)
 
     LayersBackend be;
     uint64_t id;
-    int32_t maxTextureSize;
+    TextureHostIdentifier textureHostIdentifier;
     RenderFrameChild* remoteFrame =
         static_cast<RenderFrameChild*>(SendPRenderFrameConstructor(
-                                           &mScrolling, &be, &maxTextureSize, &id));
+                                           &mScrolling, &be, &textureHostIdentifier, &id));
     if (!remoteFrame) {
       NS_WARNING("failed to construct RenderFrame");
       return false;
@@ -1098,7 +1099,7 @@ TabChild::InitWidget(const nsIntSize& size)
         shadowManager =
             CompositorChild::Get()->SendPLayersConstructor(be, id,
                                                            &be,
-                                                           &maxTextureSize);
+                                                           &textureHostIdentifier);
     } else {
         // Pushing transactions to the parent content.
         shadowManager = remoteFrame->SendPLayersConstructor();
@@ -1116,7 +1117,7 @@ TabChild::InitWidget(const nsIntSize& size)
     NS_ABORT_IF_FALSE(lf && lf->HasShadowManager(),
                       "PuppetWidget should have shadow manager");
     lf->SetParentBackendType(be);
-    lf->SetMaxTextureSize(maxTextureSize);
+    lf->IdentifyTextureHost(textureHostIdentifier);
 
     mRemoteFrame = remoteFrame;
     return true;

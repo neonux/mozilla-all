@@ -152,7 +152,7 @@ protected:
   virtual PLayersParent* AllocPLayers(const LayersBackend& aBackendHint,
                                       const uint64_t& aId,
                                       LayersBackend* aBackend,
-                                      int32_t* aMaxTextureSize);
+                                      TextureHostIdentifier* aTextureHostIdentifier);
   virtual bool DeallocPLayers(PLayersParent* aLayers);
   virtual void ScheduleTask(CancelableTask*, int);
   virtual void Composite();

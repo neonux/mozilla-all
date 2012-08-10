@@ -12,6 +12,7 @@
 #include "GLDefs.h"
 
 #include "ImageLayers.h"
+#include "Compositor.h"
 #include "mozilla/ipc/SharedMemory.h"
 #include "mozilla/WidgetUtils.h"
 
@@ -314,7 +315,24 @@ public:
   void SetIsFirstPaint() { mIsFirstPaint = true; }
 
   virtual PRInt32 GetMaxTextureSize() const { return mMaxTextureSize; }
-  void SetMaxTextureSize(PRInt32 aMaxTextureSize) { mMaxTextureSize = aMaxTextureSize; }
+
+  void IdentifyTextureHost(const TextureHostIdentifier& aIdentifier)
+  {
+    mMaxTextureSize = aIdentifier.mMaxTextureSize;
+    mTextureHostType = aIdentifier.mType;
+  }
+
+  //TODO[nrc] comment, move out of header file
+  TemporaryRef<DrawableTextureClient> CreateTextureClientFor(const ImageSourceType& aImageSourceType, ShadowableLayer* aLayer)
+  {
+    RefPtr client = Factory::CreateTextureClient(mTextureHostType, aImageSourceType);
+
+    //TODO[nrc] send client's id and type (not aImageSourceType) to Compositor
+    TextureIdentifier textureId = client->GetIdentifier();
+    mTxn->AddEdit(OpCreateTextureHost(aLayer, textureId));
+
+    return client.forget();
+  }
 
 protected:
   ShadowLayerForwarder();
@@ -380,6 +398,7 @@ private:
 
   Transaction* mTxn;
   PRInt32 mMaxTextureSize;
+  TextureHostType mTextureHostType;
   LayersBackend mParentBackend;
 
   bool mIsFirstPaint;

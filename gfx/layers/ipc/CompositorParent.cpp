@@ -751,7 +751,7 @@ PLayersParent*
 CompositorParent::AllocPLayers(const LayersBackend& aBackendHint,
                                const uint64_t& aId,
                                LayersBackend* aBackend,
-                               int32_t* aMaxTextureSize)
+                               TextureHostIdentifier* aTextureHostIdentifier)
 {
   MOZ_ASSERT(aId == 0);
 
@@ -784,7 +784,7 @@ CompositorParent::AllocPLayers(const LayersBackend& aBackendHint,
     if (!slm) {
       return NULL;
     }
-    *aMaxTextureSize = layerManager->GetMaxTextureSize();
+    *aTextureHostIdentifier = layerManager->GetTextureHostIdentifier();
     return new ShadowLayersParent(slm, this, 0);
   } else if (aBackendHint == mozilla::layers::LAYERS_BASIC) {
     nsRefPtr<LayerManager> layerManager = new BasicShadowLayerManager(mWidget);
@@ -794,7 +794,7 @@ CompositorParent::AllocPLayers(const LayersBackend& aBackendHint,
     if (!slm) {
       return NULL;
     }
-    *aMaxTextureSize = layerManager->GetMaxTextureSize();
+    *aTextureHostIdentifier = layerManager->GetTextureHostIdentifier();
     return new ShadowLayersParent(slm, this, 0);
   } else {
     NS_ERROR("Unsupported backend selected for Async Compositor");
@@ -935,7 +935,7 @@ public:
   virtual PLayersParent* AllocPLayers(const LayersBackend& aBackendType,
                                       const uint64_t& aId,
                                       LayersBackend* aBackend,
-                                      int32_t* aMaxTextureSize) MOZ_OVERRIDE;
+                                      TextureHostIdentifier* aTextureHostIdentifier) MOZ_OVERRIDE;
   virtual bool DeallocPLayers(PLayersParent* aLayers) MOZ_OVERRIDE;
 
   virtual void ShadowLayersUpdated(ShadowLayersParent* aLayerTree,
@@ -1019,13 +1019,13 @@ PLayersParent*
 CrossProcessCompositorParent::AllocPLayers(const LayersBackend& aBackendType,
                                            const uint64_t& aId,
                                            LayersBackend* aBackend,
-                                           int32_t* aMaxTextureSize)
+                                           TextureHostIdentifier* aTextureHostIdentifier)
 {
   MOZ_ASSERT(aId != 0);
 
   nsRefPtr<LayerManager> lm = sCurrentCompositor->GetLayerManager();
   *aBackend = lm->GetBackendType();
-  *aMaxTextureSize = lm->GetMaxTextureSize();
+  *aTextureHostIdentifier = lm->GetTextureHostIdentifier();
   return new ShadowLayersParent(lm->AsShadowManager(), this, aId);
 }
  

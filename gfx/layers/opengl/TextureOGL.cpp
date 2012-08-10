@@ -101,6 +101,25 @@ ImageSourceOGLShared::ImageSourceOGLShared(CompositorOGL* aCompositorOGL)
 }
 
 void
+ImageSourceOGLShared::UpdateImage(const SharedImage& aImage)
+{
+  SurfaceDescriptor surface = aImage.get_SurfaceDescriptor();
+  SharedTextureDescriptor texture = surface.get_SharedTextureDescriptor();
+
+  SharedTextureHandle newHandle = texture.handle();
+  nsIntSize size = texture.size();
+  mSize = gfx::IntSize(size.width, size.height);
+  mInverted = texture.inverted();
+  mShareType = texture.shareType();
+
+  if (mSharedHandle &&
+      newHandle != mSharedHandle) {
+    mCompositorOGL->gl()->ReleaseSharedHandle(mShareType, mSharedHandle);
+  }
+  mSharedHandle = newHandle;
+}
+
+void
 ImageSourceOGLShared::Composite(EffectChain& aEffectChain,
                                 float aOpacity,
                                 const gfx::Matrix4x4& aTransform,
@@ -142,25 +161,6 @@ ImageSourceOGLShared::Composite(EffectChain& aEffectChain,
 
   // TODO:: Call this from CompositorOGL, not here.
   mCompositorOGL->gl()->DetachSharedHandle(mShareType, mSharedHandle);
-}
-
-void
-ImageSourceOGLShared::UpdateImage(const SharedImage& aImage)
-{
-  SurfaceDescriptor surface = aImage.get_SurfaceDescriptor();
-  SharedTextureDescriptor texture = surface.get_SharedTextureDescriptor();
-
-  SharedTextureHandle newHandle = texture.handle();
-  nsIntSize size = texture.size();
-  mSize = gfx::IntSize(size.width, size.height);
-  mInverted = texture.inverted();
-  mShareType = texture.shareType();
-
-  if (mSharedHandle &&
-      newHandle != mSharedHandle) {
-    mCompositorOGL->gl()->ReleaseSharedHandle(mShareType, mSharedHandle);
-  }
-  mSharedHandle = newHandle;
 }
 
 static PRUint32

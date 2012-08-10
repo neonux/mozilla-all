@@ -14,6 +14,7 @@ include protocol POfflineCacheUpdate;
 include protocol PIndexedDB;
 
 include "gfxMatrix.h";
+include "Compositor.h";
 include "IPC/nsGUIEventIPC.h";
 include "mozilla/dom/TabMessageUtils.h";
 include "mozilla/layout/RenderFrameUtils.h";
@@ -23,6 +24,7 @@ using IPC::URI;
 using gfxMatrix;
 using gfxSize;
 using mozilla::layers::LayersBackend;
+using mozilla::layers::TextureHostIdentifier;
 using mozilla::layout::ScrollingBehavior;
 using mozilla::WindowsHandle;
 using nscolor;
@@ -182,7 +184,7 @@ parent:
      */
     sync PRenderFrame()
         returns (ScrollingBehavior scrolling,
-                 LayersBackend backend, int32_t maxTextureSize, uint64_t layersId);
+                 LayersBackend backend, TextureHostIdentifier textureHostIdentifier, uint64_t layersId);
 
     /** 
      * Starts an offline application cache update.

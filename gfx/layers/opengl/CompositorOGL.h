@@ -40,6 +40,22 @@ public:
 
   void Destroy();
 
+  //TODO[nrc]
+  virtual TemporaryRef<TextureHost>
+    CreateTextureHost(const TextureIdentifier &aIdentifier)
+  {
+    return nullptr;
+  }
+
+  virtual TextureHostIdentifier GetTextureHostIdentifier()
+  {
+    TextureHostIdentifier result;
+    result.mType = HOST_OGL;
+    result.mMaxTextureSize = mGLContext->GetMaxTextureSize();
+    return result;
+  }
+
+
   virtual TemporaryRef<Texture>
     CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PRUint32 aStride,
                          TextureFormat aFormat) MOZ_OVERRIDE;
@@ -77,7 +93,6 @@ public:
       PRInt32 maxSize = mGLContext->GetMaxTextureSize();
       return aSize <= gfxIntSize(maxSize, maxSize);
   }
-
 
   virtual PRInt32 GetMaxTextureSize() const
   {

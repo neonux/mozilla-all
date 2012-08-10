@@ -15,9 +15,10 @@
 class gfxContext;
 class nsIWidget;
 
-namespace base {
+//TODO[nrc]
+/*namespace base {
 class ProcessHandle;
-}
+}*/
 
 namespace mozilla {
 
@@ -39,31 +40,39 @@ enum TextureFormat
   TEXTUREFORMAT_Y8
 };
 
-enum TextureHostType
-{
-  HOST_SHMEM,
-  HOST_D3D10,
-  HOST_GL
-};
-
-struct TextureHostIdentifier
-{
-  TextureHostType mType;
-  void *mDescriptor;
-  gfx::IntSize mMaxTextureSize;
-};
-
-struct TextureIdentifier
-{
-  TextureHostType mType;
-  void *mDescriptor;
-};
 
 enum ImageSourceType
 {
-  IMAGE_YUV,
+  IMAGE_YUV, //TODO[nrc] do we need backend texture info? I don't think so, should be covered by TextureHostType (maybe)
   IMAGE_SHARED,
-  IMAGE_TEXTURE
+  IMAGE_TEXTURE,
+  IMAGE_SHMEM
+};
+
+//TODO[nrc] should ImageSourceType be part of TextureHostType? No, but we need both or something?
+//maybe TextureType - one of GL, D3D19, etc. used with IMAGE_TEXTURE, IMAGE_YUV
+
+enum TextureHostType
+{
+  HOST_D3D10,
+  HOST_GL,
+  HOST_SHMEM  //[nrc] for software composition
+};
+
+//TODO[nrc] comment
+// goes Compositor to ShadowLayerForwarder on LayerManager init
+struct TextureHostIdentifier
+{
+  TextureHostType mType;
+  PRInt32 mMaxTextureSize;
+};
+
+//TODO[nrc] comment
+// goes LayerManager to Compositor on TextureClient creation
+struct TextureIdentifier
+{
+  ImageSourceType mType;
+  void *mDescriptor;
 };
 
 
@@ -81,6 +90,7 @@ public:
   virtual ~Texture() {}
 };
 
+//TODO[nrc] merge with TextureHost
 class ImageSource : public RefCounted<ImageSource>
 {
 public:
@@ -94,13 +104,14 @@ public:
                          const gfx::Point& aOffset,
                          const gfx::Filter aFilter) = 0;
 
+  //TODO[nrc] fix the dependency on GL stuff!
   virtual void BindTexture(GLuint aTextureUnit)
   {
     NS_ERROR("BindTexture not implemented for this ImageSource");
   }
 };
 
-class DrawableTextureHost : public Texture
+class TextureHost : public Texture
 {
   /* This will return an identifier that can be sent accross a process or
    * thread boundary and used to construct a DrawableTextureClient object
@@ -108,7 +119,7 @@ class DrawableTextureHost : public Texture
    * current process this may return the same object and will only be thread
    * safe.
    */
-  virtual TextureIdentifier GetIdentifierForProcess(base::ProcessHandle* aProcess) = 0;
+  virtual TextureIdentifier GetIdentifierForProcess(/*base::ProcessHandle* aProcess*/) = 0; //TODO[nrc]
 
   /* Perform any precomputation (e.g. texture upload) that needs to happen to the
    * texture before rendering.
@@ -120,7 +131,7 @@ class DrawableTextureHost : public Texture
  * thebes and applies locking semantics to allow GPU or CPU level
  * synchronization.
  */
-class DrawableTextureClient
+class TextureClient
 {
   /* This will return an identifier that can be sent accross a process or
    * thread boundary and used to construct a DrawableTextureHost object
@@ -130,7 +141,10 @@ class DrawableTextureClient
    * is to be used with. If the process is identical to the current process
    * this may return the same object and will only be thread safe.
    */
-  virtual TextureIdentifier GetIdentifierForProcess(base::ProcessHandle* aProcess) = 0;
+  virtual TextureIdentifier GetIdentifierForProcess(/*base::ProcessHandle* aProcess*/) = 0; //TODO[nrc]
+
+  //TODO[nrc] will this even work?
+  virtual TextureIdentifier GetIdentifier() = 0;
 
   /* This requests a DrawTarget to draw into the current texture. Once the
    * user is finished with the DrawTarget it should call Unlock.
@@ -353,14 +367,14 @@ public:
     CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PRUint32 aStride,
                          TextureFormat aFormat) = 0;
 
-  /* This creates a DrawableTexture that can be sent accross process or thread
-   * boundaries to receive its content.
-   */
-  virtual TemporaryRef<DrawableTextureHost>
-    CreateDrawableTexture(const TextureIdentifier &aIdentifier) = 0;
-
   /**
    * TODO[nrc] comment
+   */
+  virtual TemporaryRef<TextureHost>
+    CreateTextureHost(const TextureIdentifier &aIdentifier) = 0;
+
+  /**
+   * TODO[nrc] comment, name
    */
   virtual TemporaryRef<ImageSource> 
     CreateImageSourceForSharedImage(ImageSourceType aType) = 0;
@@ -412,10 +426,8 @@ public:
 
 class Factory
 {
-  /* This may be called by a Texture client to create a Texture which is
-   * the host whose identifier is specified.
-   */
-  static TemporaryRef<DrawableTextureClient> CreateTextureClient(const TextureHostIdentifier &aIdentifier);
+  // TODO[nrc] comment
+  static TemporaryRef<TextureClient> CreateTextureClient(const TextureHostType &aHostType, const ImageSourceType& aImageSourceType);
 
   static TemporaryRef<Compositor> CreateCompositorForWidget(nsIWidget *aWidget);
 };

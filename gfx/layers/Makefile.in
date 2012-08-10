@@ -67,6 +67,7 @@ CPPSRCS = \
         ContainerLayerOGL.cpp \
         ImageLayerOGL.cpp \
         LayerManagerOGL.cpp \
+        TextureClient.cpp \
         TextureOGL.cpp \
         ThebesLayerOGL.cpp \
         TiledThebesLayerOGL.cpp \

@@ -21,6 +21,7 @@
 #include "mozilla/Preferences.h"
 #include "BasicLayers.h"
 #include "LayerManagerOGL.h"
+#include "Compositor.h"
 #include "nsIXULRuntime.h"
 #include "nsIGfxInfo.h"
 #include "npapi.h"
@@ -877,13 +878,13 @@ void nsBaseWidget::CreateCompositor()
   AsyncChannel *parentChannel = mCompositorParent->GetIPCChannel();
   AsyncChannel::Side childSide = mozilla::ipc::AsyncChannel::Child;
   mCompositorChild->Open(parentChannel, childMessageLoop, childSide);
-  PRInt32 maxTextureSize;
+  TextureHostIdentifier textureHostIdentifier;
   PLayersChild* shadowManager;
   mozilla::layers::LayersBackend backendHint =
     mUseAcceleratedRendering ? mozilla::layers::LAYERS_OPENGL : mozilla::layers::LAYERS_BASIC;
   mozilla::layers::LayersBackend parentBackend;
   shadowManager = mCompositorChild->SendPLayersConstructor(
-    backendHint, 0, &parentBackend, &maxTextureSize);
+    backendHint, 0, &parentBackend, &textureHostIdentifier);
 
   if (shadowManager) {
     ShadowLayerForwarder* lf = lm->AsShadowForwarder();
@@ -894,7 +895,7 @@ void nsBaseWidget::CreateCompositor()
     }
     lf->SetShadowManager(shadowManager);
     lf->SetParentBackendType(parentBackend);
-    lf->SetMaxTextureSize(maxTextureSize);
+    lf->IdentifyTextureHost(textureHostIdentifier);
 
     mLayerManager = lm;
   } else {

@@ -355,6 +355,22 @@ public:
 
   virtual bool CanUseCanvasLayerForSize(const gfxIntSize &aSize) { return true; }
 
+  //TODO[nrc] comment
+  virtual void CreateTextureHostFor(Layer* aLayer,
+                                    const TextureIdentifier& aTextureIdentifier)
+  {
+    //TODO[nrc]
+    NS_ERROR("THis should have been overridden TODO[nrc]");
+  }
+
+  //TODO[nrc] comment
+  virtual TextureHostIdentifier GetTextureHostIdentifier()
+  {
+    //TODO[nrc]
+    NS_ERROR("THis should have been overridden TODO[nrc]");
+    return TextureHostIdentifier;
+  }
+
   /**
    * returns the maximum texture size on this layer backend, or PR_INT32_MAX
    * if there is no maximum

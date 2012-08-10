@@ -7,6 +7,7 @@
 
 include LayersSurfaces;
 using mozilla::ScreenRotation;
+using mozilla::layers::TextureIdentifier;
 include protocol PCompositor;
 include protocol PGrallocBuffer;
 include protocol PLayer;
@@ -14,6 +15,7 @@ include protocol PRenderFrame;
 
 include "gfxipc/ShadowLayerUtils.h";
 include "mozilla/WidgetUtils.h";
+include "Compositor.h";
 
 /**
  * The layers protocol is spoken between thread contexts that manage
@@ -98,6 +100,10 @@ struct OpSetLayerAttributes {
   LayerAttributes attrs;
 };
 
+struct OpCreateTextureHost {
+  PLayer layer;
+  TextureIdentifier textureIdentifier;
+};
 
 // Monkey with the tree structure
 struct OpSetRoot      { PLayer root; };
@@ -142,6 +148,8 @@ union Edit {
   OpCreateRefLayer;
 
   OpSetLayerAttributes;
+
+  OpCreateTextureHost;
 
   OpSetRoot;
   OpInsertAfter;

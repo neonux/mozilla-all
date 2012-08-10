@@ -122,6 +122,18 @@ public:
     return mCompositor->CanUseCanvasLayerForSize(aSize);
   }
 
+  virtual void CreateTextureHostFor(Layer* aLayer, const TextureIdentifier& aTextureIdentifier)
+  {
+    RefPtr<TextureHost> textureHost = mCompositor->CreateTextureHost(aTextureIdentifier);
+
+    //TODO[nrc] what the hell do I do with it now? something on aLayer
+  }
+
+  virtual TextureHostIdentifier GetTextureHostIdentifier()
+  {
+    return mCompositor->GetTextureHostIdentifier();
+  }
+
   virtual PRInt32 GetMaxTextureSize() const
   {
     return mCompositor->GetMaxTextureSize();

@@ -44,6 +44,18 @@ AsShadowLayer(const OpCreateT& op)
 }
 
 static ShadowLayerParent*
+AsShadowLayer(const OpInsertAfter& op)
+{
+  return cast(op.layerParent());
+}
+static TextureIdentifier*
+AsTextureId(const OpInsertAfter& op)
+{
+  return const_cast<TextureIdentifier*>(
+    static_cast<const TextureIdentifier*>(op.textureIdentifierParent));
+}
+
+static ShadowLayerParent*
 AsShadowLayer(const OpSetRoot& op)
 {
   return cast(op.rootParent());
@@ -287,6 +299,18 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       default:
         NS_RUNTIMEABORT("not reached");
       }
+      break;
+    }
+
+    case Edit::TOpCreateTextureHost: {
+      MOZ_LAYERS_LOG(("[ParentSide] CreateTextureHost"));
+
+      const OpCreateTextureHost& op = edit.get_OpCreateTextureHost();
+      ShadowLayerParent* shadow = AsShadowLayer(op);
+      ShadowLayer* layer = static_cast<ShadowLayer*>(shadow->AsLayer());
+      TextureIdentifier* textureId = AsTextureId(op);
+      layer_manager()->CreateTextureHostFor(layer, textureId);
+
       break;
     }
 

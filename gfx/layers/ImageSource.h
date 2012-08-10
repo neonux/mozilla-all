@@ -62,6 +62,7 @@ private:
   nsIntRect mPictureRect;
 };
 
+//TODO[nrc] we should be able to get rid of this - the ImageSource should be pulled out of the compositor
 static ImageSourceType
 ImageSourceTypeForSharedImage(const SharedImage& aImage)
 {
