@@ -768,10 +768,7 @@ ShadowImageLayerOGL::RenderLayer(int aPreviousFrameBuffer,
     if (imgVersion != mImageVersion) {
       SharedImage* img = ImageContainerParent::GetSharedImage(mImageContainerID);
       if (img && (img->type() == SharedImage::TYUVImage)) {
-        // TODO: Fix this call or implement the corresponding constructor.
-        /*
-        mImageSource = new YUVImageSource<TextureOGLRaw, CompositorOGL>(img->get_YUVImage(), static_cast<CompositorOGL*>(mOGLManager->GetCompositor())); */
-        NS_RUNTIMEABORT("Please fix me!");
+        mImageSource = mOGLManager->GetCompositor()->CreateImageSourceForSharedImage(IMAGE_YUV);
         mImageSource->UpdateImage(*img);
   
         mImageVersion = imgVersion;
@@ -809,11 +806,9 @@ ShadowImageLayerOGL::LoadAsTexture(GLuint aTextureUnit, gfxIntSize* aSize)
   // We're assuming that the gl backend won't cheat and use NPOT
   // textures when glContext says it can't (which seems to happen
   // on a mac when you force POT textures)
-  // TODO: Fix this call or implement ImageSource::GetSize.
-  /*
-  *aSize = CalculatePOTSize(mImageSource->GetSize(), gl());
-  */
-  NS_RUNTIMEABORT("Please fix me.");
+  //TODO[nrc] this is fixed on the other branch, so just commenting out for now, uncomment
+  // when we merge.
+  //aSize = CalculatePOTSize(mImageSource->GetSize(), gl());
   return true;
 }
 

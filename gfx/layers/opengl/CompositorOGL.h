@@ -92,7 +92,8 @@ public:
   /**
    * Set the size of the EGL surface we're rendering to.
    */
-  void SetSurfaceSize(int width, int height);
+  //TODO: implement this
+  void SetSurfaceSize(int width, int height) {}
 
   GLContext* gl() const { return mGLContext; }
 

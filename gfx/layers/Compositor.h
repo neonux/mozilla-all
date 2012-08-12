@@ -12,11 +12,21 @@
 #include "nsAutoPtr.h"
 #include "nsRegion.h"
 
+//TODO: I'm pretty sure we don't want to do this
+//this is just for the definition of HANDLE, used to typedef ProcessHandle
+#ifdef OS_WIN
+#include <windows.h>
+#endif
+
 class gfxContext;
 class nsIWidget;
 
 namespace base {
+#if defined(OS_WIN)
+typedef HANDLE ProcessHandle;
+#elif defined(OS_POSIX)
 typedef pid_t ProcessHandle;
+#endif
 }
 
 namespace mozilla {
@@ -377,7 +387,7 @@ public:
    * and initializes this surface by copying from the given surface.
    */
   virtual TemporaryRef<Surface> CreateSurfaceFromSurface(const gfx::IntRect &aRect,
-                                                         const Surface *aSource);
+                                                         const Surface *aSource) = 0;
 
   /* Sets the given surface as the target for subsequent calls to DrawQuad.
    */
@@ -399,14 +409,14 @@ public:
 
   /* Flush the current frame to the screen.
    */
-  virtual void EndFrame();
+  virtual void EndFrame() = 0;
 
   /* Whether textures created by this compositor can receive partial updates.
    */
   virtual bool SupportsPartialTextureUpdate() = 0;
 
 #ifdef MOZ_DUMP_PAINTING
-  virtual const char* Name() const =0;
+  virtual const char* Name() const = 0;
 #endif // MOZ_DUMP_PAINTING
 
   virtual ~Compositor() {}
