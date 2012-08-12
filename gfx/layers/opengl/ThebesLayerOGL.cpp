@@ -141,9 +141,11 @@ ThebesLayerBufferOGL::RenderTo(const nsIntPoint& aOffset,
   EffectChain effectChain;
   RefPtr<Effect> effect;
   RefPtr<Effect> effectMask;
-  RefPtr<TextureOGL> onBlack = new TextureOGL(static_cast<CompositorOGL*>(aManager->GetCompositor()));
-  onBlack->mWrapMode = mTexImage->GetWrapMode();
-  RefPtr<TextureOGL> onWhite = new TextureOGL(static_cast<CompositorOGL*>(aManager->GetCompositor()));
+  RefPtr<TextureOGL> onBlack = new TextureOGL(static_cast<CompositorOGL*>(aManager->GetCompositor()),
+                                              0, gfx::IntSize(0,0));
+  onBlack->SetWrapMode(mTexImage->GetWrapMode());
+  RefPtr<TextureOGL> onWhite = new TextureOGL(static_cast<CompositorOGL*>(aManager->GetCompositor()),
+                                              0, gfx::IntSize(0,0));
   if (mTexImageOnWhite) {
     effect = new EffectComponentAlpha(onWhite, onBlack);
     effectChain.mEffects[EFFECT_COMPONENT_ALPHA] = effect;
@@ -215,9 +217,9 @@ ThebesLayerBufferOGL::RenderTo(const nsIntPoint& aOffset,
 
     nsIntRect tileRect = mTexImage->GetTileRect();
 
-    onBlack->mTextureHandle = mTexImage->GetTextureID();
+    onBlack->SetTextureHandle(mTexImage->GetTextureID());
     if (mTexImageOnWhite) {
-      onWhite->mTextureHandle = mTexImageOnWhite->GetTextureID();
+      onWhite->SetTextureHandle(mTexImageOnWhite->GetTextureID());
     }
 
     // Draw texture. If we're using tiles, we do repeating manually, as texture
@@ -253,7 +255,7 @@ ThebesLayerBufferOGL::RenderTo(const nsIntPoint& aOffset,
                 tileRegionRect = regionRect->Intersect(currentTileRect);
                 tileRegionRect.MoveBy(-currentTileRect.TopLeft());
             }
-            onBlack->mSize = gfx::IntSize(tileRect.width, tileRect.height);
+            onBlack->SetSize(gfx::IntSize(tileRect.width, tileRect.height));
             gfx::Rect rect(tileScreenRect.x, tileScreenRect.y,
                            tileScreenRect.width, tileScreenRect.height);
             gfx::Rect sourceRect(tileRegionRect.x, tileRegionRect.y,

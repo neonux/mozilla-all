@@ -42,7 +42,7 @@ ImageSourceOGL::UpdateImage(const SharedImage& aImage)
 
   NS_ASSERTION(mTexImage, "mTextImage should never be null");
   if (!mTexImage ||
-      mSize != size ||
+      mSize != gfx::IntSize(size.width, size.height) ||
       mTexImage->GetContentType() != surf.ContentType()) {
     mSize = gfx::IntSize(size.width, size.height);
     mTexImage = mCompositorOGL->gl()->CreateTextureImage(size,
@@ -90,6 +90,7 @@ ImageSourceOGL::Composite(EffectChain& aEffectChain,
                    mTexImage->GetTileRect().width, mTexImage->GetTileRect().height);
     gfx::Rect sourceRect(0, 0, mTexImage->GetTileRect().width,
                          mTexImage->GetTileRect().height);
+    // TODO: Calls to DrawQuad shouldn't happen from GL-specific code. So this needs to be moved.
     mCompositorOGL->DrawQuad(rect, &sourceRect, nullptr, aEffectChain,
                              aOpacity, aTransform, aOffset);
   } while (mTexImage->NextTile());
@@ -156,6 +157,7 @@ ImageSourceOGLShared::Composite(EffectChain& aEffectChain,
     return;
   }
 
+  // TODO: Calls to DrawQuad shouldn't happen from GL-specific code. So this needs to be moved.
   mCompositorOGL->DrawQuad(rect, nullptr, nullptr, aEffectChain,
                            aOpacity, aTransform, aOffset);
 

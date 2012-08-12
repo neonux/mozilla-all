@@ -10,6 +10,7 @@
 #include "gfxSharedImageSurface.h"
 
 #include "CanvasLayerOGL.h"
+#include "TextureOGL.h"
 
 #include "gfxImageSurface.h"
 #include "gfxContext.h"
@@ -425,9 +426,9 @@ ShadowCanvasLayerOGL::RenderLayer(int aPreviousFrameBuffer,
       return;
     }
 
-    RefPtr<TextureOGL> texture = new TextureOGL();
-    texture->mTextureHandle = mTexture;
-    texture->mSize = gfx::IntSize(texDescriptor.size().width, texDescriptor.size().height);
+    RefPtr<TextureOGL> texture = new TextureOGL(static_cast<CompositorOGL*>(mOGLManager->GetCompositor()),
+                                                mTexture,
+                                                gfx::IntSize(texDescriptor.size().width, texDescriptor.size().height));
 
     if (CanUseOpaqueSurface()) {
       effect = new EffectRGBX(texture, true, gfx::ToFilter(filter), mNeedsYFlip);
@@ -435,8 +436,6 @@ ShadowCanvasLayerOGL::RenderLayer(int aPreviousFrameBuffer,
     } else {
       effect = new EffectRGBA(texture, true, gfx::ToFilter(filter), mNeedsYFlip);
       effectChain.mEffects[EFFECT_RGBA] = effect;
-    } else {
-      NS_RUNTIMEABORT("Shader type not yet supported");
     }
 
     gfx::Rect rect(0, 0, texDescriptor.size().width, texDescriptor.size().height);
@@ -450,8 +449,9 @@ ShadowCanvasLayerOGL::RenderLayer(int aPreviousFrameBuffer,
     gl()->DetachSharedHandle(texDescriptor.shareType(), texDescriptor.handle());
     gl()->fBindTexture(LOCAL_GL_TEXTURE_2D, 0);
   } else {
-    RefPtr<TextureOGL> texture = new TextureOGL();
-    texture->mWrapMode = mTexImage->GetWrapMode();
+    RefPtr<TextureOGL> texture = new TextureOGL(static_cast<CompositorOGL*>(mOGLManager->GetCompositor()),
+                                                0, gfx::IntSize(0,0));
+    texture->SetWrapMode(mTexImage->GetWrapMode());
     if (mTexImage->GetShaderProgramType() == gl::BGRXLayerProgramType) {
       effect = new EffectBGRX(texture, true, gfx::ToFilter(mFilter), mNeedsYFlip);
       effectChain.mEffects[EFFECT_BGRX] = effect;
@@ -467,9 +467,9 @@ ShadowCanvasLayerOGL::RenderLayer(int aPreviousFrameBuffer,
     mTexImage->BeginTileIteration();
 
     do {
-      texture->mTextureHandle = mTexImage->GetTextureID();
-      texture->mSize = gfx::IntSize(mTexImage->GetTileRect().width,
-                                    mTexImage->GetTileRect().height);
+      texture->SetTextureHandle(mTexImage->GetTextureID());
+      texture->SetSize(gfx::IntSize(mTexImage->GetTileRect().width,
+                                    mTexImage->GetTileRect().height));
       gfx::Rect rect(mTexImage->GetTileRect().x, mTexImage->GetTileRect().y,
                      mTexImage->GetTileRect().width, mTexImage->GetTileRect().height);
       gfx::Rect sourceRect(0, 0, mTexImage->GetTileRect().width,

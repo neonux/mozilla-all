@@ -47,7 +47,7 @@ public:
     return nullptr;
   }
 
-  virtual TextureHostIdentifier GetTextureHostIdentifier()
+  virtual TextureHostIdentifier GetTextureHostIdentifier() MOZ_OVERRIDE;
   {
     TextureHostIdentifier result;
     result.mType = HOST_OGL;
@@ -55,10 +55,12 @@ public:
     return result;
   }
 
-
   virtual TemporaryRef<Texture>
     CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PRUint32 aStride,
                          TextureFormat aFormat) MOZ_OVERRIDE;
+
+  virtual TemporaryRef<DrawableTextureHost>
+    CreateDrawableTexture(const TextureIdentifier &aIdentifier) MOZ_OVERRIDE;
 
   virtual TemporaryRef<ImageSource> 
     CreateImageSourceForSharedImage(ImageSourceType aType) MOZ_OVERRIDE;
@@ -102,7 +104,8 @@ public:
   /**
    * Set the size of the EGL surface we're rendering to.
    */
-  void SetSurfaceSize(int width, int height);
+  //TODO: implement this
+  void SetSurfaceSize(int width, int height) {}
 
   GLContext* gl() const { return mGLContext; }
 

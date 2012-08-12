@@ -13,6 +13,19 @@ namespace mozilla {
 
 namespace layers {
 
+class DrawableTextureHostOGL : public DrawableTextureHost
+{
+  virtual TextureIdentifier GetIdentifierForProcess(base::ProcessHandle* aProcess) MOZ_OVERRIDE
+  {
+    return TextureIdentifier();
+  }
+
+  virtual void PrepareForRendering() MOZ_OVERRIDE {}
+
+  virtual void
+    UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) MOZ_OVERRIDE {}
+};
+
 class ATextureOGL : public Texture
 {
 public:
@@ -29,6 +42,11 @@ public:
     return mWrapMode;
   }
 
+  void SetWrapMode(GLenum aWrapMode)
+  {
+    mWrapMode = aWrapMode;
+  }
+
   //TODO[nrc] will UpdateTexture work with the other kinds of textures?
   //default = no op
   virtual void
@@ -42,8 +60,8 @@ protected:
 
   ATextureOGL(CompositorOGL* aCompositorOGL, gfx::IntSize aSize)
     : mCompositorOGL(aCompositorOGL)
-    , mWrapMode(LOCAL_GL_REPEAT)
     , mSize(aSize)
+    , mWrapMode(LOCAL_GL_REPEAT)
   {}
 
   RefPtr<CompositorOGL> mCompositorOGL;
@@ -64,6 +82,19 @@ public:
     return mTextureHandle;
   }
 
+  // TODO: Remove this once Textures are properly able to manage their own
+  // handles.
+  void SetTextureHandle(GLuint aTextureHandle)
+  {
+    mTextureHandle = aTextureHandle;
+  }
+
+  // TODO: Remove this once Textures are properly able to manager their own
+  // sizes.
+  void SetSize(const gfx::IntSize& aSize)
+  {
+    mSize = aSize;
+  }
 
   virtual void
     UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) MOZ_OVERRIDE;
