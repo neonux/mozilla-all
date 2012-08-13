@@ -761,8 +761,8 @@ ThebesLayerOGL::InvalidateRegion(const nsIntRegion &aRegion)
 }
 
 void
-ThebesLayerOGL::RenderLayer(int aPreviousFrameBuffer,
-                            const nsIntPoint& aOffset)
+ThebesLayerOGL::RenderLayer(const nsIntPoint& aOffset,
+                            Surface* aPreviousSurface)
 {
   if (!mBuffer && !CreateSurface()) {
     return;
@@ -816,7 +816,9 @@ ThebesLayerOGL::RenderLayer(int aPreviousFrameBuffer,
   // Drawing thebes layers can change the current context, reset it.
   gl()->MakeCurrent();
 
-  gl()->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, aPreviousFrameBuffer);
+  // We won't be supporting non-shadow-thebes layers, so commenting the next
+  // line is the simplest build fix.
+  //gl()->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, aPreviousFrameBuffer);
   mBuffer->RenderTo(aOffset, mOGLManager, flags);
 }
 
@@ -1071,19 +1073,14 @@ ShadowThebesLayerOGL::IsEmpty()
 }
 
 void
-ShadowThebesLayerOGL::RenderLayer(int aPreviousFrameBuffer,
-                                  const nsIntPoint& aOffset)
+ShadowThebesLayerOGL::RenderLayer(const nsIntPoint& aOffset,
+                                  Surface* aPreviousSurface)
 {
   if (!mBuffer) {
     return;
   }
   NS_ABORT_IF_FALSE(mBuffer, "should have a buffer here");
 
-  mOGLManager->MakeCurrent();
-
-  gl()->fActiveTexture(LOCAL_GL_TEXTURE0);
-
-  gl()->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, aPreviousFrameBuffer);
   mBuffer->RenderTo(aOffset, mOGLManager, 0);
 }
 

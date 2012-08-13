@@ -105,8 +105,8 @@ public:
   virtual Layer* GetLayer();
   virtual bool LoadAsTexture(GLuint aTextureUnit, gfxIntSize* aSize);
 
-  virtual void RenderLayer(int aPreviousFrameBuffer,
-                           const nsIntPoint& aOffset);
+  virtual void RenderLayer(const nsIntPoint& aOffset,
+                           Surface* aPreviousSurface = nullptr);
   virtual void CleanupResources() {}
 
 
@@ -169,8 +169,8 @@ public:
 
   virtual Layer* GetLayer();
 
-  virtual void RenderLayer(int aPreviousFrameBuffer,
-                           const nsIntPoint& aOffset);
+  virtual void RenderLayer(const nsIntPoint& aOffset,
+                           Surface* aPreviousSurface = nullptr);
 
   virtual void CleanupResources();
 

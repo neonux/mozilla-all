@@ -189,8 +189,7 @@ CanvasLayerOGL::UpdateSurface()
 }
 
 void
-CanvasLayerOGL::RenderLayer(int aPreviousDestination,
-                            const nsIntPoint& aOffset)
+CanvasLayerOGL::RenderLayer(const nsIntPoint& aOffset, Surface*)
 {
   UpdateSurface();
   FireDidTransactionCallback();
@@ -383,8 +382,7 @@ ShadowCanvasLayerOGL::GetLayer()
 }
 
 void
-ShadowCanvasLayerOGL::RenderLayer(int aPreviousFrameBuffer,
-                                  const nsIntPoint& aOffset)
+ShadowCanvasLayerOGL::RenderLayer(const nsIntPoint& aOffset, Surface*)
 {
   if (!mTexImage && !IsValidSharedTexDescriptor(mFrontBufferDescriptor)) {
     return;

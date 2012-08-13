@@ -30,15 +30,13 @@ RenderColorLayer(ColorLayer* aLayer, LayerManagerOGL *aManager,
 }
 
 void
-ColorLayerOGL::RenderLayer(int,
-                           const nsIntPoint& aOffset)
+ColorLayerOGL::RenderLayer(const nsIntPoint& aOffset, Surface*)
 {
   RenderColorLayer(this, mOGLManager, aOffset);
 }
 
 void
-ShadowColorLayerOGL::RenderLayer(int,
-                                 const nsIntPoint& aOffset)
+ShadowColorLayerOGL::RenderLayer(const nsIntPoint& aOffset, Surface*)
 {
   RenderColorLayer(this, mOGLManager, aOffset);
 }
