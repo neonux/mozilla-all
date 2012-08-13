@@ -8,6 +8,7 @@
 
 #include "gfxTypes.h"
 #include "gfxASurface.h"
+#include "Compositor.h"
 #include "nsRegion.h"
 #include "nsPoint.h"
 #include "nsRect.h"
@@ -368,7 +369,7 @@ public:
   {
     //TODO[nrc]
     NS_ERROR("THis should have been overridden TODO[nrc]");
-    return TextureHostIdentifier;
+    return TextureHostIdentifier();
   }
 
   /**

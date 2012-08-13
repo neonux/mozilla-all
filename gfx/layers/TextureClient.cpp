@@ -5,10 +5,14 @@
 
 #include "Compositor.h"
 
+namespace mozilla {
+namespace layers {
+
 /* static */ TemporaryRef<TextureClient>
-Factory::CreateTextureClient(const TextureHostType &aHostType, const ImageSourceType& aImageSourceType)
+CompositingFactory::CreateTextureClient(const TextureHostType &aHostType, const ImageSourceType& aImageSourceType)
 {
   //TODO[nrc]
+  RefPtr<TextureClient> result = nullptr;
   switch (aHostType) {
   case HOST_D3D10:
     break;
@@ -19,5 +23,8 @@ Factory::CreateTextureClient(const TextureHostType &aHostType, const ImageSource
   default:
     break;
   }
-  return nullptr;
+  return result.forget();
+}
+
+}
 }

@@ -9,13 +9,13 @@
 
 #include "mozilla/layers/PCompositorChild.h"
 #include "nsXULAppAPI.h"
-#include "Compositor.h"
 
 namespace mozilla {
 namespace layers {
 
 class LayerManager;
 class CompositorParent;
+struct TextureHostIdentifier;
 
 class CompositorChild : public PCompositorChild
 {

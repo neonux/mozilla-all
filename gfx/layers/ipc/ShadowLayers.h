@@ -322,17 +322,8 @@ public:
     mTextureHostType = aIdentifier.mType;
   }
 
-  //TODO[nrc] comment, move out of header file
-  TemporaryRef<DrawableTextureClient> CreateTextureClientFor(const ImageSourceType& aImageSourceType, ShadowableLayer* aLayer)
-  {
-    RefPtr client = Factory::CreateTextureClient(mTextureHostType, aImageSourceType);
-
-    //TODO[nrc] send client's id and type (not aImageSourceType) to Compositor
-    TextureIdentifier textureId = client->GetIdentifier();
-    mTxn->AddEdit(OpCreateTextureHost(aLayer, textureId));
-
-    return client.forget();
-  }
+  //TODO[nrc] comment
+  TemporaryRef<TextureClient> CreateTextureClientFor(const ImageSourceType& aImageSourceType, ShadowableLayer* aLayer);
 
 protected:
   ShadowLayerForwarder();

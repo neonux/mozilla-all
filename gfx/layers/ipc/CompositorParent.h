@@ -33,6 +33,7 @@ namespace layers {
 class AsyncPanZoomController;
 class Layer;
 class LayerManager;
+struct TextureHostIdentifier;
 
 // Represents (affine) transforms that are calculated from a content view.
 struct ViewTransform {

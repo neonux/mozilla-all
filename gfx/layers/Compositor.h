@@ -14,20 +14,20 @@
 
 //TODO: I'm pretty sure we don't want to do this
 //this is just for the definition of HANDLE, used to typedef ProcessHandle
-#ifdef OS_WIN
-#include <windows.h>
-#endif
+//#ifdef OS_WIN
+//#include <windows.h>
+//#endif
 
 class gfxContext;
 class nsIWidget;
 
-namespace base {
+/*namespace base {
 #if defined(OS_WIN)
-typedef HANDLE ProcessHandle;
+typedef HANDLE int ProcessHandle;
 #elif defined(OS_POSIX)
 typedef pid_t ProcessHandle;
 #endif
-}
+}*/
 
 namespace mozilla {
 
@@ -81,9 +81,19 @@ struct TextureHostIdentifier
 struct TextureIdentifier
 {
   ImageSourceType mType;
-  void *mDescriptor;
+  PRUint32 mDescriptor;
 };
 
+/*static bool operator==(const TextureHostIdentifier& aLeft,const TextureHostIdentifier& aRight)
+{
+  return aLeft.mType == aRight.mType &&
+         aLeft.mMaxTextureSize == aRight.mMaxTextureSize;
+}*/
+static bool operator==(const TextureIdentifier& aLeft, const TextureIdentifier& aRight)
+{
+  return aLeft.mType == aRight.mType &&
+         aLeft.mDescriptor == aRight.mDescriptor;
+}
 
 class Texture : public RefCounted<Texture>
 {
@@ -123,6 +133,7 @@ public:
 
 class TextureHost : public Texture
 {
+public:
   /* This will return an identifier that can be sent accross a process or
    * thread boundary and used to construct a DrawableTextureClient object
    * which can then be used for rendering. If the process is identical to the
@@ -141,8 +152,9 @@ class TextureHost : public Texture
  * thebes and applies locking semantics to allow GPU or CPU level
  * synchronization.
  */
-class TextureClient
+class TextureClient : public RefCounted<TextureClient>
 {
+public:
   /* This will return an identifier that can be sent accross a process or
    * thread boundary and used to construct a DrawableTextureHost object
    * which can then be used as a texture for rendering by a compatible
@@ -434,8 +446,9 @@ public:
   virtual ~Compositor() {}
 };
 
-class Factory
+class CompositingFactory
 {
+public:
   // TODO[nrc] comment
   static TemporaryRef<TextureClient> CreateTextureClient(const TextureHostType &aHostType, const ImageSourceType& aImageSourceType);
 

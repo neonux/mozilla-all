@@ -26,6 +26,7 @@
 #include "nsRegion.h"
 #include "gfxASurface.h"
 #include "LayersTypes.h"
+#include "Compositor.h"
 
 #ifdef _MSC_VER
 #pragma warning( disable : 4800 )
@@ -765,6 +766,56 @@ struct ParamTraits<nsID>
     aLog->append(L"}");
   }
 };
+
+template<>
+struct ParamTraits<mozilla::layers::TextureHostIdentifier>
+{
+  typedef mozilla::layers::TextureHostIdentifier paramType;
+
+  static void Write(Message* aMsg, const paramType& aParam)
+  {
+    WriteParam(aMsg, aParam.mType);
+    WriteParam(aMsg, aParam.mMaxTextureSize);
+  }
+
+  static bool Read(const Message* aMsg, void** aIter, paramType* aResult)
+  {
+    return ReadParam(aMsg, aIter, &aResult->mType) &&
+           ReadParam(aMsg, aIter, &aResult->mMaxTextureSize);
+  }
+};
+
+template<>
+struct ParamTraits<mozilla::layers::TextureIdentifier>
+{
+  typedef mozilla::layers::TextureIdentifier paramType;
+  
+  static void Write(Message* aMsg, const paramType& aParam)
+  {
+    WriteParam(aMsg, aParam.mType);
+    WriteParam(aMsg, aParam.mDescriptor);
+  }
+
+  static bool Read(const Message* aMsg, void** aIter, paramType* aResult)
+  {
+    return ReadParam(aMsg, aIter, &aResult->mType) &&
+           ReadParam(aMsg, aIter, &aResult->mDescriptor);
+  }
+};
+
+template <>
+struct ParamTraits<mozilla::layers::TextureHostType>
+  : public EnumSerializer<mozilla::layers::TextureHostType,
+                          mozilla::layers::HOST_D3D10,
+                          mozilla::layers::HOST_SHMEM>
+{};
+template <>
+struct ParamTraits<mozilla::layers::ImageSourceType>
+  : public EnumSerializer<mozilla::layers::ImageSourceType,
+                          mozilla::layers::IMAGE_YUV,
+                          mozilla::layers::IMAGE_SHMEM>
+{};
+
 
 } /* namespace IPC */
 

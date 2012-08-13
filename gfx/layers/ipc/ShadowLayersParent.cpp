@@ -44,15 +44,14 @@ AsShadowLayer(const OpCreateT& op)
 }
 
 static ShadowLayerParent*
-AsShadowLayer(const OpInsertAfter& op)
+AsShadowLayer(const OpCreateTextureHost& op)
 {
   return cast(op.layerParent());
 }
-static TextureIdentifier*
-AsTextureId(const OpInsertAfter& op)
+static const TextureIdentifier
+AsTextureId(const OpCreateTextureHost& op)
 {
-  return const_cast<TextureIdentifier*>(
-    static_cast<const TextureIdentifier*>(op.textureIdentifierParent));
+  return static_cast<const TextureIdentifier>(op.textureIdentifier());
 }
 
 static ShadowLayerParent*
@@ -307,9 +306,8 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
 
       const OpCreateTextureHost& op = edit.get_OpCreateTextureHost();
       ShadowLayerParent* shadow = AsShadowLayer(op);
-      ShadowLayer* layer = static_cast<ShadowLayer*>(shadow->AsLayer());
-      TextureIdentifier* textureId = AsTextureId(op);
-      layer_manager()->CreateTextureHostFor(layer, textureId);
+      const TextureIdentifier textureId = AsTextureId(op);
+      layer_manager()->CreateTextureHostFor(shadow->AsLayer(), textureId);
 
       break;
     }

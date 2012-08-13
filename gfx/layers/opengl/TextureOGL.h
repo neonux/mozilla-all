@@ -13,7 +13,9 @@ namespace mozilla {
 
 namespace layers {
 
-class DrawableTextureHostOGL : public DrawableTextureHost
+//TODO[nrc] kill this?
+/*
+class TextureHostOGL : public TextureHost
 {
   virtual TextureIdentifier GetIdentifierForProcess(base::ProcessHandle* aProcess) MOZ_OVERRIDE
   {
@@ -24,7 +26,7 @@ class DrawableTextureHostOGL : public DrawableTextureHost
 
   virtual void
     UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) MOZ_OVERRIDE {}
-};
+};*/
 
 class ATextureOGL : public Texture
 {

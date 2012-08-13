@@ -42,15 +42,15 @@ public:
 
   //TODO[nrc]
   virtual TemporaryRef<TextureHost>
-    CreateTextureHost(const TextureIdentifier &aIdentifier)
+    CreateTextureHost(const TextureIdentifier &aIdentifier) MOZ_OVERRIDE
   {
     return nullptr;
   }
 
-  virtual TextureHostIdentifier GetTextureHostIdentifier() MOZ_OVERRIDE;
+  virtual TextureHostIdentifier GetTextureHostIdentifier() MOZ_OVERRIDE
   {
     TextureHostIdentifier result;
-    result.mType = HOST_OGL;
+    result.mType = HOST_GL;
     result.mMaxTextureSize = mGLContext->GetMaxTextureSize();
     return result;
   }
@@ -58,9 +58,6 @@ public:
   virtual TemporaryRef<Texture>
     CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PRUint32 aStride,
                          TextureFormat aFormat) MOZ_OVERRIDE;
-
-  virtual TemporaryRef<DrawableTextureHost>
-    CreateDrawableTexture(const TextureIdentifier &aIdentifier) MOZ_OVERRIDE;
 
   virtual TemporaryRef<ImageSource> 
     CreateImageSourceForSharedImage(ImageSourceType aType) MOZ_OVERRIDE;

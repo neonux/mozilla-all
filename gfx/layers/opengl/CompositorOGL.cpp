@@ -442,16 +442,6 @@ CompositorOGL::SetLayerProgramProjectionMatrix(const gfx3DMatrix& aMatrix)
   }
 }
 
-TextureHostIdentifier
-CompositorOGL::GetTextureHostIdentifier()
-{
-  TextureHostIdentifier identifier;
-  identifier.mType = HOST_GL;
-  GLint maxTextureSize = mGLContext->GetMaxTextureSize();
-  identifier.mMaxTextureSize = gfx::IntSize(maxTextureSize, maxTextureSize);
-  return identifier;
-}
-
 TemporaryRef<Texture>
 CompositorOGL::CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PRUint32 aStride,
                                     TextureFormat aFormat)
@@ -508,14 +498,6 @@ CompositorOGL::CreateImageSourceForSharedImage(ImageSourceType aType)
     NS_ERROR("Unknown ImageSourceType");
     return nullptr;
   }
-}
-
-TemporaryRef<DrawableTextureHost>
-CompositorOGL::CreateDrawableTexture(const TextureIdentifier &aIdentifier)
-{
-  // TODO: Implement this.
-
-  return new DrawableTextureHostOGL();
 }
 
 TemporaryRef<Surface>
