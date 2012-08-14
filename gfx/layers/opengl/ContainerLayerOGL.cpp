@@ -139,11 +139,10 @@ ContainerRender(Container* aContainer,
                 LayerManagerOGL* aManager)
 {
   /**
-   * Setup our temporary texture for rendering the contents of this container.
+   * Setup our temporary surface for rendering the contents of this container.
    */
   GLuint containerSurface;
-  GLuint frameBuffer;
-  Surface* surface = aPreviousSurface;
+  RefPtr<Surface> surface;
 
   nsIntPoint childOffset(aOffset);
   nsIntRect visibleRect = aContainer->GetEffectiveVisibleRegion().GetBounds();
@@ -153,11 +152,11 @@ ContainerRender(Container* aContainer,
   aContainer->mSupportsComponentAlphaChildren = false;
 
   float opacity = aContainer->GetEffectiveOpacity();
-  const gfx3DMatrix& transform = aContainer->GetEffectiveTransform();
-  bool needsFramebuffer = aContainer->UseIntermediateSurface();
-  if (needsFramebuffer) {
+  bool needsSurface = aContainer->UseIntermediateSurface();
+  if (needsSurface) {
     SurfaceInitMode mode = INIT_MODE_CLEAR;
-    nsIntRect framebufferRect = visibleRect;
+    gfx::IntRect surfaceRect = gfx::IntRect(visibleRect.x, visibleRect.y, visibleRect.width,
+                                            visibleRect.height);
     if (aContainer->GetEffectiveVisibleRegion().GetNumRects() == 1 && 
         (aContainer->GetContentFlags() & Layer::CONTENT_OPAQUE))
     {
@@ -174,27 +173,24 @@ ContainerRender(Container* aContainer,
       if (HasOpaqueAncestorLayer(aContainer) &&
           transform3D.Is2D(&transform) && !transform.HasNonIntegerTranslation()) {
         mode = INIT_MODE_COPY;
-        framebufferRect.x += transform.x0;
-        framebufferRect.y += transform.y0;
+        surfaceRect.x += transform.x0;
+        surfaceRect.y += transform.y0;
         aContainer->mSupportsComponentAlphaChildren = true;
       }
     }
 
     aContainer->gl()->PushViewportRect();
-    framebufferRect -= childOffset;
-    // FIXME: Create a Surface instead.
-    /*
-    aManager->CreateFBOWithTexture(framebufferRect,
-                                   mode,
-                                   aPreviousFrameBuffer,
-                                   &frameBuffer,
-                                   &containerSurface);
-                                   */
+    surfaceRect -= gfx::IntPoint(childOffset.x, childOffset.y);
+    if (mode == INIT_MODE_COPY) {
+      surface = aManager->GetCompositor()->CreateSurfaceFromSurface(surfaceRect, aPreviousSurface);
+    } else {
+      surface = aManager->GetCompositor()->CreateSurface(surfaceRect, mode);
+    }
+    aManager->GetCompositor()->SetSurfaceTarget(surface);
     childOffset.x = visibleRect.x;
     childOffset.y = visibleRect.y;
   } else {
-    // FIXME: Use a Surface instead of a framebuffer.
-    // frameBuffer = aPreviousFrameBuffer;
+    surface = aPreviousSurface;
     aContainer->mSupportsComponentAlphaChildren = (aContainer->GetContentFlags() & Layer::CONTENT_OPAQUE) ||
       (aContainer->GetParent() && aContainer->GetParent()->SupportsComponentAlphaChildren());
   }
@@ -218,6 +214,8 @@ ContainerRender(Container* aContainer,
       continue;
     }
 
+    // TODO: Either pass the scissor rect directly to the Compositor, or pass it to
+    // each layer so each layer can pass it on to the Compositor.
     aContainer->gl()->fScissor(scissorRect.x, 
                                scissorRect.y, 
                                scissorRect.width, 
@@ -228,32 +226,29 @@ ContainerRender(Container* aContainer,
   }
 
 
-  if (needsFramebuffer) {
-    // Unbind the current framebuffer and rebind the previous one.
+  if (needsSurface) {
+    // Unbind the current surface and rebind the previous one.
+    aManager->GetCompositor()->SetSurfaceTarget(aPreviousSurface);
 #ifdef MOZ_DUMP_PAINTING
+    /* This needs to be re-written to use the Compositor API (which will likely require
+     * additions to the Compositor API).
+     */
+    /*
     if (gfxUtils::sDumpPainting) {
       nsRefPtr<gfxImageSurface> surf = 
         aContainer->gl()->GetTexImage(containerSurface, true, aManager->GetFBOLayerProgramType());
 
       WriteSnapshotToDumpFile(aContainer, surf);
+      */
     }
 #endif
-    
+
+    // TODO: Handle this in the Compositor.
     // Restore the viewport
     aContainer->gl()->PopViewportRect();
     nsIntRect viewport = aContainer->gl()->ViewportRect();
     aManager->SetupPipeline(viewport.width, viewport.height);
     aContainer->gl()->PopScissorRect();
-
-    // FIXME: Use a Surface instead of a framebuffer.
-    /*
-    aContainer->gl()->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, aPreviousFrameBuffer);
-    aContainer->gl()->fDeleteFramebuffers(1, &frameBuffer);
-
-    aContainer->gl()->fActiveTexture(LOCAL_GL_TEXTURE0);
-
-    aContainer->gl()->fBindTexture(aManager->FBOTextureTarget(), containerSurface);
-    */
 
     MaskType maskType = MaskNone;
     if (aContainer->GetMaskLayer()) {
@@ -263,30 +258,20 @@ ContainerRender(Container* aContainer,
         maskType = Mask2d;
       }
     }
-    ShaderProgramOGL *rgb =
-      aManager->GetFBOLayerProgram(maskType);
 
-    rgb->Activate();
-    rgb->SetLayerQuadRect(visibleRect);
-    rgb->SetLayerTransform(transform);
-    rgb->SetLayerOpacity(opacity);
-    rgb->SetRenderOffset(aOffset);
-    rgb->SetTextureUnit(0);
-    rgb->LoadMask(aContainer->GetMaskLayer());
+    // TODO: Handle mask layers.
+    EffectChain effectChain;
+    RefPtr<Effect> effect = new EffectSurface(surface);
+    effectChain.mEffects[EFFECT_SURFACE] = effect;
+    gfx::Matrix4x4 transform;
+    aManager->ToMatrix4x4(aContainer->GetEffectiveTransform(), transform);
 
-    if (rgb->GetTexCoordMultiplierUniformLocation() != -1) {
-      // 2DRect case, get the multiplier right for a sampler2DRect
-      rgb->SetTexCoordMultiplier(visibleRect.width, visibleRect.height);
-    }
+    gfx::Rect rect(visibleRect.x, visibleRect.y, visibleRect.width, visibleRect.height);
+    aManager->GetCompositor()->DrawQuad(rect, nullptr, nullptr, effectChain, opacity,
+                                        transform, gfx::Point(aOffset.x, aOffset.y));
 
-    // Drawing is always flipped, but when copying between surfaces we want to avoid
-    // this. Pass true for the flip parameter to introduce a second flip
-    // that cancels the other one out.
-    aManager->BindAndDrawQuad(rgb, true);
-
-    // Clean up resources.  This also unbinds the texture.
-    aContainer->gl()->fDeleteTextures(1, &containerSurface);
   } else {
+    // TODO: This should be handled by the Compositor.
     aContainer->gl()->PopScissorRect();
   }
 }

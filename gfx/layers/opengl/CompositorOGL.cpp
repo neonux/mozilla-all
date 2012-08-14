@@ -521,17 +521,13 @@ CompositorOGL::CreateSurfaceFromSurface(const gfx::IntRect &aRect, const Surface
 void
 CompositorOGL::SetSurfaceTarget(Surface *aSurface)
 {
-  SurfaceOGL* surface = static_cast<SurfaceOGL*>(aSurface);
-  if (mBoundFBO != surface->mFBO) {
-    mGLContext->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, surface->mFBO);
-    mBoundFBO = surface->mFBO;
-  }
-}
-
-void
-CompositorOGL::RemoveSurfaceTarget()
-{
-  if (mBoundFBO != 0) {
+  if (aSurface) {
+    SurfaceOGL* surface = static_cast<SurfaceOGL*>(aSurface);
+    if (mBoundFBO != surface->mFBO) {
+      mGLContext->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, surface->mFBO);
+      mBoundFBO = surface->mFBO;
+    }
+  } else if (mBoundFBO != 0) {
     mGLContext->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, 0);
     mBoundFBO = 0;
   }

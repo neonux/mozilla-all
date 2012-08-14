@@ -414,12 +414,10 @@ public:
                                                          const Surface *aSource) = 0;
 
   /* Sets the given surface as the target for subsequent calls to DrawQuad.
+   * Passing nullptr as aSurface sets the screen as the target.
    */
   virtual void SetSurfaceTarget(Surface *aSurface) = 0;
 
-  /* Sets the screen as the target for subsequent calls to DrawQuad.
-   */
-  virtual void RemoveSurfaceTarget() = 0;
 
   /* This tells the compositor to actually draw a quad, where the area is
    * specified in userspace, and the source rectangle is the area of the

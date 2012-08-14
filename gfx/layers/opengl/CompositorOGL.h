@@ -71,8 +71,6 @@ public:
 
   virtual void SetSurfaceTarget(Surface *aSurface) MOZ_OVERRIDE;
 
-  virtual void RemoveSurfaceTarget() MOZ_OVERRIDE;
-
   virtual void DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
                         const gfx::Rect *aClipRect, const EffectChain &aEffectChain,
                         gfx::Float aOpacity, const gfx::Matrix4x4 &aTransform,
