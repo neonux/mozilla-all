@@ -888,6 +888,11 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
   if (aEffectChain.mEffects[EFFECT_MASK]) {
     effectMask = static_cast<EffectMask*>(aEffectChain.mEffects[EFFECT_MASK]);
     textureMask = static_cast<ATextureOGL*>(effectMask->mMaskTexture.get());
+
+    //TODO[nrc] do something with this assertion
+    //NS_ASSERTION(static_cast<ImageSourceOGL*>(textureMask)->mTexImage->GetContentType() == gfxASurface::CONTENT_ALPHA,
+    //             "OpenGL mask layers must be backed by alpha surfaces");
+
     if (effectMask->mMaskTransform.Is2D()) {
       maskType = Mask2d;
     } else {

@@ -122,11 +122,9 @@ public:
     return mCompositor->CanUseCanvasLayerForSize(aSize);
   }
 
-  virtual void CreateTextureHostFor(Layer* aLayer, const TextureIdentifier& aTextureIdentifier)
+  virtual void CreateTextureHostFor(ShadowLayer* aLayer, const TextureIdentifier& aTextureIdentifier)
   {
-    RefPtr<TextureHost> textureHost = mCompositor->CreateTextureHost(aTextureIdentifier);
-
-    //TODO[nrc] what the hell do I do with it now? something on aLayer
+    aLayer->AddTextureHost(aTextureIdentifier, mCompositor->CreateTextureHost(aTextureIdentifier));
   }
 
   virtual TextureHostIdentifier GetTextureHostIdentifier()

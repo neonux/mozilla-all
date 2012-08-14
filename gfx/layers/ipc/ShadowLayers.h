@@ -107,6 +107,7 @@ enum OpenMode {
 class ShadowLayerForwarder
 {
   friend class AutoOpenSurface;
+  friend class TextureClientTexture;
 
 public:
   typedef gfxASurface::gfxContentType gfxContentType;
@@ -212,6 +213,8 @@ public:
    */
   void PaintedImage(ShadowableLayer* aImage,
                     const SharedImage& aNewFrontImage);
+  void PaintedTexture(ShadowableLayer* aImage,
+                      TextureClient* aTextureClient);
   void PaintedCanvas(ShadowableLayer* aCanvas,
                      bool aNeedYFlip,
                      const SurfaceDescriptor& aNewFrontSurface);
@@ -545,6 +548,10 @@ public:
   {
     mShadowTransform = aMatrix;
   }
+
+  //TODO[nrc] comment; make pure virtual when each layer type implements it
+  // the layer can store the host how ever it wants - one-to-one or mapping from the id, or even not at all (e.g., colour layers)
+  virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost) {} //= 0;
 
   // These getters can be used anytime.
   const nsIntRect* GetShadowClipRect() { return mUseShadowClipRect ? &mShadowClipRect : nullptr; }

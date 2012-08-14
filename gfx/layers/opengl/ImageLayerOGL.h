@@ -163,6 +163,11 @@ public:
 
   virtual void Disconnect();
 
+  virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
+  {
+    mTextureHost = aTextureHost;
+  }
+
   // LayerOGL impl
   virtual void Destroy();
   virtual bool LoadAsTexture(GLuint aTextureUnit, gfxIntSize* aSize);
@@ -177,9 +182,10 @@ public:
 private:
   void EnsureImageSource(const SharedImage& aFront);
 
-  // ImageSource, a ShadowImageLayer should use only one of the ImageSource
+  // A ShadowImageLayer should use only one of the ImageSource
   // or ImageBridge mechanisms at one time
   RefPtr<ImageSource> mImageSource;
+  RefPtr<TextureHost> mTextureHost;
 };
 
 } /* layers */

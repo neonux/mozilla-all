@@ -137,6 +137,12 @@ struct OpPaintImage  {
   SharedImage newFrontBuffer;
 };
 
+struct OpPaintTexture {
+  PLayer layer;
+  TextureIdentifier textureIdentifier;
+  SharedImage image;
+};
+
 
 // A unit of a changeset; a set of these comprise a changeset
 union Edit {
@@ -160,6 +166,7 @@ union Edit {
   OpPaintTiledLayerBuffer;
   OpPaintCanvas;
   OpPaintImage;
+  OpPaintTexture;
 };
 
 

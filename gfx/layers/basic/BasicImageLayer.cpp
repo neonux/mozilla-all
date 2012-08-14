@@ -9,6 +9,7 @@
 #include "gfxUtils.h"
 #include "gfxSharedImageSurface.h"
 #include "mozilla/layers/ImageContainerChild.h"
+#include "TextureClient.h"
 
 using namespace mozilla::gfx;
 
@@ -174,7 +175,7 @@ class BasicShadowableImageLayer : public BasicImageLayer,
 public:
   BasicShadowableImageLayer(BasicShadowLayerManager* aManager) :
     BasicImageLayer(aManager),
-    mBufferIsOpaque(false)
+    mTextureClient(nullptr)
   {
     MOZ_COUNT_CTOR(BasicShadowableImageLayer);
   }
@@ -194,9 +195,10 @@ public:
   virtual Layer* AsLayer() { return this; }
   virtual ShadowableLayer* AsShadowableLayer() { return this; }
 
+  //TODO[nrc] remove this
   virtual void SetBackBuffer(const SurfaceDescriptor& aBuffer)
   {
-    mBackBuffer = aBuffer;
+    NS_ERROR("I thought this only got called for ShadowLayers?");
   }
 
   virtual void SetBackBufferYUVImage(const SurfaceDescriptor& aYBuffer,
@@ -213,20 +215,17 @@ public:
     mBackBufferY = SurfaceDescriptor();
     mBackBufferU = SurfaceDescriptor();
     mBackBufferV = SurfaceDescriptor();
-    mBackBuffer = SurfaceDescriptor();
+    mTextureClient = nullptr;
     BasicShadowableLayer::Disconnect();
   }
 
   void DestroyBackBuffer()
   {
-    if (IsSurfaceDescriptorValid(mBackBuffer)) {
-      BasicManager()->ShadowLayerForwarder::DestroySharedSurface(&mBackBuffer);
-    }
     if (IsSurfaceDescriptorValid(mBackBufferY)) {
       BasicManager()->ShadowLayerForwarder::DestroySharedSurface(&mBackBufferY);
       BasicManager()->ShadowLayerForwarder::DestroySharedSurface(&mBackBufferU);
       BasicManager()->ShadowLayerForwarder::DestroySharedSurface(&mBackBufferV);
-}
+    }
   }
 
 private:
@@ -235,10 +234,8 @@ private:
     return static_cast<BasicShadowLayerManager*>(mManager);
   }
 
+  RefPtr<TextureClient> mTextureClient;
   // For YUV Images these are the 3 planes (Y, Cb and Cr),
-  // for RGB images only mBackSurface is used.
-  SurfaceDescriptor mBackBuffer;
-  bool mBufferIsOpaque;
   SurfaceDescriptor mBackBufferY;
   SurfaceDescriptor mBackBufferU;
   SurfaceDescriptor mBackBufferV;
@@ -347,41 +344,35 @@ BasicShadowableImageLayer::Paint(gfxContext* aContext, Layer* aMaskLayer)
     return;
   }
 
-  gfxIntSize oldSize = mSize;
   nsRefPtr<gfxPattern> pat = GetAndPaintCurrentImage
     (aContext, GetEffectiveOpacity(), nullptr);
   if (!pat)
     return;
 
-  bool isOpaque = (GetContentFlags() & CONTENT_OPAQUE);
-  if (oldSize != mSize || 
-      !IsSurfaceDescriptorValid(mBackBuffer) ||
-      isOpaque != mBufferIsOpaque) {
-    DestroyBackBuffer();
-    mBufferIsOpaque = isOpaque;
-
-    gfxASurface::gfxContentType type = gfxASurface::CONTENT_COLOR_ALPHA;
-    if (surface) {
-      type = surface->GetContentType();
-    }
-    if (type != gfxASurface::CONTENT_ALPHA &&
-        isOpaque) {
-      type = gfxASurface::CONTENT_COLOR;
-    }
-
-    if (!BasicManager()->AllocBuffer(mSize, type, &mBackBuffer))
-      NS_RUNTIMEABORT("creating ImageLayer 'front buffer' failed!");
+  if (!mTextureClient) {
+    mTextureClient = BasicManager()->CreateTextureClientFor(IMAGE_TEXTURE, this);
   }
 
-  AutoOpenSurface backSurface(OPEN_READ_WRITE, mBackBuffer);
-  nsRefPtr<gfxContext> tmpCtx = new gfxContext(backSurface.Get());
+  gfxASurface::gfxContentType type = gfxASurface::CONTENT_COLOR_ALPHA;
+  bool isOpaque = (GetContentFlags() & CONTENT_OPAQUE);
+  if (surface) {
+    type = surface->GetContentType();
+  }
+  if (type != gfxASurface::CONTENT_ALPHA &&
+      isOpaque) {
+    type = gfxASurface::CONTENT_COLOR;
+  }
+  mTextureClient->EnsureTextureClient(gfx::IntSize(mSize.width, mSize.height), type);
+
+  nsRefPtr<gfxContext> tmpCtx = mTextureClient->LockContext();
   tmpCtx->SetOperator(gfxContext::OPERATOR_SOURCE);
   PaintContext(pat,
                nsIntRegion(nsIntRect(0, 0, mSize.width, mSize.height)),
                1.0, tmpCtx, nullptr);
 
-  BasicManager()->PaintedImage(BasicManager()->Hold(this),
-                               mBackBuffer);
+  BasicManager()->PaintedTexture(BasicManager()->Hold(this), mTextureClient);
+
+  mTextureClient->Unlock();
 }
 
 class BasicShadowImageLayer : public ShadowImageLayer, public BasicImplData {

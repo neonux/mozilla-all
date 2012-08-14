@@ -136,14 +136,6 @@ public:
                          const gfx::Point& aOffset,
                          const gfx::Filter aFilter);
 
-  virtual void BindTexture(GLuint aTextureUnit)
-  {
-    mTexImage->BindTextureAndApplyFilter(aTextureUnit);
-
-    NS_ASSERTION(mTexImage->GetContentType() == gfxASurface::CONTENT_ALPHA,
-                 "OpenGL mask layers must be backed by alpha surfaces");
-  }
-
   virtual GLuint GetTextureHandle()
   {
     return mTexImage->GetTextureID();

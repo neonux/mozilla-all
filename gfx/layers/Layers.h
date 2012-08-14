@@ -357,7 +357,7 @@ public:
   virtual bool CanUseCanvasLayerForSize(const gfxIntSize &aSize) { return true; }
 
   //TODO[nrc] comment
-  virtual void CreateTextureHostFor(Layer* aLayer,
+  virtual void CreateTextureHostFor(ShadowLayer* aLayer,
                                     const TextureIdentifier& aTextureIdentifier)
   {
     //TODO[nrc]

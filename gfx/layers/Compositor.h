@@ -12,6 +12,8 @@
 #include "nsAutoPtr.h"
 #include "nsRegion.h"
 
+//TODO[nrc] can we break up this header file into host and client parts?
+
 //TODO: I'm pretty sure we don't want to do this
 //this is just for the definition of HANDLE, used to typedef ProcessHandle
 //#ifdef OS_WIN
@@ -40,6 +42,8 @@ namespace layers {
 class Compositor;
 struct EffectChain;
 class SharedImage;
+class ShadowLayerForwarder;
+class TextureClient;
 
 enum TextureFormat
 {
@@ -122,13 +126,6 @@ public:
                          const gfx::Matrix4x4& aTransform,
                          const gfx::Point& aOffset,
                          const gfx::Filter aFilter) = 0;
-
-  //TODO[nrc] fix the dependency on GL stuff!
-  typedef unsigned int GLuint;
-  virtual void BindTexture(GLuint aTextureUnit)
-  {
-    NS_ERROR("BindTexture not implemented for this ImageSource");
-  }
 };
 
 class TextureHost : public Texture
@@ -140,50 +137,13 @@ public:
    * current process this may return the same object and will only be thread
    * safe.
    */
-  virtual TextureIdentifier GetIdentifierForProcess(/*base::ProcessHandle* aProcess*/) = 0; //TODO[nrc]
+  //virtual TextureIdentifier GetIdentifierForProcess(/*base::ProcessHandle* aProcess*/) = 0; //TODO[nrc]
 
   /* Perform any precomputation (e.g. texture upload) that needs to happen to the
    * texture before rendering.
    */
   virtual void PrepareForRendering() = 0;
 };
-
-/* This class allows texture clients to draw into textures through Azure or
- * thebes and applies locking semantics to allow GPU or CPU level
- * synchronization.
- */
-class TextureClient : public RefCounted<TextureClient>
-{
-public:
-  /* This will return an identifier that can be sent accross a process or
-   * thread boundary and used to construct a DrawableTextureHost object
-   * which can then be used as a texture for rendering by a compatible
-   * compositor. This texture should have been created with the
-   * TextureHostIdentifier specified by the compositor that this identifier
-   * is to be used with. If the process is identical to the current process
-   * this may return the same object and will only be thread safe.
-   */
-  virtual TextureIdentifier GetIdentifierForProcess(/*base::ProcessHandle* aProcess*/) = 0; //TODO[nrc]
-
-  //TODO[nrc] will this even work?
-  virtual TextureIdentifier GetIdentifier() = 0;
-
-  /* This requests a DrawTarget to draw into the current texture. Once the
-   * user is finished with the DrawTarget it should call Unlock.
-   */
-  virtual TemporaryRef<gfx::DrawTarget> LockDT() = 0;
-
-  /* This requests a gfxContext to draw into the current texture. Once the
-   * user is finished with the gfxContext it should call Unlock.
-   */
-  virtual already_AddRefed<gfxContext> LockContext() = 0;
-
-  /* This unlocks the current DrawableTexture and allows the host to composite
-   * it directly.
-   */
-  virtual void Unlock() = 0;
-};
-
 
 /* This can be used as an offscreen rendering target by the compositor, and
  * subsequently can be used as a source by the compositor.
@@ -450,9 +410,15 @@ class CompositingFactory
 {
 public:
   // TODO[nrc] comment
-  static TemporaryRef<TextureClient> CreateTextureClient(const TextureHostType &aHostType, const ImageSourceType& aImageSourceType);
+  static TemporaryRef<TextureClient> CreateTextureClient(const TextureHostType &aHostType,
+                                                         const ImageSourceType& aImageSourceType,
+                                                         ShadowLayerForwarder* aLayerForwarder);
 
   static TemporaryRef<Compositor> CreateCompositorForWidget(nsIWidget *aWidget);
+
+private:
+  //TODO[nrc] lol, fix this
+  static PRUint32 sId;
 };
 
 

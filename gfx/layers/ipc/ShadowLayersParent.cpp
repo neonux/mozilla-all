@@ -424,6 +424,28 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       RenderTraceInvalidateEnd(image, "FF00FF");
       break;
     }
+    case Edit::TOpPaintTexture: {
+      MOZ_LAYERS_LOG(("[ParentSide] Paint Texture"));
+
+      const OpPaintImage& op = edit.get_OpPaintImage();
+      ShadowLayerParent* shadow = AsShadowLayer(op);
+      ShadowLayer* layer = shadow->AsLayer();
+      const TextureIdentifier textureId = AsTextureId(op);
+      layer->SetAllocator(this);
+      layer->PaintTexture(textureId, op.image());
+      //TODO[nrc] implement helper methods
+      //TODO[nrc] do I need to reply? yes, and that is where the SetBackBuffer thing comes in too
+ 
+      /*RenderTraceInvalidateStart(image, "FF00FF", image->GetVisibleRegion().GetBounds());
+
+      SharedImage newBack;
+      image->Swap(op.newFrontBuffer(), &newBack);
+      replyv.push_back(OpImageSwap(shadow, NULL,
+                                   newBack));
+
+      RenderTraceInvalidateEnd(image, "FF00FF");*/
+      break;
+    }
 
     default:
       NS_RUNTIMEABORT("not reached");

@@ -22,6 +22,7 @@
 #include "RenderTrace.h"
 #include "sampler.h"
 #include "nsXULAppAPI.h"
+#include "TextureClient.h"
 
 using namespace mozilla::ipc;
 
@@ -251,6 +252,16 @@ ShadowLayerForwarder::PaintedImage(ShadowableLayer* aImage,
   mTxn->AddPaint(OpPaintImage(NULL, Shadow(aImage),
                               aNewFrontImage));
 }
+
+void
+ShadowLayerForwarder::PaintedTexture(ShadowableLayer* aImage,
+                                    TextureClient* aTextureClient)
+{
+  mTxn->AddPaint(OpPaintTexture(NULL, Shadow(aImage),
+                                aTextureClient->GetIdentifier(),
+                                aTextureClient->GetAsSharedImage()));
+}
+
 void
 ShadowLayerForwarder::PaintedCanvas(ShadowableLayer* aCanvas,
                                     bool aNeedYFlip,
@@ -544,7 +555,7 @@ ShadowLayerForwarder::DestroySharedSurface(SurfaceDescriptor* aSurface)
 TemporaryRef<TextureClient>
 ShadowLayerForwarder::CreateTextureClientFor(const ImageSourceType& aImageSourceType, ShadowableLayer* aLayer)
 {
-  RefPtr<TextureClient> client = CompositingFactory::CreateTextureClient(mTextureHostType, aImageSourceType);
+  RefPtr<TextureClient> client = CompositingFactory::CreateTextureClient(mTextureHostType, aImageSourceType, this);
 
   //TODO[nrc] send client's id and type (not aImageSourceType) to Compositor
   TextureIdentifier textureId = client->GetIdentifier();

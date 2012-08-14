@@ -796,19 +796,7 @@ ShadowImageLayerOGL::RenderLayer(int aPreviousFrameBuffer,
 bool
 ShadowImageLayerOGL::LoadAsTexture(GLuint aTextureUnit, gfxIntSize* aSize)
 {
-  //TODO nrc wonders if there is a better way of doing this? Keep a reference to the ImageSource in the effect maybe?
-  if (!mImageSource) {
-    return false;
-  }
-
-  mImageSource->BindTexture(aTextureUnit);
-
-  // We're assuming that the gl backend won't cheat and use NPOT
-  // textures when glContext says it can't (which seems to happen
-  // on a mac when you force POT textures)
-  //TODO[nrc] this is fixed on the other branch, so just commenting out for now, uncomment
-  // when we merge.
-  //aSize = CalculatePOTSize(mImageSource->GetSize(), gl());
+  //TODO[nrc] remove this - we shouldn't be doing LoadAsTexture on shadow side
   return true;
 }
 
