@@ -513,8 +513,13 @@ CompositorOGL::CreateSurfaceFromSurface(const gfx::IntRect &aRect, const Surface
 {
   RefPtr<SurfaceOGL> surface = new SurfaceOGL();
   const SurfaceOGL* sourceSurface = static_cast<const SurfaceOGL*>(aSource);
-  CreateFBOWithTexture(aRect, INIT_MODE_COPY, sourceSurface->mFBO,
-                       &(surface->mFBO), &(surface->mTexture));
+  if (aSource) {
+    CreateFBOWithTexture(aRect, INIT_MODE_COPY, sourceSurface->mFBO,
+                         &(surface->mFBO), &(surface->mTexture));
+  } else {
+    CreateFBOWithTexture(aRect, INIT_MODE_COPY, 0,
+                         &(surface->mFBO), &(surface->mTexture));
+  }
   return surface.forget();
 }
 

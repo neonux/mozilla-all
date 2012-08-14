@@ -408,7 +408,8 @@ public:
                                               SurfaceInitMode aInit) = 0;
 
   /* This creates a Surface that can be used as a rendering target by this compositor,
-   * and initializes this surface by copying from the given surface.
+   * and initializes this surface by copying from the given surface. If the given surface
+   * is nullptr, the screen frame in progress is used as the source.
    */
   virtual TemporaryRef<Surface> CreateSurfaceFromSurface(const gfx::IntRect &aRect,
                                                          const Surface *aSource) = 0;

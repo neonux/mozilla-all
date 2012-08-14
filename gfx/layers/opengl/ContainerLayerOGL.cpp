@@ -155,6 +155,7 @@ ContainerRender(Container* aContainer,
   bool needsSurface = aContainer->UseIntermediateSurface();
   if (needsSurface) {
     SurfaceInitMode mode = INIT_MODE_CLEAR;
+    bool surfaceCopyNeeded = false;
     gfx::IntRect surfaceRect = gfx::IntRect(visibleRect.x, visibleRect.y, visibleRect.width,
                                             visibleRect.height);
     if (aContainer->GetEffectiveVisibleRegion().GetNumRects() == 1 && 
@@ -172,7 +173,7 @@ ContainerRender(Container* aContainer,
       // not safe.
       if (HasOpaqueAncestorLayer(aContainer) &&
           transform3D.Is2D(&transform) && !transform.HasNonIntegerTranslation()) {
-        mode = INIT_MODE_COPY;
+        surfaceCopyNeeded = true;
         surfaceRect.x += transform.x0;
         surfaceRect.y += transform.y0;
         aContainer->mSupportsComponentAlphaChildren = true;
@@ -181,7 +182,7 @@ ContainerRender(Container* aContainer,
 
     aContainer->gl()->PushViewportRect();
     surfaceRect -= gfx::IntPoint(childOffset.x, childOffset.y);
-    if (mode == INIT_MODE_COPY) {
+    if (surfaceCopyNeeded) {
       surface = aManager->GetCompositor()->CreateSurfaceFromSurface(surfaceRect, aPreviousSurface);
     } else {
       surface = aManager->GetCompositor()->CreateSurface(surfaceRect, mode);
