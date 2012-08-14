@@ -134,7 +134,7 @@ HasOpaqueAncestorLayer(Layer* aLayer)
 template<class Container>
 static void
 ContainerRender(Container* aContainer,
-                int aPreviousFrameBuffer,
+                Surface* aPreviousSurface,
                 const nsIntPoint& aOffset,
                 LayerManagerOGL* aManager)
 {
@@ -143,6 +143,7 @@ ContainerRender(Container* aContainer,
    */
   GLuint containerSurface;
   GLuint frameBuffer;
+  Surface* surface = aPreviousSurface;
 
   nsIntPoint childOffset(aOffset);
   nsIntRect visibleRect = aContainer->GetEffectiveVisibleRegion().GetBounds();
@@ -180,16 +181,20 @@ ContainerRender(Container* aContainer,
     }
 
     aContainer->gl()->PushViewportRect();
-    framebufferRect -= childOffset; 
+    framebufferRect -= childOffset;
+    // FIXME: Create a Surface instead.
+    /*
     aManager->CreateFBOWithTexture(framebufferRect,
                                    mode,
                                    aPreviousFrameBuffer,
                                    &frameBuffer,
                                    &containerSurface);
+                                   */
     childOffset.x = visibleRect.x;
     childOffset.y = visibleRect.y;
   } else {
-    frameBuffer = aPreviousFrameBuffer;
+    // FIXME: Use a Surface instead of a framebuffer.
+    // frameBuffer = aPreviousFrameBuffer;
     aContainer->mSupportsComponentAlphaChildren = (aContainer->GetContentFlags() & Layer::CONTENT_OPAQUE) ||
       (aContainer->GetParent() && aContainer->GetParent()->SupportsComponentAlphaChildren());
   }
@@ -218,7 +223,7 @@ ContainerRender(Container* aContainer,
                                scissorRect.width, 
                                scissorRect.height);
 
-    layerToRender->RenderLayer(frameBuffer, childOffset);
+    layerToRender->RenderLayer(childOffset, surface);
     aContainer->gl()->MakeCurrent();
   }
 
@@ -240,12 +245,15 @@ ContainerRender(Container* aContainer,
     aManager->SetupPipeline(viewport.width, viewport.height);
     aContainer->gl()->PopScissorRect();
 
+    // FIXME: Use a Surface instead of a framebuffer.
+    /*
     aContainer->gl()->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, aPreviousFrameBuffer);
     aContainer->gl()->fDeleteFramebuffers(1, &frameBuffer);
 
     aContainer->gl()->fActiveTexture(LOCAL_GL_TEXTURE0);
 
     aContainer->gl()->fBindTexture(aManager->FBOTextureTarget(), containerSurface);
+    */
 
     MaskType maskType = MaskNone;
     if (aContainer->GetMaskLayer()) {
@@ -323,10 +331,10 @@ ContainerLayerOGL::GetFirstChildOGL()
 }
 
 void
-ContainerLayerOGL::RenderLayer(int aPreviousFrameBuffer,
-                               const nsIntPoint& aOffset)
+ContainerLayerOGL::RenderLayer(const nsIntPoint& aOffset,
+                               Surface* aPreviousSurface)
 {
-  ContainerRender(this, aPreviousFrameBuffer, aOffset, mOGLManager);
+  ContainerRender(this, aPreviousSurface, aOffset, mOGLManager);
 }
 
 void
@@ -384,12 +392,12 @@ ShadowContainerLayerOGL::GetFirstChildOGL()
    }
   return static_cast<LayerOGL*>(mFirstChild->ImplData());
 }
- 
+
 void
-ShadowContainerLayerOGL::RenderLayer(int aPreviousFrameBuffer,
-                                     const nsIntPoint& aOffset)
+ShadowContainerLayerOGL::RenderLayer(const nsIntPoint& aOffset,
+                                     Surface* aPreviousSurface)
 {
-  ContainerRender(this, aPreviousFrameBuffer, aOffset, mOGLManager);
+  ContainerRender(this, aPreviousSurface, aOffset, mOGLManager);
 }
 
 void
@@ -427,10 +435,10 @@ ShadowRefLayerOGL::GetFirstChildOGL()
 }
 
 void
-ShadowRefLayerOGL::RenderLayer(int aPreviousFrameBuffer,
-                               const nsIntPoint& aOffset)
+ShadowRefLayerOGL::RenderLayer(const nsIntPoint& aOffset,
+                               Surface* aPreviousSurface)
 {
-  ContainerRender(this, aPreviousFrameBuffer, aOffset, mOGLManager);
+  ContainerRender(this, aPreviousSurface, aOffset, mOGLManager);
 }
 
 void

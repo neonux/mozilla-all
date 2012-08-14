@@ -207,8 +207,7 @@ ImageLayerOGL::GetLayer()
 }
 
 void
-ImageLayerOGL::RenderLayer(int,
-                           const nsIntPoint& aOffset)
+ImageLayerOGL::RenderLayer(const nsIntPoint& aOffset, Surface*)
 {
   nsRefPtr<ImageContainer> container = GetContainer();
 
@@ -757,8 +756,7 @@ ShadowImageLayerOGL::GetLayer()
 }
 
 void
-ShadowImageLayerOGL::RenderLayer(int aPreviousFrameBuffer,
-                                 const nsIntPoint& aOffset)
+ShadowImageLayerOGL::RenderLayer(const nsIntPoint& aOffset, Surface*)
 {
   mOGLManager->MakeCurrent();
   if (mImageContainerID) {

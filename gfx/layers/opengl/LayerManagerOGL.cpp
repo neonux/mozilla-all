@@ -235,7 +235,7 @@ LayerManagerOGL::Render()
   }
 
   // Render our layers.
-  RootLayer()->RenderLayer(0, nsIntPoint(0, 0));
+  RootLayer()->RenderLayer(nsIntPoint(0, 0), nullptr);
 
   mCompositor->EndFrame();
 }

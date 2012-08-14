@@ -23,7 +23,7 @@ template<class Container>
 static void ContainerDestroy(Container* aContainer);
 template<class Container>
 static void ContainerRender(Container* aContainer,
-                            int aPreviousFrameBuffer,
+                            Surface* aPreviousSurface,
                             const nsIntPoint& aOffset,
                             LayerManagerOGL* aManager);
 
@@ -38,7 +38,7 @@ class ContainerLayerOGL : public ContainerLayer,
   friend void ContainerDestroy(Container* aContainer);
   template<class Container>
   friend void ContainerRender(Container* aContainer,
-                              int aPreviousFrameBuffer,
+                              Surface* aPreviousSurface,
                               const nsIntPoint& aOffset,
                               LayerManagerOGL* aManager);
 
@@ -57,8 +57,8 @@ public:
 
   LayerOGL* GetFirstChildOGL();
 
-  virtual void RenderLayer(int aPreviousFrameBuffer,
-                           const nsIntPoint& aOffset);
+  virtual void RenderLayer(const nsIntPoint& aOffset,
+                           Surface* aPreviousSurface = nullptr);
 
   virtual void ComputeEffectiveTransforms(const gfx3DMatrix& aTransformToSurface)
   {
@@ -79,7 +79,7 @@ class ShadowContainerLayerOGL : public ShadowContainerLayer,
   friend void ContainerDestroy(Container* aContainer);
   template<class Container>
   friend void ContainerRender(Container* aContainer,
-                              int aPreviousFrameBuffer,
+                              Surface* aPreviousSurface,
                               const nsIntPoint& aOffset,
                               LayerManagerOGL* aManager);
 
@@ -98,8 +98,8 @@ public:
 
   LayerOGL* GetFirstChildOGL();
 
-  virtual void RenderLayer(int aPreviousFrameBuffer,
-                           const nsIntPoint& aOffset);
+  virtual void RenderLayer(const nsIntPoint& aOffset,
+                           Surface* aPreviousSurface = nullptr);
 
   virtual void ComputeEffectiveTransforms(const gfx3DMatrix& aTransformToSurface)
   {
@@ -114,7 +114,7 @@ class ShadowRefLayerOGL : public ShadowRefLayer,
 {
   template<class Container>
   friend void ContainerRender(Container* aContainer,
-                              int aPreviousFrameBuffer,
+                              Surface* aPreviousSurface,
                               const nsIntPoint& aOffset,
                               LayerManagerOGL* aManager);
 
@@ -129,8 +129,8 @@ public:
 
   LayerOGL* GetFirstChildOGL();
 
-  virtual void RenderLayer(int aPreviousFrameBuffer,
-                           const nsIntPoint& aOffset);
+  virtual void RenderLayer(const nsIntPoint& aOffset,
+                           Surface* aPreviousSurface = nullptr);
 
   virtual void ComputeEffectiveTransforms(const gfx3DMatrix& aTransformToSurface)
   {

@@ -41,8 +41,8 @@ public:
   // LayerOGL implementation
   virtual void Destroy();
   virtual Layer* GetLayer() { return this; }
-  virtual void RenderLayer(int aPreviousFrameBuffer,
-                           const nsIntPoint& aOffset);
+  virtual void RenderLayer(const nsIntPoint& aOffset,
+                           Surface* aPreviousSurface = nullptr);
   virtual void CleanupResources();
 
 protected:
@@ -118,8 +118,8 @@ public:
   // LayerOGL impl
   void Destroy();
   Layer* GetLayer();
-  virtual void RenderLayer(int aPreviousFrameBuffer,
-                           const nsIntPoint& aOffset);
+  virtual void RenderLayer(const nsIntPoint& aOffset,
+                           Surface* aPreviousSurface = nullptr);
   virtual void CleanupResources();
 
 private:

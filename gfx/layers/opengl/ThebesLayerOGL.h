@@ -42,8 +42,8 @@ public:
   void Destroy();
   Layer* GetLayer();
   virtual bool IsEmpty();
-  virtual void RenderLayer(int aPreviousFrameBuffer,
-                           const nsIntPoint& aOffset);
+  virtual void RenderLayer(const nsIntPoint& aOffset,
+                           Surface* aPreviousSurface = nullptr);
   virtual void CleanupResources();
 
 private:
@@ -132,8 +132,8 @@ public:
   void Destroy();
   Layer* GetLayer();
   virtual bool IsEmpty();
-  virtual void RenderLayer(int aPreviousFrameBuffer,
-                           const nsIntPoint& aOffset);
+  virtual void RenderLayer(const nsIntPoint& aOffset,
+                           Surface* aPreviousSurface = nullptr);
   virtual void CleanupResources();
 
 private:

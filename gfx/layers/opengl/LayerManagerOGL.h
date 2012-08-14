@@ -399,8 +399,8 @@ public:
 
   virtual Layer* GetLayer() = 0;
 
-  virtual void RenderLayer(int aPreviousFrameBuffer,
-                           const nsIntPoint& aOffset) = 0;
+  virtual void RenderLayer(const nsIntPoint& aOffset,
+                           Surface* aPreviousSurface = nullptr) = 0;
 
   typedef mozilla::gl::GLContext GLContext;
 
