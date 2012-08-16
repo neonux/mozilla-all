@@ -207,7 +207,7 @@ ImageLayerOGL::GetLayer()
 }
 
 void
-ImageLayerOGL::RenderLayer(const nsIntPoint& aOffset, Surface*)
+ImageLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aClipRect, Surface*)
 {
   nsRefPtr<ImageContainer> container = GetContainer();
 
@@ -756,7 +756,7 @@ ShadowImageLayerOGL::GetLayer()
 }
 
 void
-ShadowImageLayerOGL::RenderLayer(const nsIntPoint& aOffset, Surface*)
+ShadowImageLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aClipRect, Surface*)
 {
   mOGLManager->MakeCurrent();
   if (mImageContainerID) {
@@ -783,12 +783,14 @@ ShadowImageLayerOGL::RenderLayer(const nsIntPoint& aOffset, Surface*)
 
   gfx::Matrix4x4 transform;
   LayerManagerOGL::ToMatrix4x4(GetEffectiveTransform(), transform);
+  gfx::Rect clipRect(aClipRect.x, aClipRect.y, aClipRect.width, aClipRect.height);
 
   mImageSource->Composite(effectChain,
                           GetEffectiveOpacity(),
                           transform,
                           gfx::Point(aOffset.x, aOffset.y),
-                          gfx::ToFilter(mFilter));
+                          gfx::ToFilter(mFilter),
+                          clipRect);
 }
 
 bool

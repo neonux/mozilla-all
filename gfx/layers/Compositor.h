@@ -9,6 +9,7 @@
 #include "mozilla/RefPtr.h"
 #include "mozilla/gfx/Rect.h"
 #include "mozilla/gfx/Matrix.h"
+#include "gfxMatrix.h"
 #include "nsAutoPtr.h"
 #include "nsRegion.h"
 
@@ -121,7 +122,8 @@ public:
                          float aOpacity,
                          const gfx::Matrix4x4& aTransform,
                          const gfx::Point& aOffset,
-                         const gfx::Filter aFilter) = 0;
+                         const gfx::Filter aFilter,
+                         const gfx::Rect& aClipRect) = 0;
 
   //TODO[nrc] fix the dependency on GL stuff!
   typedef unsigned int GLuint;
@@ -429,6 +431,11 @@ public:
                         const gfx::Rect *aClipRect, const EffectChain &aEffectChain,
                         gfx::Float aOpacity, const gfx::Matrix4x4 &aTransform,
                         const gfx::Point &aOffset) = 0;
+
+  /* Start a new frame. If aClipRectIn is null, sets *aClipRectOut to the screen dimensions. 
+   */
+  virtual void BeginFrame(const gfx::Rect *aClipRectIn, const gfxMatrix& aTransform,
+                          gfx::Rect *aClipRectOut = nullptr) = 0;
 
   /* Flush the current frame to the screen.
    */

@@ -63,7 +63,8 @@ ImageSourceOGL::Composite(EffectChain& aEffectChain,
                           float aOpacity,
                           const gfx::Matrix4x4& aTransform,
                           const gfx::Point& aOffset,
-                          const gfx::Filter aFilter)
+                          const gfx::Filter aFilter,
+                          const gfx::Rect& aClipRect)
 {
   NS_ASSERTION(mTexImage->GetContentType() != gfxASurface::CONTENT_ALPHA,
                "Image layer has alpha image");
@@ -91,7 +92,7 @@ ImageSourceOGL::Composite(EffectChain& aEffectChain,
     gfx::Rect sourceRect(0, 0, mTexImage->GetTileRect().width,
                          mTexImage->GetTileRect().height);
     // TODO: Calls to DrawQuad shouldn't happen from GL-specific code. So this needs to be moved.
-    mCompositorOGL->DrawQuad(rect, &sourceRect, nullptr, aEffectChain,
+    mCompositorOGL->DrawQuad(rect, &sourceRect, &aClipRect, aEffectChain,
                              aOpacity, aTransform, aOffset);
   } while (mTexImage->NextTile());
 }
@@ -125,7 +126,8 @@ ImageSourceOGLShared::Composite(EffectChain& aEffectChain,
                                 float aOpacity,
                                 const gfx::Matrix4x4& aTransform,
                                 const gfx::Point& aOffset,
-                                const gfx::Filter aFilter)
+                                const gfx::Filter aFilter,
+                                const gfx::Rect& aClipRect)
 {
   GLContext::SharedHandleDetails handleDetails;
   if (!mCompositorOGL->gl()->GetSharedHandleDetails(mShareType, mSharedHandle, handleDetails)) {
@@ -158,7 +160,7 @@ ImageSourceOGLShared::Composite(EffectChain& aEffectChain,
   }
 
   // TODO: Calls to DrawQuad shouldn't happen from GL-specific code. So this needs to be moved.
-  mCompositorOGL->DrawQuad(rect, nullptr, nullptr, aEffectChain,
+  mCompositorOGL->DrawQuad(rect, nullptr, &aClipRect, aEffectChain,
                            aOpacity, aTransform, aOffset);
 
   // TODO:: Call this from CompositorOGL, not here.

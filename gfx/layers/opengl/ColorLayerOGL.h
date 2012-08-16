@@ -32,6 +32,7 @@ public:
   virtual void Destroy() { mDestroyed = true; }
 
   virtual void RenderLayer(const nsIntPoint& aOffset,
+                           const nsIntRect& aClipRect,
                            Surface* aPreviousSurface = nullptr);
   virtual void CleanupResources() {};
 };
@@ -54,6 +55,7 @@ public:
   virtual void Destroy() { mDestroyed = true; }
 
   virtual void RenderLayer(const nsIntPoint& aOffset,
+                           const nsIntRect& aClipRect,
                            Surface* aPreviousSurface = nullptr);
   virtual void CleanupResources() {};
 };

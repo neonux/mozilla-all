@@ -43,6 +43,7 @@ public:
   Layer* GetLayer();
   virtual bool IsEmpty();
   virtual void RenderLayer(const nsIntPoint& aOffset,
+                           const nsIntRect& aClipRect,
                            Surface* aPreviousSurface = nullptr);
   virtual void CleanupResources();
 
@@ -133,6 +134,7 @@ public:
   Layer* GetLayer();
   virtual bool IsEmpty();
   virtual void RenderLayer(const nsIntPoint& aOffset,
+                           const nsIntRect& aClipRect,
                            Surface* aPreviousSurface = nullptr);
   virtual void CleanupResources();
 

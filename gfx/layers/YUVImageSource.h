@@ -54,13 +54,14 @@ public:
                          float aOpacity,
                          const gfx::Matrix4x4& aTransform,
                          const gfx::Point& aOffset,
-                         const gfx::Filter aFilter)
+                         const gfx::Filter aFilter,
+                         const gfx::Rect& aClipRect)
   {
     EffectYCbCr* effect = new EffectYCbCr(&mTextures[0], &mTextures[1], &mTextures[2], aFilter);
     aEffectChain.mEffects[EFFECT_YCBCR] = effect;
     gfx::Rect rect(0, 0, mPictureRect.width, mPictureRect.height);
     gfx::Rect sourceRect(mPictureRect.x, mPictureRect.y, mPictureRect.width, mPictureRect.height);
-    mCompositor->DrawQuad(rect, &sourceRect, nullptr, aEffectChain, aOpacity, aTransform, aOffset);
+    mCompositor->DrawQuad(rect, &sourceRect, &aClipRect, aEffectChain, aOpacity, aTransform, aOffset);
   }
 
 private:

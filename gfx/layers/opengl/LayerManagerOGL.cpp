@@ -225,17 +225,20 @@ LayerManagerOGL::Render()
     return;
   }
 
+  nsIntRect clipRect;
   if (mRoot->GetClipRect()) {
-    nsIntRect clipRect = *mRoot->GetClipRect();
+    clipRect = *mRoot->GetClipRect();
     WorldTransformRect(clipRect);
     Rect rect(clipRect.x, clipRect.y, clipRect.width, clipRect.height);
     mCompositor->BeginFrame(&rect, mWorldMatrix);
   } else {
-    mCompositor->BeginFrame(nullptr, mWorldMatrix);
+    gfx::Rect rect;
+    mCompositor->BeginFrame(nullptr, mWorldMatrix, &rect);
+    clipRect = nsIntRect(rect.x, rect.y, rect.width, rect.height);
   }
 
   // Render our layers.
-  RootLayer()->RenderLayer(nsIntPoint(0, 0), nullptr);
+  RootLayer()->RenderLayer(nsIntPoint(0, 0), clipRect, nullptr);
 
   mCompositor->EndFrame();
 }

@@ -180,7 +180,11 @@ private:
    */
   bool mFrameInProgress;
 
-  void BeginFrame(const gfx::Rect *aClipRect, const gfxMatrix& aTransform);
+  /* Start a new frame. If aClipRectIn is null and aClipRectOut is non-null,
+   * sets *aClipRectOut to the screen dimensions.
+   */
+  virtual void BeginFrame(const gfx::Rect *aClipRectIn, const gfxMatrix& aTransform,
+                          gfx::Rect *aClipRectOut = nullptr) MOZ_OVERRIDE;
 
   /**
    * Updates all layer programs with a new projection matrix.

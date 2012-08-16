@@ -136,7 +136,8 @@ static void
 ContainerRender(Container* aContainer,
                 Surface* aPreviousSurface,
                 const nsIntPoint& aOffset,
-                LayerManagerOGL* aManager)
+                LayerManagerOGL* aManager,
+                const nsIntRect& aClipRect)
 {
   /**
    * Setup our temporary surface for rendering the contents of this container.
@@ -147,8 +148,7 @@ ContainerRender(Container* aContainer,
   nsIntPoint childOffset(aOffset);
   nsIntRect visibleRect = aContainer->GetEffectiveVisibleRegion().GetBounds();
 
-  nsIntRect cachedScissor = aContainer->gl()->ScissorRect();
-  aContainer->gl()->PushScissorRect();
+  nsIntRect cachedScissor = aClipRect;
   aContainer->mSupportsComponentAlphaChildren = false;
 
   float opacity = aContainer->GetEffectiveOpacity();
@@ -215,14 +215,7 @@ ContainerRender(Container* aContainer,
       continue;
     }
 
-    // TODO: Either pass the scissor rect directly to the Compositor, or pass it to
-    // each layer so each layer can pass it on to the Compositor.
-    aContainer->gl()->fScissor(scissorRect.x, 
-                               scissorRect.y, 
-                               scissorRect.width, 
-                               scissorRect.height);
-
-    layerToRender->RenderLayer(childOffset, surface);
+    layerToRender->RenderLayer(childOffset, scissorRect, surface);
     aContainer->gl()->MakeCurrent();
   }
 
@@ -249,7 +242,6 @@ ContainerRender(Container* aContainer,
     aContainer->gl()->PopViewportRect();
     nsIntRect viewport = aContainer->gl()->ViewportRect();
     aManager->SetupPipeline(viewport.width, viewport.height);
-    aContainer->gl()->PopScissorRect();
 
     MaskType maskType = MaskNone;
     if (aContainer->GetMaskLayer()) {
@@ -271,9 +263,6 @@ ContainerRender(Container* aContainer,
     aManager->GetCompositor()->DrawQuad(rect, nullptr, nullptr, effectChain, opacity,
                                         transform, gfx::Point(aOffset.x, aOffset.y));
 
-  } else {
-    // TODO: This should be handled by the Compositor.
-    aContainer->gl()->PopScissorRect();
   }
 }
 
@@ -318,9 +307,10 @@ ContainerLayerOGL::GetFirstChildOGL()
 
 void
 ContainerLayerOGL::RenderLayer(const nsIntPoint& aOffset,
+                               const nsIntRect& aClipRect,
                                Surface* aPreviousSurface)
 {
-  ContainerRender(this, aPreviousSurface, aOffset, mOGLManager);
+  ContainerRender(this, aPreviousSurface, aOffset, mOGLManager, aClipRect);
 }
 
 void
@@ -381,9 +371,10 @@ ShadowContainerLayerOGL::GetFirstChildOGL()
 
 void
 ShadowContainerLayerOGL::RenderLayer(const nsIntPoint& aOffset,
+                                     const nsIntRect& aClipRect,
                                      Surface* aPreviousSurface)
 {
-  ContainerRender(this, aPreviousSurface, aOffset, mOGLManager);
+  ContainerRender(this, aPreviousSurface, aOffset, mOGLManager, aClipRect);
 }
 
 void
@@ -422,9 +413,10 @@ ShadowRefLayerOGL::GetFirstChildOGL()
 
 void
 ShadowRefLayerOGL::RenderLayer(const nsIntPoint& aOffset,
+                               const nsIntRect& aClipRect,
                                Surface* aPreviousSurface)
 {
-  ContainerRender(this, aPreviousSurface, aOffset, mOGLManager);
+  ContainerRender(this, aPreviousSurface, aOffset, mOGLManager, aClipRect);
 }
 
 void

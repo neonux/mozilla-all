@@ -402,6 +402,7 @@ public:
   virtual Layer* GetLayer() = 0;
 
   virtual void RenderLayer(const nsIntPoint& aOffset,
+                           const nsIntRect& aClipRect,
                            Surface* aPreviousSurface = nullptr) = 0;
 
   typedef mozilla::gl::GLContext GLContext;

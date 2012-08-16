@@ -799,8 +799,12 @@ CompositorOGL::FPSState::DrawFPS(GLContext* context, ShaderProgramOGL* copyprog)
 }
 
 void
-CompositorOGL::BeginFrame(const gfx::Rect *aClipRect, const gfxMatrix& aTransform)
+CompositorOGL::BeginFrame(const gfx::Rect *aClipRectIn, const gfxMatrix& aTransform,
+                          gfx::Rect *aClipRectOut)
 {
+  if (mFrameInProgress) {
+    EndFrame();
+  }
   mFrameInProgress = true;
   nsIntRect rect;
   if (mIsRenderingToEGLSurface) {
@@ -847,8 +851,13 @@ CompositorOGL::BeginFrame(const gfx::Rect *aClipRect, const gfxMatrix& aTransfor
                                  LOCAL_GL_ONE, LOCAL_GL_ONE);
   mGLContext->fEnable(LOCAL_GL_BLEND);
 
-  if (!aClipRect) {
+  if (!aClipRectIn) {
     mGLContext->fScissor(0, 0, width, height);
+    if (aClipRectOut) {
+      aClipRectOut->SetRect(0, 0, width, height);
+    }
+  } else {
+    mGLContext->fScissor(aClipRectIn->x, aClipRectIn->y, aClipRectIn->width, aClipRectIn->height);
   }
 
   mGLContext->fEnable(LOCAL_GL_SCISSOR_TEST);

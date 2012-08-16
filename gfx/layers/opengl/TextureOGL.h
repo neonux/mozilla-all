@@ -134,7 +134,8 @@ public:
                          float aOpacity,
                          const gfx::Matrix4x4& aTransform,
                          const gfx::Point& aOffset,
-                         const gfx::Filter aFilter);
+                         const gfx::Filter aFilter,
+                         const gfx::Rect& aClipRect);
 
   virtual void BindTexture(GLuint aTextureUnit)
   {
@@ -178,7 +179,8 @@ public:
                          float aOpacity,
                          const gfx::Matrix4x4& aTransform,
                          const gfx::Point& aOffset,
-                         const gfx::Filter aFilter);
+                         const gfx::Filter aFilter,
+                         const gfx::Rect& aClipRect);
 
   virtual GLuint GetTextureHandle()
   {

@@ -221,7 +221,7 @@ TiledThebesLayerOGL::RenderTile(TiledTexture aTile,
 }
 
 void
-TiledThebesLayerOGL::RenderLayer(const nsIntPoint& aOffset, Surface*)
+TiledThebesLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aClipRect, Surface*)
 {
   gl()->MakeCurrent();
   gl()->fActiveTexture(LOCAL_GL_TEXTURE0);
