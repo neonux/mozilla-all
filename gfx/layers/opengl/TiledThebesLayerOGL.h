@@ -138,7 +138,8 @@ public:
                   nsIntRegion aScreenRegion,
                   nsIntPoint aTextureOffset,
                   nsIntSize aTextureBounds,
-                  Layer* aMaskLayer);
+                  Layer* aMaskLayer,
+                  const nsIntRect& aClipRect);
 
 private:
   nsIntRegion                  mRegionToUpload;

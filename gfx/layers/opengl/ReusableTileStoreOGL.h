@@ -79,7 +79,8 @@ public:
                  const gfxSize& aResolution,
                  const gfx3DMatrix& aTransform,
                  const nsIntPoint& aRenderOffset,
-                 Layer* aMaskLayer);
+                 Layer* aMaskLayer,
+                 const nsIntRect& aClipRect);
 
 protected:
   // Invalidates tiles contained within the valid region, or intersecting with

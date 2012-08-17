@@ -990,6 +990,49 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
                                      LOCAL_GL_ONE, LOCAL_GL_ONE);
     }
 
+  } else if (aEffectChain.mEffects[EFFECT_RGB]) {
+    RefPtr<ATextureOGL> texture;
+    bool premultiplied;
+    gfxPattern::GraphicsFilter filter;
+    ShaderProgramOGL *program;
+    bool flipped;
+
+    EffectRGB* effectRGB =
+      static_cast<EffectRGB*>(aEffectChain.mEffects[EFFECT_RGB]);
+    texture = static_cast<ATextureOGL*>(effectRGB->mRGBTexture.get());
+    premultiplied = effectRGB->mPremultiplied;
+    flipped = effectRGB->mFlipped;
+    filter = gfx::ThebesFilter(effectRGB->mFilter);
+    program = GetProgram(gl::RGBALayerProgramType, maskType);
+
+    if (!premultiplied) {
+      mGLContext->fBlendFuncSeparate(LOCAL_GL_SRC_ALPHA, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
+                                     LOCAL_GL_ONE, LOCAL_GL_ONE);
+    }
+
+    mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, texture->GetTextureHandle());
+
+    mGLContext->ApplyFilterToBoundTexture(filter);
+
+    program->Activate();
+    program->SetTextureUnit(0);
+    program->SetLayerOpacity(aOpacity);
+    program->SetLayerTransform(aTransform);
+    program->SetRenderOffset(aOffset.x, aOffset.y);
+    program->SetLayerQuadRect(aRect);
+    if (maskType != MaskNone) {
+      mGLContext->fActiveTexture(LOCAL_GL_TEXTURE1);
+      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureMask->GetTextureHandle());
+      program->SetMaskTextureUnit(1);
+      program->SetMaskLayerTransform(effectMask->mMaskTransform);
+    }
+
+    BindAndDrawQuadWithTextureRect(program, intSourceRect, texture->GetSize(), texture->GetWrapMode(), flipped);
+
+    if (!premultiplied) {
+      mGLContext->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
+                                     LOCAL_GL_ONE, LOCAL_GL_ONE);
+    }
 
   } else if (aEffectChain.mEffects[EFFECT_RGBA] || aEffectChain.mEffects[EFFECT_RGBX] ||
              aEffectChain.mEffects[EFFECT_RGBA_EXTERNAL]) {

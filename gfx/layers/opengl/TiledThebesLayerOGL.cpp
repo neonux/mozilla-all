@@ -3,6 +3,7 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "mozilla/layers/PLayersChild.h"
+#include "TextureOGL.h"
 #include "TiledThebesLayerOGL.h"
 #include "ReusableTileStoreOGL.h"
 #include "BasicTiledThebesLayer.h"
@@ -193,31 +194,39 @@ TiledThebesLayerOGL::RenderTile(TiledTexture aTile,
                                 nsIntRegion aScreenRegion,
                                 nsIntPoint aTextureOffset,
                                 nsIntSize aTextureBounds,
-                                Layer* aMaskLayer)
+                                Layer* aMaskLayer,
+                                const nsIntRect& aClipRect)
 {
-    gl()->fBindTexture(LOCAL_GL_TEXTURE_2D, aTile.mTextureHandle);
-    ShaderProgramOGL *program;
-    if (aTile.mFormat == LOCAL_GL_RGB) {
-      program = mOGLManager->GetProgram(gl::RGBXLayerProgramType, aMaskLayer);
-    } else {
-      program = mOGLManager->GetProgram(gl::BGRALayerProgramType, aMaskLayer);
-    }
-    program->Activate();
-    program->SetTextureUnit(0);
-    program->SetLayerOpacity(GetEffectiveOpacity());
-    program->SetLayerTransform(aTransform);
-    program->SetRenderOffset(aOffset);
-    program->LoadMask(GetMaskLayer());
+  // TODO: Fix texture handling.
+  // TODO: Handle mask layers.
+  EffectChain effectChain;
+  RefPtr<Effect> effect;
+  RefPtr<TextureOGL> texture = new TextureOGL(static_cast<CompositorOGL*>(mOGLManager->GetCompositor()),
+                                              aTile.mTextureHandle,
+                                              gfx::IntSize(aTextureBounds.width, aTextureBounds.height));
+  texture->SetWrapMode(LOCAL_GL_REPEAT);
 
-    nsIntRegionRectIterator it(aScreenRegion);
-    for (const nsIntRect* rect = it.Next(); rect != nullptr; rect = it.Next()) {
-      nsIntRect textureRect(rect->x - aTextureOffset.x, rect->y - aTextureOffset.y,
-                            rect->width, rect->height);
-      program->SetLayerQuadRect(*rect);
-      mOGLManager->BindAndDrawQuadWithTextureRect(program,
-                                                  textureRect,
-                                                  aTextureBounds);
-    }
+  if (aTile.mFormat == LOCAL_GL_RGB) {
+    effect = new EffectRGB(texture, true, gfx::FILTER_LINEAR);
+    effectChain.mEffects[EFFECT_RGB] = effect;
+  } else {
+    effect = new EffectBGRA(texture, true, gfx::FILTER_LINEAR);
+    effectChain.mEffects[EFFECT_BGRA] = effect;
+  }
+
+  gfx::Matrix4x4 transform;
+  mOGLManager->ToMatrix4x4(aTransform, transform);
+  gfx::Rect clipRect(aClipRect.x, aClipRect.y, aClipRect.width, aClipRect.height);
+  gfx::Point offset(aOffset.x, aOffset.y);
+
+  nsIntRegionRectIterator it(aScreenRegion);
+  for (const nsIntRect* rect = it.Next(); rect != nullptr; rect = it.Next()) {
+    gfx::Rect sourceRect(rect->x - aTextureOffset.x, rect->y - aTextureOffset.y,
+                         rect->width, rect->height);
+    gfx::Rect quadRect(rect->x, rect->y, rect->width, rect->height);
+    mOGLManager->GetCompositor()->DrawQuad(quadRect, &sourceRect, &clipRect, effectChain,
+                                           GetEffectiveOpacity(), transform, offset);
+  }
 }
 
 void
@@ -234,7 +243,7 @@ TiledThebesLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aCl
     mReusableTileStore->DrawTiles(this,
                                   mVideoMemoryTiledBuffer.GetValidRegion(),
                                   mVideoMemoryTiledBuffer.GetResolution(),
-                                  GetEffectiveTransform(), aOffset, maskLayer);
+                                  GetEffectiveTransform(), aOffset, maskLayer, aClipRect);
   }
 
   // Render valid tiles.
@@ -266,7 +275,7 @@ TiledThebesLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aCl
         nsIntPoint tileOffset(x - tileStartX, y - tileStartY);
         uint16_t tileSize = mVideoMemoryTiledBuffer.GetTileLength();
         RenderTile(tileTexture, GetEffectiveTransform(), aOffset, tileDrawRegion,
-                   tileOffset, nsIntSize(tileSize, tileSize), maskLayer);
+                   tileOffset, nsIntSize(tileSize, tileSize), maskLayer, aClipRect);
       }
       tileY++;
       y += h;

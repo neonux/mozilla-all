@@ -202,7 +202,8 @@ ReusableTileStoreOGL::DrawTiles(TiledThebesLayerOGL* aLayer,
                                 const gfxSize& aResolution,
                                 const gfx3DMatrix& aTransform,
                                 const nsIntPoint& aRenderOffset,
-                                Layer* aMaskLayer)
+                                Layer* aMaskLayer,
+                                const nsIntRect& aClipRect)
 {
   // Walk up the tree, looking for a display-port - if we find one, we know
   // that this layer represents a content node and we can use its first
@@ -287,7 +288,7 @@ ReusableTileStoreOGL::DrawTiles(TiledThebesLayerOGL* aLayer,
     }
     nsIntPoint tileOffset(tile->mTileOrigin.x - tileStartX, tile->mTileOrigin.y - tileStartY);
     nsIntSize textureSize(tile->mTileSize, tile->mTileSize);
-    aLayer->RenderTile(tile->mTexture, transform, aRenderOffset, tileRegion, tileOffset, textureSize, aMaskLayer);
+    aLayer->RenderTile(tile->mTexture, transform, aRenderOffset, tileRegion, tileOffset, textureSize, aMaskLayer, aClipRect);
   }
 }
 
