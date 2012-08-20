@@ -10,7 +10,7 @@ namespace layers {
 
 static void
 RenderColorLayer(ColorLayer* aLayer, LayerManagerOGL *aManager,
-                 const nsIntPoint& aOffset)
+                 const nsIntPoint& aOffset, const nsIntRect& aClipRect)
 {
   EffectChain effects;
   gfxRGBA color(aLayer->GetColor());
@@ -25,20 +25,21 @@ RenderColorLayer(ColorLayer* aLayer, LayerManagerOGL *aManager,
   float opacity = aLayer->GetEffectiveOpacity();
   gfx::Matrix4x4 transform;
   aManager->ToMatrix4x4(aLayer->GetEffectiveTransform(), transform);
-  aManager->GetCompositor()->DrawQuad(rect, nullptr, nullptr, effects, opacity, transform,
+  gfx::Rect clipRect(aClipRect.x, aClipRect.y, aClipRect.width, aClipRect.height);
+  aManager->GetCompositor()->DrawQuad(rect, nullptr, &clipRect, effects, opacity, transform,
                                       gfx::Point(aOffset.x, aOffset.y));
 }
 
 void
-ColorLayerOGL::RenderLayer(const nsIntPoint& aOffset, Surface*)
+ColorLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aClipRect, Surface*)
 {
-  RenderColorLayer(this, mOGLManager, aOffset);
+  RenderColorLayer(this, mOGLManager, aOffset, aClipRect);
 }
 
 void
-ShadowColorLayerOGL::RenderLayer(const nsIntPoint& aOffset, Surface*)
+ShadowColorLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aClipRect, Surface*)
 {
-  RenderColorLayer(this, mOGLManager, aOffset);
+  RenderColorLayer(this, mOGLManager, aOffset, aClipRect);
 }
 
 

@@ -42,6 +42,7 @@ public:
   virtual void Destroy();
   virtual Layer* GetLayer() { return this; }
   virtual void RenderLayer(const nsIntPoint& aOffset,
+                           const nsIntRect& aClipRect,
                            Surface* aPreviousSurface = nullptr);
   virtual void CleanupResources();
 
@@ -119,6 +120,7 @@ public:
   void Destroy();
   Layer* GetLayer();
   virtual void RenderLayer(const nsIntPoint& aOffset,
+                           const nsIntRect& aClipRect,
                            Surface* aPreviousSurface = nullptr);
   virtual void CleanupResources();
 

@@ -513,25 +513,26 @@ CompositorOGL::CreateSurfaceFromSurface(const gfx::IntRect &aRect, const Surface
 {
   RefPtr<SurfaceOGL> surface = new SurfaceOGL();
   const SurfaceOGL* sourceSurface = static_cast<const SurfaceOGL*>(aSource);
-  CreateFBOWithTexture(aRect, INIT_MODE_COPY, sourceSurface->mFBO,
-                       &(surface->mFBO), &(surface->mTexture));
+  if (aSource) {
+    CreateFBOWithTexture(aRect, INIT_MODE_COPY, sourceSurface->mFBO,
+                         &(surface->mFBO), &(surface->mTexture));
+  } else {
+    CreateFBOWithTexture(aRect, INIT_MODE_COPY, 0,
+                         &(surface->mFBO), &(surface->mTexture));
+  }
   return surface.forget();
 }
 
 void
 CompositorOGL::SetSurfaceTarget(Surface *aSurface)
 {
-  SurfaceOGL* surface = static_cast<SurfaceOGL*>(aSurface);
-  if (mBoundFBO != surface->mFBO) {
-    mGLContext->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, surface->mFBO);
-    mBoundFBO = surface->mFBO;
-  }
-}
-
-void
-CompositorOGL::RemoveSurfaceTarget()
-{
-  if (mBoundFBO != 0) {
+  if (aSurface) {
+    SurfaceOGL* surface = static_cast<SurfaceOGL*>(aSurface);
+    if (mBoundFBO != surface->mFBO) {
+      mGLContext->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, surface->mFBO);
+      mBoundFBO = surface->mFBO;
+    }
+  } else if (mBoundFBO != 0) {
     mGLContext->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, 0);
     mBoundFBO = 0;
   }
@@ -798,8 +799,12 @@ CompositorOGL::FPSState::DrawFPS(GLContext* context, ShaderProgramOGL* copyprog)
 }
 
 void
-CompositorOGL::BeginFrame(const gfx::Rect *aClipRect, const gfxMatrix& aTransform)
+CompositorOGL::BeginFrame(const gfx::Rect *aClipRectIn, const gfxMatrix& aTransform,
+                          gfx::Rect *aClipRectOut)
 {
+  if (mFrameInProgress) {
+    EndFrame();
+  }
   mFrameInProgress = true;
   nsIntRect rect;
   if (mIsRenderingToEGLSurface) {
@@ -846,8 +851,13 @@ CompositorOGL::BeginFrame(const gfx::Rect *aClipRect, const gfxMatrix& aTransfor
                                  LOCAL_GL_ONE, LOCAL_GL_ONE);
   mGLContext->fEnable(LOCAL_GL_BLEND);
 
-  if (!aClipRect) {
+  if (!aClipRectIn) {
     mGLContext->fScissor(0, 0, width, height);
+    if (aClipRectOut) {
+      aClipRectOut->SetRect(0, 0, width, height);
+    }
+  } else {
+    mGLContext->fScissor(aClipRectIn->x, aClipRectIn->y, aClipRectIn->width, aClipRectIn->height);
   }
 
   mGLContext->fEnable(LOCAL_GL_SCISSOR_TEST);
@@ -985,6 +995,49 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
                                      LOCAL_GL_ONE, LOCAL_GL_ONE);
     }
 
+  } else if (aEffectChain.mEffects[EFFECT_RGB]) {
+    RefPtr<ATextureOGL> texture;
+    bool premultiplied;
+    gfxPattern::GraphicsFilter filter;
+    ShaderProgramOGL *program;
+    bool flipped;
+
+    EffectRGB* effectRGB =
+      static_cast<EffectRGB*>(aEffectChain.mEffects[EFFECT_RGB]);
+    texture = static_cast<ATextureOGL*>(effectRGB->mRGBTexture.get());
+    premultiplied = effectRGB->mPremultiplied;
+    flipped = effectRGB->mFlipped;
+    filter = gfx::ThebesFilter(effectRGB->mFilter);
+    program = GetProgram(gl::RGBALayerProgramType, maskType);
+
+    if (!premultiplied) {
+      mGLContext->fBlendFuncSeparate(LOCAL_GL_SRC_ALPHA, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
+                                     LOCAL_GL_ONE, LOCAL_GL_ONE);
+    }
+
+    mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, texture->GetTextureHandle());
+
+    mGLContext->ApplyFilterToBoundTexture(filter);
+
+    program->Activate();
+    program->SetTextureUnit(0);
+    program->SetLayerOpacity(aOpacity);
+    program->SetLayerTransform(aTransform);
+    program->SetRenderOffset(aOffset.x, aOffset.y);
+    program->SetLayerQuadRect(aRect);
+    if (maskType != MaskNone) {
+      mGLContext->fActiveTexture(LOCAL_GL_TEXTURE1);
+      mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureMask->GetTextureHandle());
+      program->SetMaskTextureUnit(1);
+      program->SetMaskLayerTransform(effectMask->mMaskTransform);
+    }
+
+    BindAndDrawQuadWithTextureRect(program, intSourceRect, texture->GetSize(), texture->GetWrapMode(), flipped);
+
+    if (!premultiplied) {
+      mGLContext->fBlendFuncSeparate(LOCAL_GL_ONE, LOCAL_GL_ONE_MINUS_SRC_ALPHA,
+                                     LOCAL_GL_ONE, LOCAL_GL_ONE);
+    }
 
   } else if (aEffectChain.mEffects[EFFECT_RGBA] || aEffectChain.mEffects[EFFECT_RGBX] ||
              aEffectChain.mEffects[EFFECT_RGBA_EXTERNAL]) {

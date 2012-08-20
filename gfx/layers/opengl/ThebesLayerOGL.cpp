@@ -87,7 +87,7 @@ public:
                                 PRUint32 aFlags) = 0;
 
   void RenderTo(const nsIntPoint& aOffset, LayerManagerOGL* aManager,
-                PRUint32 aFlags);
+                PRUint32 aFlags, const nsIntRect& aClipRect);
 
   nsIntSize GetSize() {
     if (mTexImage)
@@ -112,7 +112,8 @@ protected:
 void
 ThebesLayerBufferOGL::RenderTo(const nsIntPoint& aOffset,
                                LayerManagerOGL* aManager,
-                               PRUint32 aFlags)
+                               PRUint32 aFlags,
+                               const nsIntRect& aClipRect)
 {
   NS_ASSERTION(Initialised(), "RenderTo with uninitialised buffer!");
 
@@ -161,6 +162,7 @@ ThebesLayerBufferOGL::RenderTo(const nsIntPoint& aOffset,
 
   gfx::Matrix4x4 transform;
   aManager->ToMatrix4x4(mLayer->GetEffectiveTransform(), transform);
+  gfx::Rect clipRect(aClipRect.x, aClipRect.y, aClipRect.width, aClipRect.height);
 
   const nsIntRegion& visibleRegion = mLayer->GetEffectiveVisibleRegion();
   nsIntRegion tmpRegion;
@@ -261,7 +263,7 @@ ThebesLayerBufferOGL::RenderTo(const nsIntPoint& aOffset,
             gfx::Rect sourceRect(tileRegionRect.x, tileRegionRect.y,
                                  tileRegionRect.width, tileRegionRect.height);
             gfx::Point offset(aOffset.x, aOffset.y);
-            aManager->GetCompositor()->DrawQuad(rect, &sourceRect, nullptr, effectChain,
+            aManager->GetCompositor()->DrawQuad(rect, &sourceRect, &clipRect, effectChain,
                                                 mLayer->GetEffectiveOpacity(), transform,
                                                 offset);
         }
@@ -762,6 +764,7 @@ ThebesLayerOGL::InvalidateRegion(const nsIntRegion &aRegion)
 
 void
 ThebesLayerOGL::RenderLayer(const nsIntPoint& aOffset,
+                            const nsIntRect& aClipRect,
                             Surface* aPreviousSurface)
 {
   if (!mBuffer && !CreateSurface()) {
@@ -819,7 +822,7 @@ ThebesLayerOGL::RenderLayer(const nsIntPoint& aOffset,
   // We won't be supporting non-shadow-thebes layers, so commenting the next
   // line is the simplest build fix.
   //gl()->fBindFramebuffer(LOCAL_GL_FRAMEBUFFER, aPreviousFrameBuffer);
-  mBuffer->RenderTo(aOffset, mOGLManager, flags);
+  mBuffer->RenderTo(aOffset, mOGLManager, flags, aClipRect);
 }
 
 Layer*
@@ -1074,6 +1077,7 @@ ShadowThebesLayerOGL::IsEmpty()
 
 void
 ShadowThebesLayerOGL::RenderLayer(const nsIntPoint& aOffset,
+                                  const nsIntRect& aClipRect,
                                   Surface* aPreviousSurface)
 {
   if (!mBuffer) {
@@ -1081,7 +1085,7 @@ ShadowThebesLayerOGL::RenderLayer(const nsIntPoint& aOffset,
   }
   NS_ABORT_IF_FALSE(mBuffer, "should have a buffer here");
 
-  mBuffer->RenderTo(aOffset, mOGLManager, 0);
+  mBuffer->RenderTo(aOffset, mOGLManager, 0, aClipRect);
 }
 
 void

@@ -9,6 +9,7 @@
 #include "mozilla/RefPtr.h"
 #include "mozilla/gfx/Rect.h"
 #include "mozilla/gfx/Matrix.h"
+#include "gfxMatrix.h"
 #include "nsAutoPtr.h"
 #include "nsRegion.h"
 
@@ -129,7 +130,15 @@ public:
                          float aOpacity,
                          const gfx::Matrix4x4& aTransform,
                          const gfx::Point& aOffset,
-                         const gfx::Filter aFilter) = 0;
+                         const gfx::Filter aFilter,
+                         const gfx::Rect& aClipRect) = 0;
+
+  //TODO[nrc] fix the dependency on GL stuff!
+  typedef unsigned int GLuint;
+  virtual void BindTexture(GLuint aTextureUnit)
+  {
+    NS_ERROR("BindTexture not implemented for this ImageSource");
+  }
 };
 
 class TextureHost : public Texture
@@ -168,6 +177,7 @@ enum EffectTypes
   EFFECT_BGRX,
   EFFECT_RGBX,
   EFFECT_BGRA,
+  EFFECT_RGB,
   EFFECT_RGBA,
   EFFECT_RGBA_EXTERNAL,
   EFFECT_YCBCR,
@@ -252,6 +262,23 @@ struct EffectBGRA : public Effect
   {}
 
   RefPtr<Texture> mBGRATexture;
+  bool mPremultiplied;
+  mozilla::gfx::Filter mFilter;
+  bool mFlipped;
+};
+
+struct EffectRGB : public Effect
+{
+  EffectRGB(Texture *aRGBTexture,
+             bool aPremultiplied,
+             mozilla::gfx::Filter aFilter,
+             bool aFlipped = false)
+    : Effect(EFFECT_RGB), mRGBTexture(aRGBTexture)
+    , mPremultiplied(aPremultiplied), mFilter(aFilter)
+    , mFlipped(aFlipped)
+  {}
+
+  RefPtr<Texture> mRGBTexture;
   bool mPremultiplied;
   mozilla::gfx::Filter mFilter;
   bool mFlipped;
@@ -372,18 +399,17 @@ public:
                                               SurfaceInitMode aInit) = 0;
 
   /* This creates a Surface that can be used as a rendering target by this compositor,
-   * and initializes this surface by copying from the given surface.
+   * and initializes this surface by copying from the given surface. If the given surface
+   * is nullptr, the screen frame in progress is used as the source.
    */
   virtual TemporaryRef<Surface> CreateSurfaceFromSurface(const gfx::IntRect &aRect,
                                                          const Surface *aSource) = 0;
 
   /* Sets the given surface as the target for subsequent calls to DrawQuad.
+   * Passing nullptr as aSurface sets the screen as the target.
    */
   virtual void SetSurfaceTarget(Surface *aSurface) = 0;
 
-  /* Sets the screen as the target for subsequent calls to DrawQuad.
-   */
-  virtual void RemoveSurfaceTarget() = 0;
 
   /* This tells the compositor to actually draw a quad, where the area is
    * specified in userspace, and the source rectangle is the area of the
@@ -394,6 +420,11 @@ public:
                         const gfx::Rect *aClipRect, const EffectChain &aEffectChain,
                         gfx::Float aOpacity, const gfx::Matrix4x4 &aTransform,
                         const gfx::Point &aOffset) = 0;
+
+  /* Start a new frame. If aClipRectIn is null, sets *aClipRectOut to the screen dimensions. 
+   */
+  virtual void BeginFrame(const gfx::Rect *aClipRectIn, const gfxMatrix& aTransform,
+                          gfx::Rect *aClipRectOut = nullptr) = 0;
 
   /* Flush the current frame to the screen.
    */

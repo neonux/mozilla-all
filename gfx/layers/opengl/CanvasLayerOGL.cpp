@@ -189,7 +189,7 @@ CanvasLayerOGL::UpdateSurface()
 }
 
 void
-CanvasLayerOGL::RenderLayer(const nsIntPoint& aOffset, Surface*)
+CanvasLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aClipRect, Surface*)
 {
   UpdateSurface();
   FireDidTransactionCallback();
@@ -382,7 +382,7 @@ ShadowCanvasLayerOGL::GetLayer()
 }
 
 void
-ShadowCanvasLayerOGL::RenderLayer(const nsIntPoint& aOffset, Surface*)
+ShadowCanvasLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aClipRect, Surface*)
 {
   if (!mTexImage && !IsValidSharedTexDescriptor(mFrontBufferDescriptor)) {
     return;
@@ -411,6 +411,7 @@ ShadowCanvasLayerOGL::RenderLayer(const nsIntPoint& aOffset, Surface*)
 
   gfx::Matrix4x4 transform;
   mOGLManager->ToMatrix4x4(GetEffectiveTransform(), transform);
+  gfx::Rect clipRect(aClipRect.x, aClipRect.y, aClipRect.width, aClipRect.height);
 
   if (IsValidSharedTexDescriptor(mFrontBufferDescriptor)) {
     // Shared texture handle rendering path, single texture rendering
@@ -439,7 +440,7 @@ ShadowCanvasLayerOGL::RenderLayer(const nsIntPoint& aOffset, Surface*)
     gfx::Rect rect(0, 0, texDescriptor.size().width, texDescriptor.size().height);
     gfx::Point offset(aOffset.x, aOffset.y);
 
-    mOGLManager->GetCompositor()->DrawQuad(rect, nullptr, nullptr, effectChain,
+    mOGLManager->GetCompositor()->DrawQuad(rect, nullptr, &clipRect, effectChain,
                                            GetEffectiveOpacity(), transform,
                                            offset);
 
@@ -473,7 +474,7 @@ ShadowCanvasLayerOGL::RenderLayer(const nsIntPoint& aOffset, Surface*)
       gfx::Rect sourceRect(0, 0, mTexImage->GetTileRect().width,
                            mTexImage->GetTileRect().height);
       gfx::Point offset(aOffset.x, aOffset.y);
-      mOGLManager->GetCompositor()->DrawQuad(rect, &sourceRect, nullptr, effectChain,
+      mOGLManager->GetCompositor()->DrawQuad(rect, &sourceRect, &clipRect, effectChain,
                                              GetEffectiveOpacity(), transform,
                                              offset);
     } while (mTexImage->NextTile());
