@@ -43,7 +43,10 @@ class Compositor;
 struct EffectChain;
 class SharedImage;
 class ShadowLayerForwarder;
+class ShadowableLayer;
 class TextureClient;
+class ImageClient;
+class Image;
 
 enum TextureFormat
 {
@@ -56,9 +59,11 @@ enum TextureFormat
 
 enum ImageSourceType
 {
+  IMAGE_UNKNOWN,
   IMAGE_YUV, //TODO[nrc] do we need backend texture info? I don't think so, should be covered by TextureHostType (maybe)
   IMAGE_SHARED,
   IMAGE_TEXTURE,
+  IMAGE_BRIDGE,
   IMAGE_SHMEM
 };
 
@@ -113,7 +118,6 @@ public:
   virtual ~Texture() {}
 };
 
-//TODO[nrc] merge with TextureHost
 class ImageSource : public RefCounted<ImageSource>
 {
 public:
@@ -410,11 +414,17 @@ class CompositingFactory
 {
 public:
   // TODO[nrc] comment
+  static TemporaryRef<ImageClient> CreateImageClient(const TextureHostType &aHostType,
+                                                     const ImageSourceType& aImageSourceType,
+                                                     ShadowLayerForwarder* aLayerForwarder,
+                                                     ShadowableLayer* aLayer);
   static TemporaryRef<TextureClient> CreateTextureClient(const TextureHostType &aHostType,
                                                          const ImageSourceType& aImageSourceType,
-                                                         ShadowLayerForwarder* aLayerForwarder);
+                                                         ShadowLayerForwarder* aLayerForwarder,
+                                                         bool aStrict = false);
 
   static TemporaryRef<Compositor> CreateCompositorForWidget(nsIWidget *aWidget);
+  static ImageSourceType TypeForImage(Image* aImage);
 
 private:
   //TODO[nrc] lol, fix this

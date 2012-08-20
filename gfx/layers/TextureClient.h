@@ -15,6 +15,9 @@
 namespace mozilla {
 namespace layers {
 
+class ImageContainer;
+class ImageLayer;
+
 /* This class allows texture clients to draw into textures through Azure or
  * thebes and applies locking semantics to allow GPU or CPU level
  * synchronization.
@@ -35,9 +38,6 @@ public:
   //TODO[nrc] will this even work?
   virtual TextureIdentifier GetIdentifier() = 0;
 
-  //TODO[nrc] comment
-  virtual void EnsureTextureClient(gfx::IntSize aSize, gfxASurface::gfxContentType aType);
-
   /* This requests a DrawTarget to draw into the current texture. Once the
    * user is finished with the DrawTarget it should call Unlock.
    */
@@ -48,40 +48,36 @@ public:
    */
   virtual already_AddRefed<gfxContext> LockContext() = 0;
 
+  //TODO[nrc] comments
+  virtual gfxImageSurface* LockImageSurface() = 0;
+  virtual void EnsureTextureClient(gfx::IntSize aSize, gfxASurface::gfxContentType aType) = 0;
+
   /* This unlocks the current DrawableTexture and allows the host to composite
    * it directly.
    */
   virtual void Unlock() = 0;
 
-  //TODO[nrc] comment; could this have a better name?
-  virtual SharedImage GetAsSharedImage() = 0;
+protected:
+  TextureClient(ShadowLayerForwarder* aLayerForwarder)
+    : mLayerForwarder(aLayerForwarder)
+  {}
+
+  ShadowLayerForwarder* mLayerForwarder;
 };
 
-//TODO[nrc] comments
-//specialised for non-shared textures
-class TextureClientTexture : public TextureClient
+class ImageClient : public RefCounted<ImageClient>
 {
 public:
-  TextureClientTexture(PRUint32 aId, ShadowLayerForwarder* aLayerForwarder);
-  ~TextureClientTexture();
+  //TODO[nrc] comments
+  virtual SharedImage GetAsSharedImage() = 0;
 
-  virtual TextureIdentifier GetIdentifier();
-  virtual void EnsureTextureClient(gfx::IntSize aSize, gfxASurface::gfxContentType aType);
-  virtual TemporaryRef<gfx::DrawTarget> LockDT();
-  virtual already_AddRefed<gfxContext> LockContext();
-  virtual void Unlock();
-  virtual SharedImage GetAsSharedImage();
+  // returns false if this is the wrong kind of ImageClient for aContainer
+  // note returning true does not necessarily imply success
+  virtual bool UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer) = 0;
 
-private:
-  //TODO[nrc] can we hoist up some of these fields
-  //TODO[nrc] change this to a layer manager and a ref ptr
-  ShadowLayerForwarder* mLayerForwarder;
-  nsRefPtr<gfxASurface> mSurface;
-  gfxASurface::gfxContentType mType;
-  SurfaceDescriptor mDescriptor;
-  TextureIdentifier mIdentifier;
-  gfx::IntSize mSize;
+  virtual void SetBuffer(const SharedImage& aBuffer) = 0;
 };
+
 
 }
 }

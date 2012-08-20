@@ -44,7 +44,21 @@ public:
   virtual TemporaryRef<TextureHost>
     CreateTextureHost(const TextureIdentifier &aIdentifier) MOZ_OVERRIDE
   {
-    return nullptr;
+    NS_ERROR("TODO[nrc]");
+    RefPtr<TextureHost> result = nullptr;
+    switch (aIdentifier.mType) {
+    case IMAGE_YUV:
+      break;
+    case IMAGE_SHARED:
+      break;
+    case IMAGE_TEXTURE:
+      break;
+    case IMAGE_SHMEM:
+      break;
+    }
+
+    //TODO[nrc] set the id?
+    return result.forget();
   }
 
   virtual TextureHostIdentifier GetTextureHostIdentifier() MOZ_OVERRIDE

@@ -254,12 +254,11 @@ ShadowLayerForwarder::PaintedImage(ShadowableLayer* aImage,
 }
 
 void
-ShadowLayerForwarder::PaintedTexture(ShadowableLayer* aImage,
-                                    TextureClient* aTextureClient)
+ShadowLayerForwarder::PaintedImage(ShadowableLayer* aImage,
+                                   ImageClient*  aImageClient)
 {
-  mTxn->AddPaint(OpPaintTexture(NULL, Shadow(aImage),
-                                aTextureClient->GetIdentifier(),
-                                aTextureClient->GetAsSharedImage()));
+  mTxn->AddPaint(OpPaintImage(NULL, Shadow(aImage),
+                              aImageClient->GetAsSharedImage()));
 }
 
 void
@@ -553,18 +552,30 @@ ShadowLayerForwarder::DestroySharedSurface(SurfaceDescriptor* aSurface)
 }
 
 TemporaryRef<TextureClient>
-ShadowLayerForwarder::CreateTextureClientFor(const ImageSourceType& aImageSourceType, ShadowableLayer* aLayer)
+ShadowLayerForwarder::CreateTextureClientFor(const ImageSourceType& aImageSourceType,
+                                             ShadowableLayer* aLayer,
+                                             bool aStrict /* = false */)
 {
-  RefPtr<TextureClient> client = CompositingFactory::CreateTextureClient(mTextureHostType, aImageSourceType, this);
+  RefPtr<TextureClient> client = CompositingFactory::CreateTextureClient(mTextureHostType,
+                                                                         aImageSourceType,
+                                                                         this, aStrict);
 
-  //TODO[nrc] send client's id and type (not aImageSourceType) to Compositor
+  // send client's id and type (not aImageSourceType) to Compositor
   TextureIdentifier textureId = client->GetIdentifier();
   mTxn->AddEdit(OpCreateTextureHost(NULL, Shadow(aLayer), textureId));
 
   return client.forget();
 }
 
-
+TemporaryRef<ImageClient>
+ShadowLayerForwarder::CreateImageClientFor(const ImageSourceType& aImageSourceType,
+                                           ShadowableLayer* aLayer)
+{
+  RefPtr<ImageClient> client = CompositingFactory::CreateImageClient(mTextureHostType,
+                                                                     aImageSourceType,
+                                                                     this, aLayer);
+  return client.forget();
+}
 
 PLayerChild*
 ShadowLayerForwarder::ConstructShadowFor(ShadowableLayer* aLayer)

@@ -44,7 +44,7 @@ struct OpCreateRefLayer        { PLayer layer; };
 struct ThebesBuffer {
   SurfaceDescriptor buffer;
   nsIntRect rect;
-  nsIntPoint rotation; 
+  nsIntPoint rotation;
 };
 union OptionalThebesBuffer { ThebesBuffer; null_t; };
 
@@ -189,12 +189,19 @@ struct OpThebesBufferSwap {
   nsIntRegion frontUpdatedRegion;
 };
 
+struct OpTextureSwap {
+  PLayer layer;
+  TextureIdentifier textureIdentifier;
+  SharedImage image;
+};
+
 // Unit of a "changeset reply".  This is a weird abstraction, probably
 // only to be used for buffer swapping.
 union EditReply {
   OpBufferSwap;
   OpThebesBufferSwap;
   OpImageSwap;
+  OpTextureSwap;
 };
 
 

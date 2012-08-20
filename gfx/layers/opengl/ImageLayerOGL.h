@@ -165,7 +165,8 @@ public:
 
   virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
   {
-    mTextureHost = aTextureHost;
+    //TODO[nrc]
+    //mTextureHost = aTextureHost;
   }
 
   // LayerOGL impl
@@ -185,7 +186,6 @@ private:
   // A ShadowImageLayer should use only one of the ImageSource
   // or ImageBridge mechanisms at one time
   RefPtr<ImageSource> mImageSource;
-  RefPtr<TextureHost> mTextureHost;
 };
 
 } /* layers */

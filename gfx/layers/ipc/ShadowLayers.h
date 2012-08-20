@@ -211,10 +211,11 @@ public:
    * NB: this initial implementation only forwards RGBA data for
    * ImageLayers.  This is slow, and will be optimized.
    */
+  //TODO[nrc] remove this one if not used
   void PaintedImage(ShadowableLayer* aImage,
                     const SharedImage& aNewFrontImage);
-  void PaintedTexture(ShadowableLayer* aImage,
-                      TextureClient* aTextureClient);
+  void PaintedImage(ShadowableLayer* aImage,
+                    ImageClient* aImageClient);
   void PaintedCanvas(ShadowableLayer* aCanvas,
                      bool aNeedYFlip,
                      const SurfaceDescriptor& aNewFrontSurface);
@@ -326,7 +327,8 @@ public:
   }
 
   //TODO[nrc] comment
-  TemporaryRef<TextureClient> CreateTextureClientFor(const ImageSourceType& aImageSourceType, ShadowableLayer* aLayer);
+  TemporaryRef<TextureClient> CreateTextureClientFor(const ImageSourceType& aImageSourceType, ShadowableLayer* aLayer, bool aStrict = false);
+  TemporaryRef<ImageClient> CreateImageClientFor(const ImageSourceType& aImageSourceType, ShadowableLayer* aLayer);
 
 protected:
   ShadowLayerForwarder();
@@ -393,6 +395,7 @@ private:
   Transaction* mTxn;
   PRInt32 mMaxTextureSize;
   TextureHostType mTextureHostType;
+  //TODO[nrc] do we need this anymore?
   LayersBackend mParentBackend;
 
   bool mIsFirstPaint;
@@ -552,6 +555,9 @@ public:
   //TODO[nrc] comment; make pure virtual when each layer type implements it
   // the layer can store the host how ever it wants - one-to-one or mapping from the id, or even not at all (e.g., colour layers)
   virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost) {} //= 0;
+
+  //TODO[nrc] comment; make pure virtual when each layer type implements it
+  virtual void SwapTexture(const TextureIdentifier& aTextureIdentifier, const SharedImage& aFront, SharedImage* aNewBack) {} // = 0;
 
   // These getters can be used anytime.
   const nsIntRect* GetShadowClipRect() { return mUseShadowClipRect ? &mShadowClipRect : nullptr; }

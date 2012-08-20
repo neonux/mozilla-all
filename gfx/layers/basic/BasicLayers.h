@@ -293,16 +293,9 @@ public:
     mShadow = aShadow;
   }
 
-  virtual void SetBackBuffer(const SurfaceDescriptor& aBuffer)
+  virtual void SetBackBuffer(const SharedImage& aBuffer)
   {
     NS_RUNTIMEABORT("if this default impl is called, |aBuffer| leaks");
-  }
-  
-  virtual void SetBackBufferYUVImage(const SurfaceDescriptor& aYBuffer,
-                                     const SurfaceDescriptor& aUBuffer,
-                                     const SurfaceDescriptor& aVBuffer)
-  {
-    NS_RUNTIMEABORT("if this default impl is called, the buffers leak");
   }
 
   virtual void Disconnect()
@@ -318,6 +311,12 @@ public:
   virtual BasicShadowableThebesLayer* AsThebes() { return nullptr; }
 };
 
+void
+PaintContext(gfxPattern* aPattern,
+             const nsIntRegion& aVisible,
+             float aOpacity,
+             gfxContext* aContext,
+             Layer* aMaskLayer);
 
 }
 }

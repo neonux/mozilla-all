@@ -38,12 +38,6 @@ public:
 
   virtual void Paint(gfxContext* aContext, Layer* aMaskLayer);
 
-  static void PaintContext(gfxPattern* aPattern,
-                           const nsIntRegion& aVisible,
-                           float aOpacity,
-                           gfxContext* aContext,
-                           Layer* aMaskLayer);
-
   virtual bool GetAsSurface(gfxASurface** aSurface,
                             SurfaceDescriptor* aDescriptor);
 
@@ -96,15 +90,9 @@ BasicImageLayer::GetAndPaintCurrentImage(gfxContext* aContext,
   }
 
   pat->SetFilter(mFilter);
-  gfxIntSize sourceSize = surface->GetSize();
-  if (mScaleMode != SCALE_NONE) {
-    NS_ASSERTION(mScaleMode == SCALE_STRETCH,
-      "No other scalemodes than stretch and none supported yet.");
-    gfxMatrix mat = pat->GetMatrix();
-    mat.Scale(float(sourceSize.width) / mScaleToSize.width, float(sourceSize.height) / mScaleToSize.height);
-    pat->SetMatrix(mat);
-    size = mScaleToSize;
-  }
+  gfxMatrix mat = pat->GetMatrix();
+  ScaleMatrix(surface->GetSize(), mat);
+  pat->SetMatrix(mat);
 
   // The visible region can extend outside the image, so just draw
   // within the image bounds.
@@ -120,12 +108,12 @@ BasicImageLayer::GetAndPaintCurrentImage(gfxContext* aContext,
   return pat.forget();
 }
 
-/*static*/ void
-BasicImageLayer::PaintContext(gfxPattern* aPattern,
-                              const nsIntRegion& aVisible,
-                              float aOpacity,
-                              gfxContext* aContext,
-                              Layer* aMaskLayer)
+void
+PaintContext(gfxPattern* aPattern,
+             const nsIntRegion& aVisible,
+             float aOpacity,
+             gfxContext* aContext,
+             Layer* aMaskLayer)
 {
   // Set PAD mode so that when the video is being scaled, we do not sample
   // outside the bounds of the video image.
@@ -175,7 +163,7 @@ class BasicShadowableImageLayer : public BasicImageLayer,
 public:
   BasicShadowableImageLayer(BasicShadowLayerManager* aManager) :
     BasicImageLayer(aManager),
-    mTextureClient(nullptr)
+    mImageClient(nullptr)
   {
     MOZ_COUNT_CTOR(BasicShadowableImageLayer);
   }
@@ -195,37 +183,20 @@ public:
   virtual Layer* AsLayer() { return this; }
   virtual ShadowableLayer* AsShadowableLayer() { return this; }
 
-  //TODO[nrc] remove this
-  virtual void SetBackBuffer(const SurfaceDescriptor& aBuffer)
+  virtual void SetBackBuffer(const SharedImage& aBuffer)
   {
-    NS_ERROR("I thought this only got called for ShadowLayers?");
-  }
-
-  virtual void SetBackBufferYUVImage(const SurfaceDescriptor& aYBuffer,
-                                     const SurfaceDescriptor& aUBuffer,
-                                     const SurfaceDescriptor& aVBuffer)
-  {
-    mBackBufferY = aYBuffer;
-    mBackBufferU = aUBuffer;
-    mBackBufferV = aVBuffer;
+    mImageClient->SetBuffer(aBuffer);
   }
 
   virtual void Disconnect()
   {
-    mBackBufferY = SurfaceDescriptor();
-    mBackBufferU = SurfaceDescriptor();
-    mBackBufferV = SurfaceDescriptor();
-    mTextureClient = nullptr;
+    mImageClient = nullptr;
     BasicShadowableLayer::Disconnect();
   }
 
   void DestroyBackBuffer()
   {
-    if (IsSurfaceDescriptorValid(mBackBufferY)) {
-      BasicManager()->ShadowLayerForwarder::DestroySharedSurface(&mBackBufferY);
-      BasicManager()->ShadowLayerForwarder::DestroySharedSurface(&mBackBufferU);
-      BasicManager()->ShadowLayerForwarder::DestroySharedSurface(&mBackBufferV);
-    }
+    mImageClient = nullptr;
   }
 
 private:
@@ -234,14 +205,27 @@ private:
     return static_cast<BasicShadowLayerManager*>(mManager);
   }
 
-  RefPtr<TextureClient> mTextureClient;
-  // For YUV Images these are the 3 planes (Y, Cb and Cr),
-  SurfaceDescriptor mBackBufferY;
-  SurfaceDescriptor mBackBufferU;
-  SurfaceDescriptor mBackBufferV;
-  gfxIntSize mCbCrSize;
+  ImageSourceType GetImageClientType();
+
+  void BasicShadowableImageLayer::EnsureImageClient()
+  {
+    if (!mImageClient) {
+      mImageClient = BasicManager()->CreateImageClientFor(GetImageClientType(), this);
+    }
+  }
+
+  RefPtr<ImageClient>  mImageClient;
 };
- 
+
+ImageSourceType
+BasicShadowableImageLayer::GetImageClientType()
+{
+  nsRefPtr<gfxASurface> surface;
+  AutoLockImage autoLock(mContainer, getter_AddRefs(surface));
+
+  return CompositingFactory::TypeForImage(autoLock.GetImage());
+}
+
 void
 BasicShadowableImageLayer::Paint(gfxContext* aContext, Layer* aMaskLayer)
 {
@@ -250,129 +234,35 @@ BasicShadowableImageLayer::Paint(gfxContext* aContext, Layer* aMaskLayer)
     return;
   }
 
-  if (!mContainer) {
-    return;
-  }
-
-  if (mContainer->IsAsync()) {
-    PRUint32 containerID = mContainer->GetAsyncContainerID();
-    BasicManager()->PaintedImage(BasicManager()->Hold(this), 
-                                 SharedImageID(containerID));
-    return;
-  }
-
-  nsRefPtr<gfxASurface> surface;
-  AutoLockImage autoLock(mContainer, getter_AddRefs(surface));
-
-  Image *image = autoLock.GetImage();
-
-  if (!image) {
-    return;
-  }
+  NS_ASSERTION(!aContext, "Shadowable layer should not paint to a context");
 
   if (aMaskLayer) {
     static_cast<BasicImplData*>(aMaskLayer->ImplData())
       ->Paint(aContext, nullptr);
   }
 
-  if (image->GetFormat() == Image::SHARED_TEXTURE &&
-      BasicManager()->GetParentBackendType() == mozilla::layers::LAYERS_OPENGL) {
-    SharedTextureImage *sharedImage = static_cast<SharedTextureImage*>(image);
-    const SharedTextureImage::Data *data = sharedImage->GetData();
-
-    SharedTextureDescriptor texture(data->mShareType, data->mHandle, data->mSize, data->mInverted);
-    SurfaceDescriptor descriptor(texture);
-    BasicManager()->PaintedImage(BasicManager()->Hold(this), descriptor);
+  if (!mContainer) {
     return;
   }
 
-  if (image->GetFormat() == Image::PLANAR_YCBCR && BasicManager()->IsCompositingCheap()) {
-    PlanarYCbCrImage *YCbCrImage = static_cast<PlanarYCbCrImage*>(image);
-    const PlanarYCbCrImage::Data *data = YCbCrImage->GetData();
-    NS_ASSERTION(data, "Must be able to retrieve yuv data from image!");
-
-    if (mSize != data->mYSize || mCbCrSize != data->mCbCrSize || !IsSurfaceDescriptorValid(mBackBufferY)) {
-      DestroyBackBuffer();
-      mSize = data->mYSize;
-      mCbCrSize = data->mCbCrSize;
-
-      // We either allocate all three planes or none.
-      if (!BasicManager()->AllocBufferWithCaps(mSize,
-                                               gfxASurface::CONTENT_ALPHA,
-                                               MAP_AS_IMAGE_SURFACE,
-                                               &mBackBufferY) ||
-          !BasicManager()->AllocBufferWithCaps(mCbCrSize,
-                                               gfxASurface::CONTENT_ALPHA,
-                                               MAP_AS_IMAGE_SURFACE,
-                                               &mBackBufferU) ||
-          !BasicManager()->AllocBufferWithCaps(mCbCrSize,
-                                               gfxASurface::CONTENT_ALPHA,
-                                               MAP_AS_IMAGE_SURFACE,
-                                               &mBackBufferV)) {
-        NS_RUNTIMEABORT("creating ImageLayer 'front buffer' failed!");
-      }
-    }
-
-    AutoOpenSurface dyas(OPEN_READ_WRITE, mBackBufferY);
-    gfxImageSurface* dy = dyas.GetAsImage();
-
-    for (int i = 0; i < data->mYSize.height; i++) {
-      memcpy(dy->Data() + i * dy->Stride(),
-             data->mYChannel + i * data->mYStride,
-             data->mYSize.width);
-    }
-
-    AutoOpenSurface duas(OPEN_READ_WRITE, mBackBufferU);
-    gfxImageSurface* du = duas.GetAsImage();
-    AutoOpenSurface dvas(OPEN_READ_WRITE, mBackBufferV);
-    gfxImageSurface* dv = dvas.GetAsImage();
-
-    for (int i = 0; i < data->mCbCrSize.height; i++) {
-      memcpy(du->Data() + i * du->Stride(),
-             data->mCbChannel + i * data->mCbCrStride,
-             data->mCbCrSize.width);
-      memcpy(dv->Data() + i * dv->Stride(),
-             data->mCrChannel + i * data->mCbCrStride,
-             data->mCbCrSize.width);
-    }
-
-    YUVImage yuv(mBackBufferY, mBackBufferU, mBackBufferV,
-                 data->GetPictureRect());
-
+  if (mContainer->IsAsync()) {
+    PRUint32 containerID = mContainer->GetAsyncContainerID();
     BasicManager()->PaintedImage(BasicManager()->Hold(this),
-                                 yuv);
+                                 SharedImageID(containerID));
     return;
   }
 
-  nsRefPtr<gfxPattern> pat = GetAndPaintCurrentImage
-    (aContext, GetEffectiveOpacity(), nullptr);
-  if (!pat)
-    return;
+  EnsureImageClient();
+  if (!mImageClient ||
+      !mImageClient->UpdateImage(mContainer, this)) {
+    mImageClient = BasicManager()->CreateImageClientFor(GetImageClientType(), this);
 
-  if (!mTextureClient) {
-    mTextureClient = BasicManager()->CreateTextureClientFor(IMAGE_TEXTURE, this);
+    if (!mImageClient ||
+        !mImageClient->UpdateImage(mContainer, this)) {
+      return;
+    }
   }
-
-  gfxASurface::gfxContentType type = gfxASurface::CONTENT_COLOR_ALPHA;
-  bool isOpaque = (GetContentFlags() & CONTENT_OPAQUE);
-  if (surface) {
-    type = surface->GetContentType();
-  }
-  if (type != gfxASurface::CONTENT_ALPHA &&
-      isOpaque) {
-    type = gfxASurface::CONTENT_COLOR;
-  }
-  mTextureClient->EnsureTextureClient(gfx::IntSize(mSize.width, mSize.height), type);
-
-  nsRefPtr<gfxContext> tmpCtx = mTextureClient->LockContext();
-  tmpCtx->SetOperator(gfxContext::OPERATOR_SOURCE);
-  PaintContext(pat,
-               nsIntRegion(nsIntRect(0, 0, mSize.width, mSize.height)),
-               1.0, tmpCtx, nullptr);
-
-  BasicManager()->PaintedTexture(BasicManager()->Hold(this), mTextureClient);
-
-  mTextureClient->Unlock();
+  BasicManager()->PaintedImage(BasicManager()->Hold(this), mImageClient);
 }
 
 class BasicShadowImageLayer : public ShadowImageLayer, public BasicImplData {
@@ -457,10 +347,10 @@ BasicShadowImageLayer::Paint(gfxContext* aContext, Layer* aMaskLayer)
   // The visible region can extend outside the image, so just draw
   // within the image bounds.
   AutoSetOperator setOperator(aContext, GetOperator());
-  BasicImageLayer::PaintContext(pat,
-                                nsIntRegion(nsIntRect(0, 0, mSize.width, mSize.height)),
-                                GetEffectiveOpacity(), aContext,
-                                aMaskLayer);
+  PaintContext(pat,
+               nsIntRegion(nsIntRect(0, 0, mSize.width, mSize.height)),
+               GetEffectiveOpacity(), aContext,
+               aMaskLayer);
 }
 
 bool

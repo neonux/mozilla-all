@@ -1091,19 +1091,7 @@ BasicShadowLayerManager::ForwardTransaction()
 
         const OpImageSwap& ois = reply.get_OpImageSwap();
         BasicShadowableLayer* layer = GetBasicShadowable(ois);
-        const SharedImage& newBack = ois.newBackImage();
-
-        if (newBack.type() == SharedImage::TSurfaceDescriptor) {
-          layer->SetBackBuffer(newBack.get_SurfaceDescriptor());
-        } else if (newBack.type() == SharedImage::TYUVImage) {
-          const YUVImage& yuv = newBack.get_YUVImage();
-          layer->SetBackBufferYUVImage(yuv.Ydata(), yuv.Udata(), yuv.Vdata());
-        } else {
-          layer->SetBackBuffer(SurfaceDescriptor());
-          layer->SetBackBufferYUVImage(SurfaceDescriptor(),
-                                       SurfaceDescriptor(),
-                                       SurfaceDescriptor());
-        }
+        layer->SetBackBuffer(ois.newBackImage());
 
         break;
       }

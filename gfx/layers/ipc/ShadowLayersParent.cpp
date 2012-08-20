@@ -55,6 +55,17 @@ AsTextureId(const OpCreateTextureHost& op)
 }
 
 static ShadowLayerParent*
+AsShadowLayer(const OpPaintTexture& op)
+{
+  return cast(op.layerParent());
+}
+static const TextureIdentifier
+AsTextureId(const OpPaintTexture& op)
+{
+  return static_cast<const TextureIdentifier>(op.textureIdentifier());
+}
+
+static ShadowLayerParent*
 AsShadowLayer(const OpSetRoot& op)
 {
   return cast(op.rootParent());
@@ -307,7 +318,7 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       const OpCreateTextureHost& op = edit.get_OpCreateTextureHost();
       ShadowLayerParent* shadow = AsShadowLayer(op);
       const TextureIdentifier textureId = AsTextureId(op);
-      layer_manager()->CreateTextureHostFor(shadow->AsLayer(), textureId);
+      layer_manager()->CreateTextureHostFor(shadow->AsLayer()->AsShadowLayer(), textureId);
 
       break;
     }
@@ -425,25 +436,24 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       break;
     }
     case Edit::TOpPaintTexture: {
-      MOZ_LAYERS_LOG(("[ParentSide] Paint Texture"));
+      //TODO[nrc]
+      /*MOZ_LAYERS_LOG(("[ParentSide] Paint Texture"));
 
-      const OpPaintImage& op = edit.get_OpPaintImage();
+      const OpPaintTexture& op = edit.get_OpPaintTexture();
       ShadowLayerParent* shadow = AsShadowLayer(op);
-      ShadowLayer* layer = shadow->AsLayer();
+      Layer* layer = shadow->AsLayer();
+      ShadowLayer* shadowLayer = layer->AsShadowLayer();
       const TextureIdentifier textureId = AsTextureId(op);
-      layer->SetAllocator(this);
-      layer->PaintTexture(textureId, op.image());
-      //TODO[nrc] implement helper methods
-      //TODO[nrc] do I need to reply? yes, and that is where the SetBackBuffer thing comes in too
- 
-      /*RenderTraceInvalidateStart(image, "FF00FF", image->GetVisibleRegion().GetBounds());
 
+      RenderTraceInvalidateStart(layer, "FF00FF", layer->GetVisibleRegion().GetBounds());
+
+      shadowLayer->SetAllocator(this);
       SharedImage newBack;
-      image->Swap(op.newFrontBuffer(), &newBack);
-      replyv.push_back(OpImageSwap(shadow, NULL,
-                                   newBack));
-
-      RenderTraceInvalidateEnd(image, "FF00FF");*/
+      shadowLayer->SwapTexture(textureId, op.image(), &newBack);
+      //TODO[nrc] do I need to reply? yes, and that is where the SetBackBuffer thing comes in too
+      replyv.push_back(OpTextureSwap(shadow, NULL, textureId, newBack));
+ 
+      RenderTraceInvalidateEnd(layer, "FF00FF");*/
       break;
     }
 

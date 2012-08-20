@@ -124,7 +124,8 @@ public:
 
   virtual void CreateTextureHostFor(ShadowLayer* aLayer, const TextureIdentifier& aTextureIdentifier)
   {
-    aLayer->AddTextureHost(aTextureIdentifier, mCompositor->CreateTextureHost(aTextureIdentifier));
+    RefPtr<TextureHost> textureHost = mCompositor->CreateTextureHost(aTextureIdentifier);
+    aLayer->AddTextureHost(aTextureIdentifier, textureHost);
   }
 
   virtual TextureHostIdentifier GetTextureHostIdentifier()

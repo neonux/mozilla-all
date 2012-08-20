@@ -671,6 +671,17 @@ public:
   ImageContainer* GetContainer() { return mContainer; }
   gfxPattern::GraphicsFilter GetFilter() { return mFilter; }
 
+  void ScaleMatrix(const gfxIntSize& aSourceSize, gfxMatrix& aMatrix)
+  {
+    if (mScaleMode == SCALE_NONE) {
+      return;
+    }
+
+    NS_ASSERTION(mScaleMode == SCALE_STRETCH,
+      "No other scalemodes than stretch and none supported yet.");
+    aMatrix.Scale(float(aSourceSize.width) / mScaleToSize.width, float(aSourceSize.height) / mScaleToSize.height);
+  }
+
   MOZ_LAYER_DECL_NAME("ImageLayer", TYPE_IMAGE)
 
   virtual void ComputeEffectiveTransforms(const gfx3DMatrix& aTransformToSurface)
