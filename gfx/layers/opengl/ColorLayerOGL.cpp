@@ -14,8 +14,8 @@ RenderColorLayer(ColorLayer* aLayer, LayerManagerOGL *aManager,
 {
   EffectChain effects;
   gfxRGBA color(aLayer->GetColor());
-  EffectSolidColor effectColor(gfx::Color(color.r, color.g, color.b, color.a));
-  effects.mEffects[EFFECT_SOLID_COLOR] = &effectColor;
+  RefPtr<EffectSolidColor> effectColor = new EffectSolidColor(gfx::Color(color.r, color.g, color.b, color.a));
+  effects.mEffects[EFFECT_SOLID_COLOR] = effectColor;
   nsIntRect visibleRect = aLayer->GetEffectiveVisibleRegion().GetBounds();
 
   // TODO: Create an EffectMask (with appropriate transform) for this.

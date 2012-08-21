@@ -18,7 +18,7 @@ class ImageClientTexture : public ImageClient
 public:
   ImageClientTexture(ShadowLayerForwarder* aLayerForwarder,
                      ShadowableLayer* aLayer);
-  ~ImageClientTexture();
+  virtual ~ImageClientTexture();
 
   virtual SharedImage GetAsSharedImage();
   virtual bool UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer);
@@ -33,7 +33,7 @@ class ImageClientShared : public ImageClient
 public:
   ImageClientShared(ShadowLayerForwarder* aLayerForwarder,
                     ShadowableLayer* aLayer);
-  ~ImageClientShared();
+  virtual ~ImageClientShared();
 
   virtual SharedImage GetAsSharedImage();
   virtual bool UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer);
@@ -49,7 +49,7 @@ class ImageClientYUV : public ImageClient
 public:
   ImageClientYUV(ShadowLayerForwarder* aLayerForwarder,
                  ShadowableLayer* aLayer);
-  ~ImageClientYUV();
+  virtual ~ImageClientYUV();
 
   virtual SharedImage GetAsSharedImage();
   virtual bool UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer);
@@ -67,7 +67,7 @@ private:
 class TextureClientTexture : public TextureClient
 {
 public:
-  ~TextureClientTexture();
+  virtual ~TextureClientTexture();
 
   virtual TextureIdentifier GetIdentifier() { return TextureIdentifier(); } //TODO[nrc]
   virtual TemporaryRef<gfx::DrawTarget> LockDT() { return nullptr; } //TODO[nrc]

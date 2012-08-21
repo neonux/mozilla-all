@@ -55,6 +55,10 @@ public:
       break;
     case IMAGE_SHMEM:
       break;
+    case IMAGE_BRIDGE:
+      break;
+    case IMAGE_UNKNOWN:
+      break;
     }
 
     //TODO[nrc] set the id?

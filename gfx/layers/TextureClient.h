@@ -25,7 +25,7 @@ class ImageLayer;
 class TextureClient : public RefCounted<TextureClient>
 {
 public:
-  virtual ~TextureClient() = 0;
+  virtual ~TextureClient() {}
   /* This will return an identifier that can be sent accross a process or
    * thread boundary and used to construct a DrawableTextureHost object
    * which can then be used as a texture for rendering by a compatible
@@ -69,7 +69,7 @@ protected:
 class ImageClient : public RefCounted<ImageClient>
 {
 public:
-  virtual ~ImageClient() = 0;
+  virtual ~ImageClient() {}
   //TODO[nrc] comments
   virtual SharedImage GetAsSharedImage() = 0;
 
