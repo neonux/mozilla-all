@@ -98,12 +98,12 @@ struct TextureIdentifier
 {
   return aLeft.mType == aRight.mType &&
          aLeft.mMaxTextureSize == aRight.mMaxTextureSize;
-}*/
+}
 static bool operator==(const TextureIdentifier& aLeft, const TextureIdentifier& aRight)
 {
   return aLeft.mType == aRight.mType &&
          aLeft.mDescriptor == aRight.mDescriptor;
-}
+}*/
 
 class Texture : public RefCounted<Texture>
 {
