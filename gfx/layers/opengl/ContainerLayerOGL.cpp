@@ -233,8 +233,8 @@ ContainerRender(Container* aContainer,
         aContainer->gl()->GetTexImage(containerSurface, true, aManager->GetFBOLayerProgramType());
 
       WriteSnapshotToDumpFile(aContainer, surf);
-      */
-    }
+      
+    }*/
 #endif
 
     // TODO: Handle this in the Compositor.
