@@ -10,72 +10,72 @@
 #include "CompositorOGL.h"
 
 namespace mozilla {
-
 namespace layers {
 
-//TODO[nrc] kill this?
-/*
-class TextureHostOGL : public TextureHost
-{
-  virtual TextureIdentifier GetIdentifierForProcess(base::ProcessHandle* aProcess) MOZ_OVERRIDE
-  {
-    return TextureIdentifier();
-  }
+class TextureImageAsTextureHost;
+class TextureHostOGLShared;
 
-  virtual void PrepareForRendering() MOZ_OVERRIDE {}
-
-  virtual void
-    UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) MOZ_OVERRIDE {}
-};*/
-
-class ATextureOGL : public Texture
+// not really a TextureHost, but otherwise we have a screwey inheritance hierarchy
+class ATextureOGL : public TextureHost
 {
 public:
   virtual GLuint GetTextureHandle() = 0;
-
-  gfx::IntSize GetSize()
-  {
-    return mSize;
-  }
-
-
-  GLenum GetWrapMode()
-  {
-    return mWrapMode;
-  }
-
-  void SetWrapMode(GLenum aWrapMode)
-  {
-    mWrapMode = aWrapMode;
-  }
+  virtual gfx::IntSize GetSize() = 0;
+  virtual GLenum GetWrapMode() = 0;
+  virtual void SetWrapMode(GLenum aWrapMode) = 0;
 
   //TODO[nrc] will UpdateTexture work with the other kinds of textures?
   //default = no op
   virtual void
-    UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) {}
+    UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) MOZ_OVERRIDE {}
 
 protected:
-  ATextureOGL(CompositorOGL* aCompositorOGL)
-    : mCompositorOGL(aCompositorOGL)
+  ATextureOGL() {}
+};
+
+//TODO[nrc] kill this once I sort out TextureOGL
+class CTextureOGL : public ATextureOGL
+{
+public:
+  virtual GLuint GetTextureHandle() = 0;
+
+  virtual gfx::IntSize GetSize()
+  {
+    return mSize;
+  }
+
+  virtual GLenum GetWrapMode()
+  {
+    return mWrapMode;
+  }
+
+  virtual void SetWrapMode(GLenum aWrapMode)
+  {
+    mWrapMode = aWrapMode;
+  }
+
+protected:
+  CTextureOGL()
+    : mWrapMode(LOCAL_GL_REPEAT)
+  {}
+
+  CTextureOGL(gfx::IntSize aSize)
+    : mSize(aSize)
     , mWrapMode(LOCAL_GL_REPEAT)
   {}
 
-  ATextureOGL(CompositorOGL* aCompositorOGL, gfx::IntSize aSize)
-    : mCompositorOGL(aCompositorOGL)
-    , mSize(aSize)
-    , mWrapMode(LOCAL_GL_REPEAT)
-  {}
-
-  RefPtr<CompositorOGL> mCompositorOGL;
   gfx::IntSize mSize;
   GLenum mWrapMode;
 };
 
-class TextureOGL : public ATextureOGL
+
+
+class TextureOGL : public CTextureOGL
 {
 public:
-  TextureOGL(CompositorOGL* aCompositorOGL, GLuint aTextureHandle, const gfx::IntSize& aSize)
-    : ATextureOGL(aCompositorOGL, aSize)
+  TextureOGL(GLContext* aGL, GLuint aTextureHandle, const gfx::IntSize& aSize)
+    : CTextureOGL(aSize)
+    , mGL(aGL)
     , mTextureHandle(aTextureHandle)
   {}
 
@@ -118,83 +118,175 @@ private:
   GLenum mFormat;
   GLenum mInternalFormat;
   GLenum mType;
+  nsRefPtr<GLContext> mGL;
   PRUint32 mPixelSize;
 };
 
-class ImageSourceOGL : public ImageSource, public ATextureOGL
+//TODO[nrc] the ImageHosts are tied to a specific TextureHosts, I should fix that, maybe
+// which means that these ImageHosts are GL specific because their TextureHosts are GL
+// specific
+
+class ImageHostTexture : public ImageHost
 {
 public:
-  ImageSourceOGL(CompositorOGL* aCompositorOGL);
+  ImageHostTexture(Compositor* aCompositor);
 
-  virtual ImageSourceType GetType() { return IMAGE_TEXTURE; }
+  virtual ImageHostType GetType() { return IMAGE_TEXTURE; }
 
-  virtual void UpdateImage(const SharedImage& aImage);
+  virtual void UpdateImage(const TextureIdentifier& aTextureIdentifier,
+                           const SharedImage& aImage);
 
   virtual void Composite(EffectChain& aEffectChain,
                          float aOpacity,
                          const gfx::Matrix4x4& aTransform,
                          const gfx::Point& aOffset,
-                         const gfx::Filter aFilter,
+                         const gfx::Filter& aFilter,
                          const gfx::Rect& aClipRect);
+
+  virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost);
+
+  virtual void SetForceSingleTile(bool aForceSingleTile) MOZ_OVERRIDE;
+
+private:
+  RefPtr<TextureImageAsTextureHost> mTextureHost;
+  RefPtr<Compositor> mCompositor;
+};
+
+class ImageHostShared : public ImageHost
+{
+public:
+  ImageHostShared(Compositor* aCompositor);
+
+  virtual ImageHostType GetType() { return IMAGE_SHARED; }
+
+
+  virtual void UpdateImage(const TextureIdentifier& aTextureIdentifier,
+                           const SharedImage& aImage);
+
+  virtual void Composite(EffectChain& aEffectChain,
+                         float aOpacity,
+                         const gfx::Matrix4x4& aTransform,
+                         const gfx::Point& aOffset,
+                         const gfx::Filter& aFilter,
+                         const gfx::Rect& aClipRect);
+
+  virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost);
+
+private:
+  RefPtr<TextureHostOGLShared> mTextureHost;
+  RefPtr<Compositor> mCompositor;
+};
+
+//thin TextureHost wrapper around a TextureImage
+class TextureImageAsTextureHost : public ATextureOGL
+{
+public:
+  // XXX returns the size of the current tile being composited to DrawQuad, I think this is a bit of a hack
+  virtual gfx::IntSize GetSize()
+  {
+    return mSize;
+  }
+
+  void SetSize(const gfx::IntSize& aSize)
+  {
+    mSize = aSize;
+  }
 
   virtual GLuint GetTextureHandle()
   {
     return mTexImage->GetTextureID();
   }
 
-  void SetForceSingleTile(bool aForceSingleTile)
+  virtual GLenum GetWrapMode()
   {
-    mForceSingleTile = aForceSingleTile;
+    return mTexImage->mWrapMode;
   }
+
+  virtual void SetWrapMode(GLenum aWrapMode)
+  {
+    mTexImage->mWrapMode = aWrapMode;
+  }
+
+  virtual void Update(const SharedImage& aImage);
+  virtual Effect* Lock(const gfx::Filter& aFilter);
+
+  void SetFilter(const gfx::Filter& aFilter) { mTexImage->SetFilter(gfx::ThebesFilter(aFilter)); }
+  void BeginTileIteration() { mTexImage->BeginTileIteration(); }
+  nsIntRect GetTileRect() { return mTexImage->GetTileRect(); }
+  bool NextTile() { return mTexImage->NextTile(); }
+  void SetForceSingleTile(bool aForceSingleTile) { mForceSingleTile = aForceSingleTile; }
 
 private:
-  nsRefPtr<TextureImage> mTexImage;
+  TextureImageAsTextureHost()
+    : mTexImage(nullptr)
+    , mForceSingleTile(false)
+  {}
+
   bool mForceSingleTile;
+  nsRefPtr<TextureImage> mTexImage;
+  gfx::IntSize mSize;
+
+  friend class CompositorOGL;
 };
 
-class ImageSourceOGLShared : public ImageSource, public ATextureOGL
+class TextureHostOGLShared : public ATextureOGL
 {
 public:
-  ImageSourceOGLShared(CompositorOGL* aCompositorOGL);
-
-  ~ImageSourceOGLShared()
+  ~TextureHostOGLShared()
   {
-    mCompositorOGL->gl()->ReleaseSharedHandle(mShareType, mSharedHandle);
+    mGL->ReleaseSharedHandle(mShareType, mSharedHandle);
   }
 
-  virtual ImageSourceType GetType() { return IMAGE_SHARED; }
+  virtual gfx::IntSize GetSize()
+  {
+    return mSize;
+  }
 
-
-  virtual void UpdateImage(const SharedImage& aImage);
-
-  virtual void Composite(EffectChain& aEffectChain,
-                         float aOpacity,
-                         const gfx::Matrix4x4& aTransform,
-                         const gfx::Point& aOffset,
-                         const gfx::Filter aFilter,
-                         const gfx::Rect& aClipRect);
+  void SetSize(const gfx::IntSize& aSize)
+  {
+    mSize = aSize;
+  }
 
   virtual GLuint GetTextureHandle()
   {
     return mTextureHandle;
   }
 
+  virtual GLenum GetWrapMode()
+  {
+    return LOCAL_GL_REPEAT;
+  }
+
+  virtual void SetWrapMode(GLenum aWrapMode) {}
+
+  virtual void Update(const SharedImage& aImage);
+  virtual Effect* Lock(const gfx::Filter& aFilter);
+  virtual void Unlock();
+
 private:
-  bool mInverted;
-  GLuint mTextureHandle;
-  gl::SharedTextureHandle mSharedHandle;
-  gl::TextureImage::TextureShareType mShareType;
-};
-
-
-class TextureOGLRaw : public ATextureOGL
-{
-public:
-  TextureOGLRaw()
-    : ATextureOGL(nullptr)
+  TextureHostOGLShared(GLContext* aGL)
+    : mGL(aGL)
   {}
 
-  ~TextureOGLRaw()
+  bool mInverted;
+  GLContext* mGL;
+  GLuint mTextureHandle;
+  gfx::IntSize mSize;
+  gl::SharedTextureHandle mSharedHandle;
+  gl::TextureImage::TextureShareType mShareType;
+
+  friend class CompositorOGL;
+};
+
+class GLTextureAsTextureHost : public CTextureOGL
+{
+public:
+  GLTextureAsTextureHost(GLContext* aGL)
+    : CTextureOGL()
+    , mGL(aGL)
+  {}
+
+  ~GLTextureAsTextureHost()
   {
     mTexture.Release();
   }
@@ -204,39 +296,10 @@ public:
     return mTexture.GetTextureID();
   }
 
-  void Ensure(CompositorOGL* aCompositorOGL, const gfxIntSize& aSize)
-  {
-    mSize = gfx::IntSize(aSize.width, aSize.height);
-    mCompositorOGL = aCompositorOGL;
-
-
-    if (!mTexture.IsAllocated()) {
-      mTexture.Allocate(mCompositorOGL->gl());
-
-      NS_ASSERTION(mTexture.IsAllocated(),
-                   "Texture allocation failed!");
-
-      mCompositorOGL->gl()->MakeCurrent();
-      mCompositorOGL->SetClamping(mTexture.GetTextureID());
-    }
-  }
-
-  void Upload(gfxASurface* aSurface)
-  {
-    //TODO[nrc] I don't see why we need a new image surface here, but should check
-    /*nsRefPtr<gfxASurface> surf = new gfxImageSurface(aData.mYChannel,
-                                                     mSize,
-                                                     aData.mYStride,
-                                                     gfxASurface::ImageFormatA8);*/
-    GLuint textureId = mTexture.GetTextureID();
-    mCompositorOGL->gl()->UploadSurfaceToTexture(aSurface,
-                                                 nsIntRect(0, 0, mSize.width, mSize.height),
-                                                 textureId,
-                                                 true);
-    NS_ASSERTION(textureId == mTexture.GetTextureID(), "texture handle id changed");
-  }
+  void Update(const SharedImage& aImage);
 
 private:
+  nsRefPtr<GLContext> mGL;
   GLTexture mTexture;
 };
 

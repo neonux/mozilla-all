@@ -682,7 +682,7 @@ ImageLayerOGL::LoadAsTexture(GLuint aTextureUnit, gfxIntSize* aSize)
 ShadowImageLayerOGL::ShadowImageLayerOGL(LayerManagerOGL* aManager)
   : ShadowImageLayer(aManager, nullptr)
   , LayerOGL(aManager)
-  , mImageSource(nullptr)
+  , mImageHost(nullptr)
 {
   mImplData = static_cast<LayerOGL*>(this);
 }
@@ -691,19 +691,40 @@ ShadowImageLayerOGL::~ShadowImageLayerOGL()
 {}
 
 void
-ShadowImageLayerOGL::EnsureImageSource(const SharedImage& aFront)
+ShadowImageLayerOGL::AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
 {
-  ImageSourceType type = ImageSourceTypeForSharedImage(aFront);
-  if (mImageSource &&
-      mImageSource->GetType() == type) {
+  EnsureImageHost(aTextureIdentifier);
+
+  mImageHost->AddTextureHost(aTextureIdentifier, aTextureHost);
+}
+
+void
+ShadowImageLayerOGL::SwapTexture(const TextureIdentifier& aTextureIdentifier,
+                                 const SharedImage& aFront,
+                                 SharedImage* aNewBack)
+{
+  *aNewBack = aFront;
+
+  if (mDestroyed) {
     return;
   }
 
-  mImageSource = mOGLManager->GetCompositor()->CreateImageSourceForSharedImage(type);
+  if (aNewBack->type() == SharedImage::TSharedImageID) {
+    NS_ERROR("Shared Images should not use SwapTexture");
+  }
 
-  // TODO: YUCK! Everything else about ImageSource can be moved up to ShadowImageLayer
-  if (type == IMAGE_TEXTURE) {
-    static_cast<ImageSourceOGL*>(mImageSource.get())->SetForceSingleTile(mForceSingleTile);
+  EnsureImageHost(aTextureIdentifier);
+
+  mImageHost->UpdateImage(aTextureIdentifier, *aNewBack);
+}
+
+void
+ShadowImageLayerOGL::EnsureImageHost(const TextureIdentifier& aTextureIdentifier)
+{
+  if (!mImageHost ||
+      mImageHost->GetType() != aTextureIdentifier.mImageType) {
+    mImageHost = mOGLManager->GetCompositor()->CreateImageHost(aTextureIdentifier.mImageType);
+    mImageHost->SetForceSingleTile(mForceSingleTile);
   }
 }
 
@@ -717,21 +738,18 @@ ShadowImageLayerOGL::Swap(const SharedImage& aNewFront,
     return;
   }
 
-  if (aNewBack->type() == SharedImage::TSharedImageID) {
-    // We are using ImageBridge protocol. The image data will be queried at render
-    // time in the parent side.
-    PRUint64 newID = aNewBack->get_SharedImageID().id();
-    if (newID != mImageContainerID) {
-      mImageContainerID = newID;
-      mImageVersion = 0;
-    }
-
+  if (aNewBack->type() != SharedImage::TSharedImageID) {
+    NS_ERROR("Only Shared Images should use Swap");
     return;
   }
 
-  EnsureImageSource(*aNewBack);
-
-  mImageSource->UpdateImage(*aNewBack);
+  // We are using ImageBridge protocol. The image data will be queried at render
+  // time in the parent side.
+  PRUint64 newID = aNewBack->get_SharedImageID().id();
+  if (newID != mImageContainerID) {
+    mImageContainerID = newID;
+    mImageVersion = 0;
+  }
 }
 
 void
@@ -766,8 +784,11 @@ ShadowImageLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aCl
     if (imgVersion != mImageVersion) {
       SharedImage* img = ImageContainerParent::GetSharedImage(mImageContainerID);
       if (img && (img->type() == SharedImage::TYUVImage)) {
-        mImageSource = mOGLManager->GetCompositor()->CreateImageSourceForSharedImage(IMAGE_YUV);
-        mImageSource->UpdateImage(*img);
+        mImageHost = mOGLManager->GetCompositor()->CreateImageHost(IMAGE_YUV);
+        TextureIdentifier textureId;
+        textureId.mImageType = IMAGE_YUV;
+        textureId.mTextureType = IMAGE_SHMEM;
+        mImageHost->UpdateImage(textureId, *img);
   
         mImageVersion = imgVersion;
       }
@@ -785,12 +806,12 @@ ShadowImageLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aCl
   LayerManagerOGL::ToMatrix4x4(GetEffectiveTransform(), transform);
   gfx::Rect clipRect(aClipRect.x, aClipRect.y, aClipRect.width, aClipRect.height);
 
-  mImageSource->Composite(effectChain,
-                          GetEffectiveOpacity(),
-                          transform,
-                          gfx::Point(aOffset.x, aOffset.y),
-                          gfx::ToFilter(mFilter),
-                          clipRect);
+  mImageHost->Composite(effectChain,
+                        GetEffectiveOpacity(),
+                        transform,
+                        gfx::Point(aOffset.x, aOffset.y),
+                        gfx::ToFilter(mFilter),
+                        clipRect);
 }
 
 bool
@@ -803,7 +824,7 @@ ShadowImageLayerOGL::LoadAsTexture(GLuint aTextureUnit, gfxIntSize* aSize)
 void
 ShadowImageLayerOGL::CleanupResources()
 {
-  mImageSource = nullptr;
+  mImageHost = nullptr;
 }
 
 } /* layers */

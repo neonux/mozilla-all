@@ -298,6 +298,12 @@ public:
     NS_RUNTIMEABORT("if this default impl is called, |aBuffer| leaks");
   }
 
+  virtual void SetBackBuffer(const TextureIdentifier& aTextureIdentifier,
+                             const SharedImage& aBuffer)
+  {
+    NS_RUNTIMEABORT("if this default impl is called, |aBuffer| leaks");
+  }
+
   virtual void Disconnect()
   {
     // This is an "emergency Disconnect()", called when the compositing

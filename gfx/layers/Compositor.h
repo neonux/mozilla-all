@@ -41,6 +41,7 @@ class DrawTarget;
 namespace layers {
 
 class Compositor;
+struct Effect;
 struct EffectChain;
 class SharedImage;
 class ShadowLayerForwarder;
@@ -58,18 +59,17 @@ enum TextureFormat
 };
 
 
-enum ImageSourceType
+//TODO[nrc] rename this crap and separate out texture/image types and maybe host/client types
+enum ImageHostType
 {
   IMAGE_UNKNOWN,
-  IMAGE_YUV, //TODO[nrc] do we need backend texture info? I don't think so, should be covered by TextureHostType (maybe)
+  IMAGE_YUV,
   IMAGE_SHARED,
   IMAGE_TEXTURE,
   IMAGE_BRIDGE,
   IMAGE_SHMEM
 };
 
-//TODO[nrc] should ImageSourceType be part of TextureHostType? No, but we need both or something?
-//maybe TextureType - one of GL, D3D19, etc. used with IMAGE_TEXTURE, IMAGE_YUV
 
 enum TextureHostType
 {
@@ -83,6 +83,7 @@ enum TextureHostType
 struct TextureHostIdentifier
 {
   TextureHostType mType;
+  //TODO[nrc] add ImageHostType, use it
   PRInt32 mMaxTextureSize;
 };
 
@@ -90,7 +91,8 @@ struct TextureHostIdentifier
 // goes LayerManager to Compositor on TextureClient creation
 struct TextureIdentifier
 {
-  ImageSourceType mType;
+  ImageHostType mImageType;
+  ImageHostType mTextureType;
   PRUint32 mDescriptor;
 };
 
@@ -101,10 +103,12 @@ struct TextureIdentifier
 }*/
 static bool operator==(const TextureIdentifier& aLeft, const TextureIdentifier& aRight)
 {
-  return aLeft.mType == aRight.mType &&
+  return aLeft.mImageType == aRight.mImageType &&
+         aLeft.mTextureType == aRight.mTextureType &&
          aLeft.mDescriptor == aRight.mDescriptor;
 }
 
+//TODO[nrc] maybe remove Texture and only use TextureHost
 class Texture : public RefCounted<Texture>
 {
 public:
@@ -115,32 +119,12 @@ public:
    */
   virtual void
     UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) = 0;
-
   virtual ~Texture() {}
 };
 
-class ImageSource : public RefCounted<ImageSource>
-{
-public:
-  virtual ImageSourceType GetType() = 0;
 
-  virtual void UpdateImage(const SharedImage& aImage) = 0;
-
-  virtual void Composite(EffectChain& aEffectChain,
-                         float aOpacity,
-                         const gfx::Matrix4x4& aTransform,
-                         const gfx::Point& aOffset,
-                         const gfx::Filter aFilter,
-                         const gfx::Rect& aClipRect) = 0;
-
-  //TODO[nrc] fix the dependency on GL stuff!
-  typedef unsigned int GLuint;
-  virtual void BindTexture(GLuint aTextureUnit)
-  {
-    NS_ERROR("BindTexture not implemented for this ImageSource");
-  }
-};
-
+//TODO[nrc] IPC interface is a bit of a mess:
+// ImageClient -> SharedImage -> TextureHost
 class TextureHost : public Texture
 {
 public:
@@ -155,7 +139,31 @@ public:
   /* Perform any precomputation (e.g. texture upload) that needs to happen to the
    * texture before rendering.
    */
-  virtual void PrepareForRendering() = 0;
+  //virtual void PrepareForRendering() {}
+
+  //TODO[nrc] comments
+  virtual void Update(const SharedImage& aImage) {}
+  virtual Effect* Lock(const gfx::Filter& aFilter) { return nullptr; }
+  virtual void Unlock() {}
+};
+
+class ImageHost : public RefCounted<ImageHost>
+{
+public:
+  virtual ImageHostType GetType() = 0;
+
+  virtual void UpdateImage(const TextureIdentifier& aTextureIdentifier,
+                           const SharedImage& aImage) = 0;
+
+  virtual void Composite(EffectChain& aEffectChain,
+                         float aOpacity,
+                         const gfx::Matrix4x4& aTransform,
+                         const gfx::Point& aOffset,
+                         const gfx::Filter& aFilter,
+                         const gfx::Rect& aClipRect) = 0;
+
+  virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost) = 0;
+  virtual void SetForceSingleTile(bool aForceSingleTile) {}
 };
 
 /* This can be used as an offscreen rendering target by the compositor, and
@@ -389,8 +397,8 @@ public:
   /**
    * TODO[nrc] comment, name
    */
-  virtual TemporaryRef<ImageSource> 
-    CreateImageSourceForSharedImage(ImageSourceType aType) = 0;
+  virtual TemporaryRef<ImageHost> 
+    CreateImageHost(ImageHostType aType) = 0;
 
   /* This creates a Surface that can be used as a rendering target by this
    * compositor.
@@ -446,20 +454,17 @@ class CompositingFactory
 public:
   // TODO[nrc] comment
   static TemporaryRef<ImageClient> CreateImageClient(const TextureHostType &aHostType,
-                                                     const ImageSourceType& aImageSourceType,
+                                                     const ImageHostType& aImageHostType,
                                                      ShadowLayerForwarder* aLayerForwarder,
                                                      ShadowableLayer* aLayer);
   static TemporaryRef<TextureClient> CreateTextureClient(const TextureHostType &aHostType,
-                                                         const ImageSourceType& aImageSourceType,
+                                                         const ImageHostType& aTextureHostType,
+                                                         const ImageHostType& aImageHostType,
                                                          ShadowLayerForwarder* aLayerForwarder,
                                                          bool aStrict = false);
 
   static TemporaryRef<Compositor> CreateCompositorForWidget(nsIWidget *aWidget);
-  static ImageSourceType TypeForImage(Image* aImage);
-
-private:
-  //TODO[nrc] lol, fix this
-  static PRUint32 sId;
+  static ImageHostType TypeForImage(Image* aImage);
 };
 
 

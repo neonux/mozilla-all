@@ -360,15 +360,15 @@ public:
   virtual void CreateTextureHostFor(ShadowLayer* aLayer,
                                     const TextureIdentifier& aTextureIdentifier)
   {
-    //TODO[nrc]
-    NS_ERROR("THis should have been overridden TODO[nrc]");
+    //TODO[nrc] make pure virtual
+    NS_ERROR("This should have been overridden TODO[nrc]");
   }
 
   //TODO[nrc] comment
   virtual TextureHostIdentifier GetTextureHostIdentifier()
   {
-    //TODO[nrc]
-    NS_ERROR("THis should have been overridden TODO[nrc]");
+    //TODO[nrc] make pure virtual
+    NS_ERROR("This should have been overridden TODO[nrc]");
     return TextureHostIdentifier();
   }
 

@@ -552,12 +552,14 @@ ShadowLayerForwarder::DestroySharedSurface(SurfaceDescriptor* aSurface)
 }
 
 TemporaryRef<TextureClient>
-ShadowLayerForwarder::CreateTextureClientFor(const ImageSourceType& aImageSourceType,
+ShadowLayerForwarder::CreateTextureClientFor(const ImageHostType& aTextureHostType,
+                                             const ImageHostType& aImageHostType,
                                              ShadowableLayer* aLayer,
                                              bool aStrict /* = false */)
 {
   RefPtr<TextureClient> client = CompositingFactory::CreateTextureClient(mTextureHostType,
-                                                                         aImageSourceType,
+                                                                         aTextureHostType,
+                                                                         aImageHostType,
                                                                          this, aStrict);
 
   // send client's id and type (not aImageSourceType) to Compositor
@@ -568,11 +570,11 @@ ShadowLayerForwarder::CreateTextureClientFor(const ImageSourceType& aImageSource
 }
 
 TemporaryRef<ImageClient>
-ShadowLayerForwarder::CreateImageClientFor(const ImageSourceType& aImageSourceType,
+ShadowLayerForwarder::CreateImageClientFor(const ImageHostType& aImageHostType,
                                            ShadowableLayer* aLayer)
 {
   RefPtr<ImageClient> client = CompositingFactory::CreateImageClient(mTextureHostType,
-                                                                     aImageSourceType,
+                                                                     aImageHostType,
                                                                      this, aLayer);
   return client.forget();
 }

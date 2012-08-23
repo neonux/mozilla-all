@@ -792,13 +792,15 @@ struct ParamTraits<mozilla::layers::TextureIdentifier>
   
   static void Write(Message* aMsg, const paramType& aParam)
   {
-    WriteParam(aMsg, aParam.mType);
+    WriteParam(aMsg, aParam.mImageType);
+    WriteParam(aMsg, aParam.mTextureType);
     WriteParam(aMsg, aParam.mDescriptor);
   }
 
   static bool Read(const Message* aMsg, void** aIter, paramType* aResult)
   {
-    return ReadParam(aMsg, aIter, &aResult->mType) &&
+    return ReadParam(aMsg, aIter, &aResult->mImageType) &&
+           ReadParam(aMsg, aIter, &aResult->mTextureType) &&
            ReadParam(aMsg, aIter, &aResult->mDescriptor);
   }
 };
@@ -810,8 +812,8 @@ struct ParamTraits<mozilla::layers::TextureHostType>
                           mozilla::layers::HOST_SHMEM>
 {};
 template <>
-struct ParamTraits<mozilla::layers::ImageSourceType>
-  : public EnumSerializer<mozilla::layers::ImageSourceType,
+struct ParamTraits<mozilla::layers::ImageHostType>
+  : public EnumSerializer<mozilla::layers::ImageHostType,
                           mozilla::layers::IMAGE_YUV,
                           mozilla::layers::IMAGE_SHMEM>
 {};

@@ -185,7 +185,13 @@ public:
 
   virtual void SetBackBuffer(const SharedImage& aBuffer)
   {
-    mImageClient->SetBuffer(aBuffer);
+    // only called for Shared Images and then there is nothing to do
+  }
+
+  virtual void SetBackBuffer(const TextureIdentifier& aTextureIdentifier,
+                             const SharedImage& aBuffer)
+  {
+    mImageClient->SetBuffer(aTextureIdentifier, aBuffer);
   }
 
   virtual void Disconnect()
@@ -205,7 +211,13 @@ private:
     return static_cast<BasicShadowLayerManager*>(mManager);
   }
 
-  ImageSourceType GetImageClientType();
+  ImageHostType GetImageClientType()
+  {
+    nsRefPtr<gfxASurface> surface;
+    AutoLockImage autoLock(mContainer, getter_AddRefs(surface));
+
+    return CompositingFactory::TypeForImage(autoLock.GetImage());
+  }
 
   void BasicShadowableImageLayer::EnsureImageClient()
   {
@@ -217,14 +229,6 @@ private:
   RefPtr<ImageClient>  mImageClient;
 };
 
-ImageSourceType
-BasicShadowableImageLayer::GetImageClientType()
-{
-  nsRefPtr<gfxASurface> surface;
-  AutoLockImage autoLock(mContainer, getter_AddRefs(surface));
-
-  return CompositingFactory::TypeForImage(autoLock.GetImage());
-}
 
 void
 BasicShadowableImageLayer::Paint(gfxContext* aContext, Layer* aMaskLayer)

@@ -107,7 +107,7 @@ enum OpenMode {
 class ShadowLayerForwarder
 {
   friend class AutoOpenSurface;
-  friend class TextureClientTexture;
+  friend class TextureClientShmem;
 
 public:
   typedef gfxASurface::gfxContentType gfxContentType;
@@ -327,8 +327,12 @@ public:
   }
 
   //TODO[nrc] comment
-  TemporaryRef<TextureClient> CreateTextureClientFor(const ImageSourceType& aImageSourceType, ShadowableLayer* aLayer, bool aStrict = false);
-  TemporaryRef<ImageClient> CreateImageClientFor(const ImageSourceType& aImageSourceType, ShadowableLayer* aLayer);
+  TemporaryRef<TextureClient> CreateTextureClientFor(const ImageHostType& aTextureHostType,
+                                                     const ImageHostType& aImageHostType,
+                                                     ShadowableLayer* aLayer,
+                                                     bool aStrict = false);
+  TemporaryRef<ImageClient> CreateImageClientFor(const ImageHostType& aImageHostType,
+                                                 ShadowableLayer* aLayer);
 
 protected:
   ShadowLayerForwarder();

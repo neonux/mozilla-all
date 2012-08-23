@@ -37,7 +37,15 @@ public:
   //virtual TextureIdentifier GetIdentifierForProcess(/*base::ProcessHandle* aProcess*/) = 0; //TODO[nrc]
 
   //TODO[nrc] will this even work?
-  virtual TextureIdentifier GetIdentifier() = 0;
+  virtual const TextureIdentifier& GetIdentifier()
+  {
+    return mIdentifier;
+  }
+  
+  void SetDescriptor(PRUint32 aDescriptor)
+  {
+    mIdentifier.mDescriptor = aDescriptor;
+  }
 
   /* This requests a DrawTarget to draw into the current texture. Once the
    * user is finished with the DrawTarget it should call Unlock.
@@ -59,11 +67,14 @@ public:
   virtual void Unlock() = 0;
 
 protected:
-  TextureClient(ShadowLayerForwarder* aLayerForwarder)
+  TextureClient(ShadowLayerForwarder* aLayerForwarder, ImageHostType aImageType)
     : mLayerForwarder(aLayerForwarder)
-  {}
+  {
+    mIdentifier.mImageType = aImageType;
+  }
 
   ShadowLayerForwarder* mLayerForwarder;
+  TextureIdentifier mIdentifier;
 };
 
 class ImageClient : public RefCounted<ImageClient>
@@ -77,7 +88,8 @@ public:
   // note returning true does not necessarily imply success
   virtual bool UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer) = 0;
 
-  virtual void SetBuffer(const SharedImage& aBuffer) = 0;
+  virtual void SetBuffer(const TextureIdentifier& aTextureIdentifier,
+                         const SharedImage& aBuffer) = 0;
 };
 
 

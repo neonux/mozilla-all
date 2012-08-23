@@ -201,8 +201,7 @@ TiledThebesLayerOGL::RenderTile(TiledTexture aTile,
   // TODO: Handle mask layers.
   EffectChain effectChain;
   RefPtr<Effect> effect;
-  RefPtr<TextureOGL> texture = new TextureOGL(static_cast<CompositorOGL*>(mOGLManager->GetCompositor()),
-                                              aTile.mTextureHandle,
+  RefPtr<TextureOGL> texture = new TextureOGL(gl(), aTile.mTextureHandle,
                                               gfx::IntSize(aTextureBounds.width, aTextureBounds.height));
   texture->SetWrapMode(LOCAL_GL_REPEAT);
 

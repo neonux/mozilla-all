@@ -425,8 +425,7 @@ ShadowCanvasLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aC
       return;
     }
 
-    RefPtr<TextureOGL> texture = new TextureOGL(static_cast<CompositorOGL*>(mOGLManager->GetCompositor()),
-                                                mTexture,
+    RefPtr<TextureOGL> texture = new TextureOGL(gl(), mTexture,
                                                 gfx::IntSize(texDescriptor.size().width, texDescriptor.size().height));
 
     if (CanUseOpaqueSurface()) {
@@ -448,8 +447,7 @@ ShadowCanvasLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aC
     gl()->DetachSharedHandle(texDescriptor.shareType(), texDescriptor.handle());
     gl()->fBindTexture(LOCAL_GL_TEXTURE_2D, 0);
   } else {
-    RefPtr<TextureOGL> texture = new TextureOGL(static_cast<CompositorOGL*>(mOGLManager->GetCompositor()),
-                                                0, gfx::IntSize(0,0));
+    RefPtr<TextureOGL> texture = new TextureOGL(gl(), 0, gfx::IntSize(0,0));
     texture->SetWrapMode(mTexImage->GetWrapMode());
     if (mTexImage->GetShaderProgramType() == gl::BGRXLayerProgramType) {
       effect = new EffectBGRX(texture, true, gfx::ToFilter(mFilter), mNeedsYFlip);

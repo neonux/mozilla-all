@@ -9,7 +9,6 @@
 namespace mozilla {
 namespace layers {
 
-
 static void
 MakeTextureIfNeeded(GLContext* gl, GLuint& aTexture)
 {
@@ -26,31 +25,24 @@ MakeTextureIfNeeded(GLContext* gl, GLuint& aTexture)
   gl->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_WRAP_T, LOCAL_GL_CLAMP_TO_EDGE);
 }
 
-ImageSourceOGL::ImageSourceOGL(CompositorOGL* aCompositorOGL)
-  : ATextureOGL(aCompositorOGL)
-  , mForceSingleTile(false)
-{
-}
 
 void
-ImageSourceOGL::UpdateImage(const SharedImage& aImage)
+TextureImageAsTextureHost::Update(const SharedImage& aImage)
 {
   SurfaceDescriptor surface = aImage.get_SurfaceDescriptor();
 
   AutoOpenSurface surf(OPEN_READ_ONLY, surface);
   nsIntSize size = surf.Size();
 
-  NS_ASSERTION(mTexImage, "mTextImage should never be null");
   if (!mTexImage ||
-      mSize != gfx::IntSize(size.width, size.height) ||
+      mTexImage->mSize != size ||
       mTexImage->GetContentType() != surf.ContentType()) {
-    mSize = gfx::IntSize(size.width, size.height);
-    mTexImage = mCompositorOGL->gl()->CreateTextureImage(size,
-                                                         surf.ContentType(),
-                                                         LOCAL_GL_CLAMP_TO_EDGE,
-                                                         mForceSingleTile
-                                                           ? TextureImage::ForceSingleTile
-                                                           : TextureImage::NoFlags);
+    mTexImage = mTexImage->mGLContext->CreateTextureImage(size,
+                                                          surf.ContentType(),
+                                                          LOCAL_GL_CLAMP_TO_EDGE,
+                                                          mForceSingleTile
+                                                            ? TextureImage::ForceSingleTile
+                                                            : TextureImage::NoFlags);
   }
 
   // XXX this is always just ridiculously slow
@@ -58,52 +50,83 @@ ImageSourceOGL::UpdateImage(const SharedImage& aImage)
   mTexImage->DirectUpdate(surf.Get(), updateRegion);
 }
 
-void
-ImageSourceOGL::Composite(EffectChain& aEffectChain,
-                          float aOpacity,
-                          const gfx::Matrix4x4& aTransform,
-                          const gfx::Point& aOffset,
-                          const gfx::Filter aFilter,
-                          const gfx::Rect& aClipRect)
+Effect*
+TextureImageAsTextureHost::Lock(const gfx::Filter& aFilter)
 {
   NS_ASSERTION(mTexImage->GetContentType() != gfxASurface::CONTENT_ALPHA,
                "Image layer has alpha image");
 
-  mWrapMode = mTexImage->GetWrapMode();
-
   if (mTexImage->GetShaderProgramType() == gl::BGRXLayerProgramType) {
-    EffectBGRX* effect = new EffectBGRX(this, true, aFilter);
-    aEffectChain.mEffects[EFFECT_BGRX] = effect;
+    return new EffectBGRX(this, true, aFilter);
   } else if (mTexImage->GetShaderProgramType() == gl::BGRALayerProgramType) {
-    EffectBGRA* effect = new EffectBGRA(this, true, aFilter);
-    aEffectChain.mEffects[EFFECT_BGRA] = effect;
+    return new EffectBGRA(this, true, aFilter);
   } else {
     NS_RUNTIMEABORT("Shader type not yet supported");
+    return nullptr;
   }
-
-  mTexImage->SetFilter(gfx::ThebesFilter(aFilter));
-  mTexImage->BeginTileIteration();
-
-  do {
-    mSize = gfx::IntSize(mTexImage->GetTileRect().width,
-                         mTexImage->GetTileRect().height);
-    gfx::Rect rect(mTexImage->GetTileRect().x, mTexImage->GetTileRect().y,
-                   mTexImage->GetTileRect().width, mTexImage->GetTileRect().height);
-    gfx::Rect sourceRect(0, 0, mTexImage->GetTileRect().width,
-                         mTexImage->GetTileRect().height);
-    // TODO: Calls to DrawQuad shouldn't happen from GL-specific code. So this needs to be moved.
-    mCompositorOGL->DrawQuad(rect, &sourceRect, &aClipRect, aEffectChain,
-                             aOpacity, aTransform, aOffset);
-  } while (mTexImage->NextTile());
 }
 
-ImageSourceOGLShared::ImageSourceOGLShared(CompositorOGL* aCompositorOGL)
-  : ATextureOGL(aCompositorOGL)
+
+ImageHostTexture::ImageHostTexture(Compositor* aCompositor)
+  : mTextureHost(nullptr)
+  , mCompositor(aCompositor)
 {
 }
 
 void
-ImageSourceOGLShared::UpdateImage(const SharedImage& aImage)
+ImageHostTexture::UpdateImage(const TextureIdentifier& aTextureIdentifier,
+                          const SharedImage& aImage)
+{
+  mTextureHost->Update(aImage);
+}
+
+void
+ImageHostTexture::SetForceSingleTile(bool aForceSingleTile)
+{
+  mTextureHost->SetForceSingleTile(aForceSingleTile);
+}
+
+void
+ImageHostTexture::Composite(EffectChain& aEffectChain,
+                        float aOpacity,
+                        const gfx::Matrix4x4& aTransform,
+                        const gfx::Point& aOffset,
+                        const gfx::Filter& aFilter,
+                        const gfx::Rect& aClipRect)
+{
+  //TODO[nrc] surely we don't need to set the filter twice?
+  if (Effect* effect = mTextureHost->Lock(aFilter)) {
+    aEffectChain.mEffects[effect->mType] = effect;
+  } else {
+    return;
+  }
+  mTextureHost->SetFilter(aFilter);
+  mTextureHost->BeginTileIteration();
+
+  do {
+    nsIntRect tileRect = mTextureHost->GetTileRect();
+    mTextureHost->SetSize(gfx::IntSize(tileRect.width, tileRect.height));
+    gfx::Rect rect(tileRect.x, tileRect.y, tileRect.width, tileRect.height);
+    gfx::Rect sourceRect(0, 0, tileRect.width, tileRect.height);
+    mCompositor->DrawQuad(rect, &sourceRect, &aClipRect, aEffectChain,
+                             aOpacity, aTransform, aOffset);
+  } while (mTextureHost->NextTile());
+
+  mTextureHost->Unlock();
+}
+
+void
+ImageHostTexture::AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
+{
+  NS_ASSERTION(aTextureIdentifier.mImageType == IMAGE_SHMEM &&
+               aTextureIdentifier.mTextureType == IMAGE_SHMEM,
+               "ImageHostType mismatch.");
+  mTextureHost = static_cast<TextureImageAsTextureHost*>(aTextureHost);
+}
+
+
+void
+TextureHostOGLShared::Update(const SharedImage& aImage)
 {
   SurfaceDescriptor surface = aImage.get_SurfaceDescriptor();
   SharedTextureDescriptor texture = surface.get_SharedTextureDescriptor();
@@ -116,55 +139,88 @@ ImageSourceOGLShared::UpdateImage(const SharedImage& aImage)
 
   if (mSharedHandle &&
       newHandle != mSharedHandle) {
-    mCompositorOGL->gl()->ReleaseSharedHandle(mShareType, mSharedHandle);
+    mGL->ReleaseSharedHandle(mShareType, mSharedHandle);
   }
   mSharedHandle = newHandle;
 }
 
-void
-ImageSourceOGLShared::Composite(EffectChain& aEffectChain,
-                                float aOpacity,
-                                const gfx::Matrix4x4& aTransform,
-                                const gfx::Point& aOffset,
-                                const gfx::Filter aFilter,
-                                const gfx::Rect& aClipRect)
+Effect*
+TextureHostOGLShared::Lock(const gfx::Filter& aFilter)
 {
   GLContext::SharedHandleDetails handleDetails;
-  if (!mCompositorOGL->gl()->GetSharedHandleDetails(mShareType, mSharedHandle, handleDetails)) {
+  if (!mGL->GetSharedHandleDetails(mShareType, mSharedHandle, handleDetails)) {
     NS_ERROR("Failed to get shared handle details");
-    return;
+    return nullptr;
+  }
+
+  MakeTextureIfNeeded(mGL, mTextureHandle);
+
+  mGL->fBindTexture(handleDetails.mTarget, mTextureHandle);
+  if (!mGL->AttachSharedHandle(mShareType, mSharedHandle)) {
+    NS_ERROR("Failed to bind shared texture handle");
+    return nullptr;
   }
 
   if (handleDetails.mProgramType == gl::RGBALayerProgramType) {
-    EffectRGBA* effect = new EffectRGBA(this, true, aFilter, mInverted);
-    aEffectChain.mEffects[EFFECT_RGBA] = effect;
+    return new EffectRGBA(this, true, aFilter, mInverted);
   } else if (handleDetails.mProgramType == gl::RGBALayerExternalProgramType) {
     gfx::Matrix4x4 textureTransform;
     LayerManagerOGL::ToMatrix4x4(handleDetails.mTextureTransform, textureTransform);
-    EffectRGBAExternal* effect = new EffectRGBAExternal(this, textureTransform, true, aFilter, mInverted);
-    aEffectChain.mEffects[EFFECT_RGBA_EXTERNAL] = effect;
+    return new EffectRGBAExternal(this, textureTransform, true, aFilter, mInverted);
   } else {
     NS_RUNTIMEABORT("Shader type not yet supported");
+    return nullptr;
   }
+}
 
-  gfx::Rect rect(0, 0, mSize.width, mSize.height);
+void
+TextureHostOGLShared::Unlock()
+{
+  mGL->DetachSharedHandle(mShareType, mSharedHandle);
+}
 
-  MakeTextureIfNeeded(mCompositorOGL->gl(), mTextureHandle);
 
-  // TODO: Call AttachSharedHandle from CompositorOGL, not here.
-  // ajuma: I think it is OK from here, concrete textures need to be backend specific, right?
-  mCompositorOGL->gl()->fBindTexture(handleDetails.mTarget, mTextureHandle);
-  if (!mCompositorOGL->gl()->AttachSharedHandle(mShareType, mSharedHandle)) {
-    NS_ERROR("Failed to bind shared texture handle");
+ImageHostShared::ImageHostShared(Compositor* aCompositor)
+  : mTextureHost(nullptr)
+  , mCompositor(aCompositor)
+{
+}
+
+void
+ImageHostShared::UpdateImage(const TextureIdentifier& aTextureIdentifier,
+                                const SharedImage& aImage)
+{
+  mTextureHost->Update(aImage);
+}
+
+void
+ImageHostShared::Composite(EffectChain& aEffectChain,
+                              float aOpacity,
+                              const gfx::Matrix4x4& aTransform,
+                              const gfx::Point& aOffset,
+                              const gfx::Filter& aFilter,
+                              const gfx::Rect& aClipRect)
+{
+  if (Effect* effect = mTextureHost->Lock(aFilter)) {
+    aEffectChain.mEffects[effect->mType] = effect;
+  } else {
     return;
   }
 
-  // TODO: Calls to DrawQuad shouldn't happen from GL-specific code. So this needs to be moved.
-  mCompositorOGL->DrawQuad(rect, nullptr, &aClipRect, aEffectChain,
+  gfx::Rect rect(0, 0, mTextureHost->GetSize().width, mTextureHost->GetSize().height);
+  mCompositor->DrawQuad(rect, nullptr, &aClipRect, aEffectChain,
                            aOpacity, aTransform, aOffset);
 
-  // TODO:: Call this from CompositorOGL, not here.
-  mCompositorOGL->gl()->DetachSharedHandle(mShareType, mSharedHandle);
+  mTextureHost->Unlock();
+}
+
+void
+ImageHostShared::AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
+{
+  NS_ASSERTION(aTextureIdentifier.mImageType == IMAGE_SHARED &&
+               aTextureIdentifier.mTextureType == IMAGE_SHARED,
+               "ImageHostType mismatch.");
+  mTextureHost = static_cast<TextureHostOGLShared*>(aTextureHost);
 }
 
 static PRUint32
@@ -178,8 +234,8 @@ DataOffset(PRUint32 aStride, PRUint32 aPixelSize, const nsIntPoint &aPoint)
 void
 TextureOGL::UpdateTexture(PRInt8 *aData, PRUint32 aStride)
 {
-  mCompositorOGL->gl()->fBindTexture(LOCAL_GL_TEXTURE_2D, mTextureHandle);
-  mCompositorOGL->gl()->TexImage2D(LOCAL_GL_TEXTURE_2D, 0, mInternalFormat,
+  mGL->fBindTexture(LOCAL_GL_TEXTURE_2D, mTextureHandle);
+  mGL->TexImage2D(LOCAL_GL_TEXTURE_2D, 0, mInternalFormat,
                                    mSize.width, mSize.height, aStride, mPixelSize,
                                    0, mFormat, mType, aData);
 }
@@ -187,12 +243,12 @@ TextureOGL::UpdateTexture(PRInt8 *aData, PRUint32 aStride)
 void
 TextureOGL::UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride)
 {
-  mCompositorOGL->gl()->fBindTexture(LOCAL_GL_TEXTURE_2D, mTextureHandle);
-  if (!mCompositorOGL->SupportsPartialTextureUpdate() ||
+  mGL->fBindTexture(LOCAL_GL_TEXTURE_2D, mTextureHandle);
+  if (!mGL->CanUploadSubTextures() ||
       (aRegion.IsEqual(nsIntRect(0, 0, mSize.width, mSize.height)))) {
-    mCompositorOGL->gl()->TexImage2D(LOCAL_GL_TEXTURE_2D, 0, mInternalFormat,
-                                     mSize.width, mSize.height, aStride, mPixelSize,
-                                     0, mFormat, mType, aData);
+    mGL->TexImage2D(LOCAL_GL_TEXTURE_2D, 0, mInternalFormat,
+                    mSize.width, mSize.height, aStride, mPixelSize,
+                    0, mFormat, mType, aData);
   } else {
     nsIntRegionRectIterator iter(aRegion);
     const nsIntRect *iterRect;
@@ -204,19 +260,51 @@ TextureOGL::UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aS
       // bounding rectangle. We need to find the offset of this rect
       // within the region and adjust the data pointer accordingly.
       PRInt8 *rectData = aData + DataOffset(aStride, mPixelSize, iterRect->TopLeft() - topLeft);
-      mCompositorOGL->gl()->TexSubImage2D(LOCAL_GL_TEXTURE_2D,
-                                          0,
-                                          iterRect->x,
-                                          iterRect->y,
-                                          iterRect->width,
-                                          iterRect->height,
-                                          aStride,
-                                          mPixelSize,
-                                          mFormat,
-                                          mType,
-                                          rectData);
+      mGL->TexSubImage2D(LOCAL_GL_TEXTURE_2D,
+                         0,
+                         iterRect->x,
+                         iterRect->y,
+                         iterRect->width,
+                         iterRect->height,
+                         aStride,
+                         mPixelSize,
+                         mFormat,
+                         mType,
+                         rectData);
     }
   }
+}
+
+void
+GLTextureAsTextureHost::Update(const SharedImage& aImage)
+{
+  AutoOpenSurface surf(OPEN_READ_ONLY, aImage.get_SurfaceDescriptor());
+    
+  mSize = gfx::IntSize(surf.Size().width, surf.Size().height);
+
+  if (!mTexture.IsAllocated()) {
+    mTexture.Allocate(mGL);
+
+    NS_ASSERTION(mTexture.IsAllocated(),
+                  "Texture allocation failed!");
+
+    mGL->MakeCurrent();
+    mGL->fBindTexture(LOCAL_GL_TEXTURE_2D, mTexture.GetTextureID());
+    mGL->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_WRAP_S, LOCAL_GL_CLAMP_TO_EDGE);
+    mGL->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_WRAP_T, LOCAL_GL_CLAMP_TO_EDGE);
+  }
+
+  //TODO[nrc] I don't see why we need a new image surface here, but should check
+  /*nsRefPtr<gfxASurface> surf = new gfxImageSurface(aData.mYChannel,
+                                                    mSize,
+                                                    aData.mYStride,
+                                                    gfxASurface::ImageFormatA8);*/
+  GLuint textureId = mTexture.GetTextureID();
+  mGL->UploadSurfaceToTexture(surf.GetAsImage(),
+                              nsIntRect(0, 0, mSize.width, mSize.height),
+                              textureId,
+                              true);
+  NS_ASSERTION(textureId == mTexture.GetTextureID(), "texture handle id changed");
 }
 
 } /* layers */

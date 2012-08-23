@@ -40,30 +40,8 @@ public:
 
   void Destroy();
 
-  //TODO[nrc]
   virtual TemporaryRef<TextureHost>
-    CreateTextureHost(const TextureIdentifier &aIdentifier) MOZ_OVERRIDE
-  {
-    NS_ERROR("TODO[nrc]");
-    RefPtr<TextureHost> result = nullptr;
-    switch (aIdentifier.mType) {
-    case IMAGE_YUV:
-      break;
-    case IMAGE_SHARED:
-      break;
-    case IMAGE_TEXTURE:
-      break;
-    case IMAGE_SHMEM:
-      break;
-    case IMAGE_BRIDGE:
-      break;
-    case IMAGE_UNKNOWN:
-      break;
-    }
-
-    //TODO[nrc] set the id?
-    return result.forget();
-  }
+    CreateTextureHost(const TextureIdentifier &aIdentifier) MOZ_OVERRIDE;
 
   virtual TextureHostIdentifier GetTextureHostIdentifier() MOZ_OVERRIDE
   {
@@ -77,8 +55,8 @@ public:
     CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PRUint32 aStride,
                          TextureFormat aFormat) MOZ_OVERRIDE;
 
-  virtual TemporaryRef<ImageSource> 
-    CreateImageSourceForSharedImage(ImageSourceType aType) MOZ_OVERRIDE;
+  virtual TemporaryRef<ImageHost> 
+    CreateImageHost(ImageHostType aType) MOZ_OVERRIDE;
 
 
   virtual TemporaryRef<Surface> CreateSurface(const gfx::IntRect &aRect,
@@ -135,6 +113,7 @@ public:
     mTarget = aTarget;
   }
 
+  //TODO[nrc] can I get rid of this?
   void SetClamping(GLuint aTexture)
   {
     mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, aTexture);

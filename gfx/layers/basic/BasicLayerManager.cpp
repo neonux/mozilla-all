@@ -1085,13 +1085,21 @@ BasicShadowLayerManager::ForwardTransaction()
         }
         break;
       }
-
       case EditReply::TOpImageSwap: {
         MOZ_LAYERS_LOG(("[LayersForwarder] YUVBufferSwap"));
 
         const OpImageSwap& ois = reply.get_OpImageSwap();
         BasicShadowableLayer* layer = GetBasicShadowable(ois);
         layer->SetBackBuffer(ois.newBackImage());
+
+        break;
+      }
+      case EditReply::TOpTextureSwap: {
+        MOZ_LAYERS_LOG(("[LayersForwarder] TextureSwap"));
+
+        const OpTextureSwap& ois = reply.get_OpTextureSwap();
+        BasicShadowableLayer* layer = GetBasicShadowable(ois);
+        layer->SetBackBuffer(ois.textureIdentifier(), ois.image());
 
         break;
       }

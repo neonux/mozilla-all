@@ -436,8 +436,7 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       break;
     }
     case Edit::TOpPaintTexture: {
-      //TODO[nrc]
-      /*MOZ_LAYERS_LOG(("[ParentSide] Paint Texture"));
+      MOZ_LAYERS_LOG(("[ParentSide] Paint Texture"));
 
       const OpPaintTexture& op = edit.get_OpPaintTexture();
       ShadowLayerParent* shadow = AsShadowLayer(op);
@@ -450,10 +449,9 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       shadowLayer->SetAllocator(this);
       SharedImage newBack;
       shadowLayer->SwapTexture(textureId, op.image(), &newBack);
-      //TODO[nrc] do I need to reply? yes, and that is where the SetBackBuffer thing comes in too
       replyv.push_back(OpTextureSwap(shadow, NULL, textureId, newBack));
  
-      RenderTraceInvalidateEnd(layer, "FF00FF");*/
+      RenderTraceInvalidateEnd(layer, "FF00FF");
       break;
     }
 

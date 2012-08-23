@@ -449,7 +449,7 @@ CompositorOGL::CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PR
   GLuint textureHandle;
   mGLContext->fGenTextures(1, &textureHandle);
 
-  RefPtr<TextureOGL> texture = new TextureOGL(this, textureHandle, aSize);
+  RefPtr<TextureOGL> texture = new TextureOGL(mGLContext, textureHandle, aSize);
 
   mGLContext->fBindTexture(LOCAL_GL_TEXTURE_2D, textureHandle); 
   mGLContext->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_MIN_FILTER,
@@ -484,20 +484,50 @@ CompositorOGL::CreateTextureForData(const gfx::IntSize &aSize, PRInt8 *aData, PR
   return texture.forget();
 }
 
-TemporaryRef<ImageSource> 
-CompositorOGL::CreateImageSourceForSharedImage(ImageSourceType aType)
+TemporaryRef<ImageHost> 
+CompositorOGL::CreateImageHost(ImageHostType aType)
 {
   switch (aType) {
   case IMAGE_YUV:
-    return new YUVImageSource<TextureOGLRaw, CompositorOGL>(this);
+    return new YUVImageHost(this);
   case IMAGE_SHARED:
-    return new ImageSourceOGLShared(this);
+    return new ImageHostShared(this);
   case IMAGE_TEXTURE:
-    return new ImageSourceOGL(this);
+    return new ImageHostTexture(this);
   default:
-    NS_ERROR("Unknown ImageSourceType");
+    NS_ERROR("Unknown ImageHostType");
     return nullptr;
   }
+}
+
+//TODO[nrc]
+TemporaryRef<TextureHost>
+CompositorOGL::CreateTextureHost(const TextureIdentifier &aIdentifier)
+{
+  RefPtr<TextureHost> result = nullptr;
+  switch (aIdentifier.mTextureType) {
+  case IMAGE_SHARED:
+    result = new TextureHostOGLShared(mGLContext);
+    break;
+  case IMAGE_SHMEM:
+    if (aIdentifier.mImageType == IMAGE_YUV) {
+      result = new GLTextureAsTextureHost(mGLContext);
+    } else {
+      result = new TextureImageAsTextureHost();
+    }
+    break;
+  case IMAGE_BRIDGE:
+    break;
+  case IMAGE_YUV:
+  case IMAGE_TEXTURE:
+  case IMAGE_UNKNOWN:
+  default:
+    return nullptr;
+  }
+
+  NS_ASSERTION(result, "Result should have been created.");
+
+  return result.forget();
 }
 
 TemporaryRef<Surface>
@@ -900,7 +930,7 @@ CompositorOGL::DrawQuad(const gfx::Rect &aRect, const gfx::Rect *aSourceRect,
     textureMask = static_cast<ATextureOGL*>(effectMask->mMaskTexture.get());
 
     //TODO[nrc] do something with this assertion
-    //NS_ASSERTION(static_cast<ImageSourceOGL*>(textureMask)->mTexImage->GetContentType() == gfxASurface::CONTENT_ALPHA,
+    //NS_ASSERTION(static_cast<ImageHostTexture*>(textureMask)->mTexImage->GetContentType() == gfxASurface::CONTENT_ALPHA,
     //             "OpenGL mask layers must be backed by alpha surfaces");
 
     if (effectMask->mMaskTransform.Is2D()) {

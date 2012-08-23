@@ -17,6 +17,8 @@
 namespace mozilla {
 namespace layers {
 
+class GLTextureAsTextureHost;
+
 /**
  * This class wraps a GL texture. It includes a GLContext reference
  * so we can use to free the texture when destroyed. The implementation
@@ -29,7 +31,8 @@ namespace layers {
  *
  * Initially the texture is not allocated --- it's in a "null" state.
  */
-class GLTexture {
+class GLTexture
+{
   typedef mozilla::gl::GLContext GLContext;
 
 public:
@@ -55,6 +58,8 @@ private:
 
   nsRefPtr<GLContext> mContext;
   GLuint mTexture;
+
+  friend class GLTextureAsTextureHost;
 };
 
 /**
@@ -164,11 +169,14 @@ public:
 
   virtual void Disconnect();
 
-  virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
-  {
-    //TODO[nrc]
-    //mTextureHost = aTextureHost;
-  }
+  //TODO[nrc] comment
+  virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost);
+
+  //TODO[nrc] comment
+  virtual void SwapTexture(const TextureIdentifier& aTextureIdentifier,
+                           const SharedImage& aFront,
+                           SharedImage* aNewBack);
+
 
   // LayerOGL impl
   virtual void Destroy();
@@ -183,11 +191,11 @@ public:
   virtual void CleanupResources();
 
 private:
-  void EnsureImageSource(const SharedImage& aFront);
+  void EnsureImageHost(const TextureIdentifier& aTextureIdentifier);
 
-  // A ShadowImageLayer should use only one of the ImageSource
+  // A ShadowImageLayer should use only one of the ImageHost
   // or ImageBridge mechanisms at one time
-  RefPtr<ImageSource> mImageSource;
+  RefPtr<ImageHost> mImageHost;
 };
 
 } /* layers */
