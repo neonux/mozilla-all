@@ -1075,10 +1075,10 @@ BasicShadowLayerManager::ForwardTransaction()
         MOZ_LAYERS_LOG(("[LayersForwarder] BufferSwap"));
 
         const OpBufferSwap& obs = reply.get_OpBufferSwap();
-        const CanvasSurface& newBack = obs.newBackBuffer();
-        if (newBack.type() == CanvasSurface::TSurfaceDescriptor) {
+        const SharedImage& newBack = obs.newBackBuffer();
+        if (newBack.type() == SharedImage::TSurfaceDescriptor) {
           GetBasicShadowable(obs)->SetBackBuffer(newBack.get_SurfaceDescriptor());
-        } else if (newBack.type() == CanvasSurface::Tnull_t) {
+        } else if (newBack.type() == SharedImage::Tnull_t) {
           GetBasicShadowable(obs)->SetBackBuffer(SurfaceDescriptor());
         } else {
           NS_RUNTIMEABORT("Unknown back image type");

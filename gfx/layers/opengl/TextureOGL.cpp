@@ -17,6 +17,7 @@ MakeTextureIfNeeded(GLContext* gl, GLuint& aTexture)
 
   gl->fGenTextures(1, &aTexture);
 
+  gl->fActiveTexture(LOCAL_GL_TEXTURE0);
   gl->fBindTexture(LOCAL_GL_TEXTURE_2D, aTexture);
 
   gl->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_MIN_FILTER, LOCAL_GL_LINEAR);
@@ -25,8 +26,21 @@ MakeTextureIfNeeded(GLContext* gl, GLuint& aTexture)
   gl->fTexParameteri(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_WRAP_T, LOCAL_GL_CLAMP_TO_EDGE);
 }
 
+static TextureImage::Flags FlagsToGLFlags(TextureFlags aFlags)
+{
+  uint32_t result = TextureImage::NoFlags;
+  
+  if (aFlags & UseNearestFilter)
+    result |= TextureImage::UseNearestFilter;
+  if (aFlags & NeedsYFlip)
+    result |= TextureImage::NeedsYFlip;
+  if (aFlags & ForceSingleTile)
+    result |= TextureImage::ForceSingleTile;
 
-void
+  return static_cast<TextureImage::Flags>(result);
+}
+
+const SharedImage*
 TextureImageAsTextureHost::Update(const SharedImage& aImage)
 {
   SurfaceDescriptor surface = aImage.get_SurfaceDescriptor();
@@ -40,14 +54,14 @@ TextureImageAsTextureHost::Update(const SharedImage& aImage)
     mTexImage = mTexImage->mGLContext->CreateTextureImage(size,
                                                           surf.ContentType(),
                                                           LOCAL_GL_CLAMP_TO_EDGE,
-                                                          mForceSingleTile
-                                                            ? TextureImage::ForceSingleTile
-                                                            : TextureImage::NoFlags);
+                                                          FlagsToGLFlags(mFlags));
   }
 
   // XXX this is always just ridiculously slow
   nsIntRegion updateRegion(nsIntRect(0, 0, size.width, size.height));
   mTexImage->DirectUpdate(surf.Get(), updateRegion);
+
+  return &aImage;
 }
 
 Effect*
@@ -57,9 +71,9 @@ TextureImageAsTextureHost::Lock(const gfx::Filter& aFilter)
                "Image layer has alpha image");
 
   if (mTexImage->GetShaderProgramType() == gl::BGRXLayerProgramType) {
-    return new EffectBGRX(this, true, aFilter);
+    return new EffectBGRX(this, true, aFilter, mFlags & NeedsYFlip);
   } else if (mTexImage->GetShaderProgramType() == gl::BGRALayerProgramType) {
-    return new EffectBGRA(this, true, aFilter);
+    return new EffectBGRA(this, true, aFilter, mFlags & NeedsYFlip);
   } else {
     NS_RUNTIMEABORT("Shader type not yet supported");
     return nullptr;
@@ -73,17 +87,11 @@ ImageHostTexture::ImageHostTexture(Compositor* aCompositor)
 {
 }
 
-void
+const SharedImage*
 ImageHostTexture::UpdateImage(const TextureIdentifier& aTextureIdentifier,
-                          const SharedImage& aImage)
+                              const SharedImage& aImage)
 {
-  mTextureHost->Update(aImage);
-}
-
-void
-ImageHostTexture::SetForceSingleTile(bool aForceSingleTile)
-{
-  mTextureHost->SetForceSingleTile(aForceSingleTile);
+  return mTextureHost->Update(aImage);
 }
 
 void
@@ -109,7 +117,7 @@ ImageHostTexture::Composite(EffectChain& aEffectChain,
     gfx::Rect rect(tileRect.x, tileRect.y, tileRect.width, tileRect.height);
     gfx::Rect sourceRect(0, 0, tileRect.width, tileRect.height);
     mCompositor->DrawQuad(rect, &sourceRect, &aClipRect, aEffectChain,
-                             aOpacity, aTransform, aOffset);
+                          aOpacity, aTransform, aOffset);
   } while (mTextureHost->NextTile());
 
   mTextureHost->Unlock();
@@ -125,9 +133,12 @@ ImageHostTexture::AddTextureHost(const TextureIdentifier& aTextureIdentifier, Te
 }
 
 
-void
+const SharedImage*
 TextureHostOGLShared::Update(const SharedImage& aImage)
 {
+  NS_ASSERTION(aImage.type() == SurfaceDescriptor::TSharedTextureDescriptor,
+               "Invalid descriptor");
+
   SurfaceDescriptor surface = aImage.get_SurfaceDescriptor();
   SharedTextureDescriptor texture = surface.get_SharedTextureDescriptor();
 
@@ -142,6 +153,8 @@ TextureHostOGLShared::Update(const SharedImage& aImage)
     mGL->ReleaseSharedHandle(mShareType, mSharedHandle);
   }
   mSharedHandle = newHandle;
+
+  return &aImage;
 }
 
 Effect*
@@ -153,6 +166,7 @@ TextureHostOGLShared::Lock(const gfx::Filter& aFilter)
     return nullptr;
   }
 
+  //TODO[nrc] can we do this in update instead of here?
   MakeTextureIfNeeded(mGL, mTextureHandle);
 
   mGL->fBindTexture(handleDetails.mTarget, mTextureHandle);
@@ -177,6 +191,80 @@ void
 TextureHostOGLShared::Unlock()
 {
   mGL->DetachSharedHandle(mShareType, mSharedHandle);
+  mGL->fBindTexture(LOCAL_GL_TEXTURE_2D, 0);
+}
+
+//TODO[nrc] we can surely share more code with TextureHostOGLShared
+const SharedImage*
+TextureHostOGLSharedWithBuffer::Update(const SharedImage& aImage)
+{
+  NS_ASSERTION(aImage.type() == SurfaceDescriptor::TSharedTextureDescriptor,
+               "Invalid descriptor");
+
+  //TODO[nrc] do I even need this?
+  //if (mBuffer.type() != SurfaceDescriptor::TSharedTextureDescriptor) {
+  //  mBuffer = SharedTextureDescriptor(TextureImage::ThreadShared, 0, nsIntSize(0, 0), false);
+  //}
+
+  SurfaceDescriptor surface = aImage.get_SurfaceDescriptor();
+  SharedTextureDescriptor texture = surface.get_SharedTextureDescriptor();
+
+  SharedTextureHandle newHandle = texture.handle();
+  nsIntSize size = texture.size();
+  mSize = gfx::IntSize(size.width, size.height);
+  if (texture.inverted()) {
+    mFlags |= NeedsYFlip;
+  }
+  mShareType = texture.shareType();
+
+  if (mSharedHandle &&
+      newHandle != mSharedHandle) {
+    mGL->ReleaseSharedHandle(mShareType, mSharedHandle);
+  }
+  mSharedHandle = newHandle;
+
+  mBuffer = SharedImage(surface);
+  return &mBuffer;
+}
+
+Effect*
+TextureHostOGLSharedWithBuffer::Lock(const gfx::Filter& aFilter)
+{
+  GLContext::SharedHandleDetails handleDetails;
+  if (!mGL->GetSharedHandleDetails(mShareType, mSharedHandle, handleDetails)) {
+    NS_ERROR("Failed to get shared handle details");
+    return nullptr;
+  }
+
+  //TODO[nrc] can we do this in update instead of here?
+  MakeTextureIfNeeded(mGL, mTextureHandle);
+
+  mGL->fActiveTexture(LOCAL_GL_TEXTURE0);
+  mGL->fBindTexture(handleDetails.mTarget, mTextureHandle);
+  if (!mGL->AttachSharedHandle(mShareType, mSharedHandle)) {
+    NS_ERROR("Failed to bind shared texture handle");
+    return nullptr;
+  }
+
+  if (mFlags & UseOpaqueSurface) {
+    return new EffectRGBX(this, true, aFilter, mFlags & NeedsYFlip);
+  } else if (handleDetails.mProgramType == gl::RGBALayerProgramType) {
+    return new EffectRGBA(this, true, aFilter, mFlags & NeedsYFlip);
+  } else if (handleDetails.mProgramType == gl::RGBALayerExternalProgramType) {
+    gfx::Matrix4x4 textureTransform;
+    LayerManagerOGL::ToMatrix4x4(handleDetails.mTextureTransform, textureTransform);
+    return new EffectRGBAExternal(this, textureTransform, true, aFilter, mFlags & NeedsYFlip);
+  } else {
+    NS_RUNTIMEABORT("Shader type not yet supported");
+    return nullptr;
+  }
+}
+
+void
+TextureHostOGLSharedWithBuffer::Unlock()
+{
+  mGL->DetachSharedHandle(mShareType, mSharedHandle);
+  mGL->fBindTexture(LOCAL_GL_TEXTURE_2D, 0);
 }
 
 
@@ -186,20 +274,20 @@ ImageHostShared::ImageHostShared(Compositor* aCompositor)
 {
 }
 
-void
+const SharedImage*
 ImageHostShared::UpdateImage(const TextureIdentifier& aTextureIdentifier,
-                                const SharedImage& aImage)
+                             const SharedImage& aImage)
 {
-  mTextureHost->Update(aImage);
+  return mTextureHost->Update(aImage);
 }
 
 void
 ImageHostShared::Composite(EffectChain& aEffectChain,
-                              float aOpacity,
-                              const gfx::Matrix4x4& aTransform,
-                              const gfx::Point& aOffset,
-                              const gfx::Filter& aFilter,
-                              const gfx::Rect& aClipRect)
+                           float aOpacity,
+                           const gfx::Matrix4x4& aTransform,
+                           const gfx::Point& aOffset,
+                           const gfx::Filter& aFilter,
+                           const gfx::Rect& aClipRect)
 {
   if (Effect* effect = mTextureHost->Lock(aFilter)) {
     aEffectChain.mEffects[effect->mType] = effect;
@@ -209,7 +297,7 @@ ImageHostShared::Composite(EffectChain& aEffectChain,
 
   gfx::Rect rect(0, 0, mTextureHost->GetSize().width, mTextureHost->GetSize().height);
   mCompositor->DrawQuad(rect, nullptr, &aClipRect, aEffectChain,
-                           aOpacity, aTransform, aOffset);
+                        aOpacity, aTransform, aOffset);
 
   mTextureHost->Unlock();
 }
@@ -275,7 +363,7 @@ TextureOGL::UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aS
   }
 }
 
-void
+const SharedImage*
 GLTextureAsTextureHost::Update(const SharedImage& aImage)
 {
   AutoOpenSurface surf(OPEN_READ_ONLY, aImage.get_SurfaceDescriptor());
@@ -305,6 +393,8 @@ GLTextureAsTextureHost::Update(const SharedImage& aImage)
                               textureId,
                               true);
   NS_ASSERTION(textureId == mTexture.GetTextureID(), "texture handle id changed");
+
+  return &aImage;
 }
 
 } /* layers */

@@ -65,6 +65,7 @@ enum ImageHostType
   IMAGE_UNKNOWN,
   IMAGE_YUV,
   IMAGE_SHARED,
+  IMAGE_SHARED_WITH_BUFFER,
   IMAGE_TEXTURE,
   IMAGE_BRIDGE,
   IMAGE_SHMEM
@@ -77,6 +78,14 @@ enum TextureHostType
   HOST_GL,
   HOST_SHMEM  //[nrc] for software composition
 };
+
+typedef uint32_t TextureFlags;
+const TextureFlags NoFlags            = 0x0;
+const TextureFlags UseNearestFilter   = 0x1;
+const TextureFlags NeedsYFlip         = 0x2;
+const TextureFlags ForceSingleTile    = 0x4;
+const TextureFlags UseOpaqueSurface   = 0x8;
+
 
 //TODO[nrc] comment
 // goes Compositor to ShadowLayerForwarder on LayerManager init
@@ -128,6 +137,7 @@ public:
 class TextureHost : public Texture
 {
 public:
+  TextureHost() : mFlags(NoFlags) {}
   /* This will return an identifier that can be sent accross a process or
    * thread boundary and used to construct a DrawableTextureClient object
    * which can then be used for rendering. If the process is identical to the
@@ -142,9 +152,14 @@ public:
   //virtual void PrepareForRendering() {}
 
   //TODO[nrc] comments
-  virtual void Update(const SharedImage& aImage) {}
+  virtual const SharedImage* Update(const SharedImage& aImage) { return nullptr; }
   virtual Effect* Lock(const gfx::Filter& aFilter) { return nullptr; }
   virtual void Unlock() {}
+
+  void SetFlags(TextureFlags aFlags) { mFlags = aFlags; }
+  void AddFlag(TextureFlags aFlag) { mFlags |= aFlag; }
+protected:
+  TextureFlags mFlags;
 };
 
 class ImageHost : public RefCounted<ImageHost>
@@ -152,8 +167,8 @@ class ImageHost : public RefCounted<ImageHost>
 public:
   virtual ImageHostType GetType() = 0;
 
-  virtual void UpdateImage(const TextureIdentifier& aTextureIdentifier,
-                           const SharedImage& aImage) = 0;
+  virtual const SharedImage* UpdateImage(const TextureIdentifier& aTextureIdentifier,
+                                   const SharedImage& aImage) = 0;
 
   virtual void Composite(EffectChain& aEffectChain,
                          float aOpacity,
@@ -163,7 +178,6 @@ public:
                          const gfx::Rect& aClipRect) = 0;
 
   virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost) = 0;
-  virtual void SetForceSingleTile(bool aForceSingleTile) {}
 };
 
 /* This can be used as an offscreen rendering target by the compositor, and
@@ -392,7 +406,7 @@ public:
    * TODO[nrc] comment
    */
   virtual TemporaryRef<TextureHost>
-    CreateTextureHost(const TextureIdentifier &aIdentifier) = 0;
+    CreateTextureHost(const TextureIdentifier &aIdentifier, TextureFlags aFlags) = 0;
 
   /**
    * TODO[nrc] comment, name
@@ -456,7 +470,8 @@ public:
   static TemporaryRef<ImageClient> CreateImageClient(const TextureHostType &aHostType,
                                                      const ImageHostType& aImageHostType,
                                                      ShadowLayerForwarder* aLayerForwarder,
-                                                     ShadowableLayer* aLayer);
+                                                     ShadowableLayer* aLayer,
+                                                     TextureFlags aFlags);
   static TemporaryRef<TextureClient> CreateTextureClient(const TextureHostType &aHostType,
                                                          const ImageHostType& aTextureHostType,
                                                          const ImageHostType& aImageHostType,

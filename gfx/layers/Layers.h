@@ -358,7 +358,8 @@ public:
 
   //TODO[nrc] comment
   virtual void CreateTextureHostFor(ShadowLayer* aLayer,
-                                    const TextureIdentifier& aTextureIdentifier)
+                                    const TextureIdentifier& aTextureIdentifier,
+                                    TextureFlags aFlags)
   {
     //TODO[nrc] make pure virtual
     NS_ERROR("This should have been overridden TODO[nrc]");

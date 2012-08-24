@@ -119,7 +119,7 @@ private:
   GLenum mInternalFormat;
   GLenum mType;
   nsRefPtr<GLContext> mGL;
-  PRUint32 mPixelSize;
+  uint32_t mPixelSize;
 };
 
 //TODO[nrc] the ImageHosts are tied to a specific TextureHosts, I should fix that, maybe
@@ -133,8 +133,8 @@ public:
 
   virtual ImageHostType GetType() { return IMAGE_TEXTURE; }
 
-  virtual void UpdateImage(const TextureIdentifier& aTextureIdentifier,
-                           const SharedImage& aImage);
+  virtual const SharedImage* UpdateImage(const TextureIdentifier& aTextureIdentifier,
+                                   const SharedImage& aImage);
 
   virtual void Composite(EffectChain& aEffectChain,
                          float aOpacity,
@@ -144,8 +144,6 @@ public:
                          const gfx::Rect& aClipRect);
 
   virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost);
-
-  virtual void SetForceSingleTile(bool aForceSingleTile) MOZ_OVERRIDE;
 
 private:
   RefPtr<TextureImageAsTextureHost> mTextureHost;
@@ -160,8 +158,8 @@ public:
   virtual ImageHostType GetType() { return IMAGE_SHARED; }
 
 
-  virtual void UpdateImage(const TextureIdentifier& aTextureIdentifier,
-                           const SharedImage& aImage);
+  virtual const SharedImage* UpdateImage(const TextureIdentifier& aTextureIdentifier,
+                                   const SharedImage& aImage);
 
   virtual void Composite(EffectChain& aEffectChain,
                          float aOpacity,
@@ -207,22 +205,19 @@ public:
     mTexImage->mWrapMode = aWrapMode;
   }
 
-  virtual void Update(const SharedImage& aImage);
+  virtual const SharedImage* Update(const SharedImage& aImage);
   virtual Effect* Lock(const gfx::Filter& aFilter);
 
   void SetFilter(const gfx::Filter& aFilter) { mTexImage->SetFilter(gfx::ThebesFilter(aFilter)); }
   void BeginTileIteration() { mTexImage->BeginTileIteration(); }
   nsIntRect GetTileRect() { return mTexImage->GetTileRect(); }
   bool NextTile() { return mTexImage->NextTile(); }
-  void SetForceSingleTile(bool aForceSingleTile) { mForceSingleTile = aForceSingleTile; }
 
 private:
   TextureImageAsTextureHost()
     : mTexImage(nullptr)
-    , mForceSingleTile(false)
   {}
 
-  bool mForceSingleTile;
   nsRefPtr<TextureImage> mTexImage;
   gfx::IntSize mSize;
 
@@ -234,7 +229,11 @@ class TextureHostOGLShared : public ATextureOGL
 public:
   ~TextureHostOGLShared()
   {
+    mGL->MakeCurrent();
     mGL->ReleaseSharedHandle(mShareType, mSharedHandle);
+    if (mTextureHandle) {
+      mGL->fDeleteTextures(1, &mTextureHandle);
+    }
   }
 
   virtual gfx::IntSize GetSize()
@@ -259,11 +258,11 @@ public:
 
   virtual void SetWrapMode(GLenum aWrapMode) {}
 
-  virtual void Update(const SharedImage& aImage);
+  virtual const SharedImage* Update(const SharedImage& aImage);
   virtual Effect* Lock(const gfx::Filter& aFilter);
   virtual void Unlock();
 
-private:
+protected:
   TextureHostOGLShared(GLContext* aGL)
     : mGL(aGL)
   {}
@@ -274,6 +273,26 @@ private:
   gfx::IntSize mSize;
   gl::SharedTextureHandle mSharedHandle;
   gl::TextureImage::TextureShareType mShareType;
+
+  friend class CompositorOGL;
+};
+
+class TextureHostOGLSharedWithBuffer : public TextureHostOGLShared
+{
+public:
+  ~TextureHostOGLSharedWithBuffer()
+  {}
+
+  virtual const SharedImage* Update(const SharedImage& aImage);
+  virtual Effect* Lock(const gfx::Filter& aFilter);
+  virtual void Unlock();
+
+protected:
+  TextureHostOGLSharedWithBuffer(GLContext* aGL)
+    : TextureHostOGLShared(aGL)
+  {}
+
+  SharedImage mBuffer;
 
   friend class CompositorOGL;
 };
@@ -296,7 +315,7 @@ public:
     return mTexture.GetTextureID();
   }
 
-  void Update(const SharedImage& aImage);
+  const SharedImage* Update(const SharedImage& aImage);
 
 private:
   nsRefPtr<GLContext> mGL;

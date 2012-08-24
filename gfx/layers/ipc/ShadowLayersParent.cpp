@@ -318,7 +318,8 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       const OpCreateTextureHost& op = edit.get_OpCreateTextureHost();
       ShadowLayerParent* shadow = AsShadowLayer(op);
       const TextureIdentifier textureId = AsTextureId(op);
-      layer_manager()->CreateTextureHostFor(shadow->AsLayer()->AsShadowLayer(), textureId);
+      TextureFlags flags = static_cast<TextureFlags>(op.textureFlags());
+      layer_manager()->CreateTextureHostFor(shadow->AsLayer()->AsShadowLayer(), textureId, flags);
 
       break;
     }
@@ -397,7 +398,7 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       break;
     }
     case Edit::TOpPaintCanvas: {
-      MOZ_LAYERS_LOG(("[ParentSide] Paint CanvasLayer"));
+      /*MOZ_LAYERS_LOG(("[ParentSide] Paint CanvasLayer"));
 
       const OpPaintCanvas& op = edit.get_OpPaintCanvas();
       ShadowLayerParent* shadow = AsShadowLayer(op);
@@ -407,13 +408,14 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       RenderTraceInvalidateStart(canvas, "FF00FF", canvas->GetVisibleRegion().GetBounds());
 
       canvas->SetAllocator(this);
-      CanvasSurface newBack;
+      SharedImage newBack;
       canvas->Swap(op.newFrontBuffer(), op.needYFlip(), &newBack);
       canvas->Updated();
       replyv.push_back(OpBufferSwap(shadow, NULL,
                                     newBack));
 
-      RenderTraceInvalidateEnd(canvas, "FF00FF");
+      RenderTraceInvalidateEnd(canvas, "FF00FF");*/
+      NS_ERROR("Should have used PaintTexture");
       break;
     }
     case Edit::TOpPaintImage: {

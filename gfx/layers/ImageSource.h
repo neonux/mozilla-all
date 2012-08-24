@@ -27,8 +27,8 @@ public:
 
   // aImage contains all three plains, we could also send them seperately and 
   // update mTextures one at a time
-  virtual void UpdateImage(const TextureIdentifier& aTextureIdentifier,
-                           const SharedImage& aImage)
+  virtual const SharedImage* UpdateImage(const TextureIdentifier& aTextureIdentifier,
+                                         const SharedImage& aImage)
   {
     NS_ASSERTION(aTextureIdentifier.mImageType == IMAGE_YUV, "ImageHostType mismatch.");
     
@@ -38,6 +38,8 @@ public:
     mTextures[0]->Update(SurfaceDescriptor(yuv.Ydata()));
     mTextures[1]->Update(SurfaceDescriptor(yuv.Udata()));
     mTextures[2]->Update(SurfaceDescriptor(yuv.Vdata()));
+
+    return &aImage;
   }
 
   virtual void Composite(EffectChain& aEffectChain,

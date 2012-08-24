@@ -5,8 +5,11 @@
 
 #include "TextureClient.h"
 #include "mozilla/layers/ShadowLayers.h"
-#include "BasicLayers.h"
 #include "SharedTextureImage.h"
+#include "BasicLayers.h"
+#include "BasicCanvasLayer.h"
+
+//TODO[nrc] break up this file and its header
 
 namespace mozilla {
 namespace layers {
@@ -17,7 +20,8 @@ class ImageClientTexture : public ImageClient
 {
 public:
   ImageClientTexture(ShadowLayerForwarder* aLayerForwarder,
-                     ShadowableLayer* aLayer);
+                     ShadowableLayer* aLayer,
+                     TextureFlags aFlags);
   virtual ~ImageClientTexture();
 
   virtual SharedImage GetAsSharedImage();
@@ -33,7 +37,8 @@ class ImageClientShared : public ImageClient
 {
 public:
   ImageClientShared(ShadowLayerForwarder* aLayerForwarder,
-                    ShadowableLayer* aLayer);
+                    ShadowableLayer* aLayer,
+                    TextureFlags aFlags);
   virtual ~ImageClientShared();
 
   virtual SharedImage GetAsSharedImage();
@@ -50,7 +55,8 @@ class ImageClientYUV : public ImageClient
 {
 public:
   ImageClientYUV(ShadowLayerForwarder* aLayerForwarder,
-                 ShadowableLayer* aLayer);
+                 ShadowableLayer* aLayer,
+                 TextureFlags aFlags);
   virtual ~ImageClientYUV();
 
   virtual SharedImage GetAsSharedImage();
@@ -65,6 +71,41 @@ private:
   nsIntRect mPictureRect;
 };
 
+class CanvasClientTexture : public CanvasClient
+{
+public:
+  CanvasClientTexture(ShadowLayerForwarder* aLayerForwarder,
+                      ShadowableLayer* aLayer,
+                      TextureFlags aFlags);
+  virtual ~CanvasClientTexture();
+
+  virtual SharedImage GetAsSharedImage();
+  virtual void Update(gfx::IntSize aSize, CanvasLayer* aLayer);
+  virtual void SetBuffer(const TextureIdentifier& aTextureIdentifier,
+                         const SharedImage& aBuffer);
+
+private:
+  RefPtr<TextureClientShmem> mTextureClient;
+};
+
+class CanvasClientShared : public CanvasClient
+{
+public:
+  CanvasClientShared(ShadowLayerForwarder* aLayerForwarder,
+                     ShadowableLayer* aLayer,
+                     TextureFlags aFlags);
+  virtual ~CanvasClientShared();
+
+  virtual SharedImage GetAsSharedImage();
+  virtual void Update(gfx::IntSize aSize, CanvasLayer* aLayer);
+
+  virtual void SetBuffer(const TextureIdentifier& aTextureIdentifier,
+                         const SharedImage& aBuffer) {}
+
+private:
+  SurfaceDescriptor mDescriptor;
+};
+
 class TextureClientShmem : public TextureClient
 {
 public:
@@ -77,8 +118,8 @@ public:
   virtual void EnsureTextureClient(gfx::IntSize aSize, gfxASurface::gfxContentType aType);
   // only exposed to ImageClients, not sure if this will work for other uses
   SurfaceDescriptor& Descriptor() { return mDescriptor; }
-private:
   gfxASurface* GetSurface();
+private:
 
   TextureClientShmem(ShadowLayerForwarder* aLayerForwarder, ImageHostType aImageType);
 
@@ -104,8 +145,6 @@ public:
   virtual void Unlock() {}
   virtual void EnsureTextureClient(gfx::IntSize aSize, gfxASurface::gfxContentType aType) {}
 private:
-  gfxASurface* GetSurface();
-
   TextureClientShared(ShadowLayerForwarder* aLayerForwarder, ImageHostType aImageType)
     : TextureClient(aLayerForwarder, aImageType)
   {
@@ -189,10 +228,11 @@ TextureClientShmem::LockImageSurface()
 
 
 ImageClientTexture::ImageClientTexture(ShadowLayerForwarder* aLayerForwarder,
-                                       ShadowableLayer* aLayer)
+                                       ShadowableLayer* aLayer,
+                                       TextureFlags aFlags)
 {
   mTextureClient = static_cast<TextureClientShmem*>(
-    aLayerForwarder->CreateTextureClientFor(IMAGE_TEXTURE, IMAGE_TEXTURE, aLayer, true).drop());
+    aLayerForwarder->CreateTextureClientFor(IMAGE_TEXTURE, IMAGE_TEXTURE, aLayer, aFlags, true).drop());
 }
 
 ImageClientTexture::~ImageClientTexture()
@@ -212,7 +252,7 @@ ImageClientTexture::UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer)
   Image *image = autoLock.GetImage();
 
   ImageHostType type = CompositingFactory::TypeForImage(autoLock.GetImage());
-  if (type != IMAGE_TEXTURE) {
+  if (type != IMAGE_SHMEM) {
     return type == IMAGE_UNKNOWN;
   }
 
@@ -248,6 +288,32 @@ ImageClientTexture::UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer)
   return true;
 }
 
+CanvasClientTexture::CanvasClientTexture(ShadowLayerForwarder* aLayerForwarder,
+                                         ShadowableLayer* aLayer,
+                                         TextureFlags aFlags)
+{
+  mTextureClient = static_cast<TextureClientShmem*>(
+    aLayerForwarder->CreateTextureClientFor(IMAGE_TEXTURE, IMAGE_TEXTURE, aLayer, aFlags, true).drop());
+}
+
+void
+CanvasClientTexture::Update(gfx::IntSize aSize, CanvasLayer* aLayer)
+{
+  if (!mTextureClient) {
+    return;
+  }
+
+  bool isOpaque = (aLayer->GetContentFlags() & Layer::CONTENT_OPAQUE);
+  gfxASurface::gfxContentType contentType = isOpaque
+                                              ? gfxASurface::CONTENT_COLOR
+                                              : gfxASurface::CONTENT_COLOR_ALPHA;
+  mTextureClient->EnsureTextureClient(aSize, contentType);
+
+  gfxASurface* surface = mTextureClient->GetSurface();
+  static_cast<BasicCanvasLayer*>(aLayer)->UpdateSurface(surface, nullptr);
+  mTextureClient->Unlock();
+}
+
 SharedImage
 ImageClientTexture::GetAsSharedImage()
 {
@@ -270,10 +336,11 @@ ImageClientTexture::SetBuffer(const TextureIdentifier& aTextureIdentifier,
 
 
 ImageClientShared::ImageClientShared(ShadowLayerForwarder* aLayerForwarder,
-                                     ShadowableLayer* aLayer)
+                                     ShadowableLayer* aLayer, 
+                                     TextureFlags aFlags)
 {
   // we need to create a TextureHost, even though we don't use a texture client
-  aLayerForwarder->CreateTextureClientFor(IMAGE_SHARED, IMAGE_SHARED, aLayer, true);
+  aLayerForwarder->CreateTextureClientFor(IMAGE_SHARED, IMAGE_SHARED, aLayer, true, aFlags);
 }
 
 ImageClientShared::~ImageClientShared()
@@ -309,16 +376,17 @@ ImageClientShared::GetAsSharedImage()
 
 
 ImageClientYUV::ImageClientYUV(ShadowLayerForwarder* aLayerForwarder,
-                               ShadowableLayer* aLayer)
+                               ShadowableLayer* aLayer,
+                               TextureFlags aFlags)
 {
   mTextureClientY = static_cast<TextureClientShmem*>(
-    aLayerForwarder->CreateTextureClientFor(IMAGE_SHMEM, IMAGE_YUV, aLayer, true).drop());
+    aLayerForwarder->CreateTextureClientFor(IMAGE_SHMEM, IMAGE_YUV, aLayer, true, aFlags).drop());
   mTextureClientY->SetDescriptor(0);
   mTextureClientU = static_cast<TextureClientShmem*>(
-    aLayerForwarder->CreateTextureClientFor(IMAGE_SHMEM, IMAGE_YUV, aLayer, true).drop());
+    aLayerForwarder->CreateTextureClientFor(IMAGE_SHMEM, IMAGE_YUV, aLayer, true, aFlags).drop());
   mTextureClientU->SetDescriptor(1);
   mTextureClientV = static_cast<TextureClientShmem*>(
-    aLayerForwarder->CreateTextureClientFor(IMAGE_SHMEM, IMAGE_YUV, aLayer, true).drop());
+    aLayerForwarder->CreateTextureClientFor(IMAGE_SHMEM, IMAGE_YUV, aLayer, true, aFlags).drop());
   mTextureClientV->SetDescriptor(2);
 }
 
@@ -433,7 +501,8 @@ CompositingFactory::TypeForImage(Image* aImage) {
 CompositingFactory::CreateImageClient(const TextureHostType &aHostType,
                                       const ImageHostType& aImageHostType,
                                       ShadowLayerForwarder* aLayerForwarder,
-                                      ShadowableLayer* aLayer)
+                                      ShadowableLayer* aLayer,
+                                      TextureFlags aFlags)
 {
   //TODO[nrc]
   RefPtr<ImageClient> result = nullptr;
@@ -448,18 +517,18 @@ CompositingFactory::CreateImageClient(const TextureHostType &aHostType,
   switch (aImageHostType) {
   case IMAGE_SHARED:
     if (aHostType == HOST_GL) {
-      result = new ImageClientShared(aLayerForwarder, aLayer);
+      result = new ImageClientShared(aLayerForwarder, aLayer, aFlags);
     }
     break;
   case IMAGE_YUV:
     if (aLayer->AsLayer()->Manager()->IsCompositingCheap()) {
-      result = new ImageClientYUV(aLayerForwarder, aLayer);
+      result = new ImageClientYUV(aLayerForwarder, aLayer, aFlags);
       break;
     }
     // fall through to IMAGE_TEXTURE
   case IMAGE_TEXTURE:
     if (aHostType == HOST_GL) {
-      result = new ImageClientTexture(aLayerForwarder, aLayer);
+      result = new ImageClientTexture(aLayerForwarder, aLayer, aFlags);
     }
     break;
   case IMAGE_SHMEM:

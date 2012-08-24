@@ -555,6 +555,7 @@ TemporaryRef<TextureClient>
 ShadowLayerForwarder::CreateTextureClientFor(const ImageHostType& aTextureHostType,
                                              const ImageHostType& aImageHostType,
                                              ShadowableLayer* aLayer,
+                                             TextureFlags aFlags,
                                              bool aStrict /* = false */)
 {
   RefPtr<TextureClient> client = CompositingFactory::CreateTextureClient(mTextureHostType,
@@ -564,18 +565,19 @@ ShadowLayerForwarder::CreateTextureClientFor(const ImageHostType& aTextureHostTy
 
   // send client's id and type (not aImageSourceType) to Compositor
   TextureIdentifier textureId = client->GetIdentifier();
-  mTxn->AddEdit(OpCreateTextureHost(NULL, Shadow(aLayer), textureId));
+  mTxn->AddEdit(OpCreateTextureHost(NULL, Shadow(aLayer), textureId, aFlags));
 
   return client.forget();
 }
 
 TemporaryRef<ImageClient>
 ShadowLayerForwarder::CreateImageClientFor(const ImageHostType& aImageHostType,
-                                           ShadowableLayer* aLayer)
+                                           ShadowableLayer* aLayer,
+                                           TextureFlags aFlags)
 {
   RefPtr<ImageClient> client = CompositingFactory::CreateImageClient(mTextureHostType,
                                                                      aImageHostType,
-                                                                     this, aLayer);
+                                                                     this, aLayer, aFlags);
   return client.forget();
 }
 

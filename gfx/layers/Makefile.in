@@ -28,6 +28,7 @@ DEFINES += -DD3D_DEBUG_INFO
 endif
 
 EXPORTS = \
+        BasicCanvasLayer.h \
         BasicLayers.h \
         BasicTiledThebesLayer.h \
         BasicImplData.h \

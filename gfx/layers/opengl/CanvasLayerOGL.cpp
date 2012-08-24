@@ -286,84 +286,45 @@ IsValidSharedTexDescriptor(const SurfaceDescriptor& aDescriptor)
 ShadowCanvasLayerOGL::ShadowCanvasLayerOGL(LayerManagerOGL* aManager)
   : ShadowCanvasLayer(aManager, nullptr)
   , LayerOGL(aManager)
-  , mNeedsYFlip(false)
-  , mTexture(0)
+  , mImageHost(nullptr)
 {
   mImplData = static_cast<LayerOGL*>(this);
 }
- 
-ShadowCanvasLayerOGL::~ShadowCanvasLayerOGL()
-{}
 
+//TODO[nrc] these methods are pretty much shared with ShadowImageLayerOGL, can I pull 'em up to ShadowLayer?
 void
-ShadowCanvasLayerOGL::Initialize(const Data& aData)
+ShadowCanvasLayerOGL::EnsureImageHost(const TextureIdentifier& aTextureIdentifier)
 {
-  NS_RUNTIMEABORT("Incompatibe surface type");
+  if (!mImageHost ||
+      mImageHost->GetType() != aTextureIdentifier.mImageType) {
+    mImageHost = mOGLManager->GetCompositor()->CreateImageHost(aTextureIdentifier.mImageType);
+  }
 }
 
 void
-ShadowCanvasLayerOGL::Init(const CanvasSurface& aNewFront, bool needYFlip)
+ShadowCanvasLayerOGL::AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
 {
-  AutoOpenSurface autoSurf(OPEN_READ_ONLY, aNewFront);
+  EnsureImageHost(aTextureIdentifier);
 
-  mNeedsYFlip = needYFlip;
-
-  mTexImage = gl()->CreateTextureImage(autoSurf.Size(),
-                                       autoSurf.ContentType(),
-                                       LOCAL_GL_CLAMP_TO_EDGE,
-                                       mNeedsYFlip ? TextureImage::NeedsYFlip : TextureImage::NoFlags);
+  if (CanUseOpaqueSurface()) {
+    aTextureHost->AddFlag(UseOpaqueSurface);
+  }
+  mImageHost->AddTextureHost(aTextureIdentifier, aTextureHost);
 }
 
 void
-ShadowCanvasLayerOGL::Swap(const CanvasSurface& aNewFront,
-                           bool needYFlip,
-                           CanvasSurface* aNewBack)
+ShadowCanvasLayerOGL::SwapTexture(const TextureIdentifier& aTextureIdentifier,
+                                  const SharedImage& aFront,
+                                  SharedImage* aNewBack)
 {
   if (mDestroyed) {
-    *aNewBack = aNewFront;
+    *aNewBack = aFront;
     return;
   }
 
-  if (IsValidSharedTexDescriptor(aNewFront)) {
-    MakeTextureIfNeeded(gl(), mTexture);
-    if (!IsValidSharedTexDescriptor(mFrontBufferDescriptor)) {
-      mFrontBufferDescriptor = SharedTextureDescriptor(TextureImage::ThreadShared, 0, nsIntSize(0, 0), false);
-    }
-    *aNewBack = mFrontBufferDescriptor;
-    mFrontBufferDescriptor = aNewFront;
-    mNeedsYFlip = needYFlip;
-  } else {
-    AutoOpenSurface autoSurf(OPEN_READ_ONLY, aNewFront);
-    gfxIntSize sz = autoSurf.Size();
-    if (!mTexImage || mTexImage->GetSize() != sz ||
-        mTexImage->GetContentType() != autoSurf.ContentType()) {
-      Init(aNewFront, needYFlip);
-    }
-    nsIntRegion updateRegion(nsIntRect(0, 0, sz.width, sz.height));
-    mTexImage->DirectUpdate(autoSurf.Get(), updateRegion);
-    *aNewBack = aNewFront;
-  }
-}
+  EnsureImageHost(aTextureIdentifier);
 
-void
-ShadowCanvasLayerOGL::DestroyFrontBuffer()
-{
-  mTexImage = nullptr;
-  if (mTexture) {
-    gl()->MakeCurrent();
-    gl()->fDeleteTextures(1, &mTexture);
-  }
-  if (IsValidSharedTexDescriptor(mFrontBufferDescriptor)) {
-    SharedTextureDescriptor texDescriptor = mFrontBufferDescriptor.get_SharedTextureDescriptor();
-    gl()->ReleaseSharedHandle(texDescriptor.shareType(), texDescriptor.handle());
-    mFrontBufferDescriptor = SurfaceDescriptor();
-  }
-}
-
-void
-ShadowCanvasLayerOGL::Disconnect()
-{
-  Destroy();
+  *aNewBack = *mImageHost->UpdateImage(aTextureIdentifier, aFront);
 }
 
 void
@@ -371,7 +332,6 @@ ShadowCanvasLayerOGL::Destroy()
 {
   if (!mDestroyed) {
     mDestroyed = true;
-    DestroyFrontBuffer();
   }
 }
 
@@ -384,7 +344,7 @@ ShadowCanvasLayerOGL::GetLayer()
 void
 ShadowCanvasLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aClipRect, Surface*)
 {
-  if (!mTexImage && !IsValidSharedTexDescriptor(mFrontBufferDescriptor)) {
+  if (!mImageHost) {
     return;
   }
 
@@ -402,7 +362,6 @@ ShadowCanvasLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aC
   }
 #endif
 
-  // TODO: Fix texture handling.
   // TODO: Handle mask layers.
 
   EffectChain effectChain;
@@ -413,74 +372,11 @@ ShadowCanvasLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aC
   mOGLManager->ToMatrix4x4(GetEffectiveTransform(), transform);
   gfx::Rect clipRect(aClipRect.x, aClipRect.y, aClipRect.width, aClipRect.height);
 
-  if (IsValidSharedTexDescriptor(mFrontBufferDescriptor)) {
-    // Shared texture handle rendering path, single texture rendering
-    SharedTextureDescriptor texDescriptor = mFrontBufferDescriptor.get_SharedTextureDescriptor();
-
-    // TODO: This block needs to be moved to CompositorOGL.
-    gl()->fActiveTexture(LOCAL_GL_TEXTURE0);
-    gl()->fBindTexture(LOCAL_GL_TEXTURE_2D, mTexture);
-    if (!gl()->AttachSharedHandle(texDescriptor.shareType(), texDescriptor.handle())) {
-      NS_ERROR("Failed to attach shared texture handle");
-      return;
-    }
-
-    RefPtr<TextureOGL> texture = new TextureOGL(gl(), mTexture,
-                                                gfx::IntSize(texDescriptor.size().width, texDescriptor.size().height));
-
-    if (CanUseOpaqueSurface()) {
-      effect = new EffectRGBX(texture, true, gfx::ToFilter(filter), mNeedsYFlip);
-      effectChain.mEffects[EFFECT_RGBX] = effect;
-    } else {
-      effect = new EffectRGBA(texture, true, gfx::ToFilter(filter), mNeedsYFlip);
-      effectChain.mEffects[EFFECT_RGBA] = effect;
-    }
-
-    gfx::Rect rect(0, 0, texDescriptor.size().width, texDescriptor.size().height);
-    gfx::Point offset(aOffset.x, aOffset.y);
-
-    mOGLManager->GetCompositor()->DrawQuad(rect, nullptr, &clipRect, effectChain,
-                                           GetEffectiveOpacity(), transform,
-                                           offset);
-
-    // TODO: This needs to be moved to CompositorOGL.
-    gl()->DetachSharedHandle(texDescriptor.shareType(), texDescriptor.handle());
-    gl()->fBindTexture(LOCAL_GL_TEXTURE_2D, 0);
-  } else {
-    RefPtr<TextureOGL> texture = new TextureOGL(gl(), 0, gfx::IntSize(0,0));
-    texture->SetWrapMode(mTexImage->GetWrapMode());
-    if (mTexImage->GetShaderProgramType() == gl::BGRXLayerProgramType) {
-      effect = new EffectBGRX(texture, true, gfx::ToFilter(mFilter), mNeedsYFlip);
-      effectChain.mEffects[EFFECT_BGRX] = effect;
-    } else if (mTexImage->GetShaderProgramType() == gl::BGRALayerProgramType) {
-      effect = new EffectBGRA(texture, true, gfx::ToFilter(mFilter), mNeedsYFlip);
-      effectChain.mEffects[EFFECT_BGRA] = effect;
-    } else {
-      NS_RUNTIMEABORT("Shader type not yet supported");
-    }
-
-    // Tiled texture image rendering path
-    mTexImage->SetFilter(filter);
-    mTexImage->BeginTileIteration();
-
-    do {
-      texture->SetTextureHandle(mTexImage->GetTextureID());
-      texture->SetSize(gfx::IntSize(mTexImage->GetTileRect().width,
-                                    mTexImage->GetTileRect().height));
-      gfx::Rect rect(mTexImage->GetTileRect().x, mTexImage->GetTileRect().y,
-                     mTexImage->GetTileRect().width, mTexImage->GetTileRect().height);
-      gfx::Rect sourceRect(0, 0, mTexImage->GetTileRect().width,
-                           mTexImage->GetTileRect().height);
-      gfx::Point offset(aOffset.x, aOffset.y);
-      mOGLManager->GetCompositor()->DrawQuad(rect, &sourceRect, &clipRect, effectChain,
-                                             GetEffectiveOpacity(), transform,
-                                             offset);
-    } while (mTexImage->NextTile());
-  }
+  mImageHost->Composite(effectChain,
+                        GetEffectiveOpacity(),
+                        transform,
+                        gfx::Point(aOffset.x, aOffset.y),
+                        gfx::ToFilter(filter),
+                        clipRect);
 }
 
-void
-ShadowCanvasLayerOGL::CleanupResources()
-{
-  DestroyFrontBuffer();
-}

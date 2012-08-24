@@ -502,12 +502,16 @@ CompositorOGL::CreateImageHost(ImageHostType aType)
 
 //TODO[nrc]
 TemporaryRef<TextureHost>
-CompositorOGL::CreateTextureHost(const TextureIdentifier &aIdentifier)
+CompositorOGL::CreateTextureHost(const TextureIdentifier &aIdentifier,
+                                 TextureFlags aFlags)
 {
   RefPtr<TextureHost> result = nullptr;
   switch (aIdentifier.mTextureType) {
   case IMAGE_SHARED:
     result = new TextureHostOGLShared(mGLContext);
+    break;
+  case IMAGE_SHARED_WITH_BUFFER:
+    result = new TextureHostOGLSharedWithBuffer(mGLContext);
     break;
   case IMAGE_SHMEM:
     if (aIdentifier.mImageType == IMAGE_YUV) {
@@ -527,6 +531,7 @@ CompositorOGL::CreateTextureHost(const TextureIdentifier &aIdentifier)
 
   NS_ASSERTION(result, "Result should have been created.");
 
+  result->SetFlags(aFlags);
   return result.forget();
 }
 

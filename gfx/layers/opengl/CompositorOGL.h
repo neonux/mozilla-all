@@ -41,7 +41,8 @@ public:
   void Destroy();
 
   virtual TemporaryRef<TextureHost>
-    CreateTextureHost(const TextureIdentifier &aIdentifier) MOZ_OVERRIDE;
+    CreateTextureHost(const TextureIdentifier &aIdentifier,
+                      TextureFlags aFlags) MOZ_OVERRIDE;
 
   virtual TextureHostIdentifier GetTextureHostIdentifier() MOZ_OVERRIDE
   {

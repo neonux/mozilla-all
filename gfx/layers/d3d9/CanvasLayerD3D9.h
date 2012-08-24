@@ -95,9 +95,9 @@ public:
   virtual void Updated(const nsIntRect&) {}
 
   // ShadowCanvasLayer impl
-  virtual void Swap(const CanvasSurface& aNewFront,
+  virtual void Swap(const SharedImage& aNewFront,
                     bool needYFlip,
-                    CanvasSurface* aNewBack);
+                    SharedImage* aNewBack);
   virtual void DestroyFrontBuffer();
   virtual void Disconnect();
 

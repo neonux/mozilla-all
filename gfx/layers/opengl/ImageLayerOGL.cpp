@@ -695,6 +695,9 @@ ShadowImageLayerOGL::AddTextureHost(const TextureIdentifier& aTextureIdentifier,
 {
   EnsureImageHost(aTextureIdentifier);
 
+  if (mForceSingleTile) {
+    aTextureHost->AddFlag(ForceSingleTile);
+  }
   mImageHost->AddTextureHost(aTextureIdentifier, aTextureHost);
 }
 
@@ -703,19 +706,19 @@ ShadowImageLayerOGL::SwapTexture(const TextureIdentifier& aTextureIdentifier,
                                  const SharedImage& aFront,
                                  SharedImage* aNewBack)
 {
-  *aNewBack = aFront;
-
   if (mDestroyed) {
+    *aNewBack = aFront;
     return;
   }
 
-  if (aNewBack->type() == SharedImage::TSharedImageID) {
-    NS_ERROR("Shared Images should not use SwapTexture");
+  if (aFront.type() == SharedImage::TSharedImageID) {
+    NS_ERROR("ImageBridge should not use SwapTexture");
   }
 
   EnsureImageHost(aTextureIdentifier);
 
-  mImageHost->UpdateImage(aTextureIdentifier, *aNewBack);
+  mImageHost->UpdateImage(aTextureIdentifier, aFront);
+  *aNewBack = aFront;
 }
 
 void
@@ -724,7 +727,6 @@ ShadowImageLayerOGL::EnsureImageHost(const TextureIdentifier& aTextureIdentifier
   if (!mImageHost ||
       mImageHost->GetType() != aTextureIdentifier.mImageType) {
     mImageHost = mOGLManager->GetCompositor()->CreateImageHost(aTextureIdentifier.mImageType);
-    mImageHost->SetForceSingleTile(mForceSingleTile);
   }
 }
 
@@ -732,24 +734,26 @@ void
 ShadowImageLayerOGL::Swap(const SharedImage& aNewFront,
                           SharedImage* aNewBack)
 {
-  *aNewBack = aNewFront;
-
   if (mDestroyed) {
+    *aNewBack = aNewFront;
     return;
   }
 
-  if (aNewBack->type() != SharedImage::TSharedImageID) {
-    NS_ERROR("Only Shared Images should use Swap");
+  if (aNewFront.type() != SharedImage::TSharedImageID) {
+    NS_ERROR("Only ImageBridge should use Swap");
+    *aNewBack = aNewFront;
     return;
   }
 
   // We are using ImageBridge protocol. The image data will be queried at render
   // time in the parent side.
-  PRUint64 newID = aNewBack->get_SharedImageID().id();
+  PRUint64 newID = aNewFront.get_SharedImageID().id();
   if (newID != mImageContainerID) {
     mImageContainerID = newID;
     mImageVersion = 0;
   }
+
+  *aNewBack = aNewFront;
 }
 
 void
@@ -795,6 +799,10 @@ ShadowImageLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aCl
       //TODO[nrc] what if there is an image and it is not YUV?
       // is that possible?
     }
+  }
+
+  if (!mImageHost) {
+    return;
   }
 
   // TODO: Handle mask layers.

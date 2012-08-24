@@ -17,6 +17,7 @@ namespace layers {
 
 class ImageContainer;
 class ImageLayer;
+class CanvasLayer;
 
 /* This class allows texture clients to draw into textures through Azure or
  * thebes and applies locking semantics to allow GPU or CPU level
@@ -92,6 +93,20 @@ public:
                          const SharedImage& aBuffer) = 0;
 };
 
+class CanvasClient : public RefCounted<CanvasClient>
+{
+public:
+  virtual ~CanvasClient() {}
+  //TODO[nrc] comments
+  virtual SharedImage GetAsSharedImage() = 0;
+
+  // returns false if this is the wrong kind of ImageClient for aContainer
+  // note returning true does not necessarily imply success
+  virtual void Update(gfx::IntSize aSize, CanvasLayer* aLayer) = 0;
+
+  virtual void SetBuffer(const TextureIdentifier& aTextureIdentifier,
+                         const SharedImage& aBuffer) = 0;
+};
 
 }
 }

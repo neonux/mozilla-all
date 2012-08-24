@@ -330,9 +330,11 @@ public:
   TemporaryRef<TextureClient> CreateTextureClientFor(const ImageHostType& aTextureHostType,
                                                      const ImageHostType& aImageHostType,
                                                      ShadowableLayer* aLayer,
+                                                     TextureFlags aFlags,
                                                      bool aStrict = false);
   TemporaryRef<ImageClient> CreateImageClientFor(const ImageHostType& aImageHostType,
-                                                 ShadowableLayer* aLayer);
+                                                 ShadowableLayer* aLayer,
+                                                 TextureFlags aFlags);
 
 protected:
   ShadowLayerForwarder();
@@ -658,8 +660,8 @@ public:
    * out the old front surface (the new back surface for the remote
    * layer).
    */
-  virtual void Swap(const CanvasSurface& aNewFront, bool needYFlip,
-                    CanvasSurface* aNewBack) = 0;
+  virtual void Swap(const SharedImage& aNewFront, bool needYFlip,
+                    SharedImage* aNewBack) = 0;
 
   virtual ShadowLayer* AsShadowLayer() { return this; }
 

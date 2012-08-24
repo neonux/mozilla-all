@@ -98,23 +98,35 @@ class ShadowCanvasLayerOGL : public ShadowCanvasLayer,
 
 public:
   ShadowCanvasLayerOGL(LayerManagerOGL* aManager);
-  virtual ~ShadowCanvasLayerOGL();
+  virtual ~ShadowCanvasLayerOGL() {}
 
   // CanvasLayer impl
-  virtual void Initialize(const Data& aData);
-  virtual void Init(const CanvasSurface& aNewFront, bool needYFlip);
+  virtual void Initialize(const Data& aData)
+  {
+    NS_RUNTIMEABORT("Incompatibe surface type");
+  }
 
   // This isn't meaningful for shadow canvas.
   virtual void Updated(const nsIntRect&) {}
 
   // ShadowCanvasLayer impl
-  virtual void Swap(const CanvasSurface& aNewFront,
+  virtual void Swap(const SharedImage& aNewFront,
                     bool needYFlip,
-                    CanvasSurface* aNewBack);
+                    SharedImage* aNewBack)
+  {
+    NS_ERROR("Should never be called");
+  }
 
-  virtual void DestroyFrontBuffer();
+  virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost);
 
-  virtual void Disconnect();
+  virtual void SwapTexture(const TextureIdentifier& aTextureIdentifier,
+                           const SharedImage& aFront,
+                           SharedImage* aNewBack);
+
+  virtual void Disconnect()
+  {
+    Destroy();
+  }
 
   // LayerOGL impl
   void Destroy();
@@ -122,14 +134,13 @@ public:
   virtual void RenderLayer(const nsIntPoint& aOffset,
                            const nsIntRect& aClipRect,
                            Surface* aPreviousSurface = nullptr);
-  virtual void CleanupResources();
+
+  virtual void CleanupResources() { mImageHost = nullptr; }
 
 private:
-  nsRefPtr<TextureImage> mTexImage;
+  void EnsureImageHost(const TextureIdentifier& aTextureIdentifier);
 
-  bool mNeedsYFlip;
-  SurfaceDescriptor mFrontBufferDescriptor;
-  GLuint mTexture;
+  RefPtr<ImageHost> mImageHost;
 };
 
 } /* layers */

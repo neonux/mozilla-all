@@ -177,6 +177,7 @@ public:
 
   virtual void FillSpecificAttributes(SpecificLayerAttributes& aAttrs)
   {
+    //TODO[nrc] pass as flag with texture
     aAttrs = ImageLayerAttributes(mFilter, mForceSingleTile);
   }
 
@@ -185,7 +186,7 @@ public:
 
   virtual void SetBackBuffer(const SharedImage& aBuffer)
   {
-    // only called for Shared Images and then there is nothing to do
+    // only called for ImageBridge and then there is nothing to do
   }
 
   virtual void SetBackBuffer(const TextureIdentifier& aTextureIdentifier,
@@ -219,13 +220,6 @@ private:
     return CompositingFactory::TypeForImage(autoLock.GetImage());
   }
 
-  void BasicShadowableImageLayer::EnsureImageClient()
-  {
-    if (!mImageClient) {
-      mImageClient = BasicManager()->CreateImageClientFor(GetImageClientType(), this);
-    }
-  }
-
   RefPtr<ImageClient>  mImageClient;
 };
 
@@ -256,16 +250,16 @@ BasicShadowableImageLayer::Paint(gfxContext* aContext, Layer* aMaskLayer)
     return;
   }
 
-  EnsureImageClient();
   if (!mImageClient ||
       !mImageClient->UpdateImage(mContainer, this)) {
-    mImageClient = BasicManager()->CreateImageClientFor(GetImageClientType(), this);
+    mImageClient = BasicManager()->CreateImageClientFor(GetImageClientType(), this, NoFlags);
 
     if (!mImageClient ||
         !mImageClient->UpdateImage(mContainer, this)) {
       return;
     }
   }
+
   BasicManager()->PaintedImage(BasicManager()->Hold(this), mImageClient);
 }
 

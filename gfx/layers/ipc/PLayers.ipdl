@@ -48,11 +48,6 @@ struct ThebesBuffer {
 };
 union OptionalThebesBuffer { ThebesBuffer; null_t; };
 
-union CanvasSurface {
-  SurfaceDescriptor;
-  null_t;
-};
-
 // Change a layer's attributes
 struct CommonLayerAttributes {
   nsIntRegion visibleRegion;
@@ -103,6 +98,7 @@ struct OpSetLayerAttributes {
 struct OpCreateTextureHost {
   PLayer layer;
   TextureIdentifier textureIdentifier;
+  int textureFlags;
 };
 
 // Monkey with the tree structure
@@ -126,9 +122,10 @@ struct OpPaintTiledLayerBuffer {
   uintptr_t tiledLayerBuffer;
 };
 
+//TODO[nrc] remove
 struct OpPaintCanvas  {
   PLayer layer;
-  CanvasSurface newFrontBuffer;
+  SharedImage newFrontBuffer;
   bool needYFlip;
 };
 
@@ -171,7 +168,7 @@ union Edit {
 
 
 // Replies to operations
-struct OpBufferSwap   { PLayer layer; CanvasSurface newBackBuffer; };
+struct OpBufferSwap   { PLayer layer; SurfaceDescriptor newBackBuffer; };
 
 struct OpImageSwap { PLayer layer; SharedImage newBackImage; };
 
