@@ -15,6 +15,7 @@ namespace mozilla {
 namespace layers {
 
 class CanvasClientTexture;
+class CanvasClientShared;
 
 class BasicCanvasLayer : public CanvasLayer,
                          public BasicImplData
@@ -85,6 +86,7 @@ protected:
   }
 
   friend class CanvasClientTexture;
+  friend class CanvasClientShared;
 };
 
 }

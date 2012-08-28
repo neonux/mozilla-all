@@ -222,7 +222,6 @@ public:
   }
   virtual ~BasicShadowableCanvasLayer()
   {
-    DestroyBackBuffer();
     MOZ_COUNT_DTOR(BasicShadowableCanvasLayer);
   }
 
@@ -250,24 +249,8 @@ public:
 
   virtual void Disconnect()
   {
-    //TODO[nrc]
-    mBackBuffer = SurfaceDescriptor();
+    mCanvasClient = nullptr;
     BasicShadowableLayer::Disconnect();
-  }
-
-  void DestroyBackBuffer()
-  {
-    //TODO[nrc]
-    if (mBackBuffer.type() == SurfaceDescriptor::TSharedTextureDescriptor) {
-      SharedTextureDescriptor handle = mBackBuffer.get_SharedTextureDescriptor();
-      if (mGLContext && handle.handle()) {
-        mGLContext->ReleaseSharedHandle(handle.shareType(), handle.handle());
-        mBackBuffer = SurfaceDescriptor();
-      }
-    } else if (IsSurfaceDescriptorValid(mBackBuffer)) {
-      BasicManager()->ShadowLayerForwarder::DestroySharedSurface(&mBackBuffer);
-      mBackBuffer = SurfaceDescriptor();
-    }
   }
 
 private:
@@ -278,43 +261,14 @@ private:
 
   ImageHostType GetImageClientType()
   {
-    if (mGLContext &&
-        BasicManager()->GetParentBackendType() == mozilla::layers::LAYERS_OPENGL) {
+    if (mGLContext) {
       return IMAGE_SHARED_WITH_BUFFER;
     }
     return IMAGE_SHMEM;
   }
 
-  //TODO[nrc] move to compositor
-  CanvasClient* MakeCanvasClient(ImageHostType aType)
-  {
-    if (aType == IMAGE_SHARED_WITH_BUFFER) {
-      //return new CanvasClientShared(BasicManager(), this, NoFlags);
-    }
-    
-    if (aType == IMAGE_SHMEM) {
-      //return new CanvasClientTexture(BasicManager(), this, UpdateCanvasCallback(this), NoFlags);
-    }
-    
-    return nullptr;
-  }
-
   bool mBufferIsOpaque;
   RefPtr<CanvasClient> mCanvasClient;
-
-
-  //TODO[nrc] kill these
-  typedef mozilla::gl::SharedTextureHandle SharedTextureHandle;
-  typedef mozilla::gl::TextureImage TextureImage;
-  SharedTextureHandle GetSharedBackBufferHandle()
-  {
-    if (mBackBuffer.type() == SurfaceDescriptor::TSharedTextureDescriptor)
-      return mBackBuffer.get_SharedTextureDescriptor().handle();
-    return 0;
-  }
-
-
-  SurfaceDescriptor mBackBuffer;
 };
 
 void
@@ -342,38 +296,13 @@ BasicShadowableCanvasLayer::Paint(gfxContext* aContext, Layer* aMaskLayer)
       ->Paint(aContext, nullptr);
   }
 
-  if (mGLContext &&
-      BasicManager()->GetParentBackendType() == mozilla::layers::LAYERS_OPENGL) {
-    TextureImage::TextureShareType flags;
-    // if process type is default, then it is single-process (non-e10s)
-    if (XRE_GetProcessType() == GeckoProcessType_Default)
-      flags = TextureImage::ThreadShared;
-    else
-      flags = TextureImage::ProcessShared;
-
-    SharedTextureHandle handle = GetSharedBackBufferHandle();
-    if (!handle) {
-      handle = mGLContext->CreateSharedHandle(flags);
-      if (handle) {
-        mBackBuffer = SharedTextureDescriptor(flags, handle, mBounds.Size(), false);
-      }
-    }
-    if (handle) {
-      mGLContext->MakeCurrent();
-      mGLContext->UpdateSharedHandle(flags, handle);
-
-      FireDidTransactionCallback();
-      BasicManager()->PaintedCanvas(BasicManager()->Hold(this),
-                                    mNeedsYFlip,
-                                    mBackBuffer);
-      // Move SharedTextureHandle ownership to ShadowLayer
-      mBackBuffer = SurfaceDescriptor();
-      return;
-    }
-  }
-
   if (!mCanvasClient) {
-    mCanvasClient = MakeCanvasClient(GetImageClientType());
+    TextureFlags flags = CanvasFlag;
+    if (mNeedsYFlip) {
+      flags |= NeedsYFlip;
+    }
+    RefPtr<ImageClient> imageClient = BasicManager()->CreateImageClientFor(GetImageClientType(), this, flags);
+    mCanvasClient = static_cast<CanvasClient*>(imageClient.get());
 
     if (!mCanvasClient) {
       return;
@@ -383,10 +312,8 @@ BasicShadowableCanvasLayer::Paint(gfxContext* aContext, Layer* aMaskLayer)
 
   FireDidTransactionCallback();
 
-  //TODO[nrc] post mNeedsYFlip? mBackBuffer -> mCanvasClient
-  BasicManager()->PaintedCanvas(BasicManager()->Hold(this),
-                                mNeedsYFlip,
-                                mBackBuffer);
+  BasicManager()->PaintedImage(BasicManager()->Hold(this),
+                               mCanvasClient);
 }
 
 class BasicShadowCanvasLayer : public ShadowCanvasLayer,

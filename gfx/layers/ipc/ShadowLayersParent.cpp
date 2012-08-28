@@ -303,7 +303,6 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
         ImageLayer* imageLayer = static_cast<ImageLayer*>(layer);
         const ImageLayerAttributes& attrs = specific.get_ImageLayerAttributes();
         imageLayer->SetFilter(attrs.filter());
-        imageLayer->SetForceSingleTile(attrs.forceSingleTile());
         break;
       }
       default:

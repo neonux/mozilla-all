@@ -177,8 +177,7 @@ public:
 
   virtual void FillSpecificAttributes(SpecificLayerAttributes& aAttrs)
   {
-    //TODO[nrc] pass as flag with texture
-    aAttrs = ImageLayerAttributes(mFilter, mForceSingleTile);
+    aAttrs = ImageLayerAttributes(mFilter);
   }
 
   virtual Layer* AsLayer() { return this; }
@@ -252,7 +251,10 @@ BasicShadowableImageLayer::Paint(gfxContext* aContext, Layer* aMaskLayer)
 
   if (!mImageClient ||
       !mImageClient->UpdateImage(mContainer, this)) {
-    mImageClient = BasicManager()->CreateImageClientFor(GetImageClientType(), this, NoFlags);
+    mImageClient = BasicManager()->CreateImageClientFor(GetImageClientType(), this,
+                                                        mForceSingleTile
+                                                          ? ForceSingleTile
+                                                          : NoFlags);
 
     if (!mImageClient ||
         !mImageClient->UpdateImage(mContainer, this)) {

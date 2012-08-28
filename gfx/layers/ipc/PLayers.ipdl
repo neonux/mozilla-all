@@ -70,10 +70,7 @@ struct ContainerLayerAttributes{ FrameMetrics metrics; };
 struct ColorLayerAttributes    { gfxRGBA color; };
 struct CanvasLayerAttributes   { GraphicsFilterType filter; };
 struct RefLayerAttributes      { int64_t id; };
-struct ImageLayerAttributes    {
-  GraphicsFilterType filter;
-  bool forceSingleTile;
-};
+struct ImageLayerAttributes    { GraphicsFilterType filter; };
 
 union SpecificLayerAttributes {
   null_t;

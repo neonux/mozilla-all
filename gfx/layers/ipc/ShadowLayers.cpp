@@ -261,16 +261,6 @@ ShadowLayerForwarder::PaintedImage(ShadowableLayer* aImage,
                               aImageClient->GetAsSharedImage()));
 }
 
-void
-ShadowLayerForwarder::PaintedCanvas(ShadowableLayer* aCanvas,
-                                    bool aNeedYFlip,
-                                    const SurfaceDescriptor& aNewFrontSurface)
-{
-  mTxn->AddPaint(OpPaintCanvas(NULL, Shadow(aCanvas),
-                               aNewFrontSurface,
-                               aNeedYFlip));
-}
-
 bool
 ShadowLayerForwarder::EndTransaction(InfallibleTArray<EditReply>* aReplies)
 {

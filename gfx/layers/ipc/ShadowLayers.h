@@ -216,9 +216,6 @@ public:
                     const SharedImage& aNewFrontImage);
   void PaintedImage(ShadowableLayer* aImage,
                     ImageClient* aImageClient);
-  void PaintedCanvas(ShadowableLayer* aCanvas,
-                     bool aNeedYFlip,
-                     const SurfaceDescriptor& aNewFrontSurface);
 
   /**
    * End the current transaction and forward it to ShadowLayerManager.

@@ -85,6 +85,7 @@ const TextureFlags UseNearestFilter   = 0x1;
 const TextureFlags NeedsYFlip         = 0x2;
 const TextureFlags ForceSingleTile    = 0x4;
 const TextureFlags UseOpaqueSurface   = 0x8;
+const TextureFlags CanvasFlag   = 0x10; //TODO[nrc] remove this hack
 
 
 //TODO[nrc] comment
@@ -467,6 +468,7 @@ class CompositingFactory
 {
 public:
   // TODO[nrc] comment
+  // TODO[nrc] enums shouldn't be const &
   static TemporaryRef<ImageClient> CreateImageClient(const TextureHostType &aHostType,
                                                      const ImageHostType& aImageHostType,
                                                      ShadowLayerForwarder* aLayerForwarder,

@@ -8,6 +8,7 @@
 #include "SharedTextureImage.h"
 #include "BasicLayers.h"
 #include "BasicCanvasLayer.h"
+#include "nsXULAppAPI.h"
 
 //TODO[nrc] break up this file and its header
 
@@ -77,10 +78,10 @@ public:
   CanvasClientTexture(ShadowLayerForwarder* aLayerForwarder,
                       ShadowableLayer* aLayer,
                       TextureFlags aFlags);
-  virtual ~CanvasClientTexture();
+  virtual ~CanvasClientTexture() {}
 
   virtual SharedImage GetAsSharedImage();
-  virtual void Update(gfx::IntSize aSize, CanvasLayer* aLayer);
+  virtual void Update(gfx::IntSize aSize, BasicCanvasLayer* aLayer);
   virtual void SetBuffer(const TextureIdentifier& aTextureIdentifier,
                          const SharedImage& aBuffer);
 
@@ -97,13 +98,14 @@ public:
   virtual ~CanvasClientShared();
 
   virtual SharedImage GetAsSharedImage();
-  virtual void Update(gfx::IntSize aSize, CanvasLayer* aLayer);
+  virtual void Update(gfx::IntSize aSize, BasicCanvasLayer* aLayer);
 
   virtual void SetBuffer(const TextureIdentifier& aTextureIdentifier,
-                         const SharedImage& aBuffer) {}
+                         const SharedImage& aBuffer);
 
 private:
   SurfaceDescriptor mDescriptor;
+  nsRefPtr<GLContext> mGL;
 };
 
 class TextureClientShmem : public TextureClient
@@ -297,7 +299,7 @@ CanvasClientTexture::CanvasClientTexture(ShadowLayerForwarder* aLayerForwarder,
 }
 
 void
-CanvasClientTexture::Update(gfx::IntSize aSize, CanvasLayer* aLayer)
+CanvasClientTexture::Update(gfx::IntSize aSize, BasicCanvasLayer* aLayer)
 {
   if (!mTextureClient) {
     return;
@@ -312,6 +314,26 @@ CanvasClientTexture::Update(gfx::IntSize aSize, CanvasLayer* aLayer)
   gfxASurface* surface = mTextureClient->GetSurface();
   static_cast<BasicCanvasLayer*>(aLayer)->UpdateSurface(surface, nullptr);
   mTextureClient->Unlock();
+}
+
+SharedImage
+CanvasClientTexture::GetAsSharedImage()
+{
+  return SharedImage(mTextureClient->Descriptor());
+}
+
+void
+CanvasClientTexture::SetBuffer(const TextureIdentifier& aTextureIdentifier,
+                               const SharedImage& aBuffer)
+{
+  SharedImage::Type type = aBuffer.type();
+
+  if (type != SharedImage::TSurfaceDescriptor) {
+    mTextureClient->Descriptor() = SurfaceDescriptor();
+    return;
+  }
+
+  mTextureClient->Descriptor() = aBuffer.get_SurfaceDescriptor();
 }
 
 SharedImage
@@ -372,6 +394,67 @@ SharedImage
 ImageClientShared::GetAsSharedImage()
 {
   return SharedImage(mDescriptor);
+}
+
+
+CanvasClientShared::CanvasClientShared(ShadowLayerForwarder* aLayerForwarder,
+                                       ShadowableLayer* aLayer, 
+                                       TextureFlags aFlags)
+  : mDescriptor(0)
+{
+  // we need to create a TextureHost, even though we don't use a texture client
+  aLayerForwarder->CreateTextureClientFor(IMAGE_SHARED, IMAGE_SHARED, aLayer, true, aFlags);
+}
+
+CanvasClientShared::~CanvasClientShared()
+{
+  SharedTextureDescriptor handle = mDescriptor.get_SharedTextureDescriptor();
+  if (mGL && handle.handle()) {
+    mGL->ReleaseSharedHandle(handle.shareType(), handle.handle());
+  }
+}
+
+void
+CanvasClientShared::Update(gfx::IntSize aSize, BasicCanvasLayer* aLayer)
+{
+  NS_ASSERTION(aLayer->mGLContext, "CanvasClientShared should only be used with GL canvases");
+  mGL = aLayer->mGLContext;
+  TextureImage::TextureShareType flags;
+  // if process type is default, then it is single-process (non-e10s)
+  if (XRE_GetProcessType() == GeckoProcessType_Default)
+    flags = TextureImage::ThreadShared;
+  else
+    flags = TextureImage::ProcessShared;
+
+  SharedTextureHandle handle = 0;
+  if (mDescriptor.type() == SurfaceDescriptor::TSharedTextureDescriptor) {
+    handle = mDescriptor.get_SharedTextureDescriptor().handle();
+  } else {
+    handle = mGL->CreateSharedHandle(flags);
+    if (!handle) {
+      return;
+    }
+    mDescriptor = SharedTextureDescriptor(flags, handle, nsIntSize(aSize.width, aSize.height), false);
+  }
+
+  mGL->MakeCurrent();
+  mGL->UpdateSharedHandle(flags, handle);
+
+  // Move SharedTextureHandle ownership to ShadowLayer
+  mDescriptor = SurfaceDescriptor();
+}
+
+SharedImage
+CanvasClientShared::GetAsSharedImage()
+{
+  return SharedImage(mDescriptor);
+}
+
+void
+CanvasClientShared::SetBuffer(const TextureIdentifier& aTextureIdentifier,
+                              const SharedImage& aBuffer)
+{
+  mDescriptor = aBuffer.get_SurfaceDescriptor();
 }
 
 
@@ -504,16 +587,21 @@ CompositingFactory::CreateImageClient(const TextureHostType &aHostType,
                                       ShadowableLayer* aLayer,
                                       TextureFlags aFlags)
 {
-  //TODO[nrc]
-  RefPtr<ImageClient> result = nullptr;
-  switch (aHostType) {
-  case HOST_D3D10:
-    break;
-  case HOST_GL:
-    break;
-  case HOST_SHMEM:
-    break;
+  //TODO[nrc] remove this
+  if (aFlags & CanvasFlag) {
+    if (aImageHostType == IMAGE_SHMEM) {
+      return new CanvasClientTexture(aLayerForwarder, aLayer, aFlags);
+    } else if (aImageHostType == IMAGE_SHARED_WITH_BUFFER) {
+      if (aHostType == HOST_GL) {
+        return new CanvasClientShared(aLayerForwarder, aLayer, aFlags);
+      }
+      return new CanvasClientTexture(aLayerForwarder, aLayer, aFlags);
+    } else {
+      return nullptr;
+    }
   }
+
+  RefPtr<ImageClient> result = nullptr;
   switch (aImageHostType) {
   case IMAGE_SHARED:
     if (aHostType == HOST_GL) {
@@ -531,7 +619,7 @@ CompositingFactory::CreateImageClient(const TextureHostType &aHostType,
       result = new ImageClientTexture(aLayerForwarder, aLayer, aFlags);
     }
     break;
-  case IMAGE_SHMEM:
+  case IMAGE_SHMEM: //TODO[nrc] SHMEM or Texture?
   case IMAGE_UNKNOWN:
     return result.forget();    
   }

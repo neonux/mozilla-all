@@ -695,9 +695,6 @@ ShadowImageLayerOGL::AddTextureHost(const TextureIdentifier& aTextureIdentifier,
 {
   EnsureImageHost(aTextureIdentifier);
 
-  if (mForceSingleTile) {
-    aTextureHost->AddFlag(ForceSingleTile);
-  }
   mImageHost->AddTextureHost(aTextureIdentifier, aTextureHost);
 }
 
