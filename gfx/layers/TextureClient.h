@@ -15,10 +15,6 @@
 namespace mozilla {
 namespace layers {
 
-class ImageContainer;
-class ImageLayer;
-class BasicCanvasLayer;
-
 /* This class allows texture clients to draw into textures through Azure or
  * thebes and applies locking semantics to allow GPU or CPU level
  * synchronization.
@@ -78,37 +74,52 @@ protected:
   TextureIdentifier mIdentifier;
 };
 
-class ImageClient : public RefCounted<ImageClient>
+class TextureClientShmem : public TextureClient
 {
 public:
-  virtual ~ImageClient() {}
-  //TODO[nrc] comments
-  virtual SharedImage GetAsSharedImage() = 0;
+  virtual ~TextureClientShmem();
 
-  // returns false if this is the wrong kind of ImageClient for aContainer
-  // note returning true does not necessarily imply success
-  virtual bool UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer) = 0;
+  virtual TemporaryRef<gfx::DrawTarget> LockDT() { return nullptr; } //TODO[nrc]
+  virtual already_AddRefed<gfxContext> LockContext();
+  virtual gfxImageSurface* LockImageSurface();
+  virtual void Unlock();
+  virtual void EnsureTextureClient(gfx::IntSize aSize, gfxASurface::gfxContentType aType);
+  // only exposed to ImageClients, not sure if this will work for other uses
+  SurfaceDescriptor& Descriptor() { return mDescriptor; }
+  gfxASurface* GetSurface();
+private:
 
-  virtual void SetBuffer(const TextureIdentifier& aTextureIdentifier,
-                         const SharedImage& aBuffer) = 0;
+  TextureClientShmem(ShadowLayerForwarder* aLayerForwarder, ImageHostType aImageType);
+
+  nsRefPtr<gfxASurface> mSurface;
+  nsRefPtr<gfxImageSurface> mSurfaceAsImage;
+
+  gfxASurface::gfxContentType mContentType;
+  SurfaceDescriptor mDescriptor;
+  gfx::IntSize mSize;
+
+  friend class CompositingFactory;
 };
 
-//TODO[nrc] shouldn't need to extend ImageClient
-//don't need Updateiamge
-class CanvasClient : public ImageClient
+// this class is just a place holder really
+class TextureClientShared : public TextureClient
 {
 public:
-  virtual ~CanvasClient() {}
-  //TODO[nrc] comments
-  virtual SharedImage GetAsSharedImage() = 0;
+  virtual ~TextureClientShared() {}
 
-  // returns false if this is the wrong kind of ImageClient for aContainer
-  // note returning true does not necessarily imply success
-  virtual void Update(gfx::IntSize aSize, BasicCanvasLayer* aLayer) = 0;
+  virtual TemporaryRef<gfx::DrawTarget> LockDT() { return nullptr; } 
+  virtual already_AddRefed<gfxContext> LockContext()  { return nullptr; }
+  virtual gfxImageSurface* LockImageSurface() { return nullptr; }
+  virtual void Unlock() {}
+  virtual void EnsureTextureClient(gfx::IntSize aSize, gfxASurface::gfxContentType aType) {}
+private:
+  TextureClientShared(ShadowLayerForwarder* aLayerForwarder, ImageHostType aImageType)
+    : TextureClient(aLayerForwarder, aImageType)
+  {
+    mIdentifier.mTextureType = IMAGE_SHARED;
+  }
 
-  virtual void SetBuffer(const TextureIdentifier& aTextureIdentifier,
-                         const SharedImage& aBuffer) = 0;
-  virtual bool UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer) {return true;}
+  friend class CompositingFactory;
 };
 
 }

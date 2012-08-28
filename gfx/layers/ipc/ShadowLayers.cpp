@@ -23,6 +23,7 @@
 #include "sampler.h"
 #include "nsXULAppAPI.h"
 #include "TextureClient.h"
+#include "ImageClient.h"
 
 using namespace mozilla::ipc;
 

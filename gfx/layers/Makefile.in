@@ -58,6 +58,7 @@ CPPSRCS = \
         BasicThebesLayer.cpp \
         BasicBuffers.cpp \
         BasicTiledThebesLayer.cpp \
+        CanvasClient.cpp \
         CompositorOGL.cpp \
         Layers.cpp \
         RenderTrace.cpp \
@@ -66,6 +67,7 @@ CPPSRCS = \
         CanvasLayerOGL.cpp \
         ColorLayerOGL.cpp \
         ContainerLayerOGL.cpp \
+        ImageClient.cpp \
         ImageLayerOGL.cpp \
         LayerManagerOGL.cpp \
         TextureClient.cpp \

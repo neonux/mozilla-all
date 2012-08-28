@@ -48,6 +48,7 @@ class Transaction;
 class SharedImage;
 class CanvasSurface;
 class BasicTiledLayerBuffer;
+class TextureClientShmem;
 
 enum BufferCapabilities {
   DEFAULT_BUFFER_CAPS = 0,

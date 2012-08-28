@@ -8,7 +8,7 @@
 #include "gfxImageSurface.h"
 #include "GLContext.h"
 #include "gfxUtils.h"
-#include "TextureClient.h"
+#include "CanvasClient.h"
 #include "BasicLayersImpl.h"
 
 #include "nsXULAppAPI.h"

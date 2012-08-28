@@ -9,7 +9,7 @@
 #include "gfxUtils.h"
 #include "gfxSharedImageSurface.h"
 #include "mozilla/layers/ImageContainerChild.h"
-#include "TextureClient.h"
+#include "ImageClient.h"
 
 using namespace mozilla::gfx;
 
