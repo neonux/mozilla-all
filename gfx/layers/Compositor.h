@@ -49,6 +49,7 @@ class ShadowableLayer;
 class TextureClient;
 class ImageClient;
 class Image;
+class ISurfaceDeAllocator;
 
 enum TextureFormat
 {
@@ -68,7 +69,9 @@ enum ImageHostType
   IMAGE_SHARED_WITH_BUFFER,
   IMAGE_TEXTURE,
   IMAGE_BRIDGE,
-  IMAGE_SHMEM
+  IMAGE_SHMEM,
+  IMAGE_THEBES,
+  IMAGE_THEBES_DIRECT
 };
 
 
@@ -118,7 +121,6 @@ static bool operator==(const TextureIdentifier& aLeft, const TextureIdentifier& 
          aLeft.mDescriptor == aRight.mDescriptor;
 }
 
-//TODO[nrc] maybe remove Texture and only use TextureHost
 class Texture : public RefCounted<Texture>
 {
 public:
@@ -166,19 +168,38 @@ protected:
 class ImageHost : public RefCounted<ImageHost>
 {
 public:
+  ImageHost()
+    : mDeAllocator(nullptr)
+  {}
+
   virtual ImageHostType GetType() = 0;
 
   virtual const SharedImage* UpdateImage(const TextureIdentifier& aTextureIdentifier,
-                                   const SharedImage& aImage) = 0;
+                                         const SharedImage& aImage) = 0;
 
   virtual void Composite(EffectChain& aEffectChain,
                          float aOpacity,
                          const gfx::Matrix4x4& aTransform,
                          const gfx::Point& aOffset,
                          const gfx::Filter& aFilter,
-                         const gfx::Rect& aClipRect) = 0;
+                         const gfx::Rect& aClipRect,
+                         const nsIntRegion* aVisibleRegion = nullptr) = 0;
 
   virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost) = 0;
+
+  /**
+   * Set deallocator for data recieved from IPC protocol
+   * We should be able to set allocator right before swap call
+   * that is why allowed multiple call with the same Allocator
+   */
+  void SetDeAllocator(ISurfaceDeAllocator* aDeAllocator)
+  {
+    NS_ASSERTION(!mDeAllocator || mDeAllocator == aDeAllocator, "Stomping allocator?");
+    mDeAllocator = aDeAllocator;
+  }
+
+protected:
+  ISurfaceDeAllocator* mDeAllocator;
 };
 
 /* This can be used as an offscreen rendering target by the compositor, and

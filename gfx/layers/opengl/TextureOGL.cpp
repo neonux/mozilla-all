@@ -40,6 +40,18 @@ static TextureImage::Flags FlagsToGLFlags(TextureFlags aFlags)
   return static_cast<TextureImage::Flags>(result);
 }
 
+GLenum
+WrapMode(GLContext *aGl, bool aAllowRepeat)
+{
+  if (aAllowRepeat &&
+      (aGl->IsExtensionSupported(GLContext::ARB_texture_non_power_of_two) ||
+       aGl->IsExtensionSupported(GLContext::OES_texture_npot))) {
+    return LOCAL_GL_REPEAT;
+  }
+  return LOCAL_GL_CLAMP_TO_EDGE;
+}
+
+
 const SharedImage*
 TextureImageAsTextureHost::Update(const SharedImage& aImage)
 {
@@ -51,10 +63,10 @@ TextureImageAsTextureHost::Update(const SharedImage& aImage)
   if (!mTexImage ||
       mTexImage->mSize != size ||
       mTexImage->GetContentType() != surf.ContentType()) {
-    mTexImage = mTexImage->mGLContext->CreateTextureImage(size,
-                                                          surf.ContentType(),
-                                                          LOCAL_GL_CLAMP_TO_EDGE,
-                                                          FlagsToGLFlags(mFlags));
+    mTexImage = mGL->CreateTextureImage(size,
+                                        surf.ContentType(),
+                                        WrapMode(mGL, false), //TODO[nrc] probably need to find where AllowRepeat comes from - Image no, Thebes yes
+                                        FlagsToGLFlags(mFlags));
   }
 
   // XXX this is always just ridiculously slow
@@ -62,6 +74,37 @@ TextureImageAsTextureHost::Update(const SharedImage& aImage)
   mTexImage->DirectUpdate(surf.Get(), updateRegion);
 
   return &aImage;
+}
+
+void
+TextureImageAsTextureHost::Update(gfxASurface* aSurface, nsIntRegion& aRegion)
+{
+  if (!mTexImage ||
+      mTexImage->mSize != aSurface->GetSize() ||
+      mTexImage->GetContentType() != aSurface->GetContentType()) {
+    mTexImage = mGL->CreateTextureImage(aSurface->GetSize(),
+                                        aSurface->GetContentType(),
+                                        WrapMode(mGL, true), //TODO[nrc] AllowRepeat
+                                        FlagsToGLFlags(mFlags));
+  }
+
+  mTexImage->DirectUpdate(aSurface, aRegion);
+}
+
+bool
+TextureImageAsTextureHost::UpdateDirect(const SurfaceDescriptor& aBuffer)
+{
+  nsRefPtr<TextureImage> texImage =
+      ShadowLayerManager::OpenDescriptorForDirectTexturing(
+        mGL, aBuffer, WrapMode(mGL, true)); //TODO[nrc] AllowRepeat
+
+  if (!texImage) {
+    NS_WARNING("Could not create texture for direct texturing");
+    return false;
+  }
+
+  mTexImage = texImage;
+  return true;
 }
 
 Effect*
@@ -96,11 +139,12 @@ ImageHostTexture::UpdateImage(const TextureIdentifier& aTextureIdentifier,
 
 void
 ImageHostTexture::Composite(EffectChain& aEffectChain,
-                        float aOpacity,
-                        const gfx::Matrix4x4& aTransform,
-                        const gfx::Point& aOffset,
-                        const gfx::Filter& aFilter,
-                        const gfx::Rect& aClipRect)
+                            float aOpacity,
+                            const gfx::Matrix4x4& aTransform,
+                            const gfx::Point& aOffset,
+                            const gfx::Filter& aFilter,
+                            const gfx::Rect& aClipRect,
+                            const nsIntRegion* aVisibleRegion)
 {
   //TODO[nrc] surely we don't need to set the filter twice?
   if (Effect* effect = mTextureHost->Lock(aFilter)) {
@@ -287,7 +331,8 @@ ImageHostShared::Composite(EffectChain& aEffectChain,
                            const gfx::Matrix4x4& aTransform,
                            const gfx::Point& aOffset,
                            const gfx::Filter& aFilter,
-                           const gfx::Rect& aClipRect)
+                           const gfx::Rect& aClipRect,
+                           const nsIntRegion* aVisibleRegion)
 {
   if (Effect* effect = mTextureHost->Lock(aFilter)) {
     aEffectChain.mEffects[effect->mType] = effect;
@@ -324,8 +369,8 @@ TextureOGL::UpdateTexture(PRInt8 *aData, PRUint32 aStride)
 {
   mGL->fBindTexture(LOCAL_GL_TEXTURE_2D, mTextureHandle);
   mGL->TexImage2D(LOCAL_GL_TEXTURE_2D, 0, mInternalFormat,
-                                   mSize.width, mSize.height, aStride, mPixelSize,
-                                   0, mFormat, mType, aData);
+                  mSize.width, mSize.height, aStride, mPixelSize,
+                  0, mFormat, mType, aData);
 }
 
 void

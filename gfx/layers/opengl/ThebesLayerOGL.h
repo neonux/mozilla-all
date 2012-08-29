@@ -19,9 +19,9 @@
 namespace mozilla {
 namespace layers {
 
-class ThebesLayerBufferOGL;
 class BasicBufferOGL;
-class ShadowBufferOGL;
+class ThebesBufferHost;
+class ThebesLayerBufferOGL;
 
 class ThebesLayerOGL : public ThebesLayer, 
                        public LayerOGL
@@ -55,60 +55,6 @@ private:
   nsRefPtr<Buffer> mBuffer;
 };
 
-class ShadowThebesLayerBufferOGL
-{
-public:
-  ShadowThebesLayerBufferOGL()
-  {
-    MOZ_COUNT_CTOR(ShadowThebesLayerBufferOGL);
-  }
-
-  ~ShadowThebesLayerBufferOGL()
-  {
-    MOZ_COUNT_DTOR(ShadowThebesLayerBufferOGL);
-  }
-
-  void Swap(const SurfaceDescriptor& aDescriptor,
-            const nsIntRect& aNewRect, const nsIntPoint& aNewRotation,
-            SurfaceDescriptor* aOldDescriptor,
-            nsIntRect* aOldRect, nsIntPoint* aOldRotation)
-  {
-    *aOldDescriptor = mBuffer;
-    *aOldRect = mBufferRect;
-    *aOldRotation = mBufferRotation;
-
-    mBuffer = aDescriptor;
-    mBufferRect = aNewRect;
-    mBufferRotation = aNewRotation;
-  }
-
-  nsIntRect Rect() {
-    return mBufferRect;
-  }
-
-  nsIntPoint Rotation() {
-    return mBufferRotation;
-  }
-
-  SurfaceDescriptor Buffer() {
-    return mBuffer;
-  }
-
-  /**
-   * Wipe out all retained contents. Call this when the entire
-   * buffer becomes invalid.
-   */
-  void Clear()
-  {
-    mBufferRect.SetEmpty();
-  }
-
-protected:
-  SurfaceDescriptor mBuffer;
-  nsIntRect mBufferRect;
-  nsIntPoint mBufferRotation;
-};
-
 class ShadowThebesLayerOGL : public ShadowThebesLayer,
                              public LayerOGL
 {
@@ -138,9 +84,14 @@ public:
                            Surface* aPreviousSurface = nullptr);
   virtual void CleanupResources();
 
+  //TODO[nrc] this should be the behaviour of the default implementation
+  // but that requires having mBuffer/mImageHost in ShadowLayer
+  virtual void SetAllocator(ISurfaceDeAllocator* aAllocator);
+
 private:
-  nsRefPtr<ShadowBufferOGL> mBuffer;
-  SurfaceDescriptor mBufferDescriptor;
+  void EnsureBuffer(const ThebesBuffer& aNewFront);
+
+  nsRefPtr<ThebesBufferHost> mBuffer;
   nsIntRegion mValidRegionForNextBackBuffer;
 };
 

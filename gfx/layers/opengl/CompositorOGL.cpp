@@ -517,7 +517,7 @@ CompositorOGL::CreateTextureHost(const TextureIdentifier &aIdentifier,
     if (aIdentifier.mImageType == IMAGE_YUV) {
       result = new GLTextureAsTextureHost(mGLContext);
     } else {
-      result = new TextureImageAsTextureHost();
+      result = new TextureImageAsTextureHost(mGLContext);
     }
     break;
   case IMAGE_BRIDGE:

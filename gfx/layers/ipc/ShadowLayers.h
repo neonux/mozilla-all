@@ -441,6 +441,12 @@ public:
                                    const SurfaceDescriptor& aDescriptor,
                                    GLenum aWrapMode);
 
+  /**
+   * returns true if OpenDescriptorForDirectTexturing is likely to return
+   * something non-null for the aDescriptor
+   */
+  static bool DescriptorDoesDirectTexturing(const SurfaceDescriptor& aDescriptor);
+
   static void PlatformSyncBeforeReplyUpdate();
 
   void SetCompositorID(PRUint32 aID)

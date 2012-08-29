@@ -141,7 +141,8 @@ public:
                          const gfx::Matrix4x4& aTransform,
                          const gfx::Point& aOffset,
                          const gfx::Filter& aFilter,
-                         const gfx::Rect& aClipRect);
+                         const gfx::Rect& aClipRect,
+                         const nsIntRegion* aVisibleRegion = nullptr);
 
   virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost);
 
@@ -159,14 +160,15 @@ public:
 
 
   virtual const SharedImage* UpdateImage(const TextureIdentifier& aTextureIdentifier,
-                                   const SharedImage& aImage);
+                                         const SharedImage& aImage);
 
   virtual void Composite(EffectChain& aEffectChain,
                          float aOpacity,
                          const gfx::Matrix4x4& aTransform,
                          const gfx::Point& aOffset,
                          const gfx::Filter& aFilter,
-                         const gfx::Rect& aClipRect);
+                         const gfx::Rect& aClipRect,
+                         const nsIntRegion* aVisibleRegion = nullptr);
 
   virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost);
 
@@ -174,6 +176,9 @@ private:
   RefPtr<TextureHostOGLShared> mTextureHost;
   RefPtr<Compositor> mCompositor;
 };
+
+class BasicBufferOGL;
+class SurfaceBufferOGL;
 
 //thin TextureHost wrapper around a TextureImage
 class TextureImageAsTextureHost : public ATextureOGL
@@ -206,22 +211,46 @@ public:
   }
 
   virtual const SharedImage* Update(const SharedImage& aImage);
+  virtual void Update(gfxASurface* aSurface, nsIntRegion& aRegion);
   virtual Effect* Lock(const gfx::Filter& aFilter);
+
+  // used when this is a double buffered host (TODO[nrc] should that make it a separate class?)
+  bool UpdateDirect(const SurfaceDescriptor& aBuffer);
 
   void SetFilter(const gfx::Filter& aFilter) { mTexImage->SetFilter(gfx::ThebesFilter(aFilter)); }
   void BeginTileIteration() { mTexImage->BeginTileIteration(); }
   nsIntRect GetTileRect() { return mTexImage->GetTileRect(); }
+  size_t GetTileCount() { return mTexImage->GetTileCount(); }
   bool NextTile() { return mTexImage->NextTile(); }
+  bool InUpdate() { return mTexImage->InUpdate(); }
+  void EndUpdate() { mTexImage->EndUpdate(); }
+  gfxASurface* BeginUpdate(nsIntRegion& aRegion) { return mTexImage->BeginUpdate(aRegion); }
 
 private:
-  TextureImageAsTextureHost()
-    : mTexImage(nullptr)
+  TextureImageAsTextureHost(GLContext* aGL)
+    : mGL(aGL)
+    , mTexImage(nullptr)
   {}
 
+  GLContext* mGL;
   nsRefPtr<TextureImage> mTexImage;
   gfx::IntSize mSize;
 
   friend class CompositorOGL;
+  // YUCK! this is because BasicBufferOGL and SurfaceBufferOGL use this class like a texture image
+  // below methods are meant only for BasicBufferOGL and SurfaceBufferOGL
+  friend class BasicBufferOGL;
+  friend class SurfaceBufferOGL;
+
+  TextureImage::ContentType GetContentType() { return mTexImage->GetContentType(); }
+  TextureImage* GetTextureImage() { return mTexImage; }
+
+  // TODO[nrc] comment
+  // constructor for using without the TextureHost capabilites (probably a bad idea)
+  TextureImageAsTextureHost(TextureImage* aTexImage, GLContext* aGL)
+    : mGL(aGL)
+    , mTexImage(aTexImage)
+  {}
 };
 
 class TextureHostOGLShared : public ATextureOGL

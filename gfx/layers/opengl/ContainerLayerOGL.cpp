@@ -180,6 +180,7 @@ ContainerRender(Container* aContainer,
       }
     }
 
+    //TODO gl
     aContainer->gl()->PushViewportRect();
     surfaceRect -= gfx::IntPoint(childOffset.x, childOffset.y);
     if (surfaceCopyNeeded) {
@@ -203,6 +204,7 @@ ContainerRender(Container* aContainer,
    * Render this container's contents.
    */
   for (PRUint32 i = 0; i < children.Length(); i++) {
+    //TODO why LayerOGL and not just Layer?
     LayerOGL* layerToRender = static_cast<LayerOGL*>(children.ElementAt(i)->ImplData());
 
     if (layerToRender->GetLayer()->GetEffectiveVisibleRegion().IsEmpty()) {
@@ -216,6 +218,7 @@ ContainerRender(Container* aContainer,
     }
 
     layerToRender->RenderLayer(childOffset, scissorRect, surface);
+    //TODO gl
     aContainer->gl()->MakeCurrent();
   }
 
@@ -224,7 +227,7 @@ ContainerRender(Container* aContainer,
     // Unbind the current surface and rebind the previous one.
     aManager->GetCompositor()->SetSurfaceTarget(aPreviousSurface);
 #ifdef MOZ_DUMP_PAINTING
-    /* This needs to be re-written to use the Compositor API (which will likely require
+    /* TODO: This needs to be re-written to use the Compositor API (which will likely require
      * additions to the Compositor API).
      */
     /*

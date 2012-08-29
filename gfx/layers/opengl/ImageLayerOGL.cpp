@@ -804,7 +804,6 @@ ShadowImageLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aCl
 
   // TODO: Handle mask layers.
   EffectChain effectChain;
-  RefPtr<Effect> effect;
   RefPtr<Effect> effectMask;
 
   gfx::Matrix4x4 transform;
