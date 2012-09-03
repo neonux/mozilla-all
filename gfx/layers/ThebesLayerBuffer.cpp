@@ -3,6 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include "BasicLayersImpl.h"
 #include "ThebesLayerBuffer.h"
 #include "Layers.h"
 #include "gfxContext.h"
@@ -14,6 +15,15 @@
 namespace mozilla {
 namespace layers {
 
+/* static */ bool
+ThebesLayerBuffer::IsClippingCheap(gfxContext* aTarget, const nsIntRegion& aRegion)
+{
+  // Assume clipping is cheap if the context just has an integer
+  // translation, and the visible region is simple.
+  return !aTarget->CurrentMatrix().HasNonIntegerTranslation() &&
+         aRegion.GetNumRects() <= 1; 
+}
+
 nsIntRect
 ThebesLayerBuffer::GetQuadrantRectangle(XSide aXSide, YSide aYSide)
 {
@@ -23,6 +33,35 @@ ThebesLayerBuffer::GetQuadrantRectangle(XSide aXSide, YSide aYSide)
   quadrantTranslation.x += aXSide == LEFT ? mBufferRect.width : 0;
   quadrantTranslation.y += aYSide == TOP ? mBufferRect.height : 0;
   return mBufferRect + quadrantTranslation;
+}
+
+
+void
+ThebesLayerBuffer::DrawTo(ThebesLayer* aLayer,
+                          gfxContext* aTarget,
+                          float aOpacity,
+                          gfxASurface* aMask,
+                          const gfxMatrix* aMaskTransform)
+{
+  aTarget->Save();
+  // If the entire buffer is valid, we can just draw the whole thing,
+  // no need to clip. But we'll still clip if clipping is cheap ---
+  // that might let us copy a smaller region of the buffer.
+  // Also clip to the visible region if we're told to.
+  if (!aLayer->GetValidRegion().Contains(BufferRect()) ||
+      (ToData(aLayer)->GetClipToVisibleRegion() &&
+       !aLayer->GetVisibleRegion().Contains(BufferRect())) ||
+      IsClippingCheap(aTarget, aLayer->GetEffectiveVisibleRegion())) {
+    // We don't want to draw invalid stuff, so we need to clip. Might as
+    // well clip to the smallest area possible --- the visible region.
+    // Bug 599189 if there is a non-integer-translation transform in aTarget,
+    // we might sample pixels outside GetEffectiveVisibleRegion(), which is wrong
+    // and may cause gray lines.
+    gfxUtils::ClipToRegionSnapped(aTarget, aLayer->GetEffectiveVisibleRegion());
+  }
+
+  DrawBufferWithRotation(aTarget, aOpacity, aMask, aMaskTransform);
+  aTarget->Restore();
 }
 
 /**
@@ -275,7 +314,7 @@ ThebesLayerBuffer::BeginPaint(ThebesLayer* aLayer, ContentType aContentType,
       nsIntPoint offset = -destBufferRect.TopLeft();
       tmpCtx->SetOperator(gfxContext::OPERATOR_SOURCE);
       tmpCtx->Translate(gfxPoint(offset.x, offset.y));
-      DrawBufferWithRotation(tmpCtx, 1.0);
+      DrawBufferWithRotation(tmpCtx, 1.0, nullptr, nullptr);
     }
 
     mBuffer = destBuffer.forget();

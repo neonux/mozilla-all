@@ -43,24 +43,9 @@ AsShadowLayer(const OpCreateT& op)
   return cast(op.layerParent());
 }
 
-static ShadowLayerParent*
-AsShadowLayer(const OpCreateTextureHost& op)
-{
-  return cast(op.layerParent());
-}
+template<class OpCreateT>
 static const TextureIdentifier
-AsTextureId(const OpCreateTextureHost& op)
-{
-  return static_cast<const TextureIdentifier>(op.textureIdentifier());
-}
-
-static ShadowLayerParent*
-AsShadowLayer(const OpPaintTexture& op)
-{
-  return cast(op.layerParent());
-}
-static const TextureIdentifier
-AsTextureId(const OpPaintTexture& op)
+AsTextureId(const OpCreateT& op)
 {
   return static_cast<const TextureIdentifier>(op.textureIdentifier());
 }
@@ -376,6 +361,7 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       ShadowLayerParent* shadow = AsShadowLayer(op);
       ShadowThebesLayer* thebes =
         static_cast<ShadowThebesLayer*>(shadow->AsLayer());
+      const TextureIdentifier textureId; // = AsTextureId(op);
       const ThebesBuffer& newFront = op.newFrontBuffer();
 
       RenderTraceInvalidateStart(thebes, "FF00FF", op.updatedRegion().GetBounds());
@@ -390,6 +376,7 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       replyv.push_back(
         OpThebesBufferSwap(
           shadow, NULL,
+          textureId,
           newBack, newValidRegion,
           readonlyFront, frontUpdatedRegion));
 

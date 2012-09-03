@@ -24,6 +24,7 @@
 #include "nsXULAppAPI.h"
 #include "TextureClient.h"
 #include "ImageClient.h"
+#include "ThebesBufferClient.h"
 
 using namespace mozilla::ipc;
 
@@ -220,6 +221,16 @@ ShadowLayerForwarder::RemoveChild(ShadowableLayer* aContainer,
 {
   mTxn->AddEdit(OpRemoveChild(NULL, Shadow(aContainer),
                               NULL, Shadow(aChild)));
+}
+
+void
+ShadowLayerForwarder::PaintedThebesBuffer(ShadowableLayer* aThebes,
+                                          ContentClientRemote* aContentClient,
+                                          const nsIntRegion& aUpdatedRegion)
+{
+  mTxn->AddPaint(OpPaintThebesBuffer(NULL, Shadow(aThebes),
+                                     aContentClient->GetAsThebesBuffer(),
+                                     aUpdatedRegion));
 }
 
 void

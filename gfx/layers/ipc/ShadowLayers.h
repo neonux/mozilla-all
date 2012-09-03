@@ -49,6 +49,7 @@ class SharedImage;
 class CanvasSurface;
 class BasicTiledLayerBuffer;
 class TextureClientShmem;
+class ContentClientRemote;
 
 enum BufferCapabilities {
   DEFAULT_BUFFER_CAPS = 0,
@@ -186,8 +187,7 @@ public:
    * re-rendered, in the compositing process.  The former front buffer
    * is swapped for |aNewFrontBuffer| and becomes the new back buffer
    * for the "real" layer.
-   */
-  /**
+   *
    * |aBufferRect| is the screen rect covered as a whole by the
    * possibly-toroidally-rotated |aNewFrontBuffer|.  |aBufferRotation|
    * is buffer's rotation, if any.
@@ -197,6 +197,9 @@ public:
                            const nsIntRect& aBufferRect,
                            const nsIntPoint& aBufferRotation,
                            const SurfaceDescriptor& aNewFrontBuffer);
+  void PaintedThebesBuffer(ShadowableLayer* aThebes,
+                           ContentClientRemote* aContentClient,
+                           const nsIntRegion& aUpdatedRegion);
 
   /**
    * Notify the compositor that a tiled layer buffer has changed

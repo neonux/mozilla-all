@@ -28,9 +28,12 @@ DEFINES += -DD3D_DEBUG_INFO
 endif
 
 EXPORTS = \
+        BasicBuffers.h \
         BasicCanvasLayer.h \
         BasicLayers.h \
+        BasicLayersImpl.h \
         BasicTiledThebesLayer.h \
+        BasicThebesLayer.h \
         BasicImplData.h \
         Compositor.h \
         CompositorOGL.h \
@@ -72,6 +75,7 @@ CPPSRCS = \
         LayerManagerOGL.cpp \
         TextureClient.cpp \
         TextureOGL.cpp \
+        ThebesBufferClient.cpp \
         ThebesLayerOGL.cpp \
         TiledThebesLayerOGL.cpp \
         ReusableTileStoreOGL.cpp \

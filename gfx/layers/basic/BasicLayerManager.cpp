@@ -1066,9 +1066,11 @@ BasicShadowLayerManager::ForwardTransaction()
 
         const OpThebesBufferSwap& obs = reply.get_OpThebesBufferSwap();
         BasicShadowableThebesLayer* thebes = GetBasicShadowable(obs)->AsThebes();
-        thebes->SetBackBufferAndAttrs(
-          obs.newBackBuffer(), obs.newValidRegion(),
-          obs.readOnlyFrontBuffer(), obs.frontUpdatedRegion());
+        thebes->SetBackBufferAndAttrs(obs.textureIdentifier(),
+                                      obs.newBackBuffer(),
+                                      obs.newValidRegion(),
+                                      obs.readOnlyFrontBuffer(),
+                                      obs.frontUpdatedRegion());
         break;
       }
       case EditReply::TOpBufferSwap: {

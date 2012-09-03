@@ -171,6 +171,7 @@ struct OpImageSwap { PLayer layer; SharedImage newBackImage; };
 
 struct OpThebesBufferSwap {
   PLayer layer;
+  TextureIdentifier textureIdentifier;
   OptionalThebesBuffer newBackBuffer;
   nsIntRegion newValidRegion;
   // If the parent took the child's old back buffer and returned its

@@ -297,6 +297,7 @@ BasicShadowableCanvasLayer::Paint(gfxContext* aContext, Layer* aMaskLayer)
   }
 
   if (!mCanvasClient) {
+    //TODO[nrc] canvas flag hack :-(
     TextureFlags flags = CanvasFlag;
     if (mNeedsYFlip) {
       flags |= NeedsYFlip;
