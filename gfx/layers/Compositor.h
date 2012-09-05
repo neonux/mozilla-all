@@ -12,6 +12,7 @@
 #include "gfxMatrix.h"
 #include "nsAutoPtr.h"
 #include "nsRegion.h"
+#include "LayersTypes.h"
 
 //TODO[nrc] can we break up this header file into host and client parts?
 
@@ -48,6 +49,8 @@ class ShadowLayerForwarder;
 class ShadowableLayer;
 class TextureClient;
 class ImageClient;
+class CanvasClient;
+class ContentClient;
 class Image;
 class ISurfaceDeAllocator;
 
@@ -60,26 +63,26 @@ enum TextureFormat
 };
 
 
-//TODO[nrc] rename this crap and separate out texture/image types and maybe host/client types
+//TODO[nrc] rename this crap
+//TODO[nrc] update E:\Firefox\gfx\ipc\glue\IPCMessageUtils.h
 enum ImageHostType
 {
   IMAGE_UNKNOWN,
   IMAGE_YUV,
   IMAGE_SHARED,
-  IMAGE_SHARED_WITH_BUFFER,
   IMAGE_TEXTURE,
   IMAGE_BRIDGE,
-  IMAGE_SHMEM,
   IMAGE_THEBES,
-  IMAGE_THEBES_DIRECT
+  IMAGE_DIRECT
 };
-
 
 enum TextureHostType
 {
-  HOST_D3D10,
-  HOST_GL,
-  HOST_SHMEM  //[nrc] for software composition
+  TEXTURE_UNKNOWN,
+  TEXTURE_SHMEM,
+  TEXTURE_SHARED,
+  TEXTURE_SHARED_GL,
+  TEXTURE_BRIDGE
 };
 
 typedef uint32_t TextureFlags;
@@ -88,15 +91,14 @@ const TextureFlags UseNearestFilter   = 0x1;
 const TextureFlags NeedsYFlip         = 0x2;
 const TextureFlags ForceSingleTile    = 0x4;
 const TextureFlags UseOpaqueSurface   = 0x8;
-const TextureFlags CanvasFlag   = 0x10; //TODO[nrc] remove this hack
 
 
 //TODO[nrc] comment
 // goes Compositor to ShadowLayerForwarder on LayerManager init
 struct TextureHostIdentifier
 {
-  TextureHostType mType;
   //TODO[nrc] add ImageHostType, use it
+  LayersBackend mParentBackend;
   PRInt32 mMaxTextureSize;
 };
 
@@ -105,7 +107,7 @@ struct TextureHostIdentifier
 struct TextureIdentifier
 {
   ImageHostType mImageType;
-  ImageHostType mTextureType;
+  TextureHostType mTextureType;
   PRUint32 mDescriptor;
 };
 
@@ -490,14 +492,24 @@ class CompositingFactory
 public:
   // TODO[nrc] comment
   // TODO[nrc] enums shouldn't be const &
-  static TemporaryRef<ImageClient> CreateImageClient(const TextureHostType &aHostType,
-                                                     const ImageHostType& aImageHostType,
+  static TemporaryRef<ImageClient> CreateImageClient(LayersBackend aBackendType,
+                                                     ImageHostType aImageHostType,
                                                      ShadowLayerForwarder* aLayerForwarder,
                                                      ShadowableLayer* aLayer,
                                                      TextureFlags aFlags);
-  static TemporaryRef<TextureClient> CreateTextureClient(const TextureHostType &aHostType,
-                                                         const ImageHostType& aTextureHostType,
-                                                         const ImageHostType& aImageHostType,
+  static TemporaryRef<CanvasClient> CreateCanvasClient(LayersBackend aBackendType,
+                                                       ImageHostType aImageHostType,
+                                                       ShadowLayerForwarder* aLayerForwarder,
+                                                       ShadowableLayer* aLayer,
+                                                       TextureFlags aFlags);
+  static TemporaryRef<ContentClient> CreateContentClient(LayersBackend aBackendType,
+                                                         ImageHostType aImageHostType,
+                                                         ShadowLayerForwarder* aLayerForwarder,
+                                                         ShadowableLayer* aLayer,
+                                                         TextureFlags aFlags);
+  static TemporaryRef<TextureClient> CreateTextureClient(LayersBackend aBackendType,
+                                                         TextureHostType aTextureHostType,
+                                                         ImageHostType aImageHostType,
                                                          ShadowLayerForwarder* aLayerForwarder,
                                                          bool aStrict = false);
 

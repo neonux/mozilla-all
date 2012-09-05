@@ -63,6 +63,7 @@ CPPSRCS = \
         BasicTiledThebesLayer.cpp \
         CanvasClient.cpp \
         CompositorOGL.cpp \
+        ContentHost.cpp \
         Layers.cpp \
         RenderTrace.cpp \
         ReadbackProcessor.cpp \

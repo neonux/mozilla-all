@@ -16,8 +16,7 @@ ImageClientTexture::ImageClientTexture(ShadowLayerForwarder* aLayerForwarder,
                                        ShadowableLayer* aLayer,
                                        TextureFlags aFlags)
 {
-  mTextureClient = static_cast<TextureClientShmem*>(
-    aLayerForwarder->CreateTextureClientFor(IMAGE_TEXTURE, IMAGE_TEXTURE, aLayer, aFlags, true).drop());
+  mTextureClient = aLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, IMAGE_TEXTURE, aLayer, aFlags, true);
 }
 
 ImageClientTexture::~ImageClientTexture()
@@ -37,7 +36,7 @@ ImageClientTexture::UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer)
   Image *image = autoLock.GetImage();
 
   ImageHostType type = CompositingFactory::TypeForImage(autoLock.GetImage());
-  if (type != IMAGE_SHMEM) {
+  if (type != IMAGE_TEXTURE) {
     return type == IMAGE_UNKNOWN;
   }
 
@@ -74,12 +73,6 @@ ImageClientTexture::UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer)
 }
 
 
-SharedImage
-ImageClientTexture::GetAsSharedImage()
-{
-  return SharedImage(mTextureClient->Descriptor());
-}
-
 void
 ImageClientTexture::SetBuffer(const TextureIdentifier& aTextureIdentifier,
                               const SharedImage& aBuffer)
@@ -87,11 +80,11 @@ ImageClientTexture::SetBuffer(const TextureIdentifier& aTextureIdentifier,
   SharedImage::Type type = aBuffer.type();
 
   if (type != SharedImage::TSurfaceDescriptor) {
-    mTextureClient->Descriptor() = SurfaceDescriptor();
+    mTextureClient->SetDescriptor(SurfaceDescriptor());
     return;
   }
 
-  mTextureClient->Descriptor() = aBuffer.get_SurfaceDescriptor();
+  mTextureClient->SetDescriptor(aBuffer.get_SurfaceDescriptor());
 }
 
 
@@ -99,8 +92,7 @@ ImageClientShared::ImageClientShared(ShadowLayerForwarder* aLayerForwarder,
                                      ShadowableLayer* aLayer, 
                                      TextureFlags aFlags)
 {
-  // we need to create a TextureHost, even though we don't use a texture client
-  aLayerForwarder->CreateTextureClientFor(IMAGE_SHARED, IMAGE_SHARED, aLayer, true, aFlags);
+  mTextureClient = aLayerForwarder->CreateTextureClientFor(TEXTURE_SHARED, IMAGE_SHARED, aLayer, true, aFlags);
 }
 
 ImageClientShared::~ImageClientShared()
@@ -123,15 +115,9 @@ ImageClientShared::UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer)
   const SharedTextureImage::Data *data = sharedImage->GetData();
 
   SharedTextureDescriptor texture(data->mShareType, data->mHandle, data->mSize, data->mInverted);
-  mDescriptor = SurfaceDescriptor(texture);
+  mTextureClient->SetDescriptor(SurfaceDescriptor(texture));
 
   return true;
-}
-
-SharedImage
-ImageClientShared::GetAsSharedImage()
-{
-  return SharedImage(mDescriptor);
 }
 
 
@@ -140,13 +126,13 @@ ImageClientYUV::ImageClientYUV(ShadowLayerForwarder* aLayerForwarder,
                                TextureFlags aFlags)
 {
   mTextureClientY = static_cast<TextureClientShmem*>(
-    aLayerForwarder->CreateTextureClientFor(IMAGE_SHMEM, IMAGE_YUV, aLayer, true, aFlags).drop());
+    aLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, IMAGE_YUV, aLayer, true, aFlags).drop());
   mTextureClientY->SetDescriptor(0);
   mTextureClientU = static_cast<TextureClientShmem*>(
-    aLayerForwarder->CreateTextureClientFor(IMAGE_SHMEM, IMAGE_YUV, aLayer, true, aFlags).drop());
+    aLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, IMAGE_YUV, aLayer, true, aFlags).drop());
   mTextureClientU->SetDescriptor(1);
   mTextureClientV = static_cast<TextureClientShmem*>(
-    aLayerForwarder->CreateTextureClientFor(IMAGE_SHMEM, IMAGE_YUV, aLayer, true, aFlags).drop());
+    aLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, IMAGE_YUV, aLayer, true, aFlags).drop());
   mTextureClientV->SetDescriptor(2);
 }
 
@@ -214,6 +200,7 @@ ImageClientYUV::UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer)
 SharedImage
 ImageClientYUV::GetAsSharedImage()
 {
+  //TODO[nrc] pictureRect
   return YUVImage(mTextureClientY->Descriptor(),
                   mTextureClientU->Descriptor(),
                   mTextureClientV->Descriptor(),

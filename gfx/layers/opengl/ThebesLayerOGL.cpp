@@ -15,6 +15,7 @@
 
 #include "ThebesLayerBuffer.h"
 #include "ThebesLayerOGL.h"
+#include "ContentHost.h"
 #include "gfxUtils.h"
 #include "gfxTeeSurface.h"
 
@@ -67,47 +68,6 @@ SetAntialiasingFlags(Layer* aLayer, gfxContext* aTarget)
   surface->SetSubpixelAntialiasingEnabled(
       !(aLayer->GetContentFlags() & Layer::CONTENT_COMPONENT_ALPHA));
 }
-
-class CompositingThebesLayerBuffer
-{
-  NS_INLINE_DECL_REFCOUNTING(CompositingThebesLayerBuffer)
-public:
-  typedef TextureImage::ContentType ContentType;
-  typedef ThebesLayerBuffer::PaintState PaintState;
-
-  CompositingThebesLayerBuffer(Compositor* aCompositor)
-    : mCompositor(aCompositor)
-    , mPaintWillResample(false)
-    , mTextureHost(nullptr)
-    , mTextureHostOnWhite(nullptr)
-    , mInitialised(true)
-  {}
-  virtual ~CompositingThebesLayerBuffer() {}
-
-  virtual PaintState BeginPaint(ContentType aContentType,
-                                PRUint32 aFlags) = 0;
-
-  void Composite(EffectChain& aEffectChain,
-                 float aOpacity,
-                 const gfx::Matrix4x4& aTransform,
-                 const gfx::Point& aOffset,
-                 const gfx::Filter& aFilter,
-                 const gfx::Rect& aClipRect,
-                 const nsIntRegion* aVisibleRegion = nullptr);
-
-  void SetPaintWillResample(bool aResample) { mPaintWillResample = aResample; }
-
-protected:
-  virtual nsIntPoint GetOriginOffset() = 0;
-
-  bool PaintWillResample() { return mPaintWillResample; }
-
-  bool mPaintWillResample;
-  RefPtr<Compositor> mCompositor;
-  RefPtr<TextureImageAsTextureHost> mTextureHost;
-  RefPtr<TextureImageAsTextureHost> mTextureHostOnWhite;
-  bool mInitialised;
-};
 
 void
 CompositingThebesLayerBuffer::Composite(EffectChain& aEffectChain,
@@ -867,191 +827,6 @@ ThebesLayerOGL::CleanupResources()
   mBuffer = nullptr;
 }
 
-class ThebesBufferHost : public ImageHost, protected CompositingThebesLayerBuffer
-{
-public:
-  typedef uint32_t UpdateFlags;
-  static const UpdateFlags RESET_BUFFER = 0x1;
-  static const UpdateFlags UPDATE_SUCCESS = 0x2;
-  static const UpdateFlags UPDATE_FAIL = 0x4;
-  static const UpdateFlags UPDATE_NOSWAP = 0x8;
-
-  ThebesBufferHost(Compositor* aCompositor)
-    : CompositingThebesLayerBuffer(aCompositor)
-  {
-    mInitialised = false;
-  }
-
-  ~ThebesBufferHost()
-  {
-    Reset();
-  }
-
-  void Release() { ImageHost::Release(); }
-  void AddRef() { ImageHost::AddRef(); }
-
-  // ImageHost implementation
-  virtual const SharedImage* UpdateImage(const TextureIdentifier& aTextureIdentifier,
-                                         const SharedImage& aImage)
-  {
-    //TODO[nrc]
-    NS_ERROR("Shouldn't call UpdateImage on a Thebes buffer");
-    return nullptr;
-  }
-
-  //TODO[nrc] comment, maybe more to ImageHost?
-  virtual UpdateFlags UpdateThebes(const ThebesBuffer& aNewBack,
-                                   const nsIntRegion& aUpdated,
-                                   OptionalThebesBuffer* aNewFront) = 0;
-
-  virtual void Composite(EffectChain& aEffectChain,
-                         float aOpacity,
-                         const gfx::Matrix4x4& aTransform,
-                         const gfx::Point& aOffset,
-                         const gfx::Filter& aFilter,
-                         const gfx::Rect& aClipRect,
-                         const nsIntRegion* aVisibleRegion = nullptr)
-  {
-    CompositingThebesLayerBuffer::Composite(aEffectChain,
-                                            aOpacity,
-                                            aTransform,
-                                            aOffset,
-                                            aFilter,
-                                            aClipRect,
-                                            aVisibleRegion);
-  }
-
-  virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
-  {
-    //TODO[nrc]
-  }
-
-  // CompositingThebesLayerBuffer implementation
-
-  virtual PaintState BeginPaint(ContentType aContentType, PRUint32) {
-    NS_RUNTIMEABORT("can't BeginPaint for a shadow layer");
-    return PaintState();
-  }
-
-protected:
-  virtual nsIntPoint GetOriginOffset() {
-    return mBufferRect.TopLeft() - mBufferRotation;
-  }
-
-  void Reset() 
-  {
-    mInitialised = false;
-    if (IsSurfaceDescriptorValid(mBufferDescriptor)) {
-      mDeAllocator->DestroySharedSurface(&mBufferDescriptor);
-    }
-  }
-
-  nsIntRect mBufferRect;
-  nsIntPoint mBufferRotation;
-  SurfaceDescriptor mBufferDescriptor;
-};
-
-class ThebesBufferHostSwap : public ThebesBufferHost
-{
-public:
-  ThebesBufferHostSwap(Compositor* aCompositor)
-    : ThebesBufferHost(aCompositor)
-  {}
-
-  virtual ImageHostType GetType() { return IMAGE_THEBES_DIRECT; }
-
-  virtual UpdateFlags UpdateThebes(const ThebesBuffer& aNewBack,
-                                   const nsIntRegion& aUpdated,
-                                   OptionalThebesBuffer* aNewFront);
-};
-
-class ThebesBufferHostUpload : public ThebesBufferHost
-{
-public:
-  ThebesBufferHostUpload(Compositor* aCompositor)
-    : ThebesBufferHost(aCompositor)
-  {}
-
-  virtual ImageHostType GetType() { return IMAGE_THEBES; }
-
-  virtual UpdateFlags UpdateThebes(const ThebesBuffer& aNewBack,
-                                   const nsIntRegion& aUpdated,
-                                   OptionalThebesBuffer* aNewFront);
-};
-
-ThebesBufferHost::UpdateFlags
-ThebesBufferHostUpload::UpdateThebes(const ThebesBuffer& aNewFront,
-                                     const nsIntRegion& aUpdated,
-                                     OptionalThebesBuffer* aNewBack)
-{
-  AutoOpenSurface surface(OPEN_READ_ONLY, aNewFront.buffer());
-  gfxASurface* updated = surface.Get();
-
-  // updated is in screen coordinates. Convert it to buffer coordinates.
-  nsIntRegion destRegion(aUpdated);
-  destRegion.MoveBy(-aNewFront.rect().TopLeft());
-
-  // Correct for rotation
-  destRegion.MoveBy(aNewFront.rotation());
-  gfxIntSize size = updated->GetSize();
-  nsIntRect destBounds = destRegion.GetBounds();
-  destRegion.MoveBy((destBounds.x >= size.width) ? -size.width : 0,
-                    (destBounds.y >= size.height) ? -size.height : 0);
-
-  // There's code to make sure that updated regions don't cross rotation
-  // boundaries, so assert here that this is the case
-  NS_ASSERTION(((destBounds.x % size.width) + destBounds.width <= size.width) &&
-               ((destBounds.y % size.height) + destBounds.height <= size.height),
-               "Updated region lies across rotation boundaries!");
-
-  // NB: this gfxContext must not escape EndUpdate() below
-  mTextureHost->Update(updated, destRegion);
-  mInitialised = true;
-
-  mBufferRect = aNewFront.rect();
-  mBufferRotation = aNewFront.rotation();
-
-  *aNewBack = aNewFront;
-  return UPDATE_NOSWAP;
-}
-
-ThebesBufferHost::UpdateFlags
-ThebesBufferHostSwap::UpdateThebes(const ThebesBuffer& aNewBack,
-                                   const nsIntRegion& aUpdated,
-                                   OptionalThebesBuffer* aNewFront)
-{
-  UpdateFlags result = 0;
-  if (IsSurfaceDescriptorValid(mBufferDescriptor)) {
-    AutoOpenSurface currentFront(OPEN_READ_ONLY, mBufferDescriptor);
-    AutoOpenSurface newFront(OPEN_READ_ONLY, aNewBack.buffer());
-    if (currentFront.Size() != newFront.Size()) {
-      // The buffer changed size making us obsolete.
-      Reset();
-      result |= RESET_BUFFER;
-    }
-  }
-
-  if (IsSurfaceDescriptorValid(mBufferDescriptor)) {
-    ThebesBuffer newFront;
-    newFront.buffer() = mBufferDescriptor;
-    newFront.rect() = mBufferRect;
-    newFront.rotation() = mBufferRotation;
-    *aNewFront = newFront;
-    result |= UPDATE_SUCCESS;
-  } else {
-    *aNewFront = null_t();
-    result |= UPDATE_FAIL;
-  }
-
-  bool success = mTextureHost->UpdateDirect(aNewBack.buffer());
-  mBufferDescriptor = aNewBack.buffer();
-  mBufferRect = aNewBack.rect();
-  mBufferRotation = aNewBack.rotation();
-
-  mInitialised = success;
-
-  return result;
-}
 
 ShadowThebesLayerOGL::ShadowThebesLayerOGL(LayerManagerOGL *aManager)
   : ShadowThebesLayer(aManager, nullptr)
@@ -1067,61 +842,61 @@ ShadowThebesLayerOGL::~ShadowThebesLayerOGL()
 {}
 
 void
-ShadowThebesLayerOGL::EnsureBuffer(const ThebesBuffer& aNewFront)
+ShadowThebesLayerOGL::AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
 {
-  if (ShadowLayerManager::DescriptorDoesDirectTexturing(aNewFront.buffer())) {
-    // We can directly texture the drawn surface.  Use that as our new
-    // front buffer, and return our previous directly-textured surface
-    // to the renderer.
-    if (!mBuffer ||
-        mBuffer->GetType() != IMAGE_THEBES_DIRECT) {
-      mBuffer = new ThebesBufferHostSwap(mOGLManager->GetCompositor());
-    }
-  } else {
-    // We're using resources owned by our texture as the front buffer.
-    // Upload the changed region and then return the surface back to
-    // the renderer.
-    if (!mBuffer ||
-        mBuffer->GetType() != IMAGE_THEBES) {
-      mBuffer = new ThebesBufferHostUpload(mOGLManager->GetCompositor());
-    }
+  EnsureBuffer(aTextureIdentifier.mImageType);
+
+  mBuffer->AddTextureHost(aTextureIdentifier, aTextureHost);
+}
+
+
+void
+ShadowThebesLayerOGL::EnsureBuffer(ImageHostType aHostType)
+{
+  if (!mBuffer ||
+      mBuffer->GetType() != aHostType) {
+    RefPtr<ImageHost> imageHost = mOGLManager->GetCompositor()->CreateImageHost(aHostType);
+    mBuffer = static_cast<AContentHost*>(imageHost.get());
   }
 }
 
 void
-ShadowThebesLayerOGL::Swap(const ThebesBuffer& aNewFront,
-                           const nsIntRegion& aUpdatedRegion,
-                           OptionalThebesBuffer* aNewBack,
-                           nsIntRegion* aNewBackValidRegion,
-                           OptionalThebesBuffer* aReadOnlyFront,
-                           nsIntRegion* aFrontUpdatedRegion)
+ShadowThebesLayerOGL::SwapTexture(const TextureIdentifier& aTextureIdentifier,
+                                  const ThebesBuffer& aNewFront,
+                                  const nsIntRegion& aUpdatedRegion,
+                                  OptionalThebesBuffer* aNewBack,
+                                  nsIntRegion* aNewBackValidRegion,
+                                  OptionalThebesBuffer* aReadOnlyFront,
+                                  nsIntRegion* aFrontUpdatedRegion)
 {
-  if (mDestroyed) {
+  if (mDestroyed ||
+      !mBuffer) {
     // Don't drop buffers on the floor.
     *aNewBack = aNewFront;
     *aNewBackValidRegion = aNewFront.rect();
     return;
   }
-
-  EnsureBuffer(aNewFront);
   
-  ThebesBufferHost::UpdateFlags swapResult = mBuffer->UpdateThebes(aNewFront, aUpdatedRegion, aNewBack);
+  AContentHost::UpdateFlags swapResult = mBuffer->UpdateThebes(aTextureIdentifier,
+                                                               aNewFront,
+                                                               aUpdatedRegion,
+                                                               aNewBack);
 
-  if (swapResult & ThebesBufferHost::RESET_BUFFER) {
+  if (swapResult & AContentHost::RESET_BUFFER) {
     mValidRegionForNextBackBuffer.SetEmpty();
   }
 
-  if (swapResult & ThebesBufferHost::UPDATE_FAIL) {
+  if (swapResult & AContentHost::UPDATE_FAIL) {
     aNewBackValidRegion->SetEmpty();
     *aReadOnlyFront = aNewFront;
     *aFrontUpdatedRegion = aUpdatedRegion;
-  } else if (swapResult & ThebesBufferHost::UPDATE_SUCCESS) {
+  } else if (swapResult & AContentHost::UPDATE_SUCCESS) {
     // We have to invalidate the pixels painted into the new buffer.
     // They might overlap with our old pixels.
     aNewBackValidRegion->Sub(mValidRegionForNextBackBuffer, aUpdatedRegion);
     *aReadOnlyFront = aNewFront;
     *aFrontUpdatedRegion = aUpdatedRegion;
-  } else if (swapResult & ThebesBufferHost::UPDATE_NOSWAP) {
+  } else if (swapResult & AContentHost::UPDATE_NOSWAP) {
     *aNewBackValidRegion = mValidRegion;
     *aReadOnlyFront = null_t();
     aFrontUpdatedRegion->SetEmpty();
@@ -1201,12 +976,18 @@ ShadowThebesLayerOGL::RenderLayer(const nsIntPoint& aOffset,
                      clipRect,
                      &GetEffectiveVisibleRegion());
 }
+void
+
+ShadowThebesLayerOGL::DestroyFrontBuffer()
+{
+  mBuffer = nullptr;
+  mValidRegionForNextBackBuffer.SetEmpty();
+}
 
 void
 ShadowThebesLayerOGL::CleanupResources()
 {
-  mBuffer = nullptr;
-  mValidRegionForNextBackBuffer.SetEmpty();
+  DestroyFrontBuffer();
 }
 
 void

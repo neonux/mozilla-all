@@ -214,7 +214,6 @@ protected:
     bool AllowContentIME();
 
     virtual PRenderFrameParent* AllocPRenderFrame(ScrollingBehavior* aScrolling,
-                                                  LayersBackend* aBackend,
                                                   TextureHostIdentifier* aTextureHostIdentifier,
                                                   uint64_t* aLayersId) MOZ_OVERRIDE;
     virtual bool DeallocPRenderFrame(PRenderFrameParent* aFrame) MOZ_OVERRIDE;

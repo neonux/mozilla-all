@@ -39,7 +39,6 @@ public:
 protected:
   virtual PLayersChild* AllocPLayers(const LayersBackend& aBackendHint,
                                      const uint64_t& aId,
-                                     LayersBackend* aBackend,
                                      TextureHostIdentifier* aTextureHostIdentifier);
   virtual bool DeallocPLayers(PLayersChild *aChild);
 

@@ -293,18 +293,18 @@ ShadowCanvasLayerOGL::ShadowCanvasLayerOGL(LayerManagerOGL* aManager)
 
 //TODO[nrc] these methods are pretty much shared with ShadowImageLayerOGL, can I pull 'em up to ShadowLayer?
 void
-ShadowCanvasLayerOGL::EnsureImageHost(const TextureIdentifier& aTextureIdentifier)
+ShadowCanvasLayerOGL::EnsureImageHost(ImageHostType aHostType)
 {
   if (!mImageHost ||
-      mImageHost->GetType() != aTextureIdentifier.mImageType) {
-    mImageHost = mOGLManager->GetCompositor()->CreateImageHost(aTextureIdentifier.mImageType);
+      mImageHost->GetType() != aHostType) {
+    mImageHost = mOGLManager->GetCompositor()->CreateImageHost(aHostType);
   }
 }
 
 void
 ShadowCanvasLayerOGL::AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
 {
-  EnsureImageHost(aTextureIdentifier);
+  EnsureImageHost(aTextureIdentifier.mImageType);
 
   if (CanUseOpaqueSurface()) {
     aTextureHost->AddFlag(UseOpaqueSurface);
@@ -317,12 +317,11 @@ ShadowCanvasLayerOGL::SwapTexture(const TextureIdentifier& aTextureIdentifier,
                                   const SharedImage& aFront,
                                   SharedImage* aNewBack)
 {
-  if (mDestroyed) {
+  if (mDestroyed ||
+      !mImageHost) {
     *aNewBack = aFront;
     return;
   }
-
-  EnsureImageHost(aTextureIdentifier);
 
   *aNewBack = *mImageHost->UpdateImage(aTextureIdentifier, aFront);
 }

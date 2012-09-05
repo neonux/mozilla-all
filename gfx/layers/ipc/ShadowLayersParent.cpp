@@ -361,6 +361,7 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       ShadowLayerParent* shadow = AsShadowLayer(op);
       ShadowThebesLayer* thebes =
         static_cast<ShadowThebesLayer*>(shadow->AsLayer());
+      //TODO[nrc]
       const TextureIdentifier textureId; // = AsTextureId(op);
       const ThebesBuffer& newFront = op.newFrontBuffer();
 
@@ -370,9 +371,10 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       nsIntRegion newValidRegion;
       OptionalThebesBuffer readonlyFront;
       nsIntRegion frontUpdatedRegion;
-      thebes->Swap(newFront, op.updatedRegion(),
-                   &newBack, &newValidRegion,
-                   &readonlyFront, &frontUpdatedRegion);
+      thebes->SwapTexture(textureId,
+                          newFront, op.updatedRegion(),
+                          &newBack, &newValidRegion,
+                          &readonlyFront, &frontUpdatedRegion);
       replyv.push_back(
         OpThebesBufferSwap(
           shadow, NULL,

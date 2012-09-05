@@ -24,6 +24,7 @@
 #include "nsXULAppAPI.h"
 #include "TextureClient.h"
 #include "ImageClient.h"
+#include "CanvasClient.h"
 #include "ThebesBufferClient.h"
 
 using namespace mozilla::ipc;
@@ -272,6 +273,16 @@ ShadowLayerForwarder::PaintedImage(ShadowableLayer* aImage,
   mTxn->AddPaint(OpPaintImage(NULL, Shadow(aImage),
                               aImageClient->GetAsSharedImage()));
 }
+
+void
+ShadowLayerForwarder::UpdateTexture(ShadowableLayer* aLayer,
+                                    TextureClient aTextureClient)
+{
+  mTxn->AddPaint(OpPaintTexture(NULL, Shadow(aLayer),
+                                aTextureClient->GetIdentifier(),
+                                aTextureClient->GetAsSharedImage()));
+}
+
 
 bool
 ShadowLayerForwarder::EndTransaction(InfallibleTArray<EditReply>* aReplies)
@@ -554,13 +565,13 @@ ShadowLayerForwarder::DestroySharedSurface(SurfaceDescriptor* aSurface)
 }
 
 TemporaryRef<TextureClient>
-ShadowLayerForwarder::CreateTextureClientFor(const ImageHostType& aTextureHostType,
+ShadowLayerForwarder::CreateTextureClientFor(const TextureHostType& aTextureHostType,
                                              const ImageHostType& aImageHostType,
                                              ShadowableLayer* aLayer,
                                              TextureFlags aFlags,
                                              bool aStrict /* = false */)
 {
-  RefPtr<TextureClient> client = CompositingFactory::CreateTextureClient(mTextureHostType,
+  RefPtr<TextureClient> client = CompositingFactory::CreateTextureClient(mParentBackend,
                                                                          aTextureHostType,
                                                                          aImageHostType,
                                                                          this, aStrict);
@@ -577,9 +588,31 @@ ShadowLayerForwarder::CreateImageClientFor(const ImageHostType& aImageHostType,
                                            ShadowableLayer* aLayer,
                                            TextureFlags aFlags)
 {
-  RefPtr<ImageClient> client = CompositingFactory::CreateImageClient(mTextureHostType,
+  RefPtr<ImageClient> client = CompositingFactory::CreateImageClient(mParentBackend,
                                                                      aImageHostType,
                                                                      this, aLayer, aFlags);
+  return client.forget();
+}
+
+TemporaryRef<CanvasClient>
+ShadowLayerForwarder::CreateCanvasClientFor(const ImageHostType& aImageHostType,
+                                            ShadowableLayer* aLayer,
+                                            TextureFlags aFlags)
+{
+  RefPtr<CanvasClient> client = CompositingFactory::CreateCanvasClient(mParentBackend,
+                                                                       aImageHostType,
+                                                                       this, aLayer, aFlags);
+  return client.forget();
+}
+
+TemporaryRef<ContentClient>
+ShadowLayerForwarder::CreateContentClientFor(const ImageHostType& aImageHostType,
+                                             ShadowableLayer* aLayer,
+                                             TextureFlags aFlags)
+{
+  RefPtr<ContentClient> client = CompositingFactory::CreateContentClient(mParentBackend,
+                                                                         aImageHostType,
+                                                                         this, aLayer, aFlags);
   return client.forget();
 }
 

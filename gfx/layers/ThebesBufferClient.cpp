@@ -35,7 +35,9 @@ ContentClientBasic::ContentClientBasic(BasicLayerManager* aManager)
 
 
 already_AddRefed<gfxASurface>
-ContentClientBasic::CreateBuffer(ContentType aType, const nsIntSize& aSize, PRUint32 aFlags)
+ContentClientBasic::CreateBuffer(ContentType aType,
+                                 const nsIntSize& aSize,
+                                 PRUint32 aFlags)
 {
   nsRefPtr<gfxASurface> referenceSurface = GetBuffer();
   if (!referenceSurface) {
@@ -56,35 +58,29 @@ ContentClientBasic::CreateBuffer(ContentType aType, const nsIntSize& aSize, PRUi
 }
 
 already_AddRefed<gfxASurface>
-ContentClientRemote::CreateBuffer(ContentType aType, const nsIntSize& aSize, PRUint32 aFlags)
+ContentClientRemote::CreateBuffer(ContentType aType,
+                                  const nsIntSize& aSize,
+                                  PRUint32 aFlags)
 {
-  if (IsSurfaceDescriptorValid(mBackBuffer)) {
-    //TODO[nrc] need to move to the TextureClient and send the message properly
-    //mLayerForwarder->DestroyedThebesBuffer(mLayerForwarder->Hold(this),
-    //                                mBackBuffer);
-    mBackBuffer = SurfaceDescriptor();
-  }
-
-  AllocBackBuffer(aType, aSize);
-
   NS_ABORT_IF_FALSE(!mIsNewBuffer,
                     "Bad! Did we create a buffer twice without painting?");
 
   mIsNewBuffer = true;
 
-  Maybe<AutoOpenSurface>* surface = mNewBuffers.AppendElement();
-  surface->construct(OPEN_READ_WRITE, mBackBuffer);
-  nsRefPtr<gfxASurface> buffer =  surface->ref().Get();
-
-  return buffer.forget();
+  mOldTextures.AppendElement(mTextureClient);
+  mTextureClient = static_cast<TextureClientShmem*>(
+    mLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, GetType(),
+                                            mLayer, NoFlags, true).drop());
+  mTextureClient->EnsureTextureClient(gfx::IntSize(aSize.width, aSize.height),
+                                      aType);
+  return mTextureClient->LockSurface();
 }
 
 void
 ContentClientRemote::BeginPaint()
 {
-  if (IsSurfaceDescriptorValid(mBackBuffer)) {
-    mInitialBuffer.construct(OPEN_READ_WRITE, mBackBuffer);
-    SetBuffer(mInitialBuffer.ref().Get());
+  if (mTextureClient) {
+    SetBuffer(mTextureClient->LockSurface());
   }
 }
 
@@ -92,8 +88,10 @@ void
 ContentClientRemote::EndPaint()
 {
   SetBuffer(nullptr);
-  mInitialBuffer.destroyIfConstructed();
-  mNewBuffers.Clear();
+  if (mTextureClient) {
+    mTextureClient->Unlock();
+  }
+  mOldTextures.Clear();
 }
 
 nsIntRegion 
@@ -118,27 +116,22 @@ ContentClientRemote::GetUpdatedRegion(const nsIntRegion& aRegionToDraw,
 
   NS_ASSERTION(BufferRect().Contains(aRegionToDraw.GetBounds()),
                "Update outside of buffer rect!");
-  NS_ABORT_IF_FALSE(IsSurfaceDescriptorValid(mBackBuffer),
-                    "should have a back buffer by now");
+  NS_ABORT_IF_FALSE(!mTextureClient, "should have a back buffer by now");
 
   return updatedRegion;
 }
 
 void
-ContentClientRemote::AllocBackBuffer(ContentType aType,
-                                     const nsIntSize& aSize)
+ContentClientRemote::SetBackingBuffer(gfxASurface* aBuffer,
+                                      const nsIntRect& aRect,
+                                      const nsIntPoint& aRotation)
 {
-  // This function must *not* open the buffer it allocates.
-  if (!mLayerForwarder->AllocBuffer(gfxIntSize(aSize.width, aSize.height),
-                                    aType,
-                                    &mBackBuffer)) {
-    enum { buflen = 256 };
-    char buf[buflen];
-    PR_snprintf(buf, buflen,
-                "creating ThebesLayer 'back buffer' failed! width=%d, height=%d, type=%x",
-                aSize.width, aSize.height, int(aType));
-    NS_RUNTIMEABORT(buf);
-  }
+  gfxIntSize prevSize = gfxIntSize(BufferRect().width, BufferRect().height);
+  gfxIntSize newSize = aBuffer->GetSize();
+  NS_ABORT_IF_FALSE(newSize == prevSize,
+                    "Swapped-in buffer size doesn't match old buffer's!");
+  nsRefPtr<gfxASurface> oldBuffer;
+  oldBuffer = SetBuffer(aBuffer, aRect, aRotation);
 }
 
 void
@@ -150,9 +143,9 @@ ContentClientDirect::SetBackBufferAndAttrs(const TextureIdentifier& aTextureIden
                                            nsIntRegion& aLayerValidRegion)
 {
   if (OptionalThebesBuffer::Tnull_t == aBuffer.type()) {
-    mBackBuffer = SurfaceDescriptor();
+    mTextureClient->Descriptor() = SurfaceDescriptor();
   } else {
-    mBackBuffer = aBuffer.get_ThebesBuffer().buffer();
+    mTextureClient->Descriptor() = aBuffer.get_ThebesBuffer().buffer();
   }
 
   MOZ_ASSERT(OptionalThebesBuffer::Tnull_t != aReadOnlyFrontBuffer.type());
@@ -162,38 +155,25 @@ ContentClientDirect::SetBackBufferAndAttrs(const TextureIdentifier& aTextureIden
   mFrontUpdatedRegion = aFrontUpdatedRegion;
 }
 
-void
-ContentClientTexture::SetBackBufferAndAttrs(const TextureIdentifier& aTextureIdentifier,
-                                            const OptionalThebesBuffer& aBuffer,
-                                            const nsIntRegion& aValidRegion,
-                                            const OptionalThebesBuffer& aReadOnlyFrontBuffer,
-                                            const nsIntRegion& aFrontUpdatedRegion,
-                                            nsIntRegion& aLayerValidRegion)
-{
-  // We shouldn't get back a read-only ref to our old back buffer (the
-  // parent's new front buffer).  If the parent is pushing updates
-  // to a texture it owns, then we probably got back the same buffer
-  // we pushed in the update and all is well.  If not, ...
-  MOZ_ASSERT(OptionalThebesBuffer::Tnull_t == aReadOnlyFrontBuffer.type());
-
-  if (OptionalThebesBuffer::Tnull_t == aBuffer.type()) {
-    mBackBuffer = SurfaceDescriptor();
-  } else {
-    mBackBuffer = aBuffer.get_ThebesBuffer().buffer();
-    gfxASurface* backBuffer = GetBuffer();
-    if (!backBuffer) {
-      Maybe<AutoOpenSurface> autoBackBuffer;
-      autoBackBuffer.construct(OPEN_READ_WRITE, mBackBuffer);
-      backBuffer = autoBackBuffer.ref().Get();
+struct AutoTextureClient {
+  AutoTextureClient()
+    : mTexture(nullptr)
+  {}
+  ~AutoTextureClient()
+  {
+    if (mTexture) {
+      mTexture->Unlock();
     }
-
-    SetBuffer(backBuffer,
-              aBuffer.get_ThebesBuffer().rect(), 
-              aBuffer.get_ThebesBuffer().rotation());
   }
-  mIsNewBuffer = false;
-  aLayerValidRegion = aValidRegion;
-}
+  gfxASurface* GetSurface(TextureClientShmem* aTexture)
+  {
+    mTexture = aTexture;
+    return mTexture->LockSurface();
+  }
+
+private:
+  TextureClientShmem* mTexture;
+};
 
 void
 ContentClientDirect::SyncFrontBufferToBackBuffer()
@@ -204,18 +184,22 @@ ContentClientDirect::SyncFrontBufferToBackBuffer()
 
   gfxASurface* backBuffer = GetBuffer();
 
-  if (!IsSurfaceDescriptorValid(mBackBuffer)) {
+  if (!mTextureClient) {
     MOZ_ASSERT(!backBuffer);
     MOZ_ASSERT(mROFrontBuffer.type() == OptionalThebesBuffer::TThebesBuffer);
     const ThebesBuffer roFront = mROFrontBuffer.get_ThebesBuffer();
     AutoOpenSurface roFrontBuffer(OPEN_READ_ONLY, roFront.buffer());
-    AllocBackBuffer(roFrontBuffer.ContentType(), roFrontBuffer.Size());
+    nsIntSize size = roFrontBuffer.Size();
+    mTextureClient = static_cast<TextureClientShmem*>(
+      mLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, GetType(),
+                                              mLayer, NoFlags, true).drop());
+    mTextureClient->EnsureTextureClient(gfx::IntSize(size.width, size.height),
+                                        roFrontBuffer.ContentType());
   }
 
-  Maybe<AutoOpenSurface> autoBackBuffer;
+  AutoTextureClient autoTexture;
   if (!backBuffer) {
-    autoBackBuffer.construct(OPEN_READ_WRITE, mBackBuffer);
-    backBuffer = autoBackBuffer.ref().Get();
+    backBuffer = autoTexture.GetSurface(mTextureClient);
   }
 
   MOZ_LAYERS_LOG(("BasicShadowableThebes(%p): reading back <x=%d,y=%d,w=%d,h=%d>",
@@ -234,14 +218,6 @@ ContentClientDirect::SyncFrontBufferToBackBuffer()
                                 mFrontUpdatedRegion);
   mIsNewBuffer = false;
   mFrontAndBackBufferDiffer = false;
-}
-
-void
-ContentClientTexture::SyncFrontBufferToBackBuffer()
-{
-  MOZ_ASSERT(IsSurfaceDescriptorValid(mBackBuffer));
-  MOZ_ASSERT(GetBuffer());
-  MOZ_ASSERT(!mIsNewBuffer);
 }
 
 void
@@ -264,16 +240,43 @@ ContentClientDirect::SetBackingBufferAndUpdateFrom(gfxASurface* aBuffer,
 }
 
 void
-ContentClientRemote::SetBackingBuffer(gfxASurface* aBuffer,
-                                      const nsIntRect& aRect,
-                                      const nsIntPoint& aRotation)
+ContentClientTexture::SetBackBufferAndAttrs(const TextureIdentifier& aTextureIdentifier,
+                                            const OptionalThebesBuffer& aBuffer,
+                                            const nsIntRegion& aValidRegion,
+                                            const OptionalThebesBuffer& aReadOnlyFrontBuffer,
+                                            const nsIntRegion& aFrontUpdatedRegion,
+                                            nsIntRegion& aLayerValidRegion)
 {
-  gfxIntSize prevSize = gfxIntSize(BufferRect().width, BufferRect().height);
-  gfxIntSize newSize = aBuffer->GetSize();
-  NS_ABORT_IF_FALSE(newSize == prevSize,
-                    "Swapped-in buffer size doesn't match old buffer's!");
-  nsRefPtr<gfxASurface> oldBuffer;
-  oldBuffer = SetBuffer(aBuffer, aRect, aRotation);
+  // We shouldn't get back a read-only ref to our old back buffer (the
+  // parent's new front buffer).  If the parent is pushing updates
+  // to a texture it owns, then we probably got back the same buffer
+  // we pushed in the update and all is well.  If not, ...
+  MOZ_ASSERT(OptionalThebesBuffer::Tnull_t == aReadOnlyFrontBuffer.type());
+
+  if (OptionalThebesBuffer::Tnull_t == aBuffer.type()) {
+    mTextureClient->Descriptor() = SurfaceDescriptor();
+  } else {
+    mTextureClient->Descriptor() = aBuffer.get_ThebesBuffer().buffer();
+    gfxASurface* backBuffer = GetBuffer();
+    if (!backBuffer) {
+      backBuffer = mTextureClient->LockSurface();
+      mTextureClient->Unlock();
+    }
+
+    SetBuffer(backBuffer,
+              aBuffer.get_ThebesBuffer().rect(),
+              aBuffer.get_ThebesBuffer().rotation());
+  }
+  mIsNewBuffer = false;
+  aLayerValidRegion = aValidRegion;
+}
+
+void
+ContentClientTexture::SyncFrontBufferToBackBuffer()
+{
+  MOZ_ASSERT(mTextureClient);
+  MOZ_ASSERT(GetBuffer());
+  MOZ_ASSERT(!mIsNewBuffer);
 }
 
 

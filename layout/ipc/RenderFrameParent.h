@@ -57,7 +57,6 @@ public:
    */
   RenderFrameParent(nsFrameLoader* aFrameLoader,
                     ScrollingBehavior aScrollingBehavior,
-                    mozilla::layers::LayersBackend* aBackendType,
                     TextureHostIdentifier* aTextureHostIdentifier,
                     uint64_t* aId);
   virtual ~RenderFrameParent();

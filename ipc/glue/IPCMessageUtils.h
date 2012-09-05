@@ -774,13 +774,13 @@ struct ParamTraits<mozilla::layers::TextureHostIdentifier>
 
   static void Write(Message* aMsg, const paramType& aParam)
   {
-    WriteParam(aMsg, aParam.mType);
+    WriteParam(aMsg, aParam.mParentBackend);
     WriteParam(aMsg, aParam.mMaxTextureSize);
   }
 
   static bool Read(const Message* aMsg, void** aIter, paramType* aResult)
   {
-    return ReadParam(aMsg, aIter, &aResult->mType) &&
+    return ReadParam(aMsg, aIter, &aResult->mParentBackend) &&
            ReadParam(aMsg, aIter, &aResult->mMaxTextureSize);
   }
 };
@@ -806,16 +806,19 @@ struct ParamTraits<mozilla::layers::TextureIdentifier>
 };
 
 template <>
-struct ParamTraits<mozilla::layers::TextureHostType>
-  : public EnumSerializer<mozilla::layers::TextureHostType,
-                          mozilla::layers::HOST_D3D10,
-                          mozilla::layers::HOST_SHMEM>
-{};
-template <>
 struct ParamTraits<mozilla::layers::ImageHostType>
   : public EnumSerializer<mozilla::layers::ImageHostType,
-                          mozilla::layers::IMAGE_YUV,
-                          mozilla::layers::IMAGE_SHMEM>
+                          mozilla::layers::IMAGE_UNKNOWN,
+                          mozilla::layers::IMAGE_DIRECT
+>
+{};
+
+template <>
+struct ParamTraits<mozilla::layers::TextureHostType>
+  : public EnumSerializer<mozilla::layers::TextureHostType,
+                          mozilla::layers::TEXTURE_UNKNOWN,
+                          mozilla::layers::TEXTURE_BRIDGE
+>
 {};
 
 

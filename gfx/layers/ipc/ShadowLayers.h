@@ -221,6 +221,10 @@ public:
   void PaintedImage(ShadowableLayer* aImage,
                     ImageClient* aImageClient);
 
+  //TODO[nrc]
+  void UpdateTexture(ShadowableLayer* aLayer
+                     TextureClient aTextureClient);
+
   /**
    * End the current transaction and forward it to ShadowLayerManager.
    * |aReplies| are directions from the ShadowLayerManager to the
@@ -241,17 +245,13 @@ public:
     mShadowManager = aShadowManager;
   }
 
-  void SetParentBackendType(LayersBackend aBackendType)
-  {
-    mParentBackend = aBackendType;
-  }
-
   /**
    * True if this is forwarding to a ShadowLayerManager.
    */
   bool HasShadowManager() const { return !!mShadowManager; }
   PLayersChild* GetShadowManager() const { return mShadowManager; }
 
+  //TODO[nrc]
   /**
    * The following Alloc/Open/Destroy interfaces abstract over the
    * details of working with surfaces that are shared across
@@ -324,11 +324,11 @@ public:
   void IdentifyTextureHost(const TextureHostIdentifier& aIdentifier)
   {
     mMaxTextureSize = aIdentifier.mMaxTextureSize;
-    mTextureHostType = aIdentifier.mType;
+    mParentBackend = aIdentifier.mParentBackend;
   }
 
   //TODO[nrc] comment
-  TemporaryRef<TextureClient> CreateTextureClientFor(const ImageHostType& aTextureHostType,
+  TemporaryRef<TextureClient> CreateTextureClientFor(const TextureHostType& aTextureHostType,
                                                      const ImageHostType& aImageHostType,
                                                      ShadowableLayer* aLayer,
                                                      TextureFlags aFlags,
@@ -336,6 +336,12 @@ public:
   TemporaryRef<ImageClient> CreateImageClientFor(const ImageHostType& aImageHostType,
                                                  ShadowableLayer* aLayer,
                                                  TextureFlags aFlags);
+  TemporaryRef<CanvasClient> CreateCanvasClientFor(const ImageHostType& aImageHostType,
+                                                   ShadowableLayer* aLayer,
+                                                   TextureFlags aFlags);
+  TemporaryRef<ContentClient> CreateContentClientFor(const ImageHostType& aImageHostType,
+                                                     ShadowableLayer* aLayer,
+                                                     TextureFlags aFlags);
 
 protected:
   ShadowLayerForwarder();
@@ -401,8 +407,6 @@ private:
 
   Transaction* mTxn;
   PRInt32 mMaxTextureSize;
-  TextureHostType mTextureHostType;
-  //TODO[nrc] do we need this anymore?
   LayersBackend mParentBackend;
 
   bool mIsFirstPaint;
@@ -445,10 +449,10 @@ public:
                                    GLenum aWrapMode);
 
   /**
-   * returns true if OpenDescriptorForDirectTexturing is likely to return
-   * something non-null for the aDescriptor
+   * returns true if PlatformAllocBuffer will return a buffer that supports
+   * direct texturing
    */
-  static bool DescriptorDoesDirectTexturing(const SurfaceDescriptor& aDescriptor);
+  static bool SupportsDirectTexturing();
 
   static void PlatformSyncBeforeReplyUpdate();
 
@@ -619,9 +623,10 @@ public:
    * for the remote layer).
    */
   virtual void
-  Swap(const ThebesBuffer& aNewFront, const nsIntRegion& aUpdatedRegion,
-       OptionalThebesBuffer* aNewBack, nsIntRegion* aNewBackValidRegion,
-       OptionalThebesBuffer* aReadOnlyFront, nsIntRegion* aFrontUpdatedRegion) = 0;
+  SwapTexture(const TextureIdentifier& aTextureIdentifier,
+              const ThebesBuffer& aNewFront, const nsIntRegion& aUpdatedRegion,
+              OptionalThebesBuffer* aNewBack, nsIntRegion* aNewBackValidRegion,
+              OptionalThebesBuffer* aReadOnlyFront, nsIntRegion* aFrontUpdatedRegion) = 0;
 
   /**
    * CONSTRUCTION PHASE ONLY

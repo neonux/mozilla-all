@@ -41,7 +41,7 @@ parent:
   sync Resume();
 
   sync PLayers(LayersBackend backendHint, uint64_t id)
-    returns (LayersBackend backend, TextureHostIdentifier textureHostIdentifier);
+    returns (TextureHostIdentifier textureHostIdentifier);
 };
 
 } // layers

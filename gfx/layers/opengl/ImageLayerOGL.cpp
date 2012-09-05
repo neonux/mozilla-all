@@ -693,7 +693,7 @@ ShadowImageLayerOGL::~ShadowImageLayerOGL()
 void
 ShadowImageLayerOGL::AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
 {
-  EnsureImageHost(aTextureIdentifier);
+  EnsureImageHost(aTextureIdentifier.mImageType);
 
   mImageHost->AddTextureHost(aTextureIdentifier, aTextureHost);
 }
@@ -703,7 +703,8 @@ ShadowImageLayerOGL::SwapTexture(const TextureIdentifier& aTextureIdentifier,
                                  const SharedImage& aFront,
                                  SharedImage* aNewBack)
 {
-  if (mDestroyed) {
+  if (mDestroyed ||
+      !mImageHost) {
     *aNewBack = aFront;
     return;
   }
@@ -712,18 +713,16 @@ ShadowImageLayerOGL::SwapTexture(const TextureIdentifier& aTextureIdentifier,
     NS_ERROR("ImageBridge should not use SwapTexture");
   }
 
-  EnsureImageHost(aTextureIdentifier);
-
   mImageHost->UpdateImage(aTextureIdentifier, aFront);
   *aNewBack = aFront;
 }
 
 void
-ShadowImageLayerOGL::EnsureImageHost(const TextureIdentifier& aTextureIdentifier)
+ShadowImageLayerOGL::EnsureImageHost(ImageHostType aHostType)
 {
   if (!mImageHost ||
-      mImageHost->GetType() != aTextureIdentifier.mImageType) {
-    mImageHost = mOGLManager->GetCompositor()->CreateImageHost(aTextureIdentifier.mImageType);
+      mImageHost->GetType() != aHostType) {
+    mImageHost = mOGLManager->GetCompositor()->CreateImageHost(aHostType);
   }
 }
 
@@ -788,7 +787,7 @@ ShadowImageLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aCl
         mImageHost = mOGLManager->GetCompositor()->CreateImageHost(IMAGE_YUV);
         TextureIdentifier textureId;
         textureId.mImageType = IMAGE_YUV;
-        textureId.mTextureType = IMAGE_SHMEM;
+        textureId.mTextureType = TEXTURE_SHMEM;
         mImageHost->UpdateImage(textureId, *img);
   
         mImageVersion = imgVersion;

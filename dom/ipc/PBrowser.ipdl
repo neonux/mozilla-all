@@ -23,7 +23,6 @@ include "mozilla/net/NeckoMessageUtils.h";
 using IPC::URI;
 using gfxMatrix;
 using gfxSize;
-using mozilla::layers::LayersBackend;
 using mozilla::layers::TextureHostIdentifier;
 using mozilla::layout::ScrollingBehavior;
 using mozilla::WindowsHandle;
@@ -184,7 +183,7 @@ parent:
      */
     sync PRenderFrame()
         returns (ScrollingBehavior scrolling,
-                 LayersBackend backend, TextureHostIdentifier textureHostIdentifier, uint64_t layersId);
+                 TextureHostIdentifier textureHostIdentifier, uint64_t layersId);
 
     /** 
      * Starts an offline application cache update.

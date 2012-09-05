@@ -170,8 +170,8 @@ ImageHostTexture::Composite(EffectChain& aEffectChain,
 void
 ImageHostTexture::AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
 {
-  NS_ASSERTION(aTextureIdentifier.mImageType == IMAGE_SHMEM &&
-               aTextureIdentifier.mTextureType == IMAGE_SHMEM,
+  NS_ASSERTION(aTextureIdentifier.mImageType == IMAGE_TEXTURE &&
+               aTextureIdentifier.mTextureType == TEXTURE_SHMEM,
                "ImageHostType mismatch.");
   mTextureHost = static_cast<TextureImageAsTextureHost*>(aTextureHost);
 }
@@ -351,7 +351,7 @@ void
 ImageHostShared::AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
 {
   NS_ASSERTION(aTextureIdentifier.mImageType == IMAGE_SHARED &&
-               aTextureIdentifier.mTextureType == IMAGE_SHARED,
+               aTextureIdentifier.mTextureType == TEXTURE_SHARED,
                "ImageHostType mismatch.");
   mTextureHost = static_cast<TextureHostOGLShared*>(aTextureHost);
 }

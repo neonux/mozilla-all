@@ -24,15 +24,6 @@ public:
     : ThebesLayerBuffer(ContainsVisibleBounds)
   {}
   virtual ~ContentClient() {}
-  //TODO[nrc]
-  //virtual SharedImage GetAsSharedImage() = 0;
-
-  // returns false if this is the wrong kind of ImageClient for aContainer
-  // note returning true does not necessarily imply success
-  //virtual bool Update(ThebesLayer* aLayer) = 0;
-
-  //virtual void SetBuffer(const TextureIdentifier& aTextureIdentifier,
-  //                       const SharedImage& aBuffer) = 0;
 
   typedef ThebesLayerBuffer::PaintState PaintState;
   typedef ThebesLayerBuffer::ContentType ContentType;
@@ -49,7 +40,7 @@ public:
   // After executing, the new back buffer has the same (interesting) pixels as the
   // new front buffer, and mValidRegion et al. are correct wrt the new
   // back buffer (i.e. as they were for the old back buffer)
-  virtual void SyncFrontBufferToBackBuffer() = 0;
+  virtual void SyncFrontBufferToBackBuffer() {}
 
   virtual void SetBackBufferAndAttrs(const TextureIdentifier& aTextureIdentifier,
                                      const OptionalThebesBuffer& aBuffer,
@@ -75,21 +66,31 @@ public:
   virtual void EndPaint() {}
 };
 
+// thin wrapper around BasicThebesLayerBuffer, for on-mtc
+class ContentClientBasic : public ContentClient
+{
+public:
+  ContentClientBasic(BasicLayerManager* aManager);
+
+  virtual already_AddRefed<gfxASurface> CreateBuffer(ContentType aType,
+                                                     const nsIntSize& aSize,
+                                                     PRUint32 aFlags);
+private:
+  nsRefPtr<BasicLayerManager> mManager;
+};
+
 class ContentClientRemote : public ContentClient
 {
   using ThebesLayerBuffer::BufferRect;
   using ThebesLayerBuffer::BufferRotation;
 public:
-  ContentClientRemote(ShadowLayerForwarder* aLayerForwarder)
+  ContentClientRemote(ShadowLayerForwarder* aLayerForwarder,
+                      ShadowableLayer* aLayer,
+                      TextureFlags aFlags)
     : mLayerForwarder(aLayerForwarder)
+    , mLayer(aLayer)
+    , mTextureClient(nullptr)
   {}
-
-  ~ContentClientRemote()
-  {
-    if (IsSurfaceDescriptorValid(mBackBuffer)) {
-      mLayerForwarder->DestroySharedSurface(&mBackBuffer);
-    }
-  }
 
   virtual already_AddRefed<gfxASurface> CreateBuffer(ContentType aType,
                                                      const nsIntSize& aSize,
@@ -104,8 +105,11 @@ public:
 
   ThebesBuffer GetAsThebesBuffer()
   {
-    return ThebesBuffer(mBackBuffer, BufferRect(), BufferRotation());
+    NS_ASSERTION(mTextureClient, "No texture client?!");
+    return ThebesBuffer(mTextureClient->Descriptor(), BufferRect(), BufferRotation());
   }
+
+  virtual ImageHostType GetType() = 0;
 
 protected:
   /**
@@ -114,30 +118,23 @@ protected:
   void SetBackingBuffer(gfxASurface* aBuffer,
                         const nsIntRect& aRect, const nsIntPoint& aRotation);
 
-  // This function must *not* open the buffer it allocates.
-  void AllocBackBuffer(ContentType aType, const nsIntSize& aSize);
-
   ShadowLayerForwarder* mLayerForwarder;
+  ShadowableLayer* mLayer;
 
-  // This describes the gfxASurface we hand to mBuffer.  We keep a
-  // copy of the descriptor here so that we can call
-  // DestroySharedSurface() on the descriptor.
-  SurfaceDescriptor mBackBuffer;
-
-  //TODO[nrc] comment, AutoBufferTracker things
-  Maybe<AutoOpenSurface> mInitialBuffer;
-  nsAutoTArray<Maybe<AutoOpenSurface>, 2> mNewBuffers;
+  RefPtr<TextureClientShmem> mTextureClient;
+  // keep a record of texture clients we have created and need to keep around, then unlock
+  nsTArray<RefPtr<TextureClientShmem>> mOldTextures;
 
   bool mIsNewBuffer;
 };
 
-//both have back buffers, only one (which?) has a font buffer
-
 class ContentClientDirect : public ContentClientRemote
 {
 public:
-  ContentClientDirect(ShadowLayerForwarder* aLayerForwarder)
-    : ContentClientRemote(aLayerForwarder)
+  ContentClientDirect(ShadowLayerForwarder* aLayerForwarder,
+                      ShadowableLayer* aLayer,
+                      TextureFlags aFlags)
+    : ContentClientRemote(aLayerForwarder, aLayer, aFlags)
   {}
 
   virtual void SetBackBufferAndAttrs(const TextureIdentifier& aTextureIdentifier,
@@ -149,20 +146,23 @@ public:
 
   virtual void SyncFrontBufferToBackBuffer();
 
+  virtual ImageHostType GetType() { return IMAGE_DIRECT; }
+
 private:
   ContentClientDirect(gfxASurface* aBuffer,
                       const nsIntRect& aRect, const nsIntPoint& aRotation)
     // The size policy doesn't really matter here; this constructor is
     // intended to be used for creating temporaries
-    : ContentClientRemote(nullptr)
+    : ContentClientRemote(nullptr, nullptr, NoFlags)
   {
     SetBuffer(aBuffer, aRect, aRotation);
   }
 
-  void SetBackingBufferAndUpdateFrom(
-    gfxASurface* aBuffer,
-    gfxASurface* aSource, const nsIntRect& aRect, const nsIntPoint& aRotation,
-    const nsIntRegion& aUpdateRegion);
+  void SetBackingBufferAndUpdateFrom(gfxASurface* aBuffer,
+                                     gfxASurface* aSource,
+                                     const nsIntRect& aRect,
+                                     const nsIntPoint& aRotation,
+                                     const nsIntRegion& aUpdateRegion);
 
   bool mFrontAndBackBufferDiffer;
   OptionalThebesBuffer mROFrontBuffer;
@@ -172,8 +172,10 @@ private:
 class ContentClientTexture : public ContentClientRemote
 {
 public:
-  ContentClientTexture(ShadowLayerForwarder* aLayerForwarder)
-    : ContentClientRemote(aLayerForwarder)
+  ContentClientTexture(ShadowLayerForwarder* aLayerForwarder,
+                       ShadowableLayer* aLayer,
+                       TextureFlags aFlags)
+    : ContentClientRemote(aLayerForwarder, aLayer, aFlags)
   {}
 
   virtual void SetBackBufferAndAttrs(const TextureIdentifier& aTextureIdentifier,
@@ -184,19 +186,8 @@ public:
                                      nsIntRegion& aLayerValidRegion);
 
   virtual void SyncFrontBufferToBackBuffer(); 
-};
 
-// thin wrapper around BasicThebesLayerBuffer, for on-mtc
-class ContentClientBasic : public ContentClient
-{
-public:
-  ContentClientBasic(BasicLayerManager* aManager);
-
-  virtual already_AddRefed<gfxASurface> CreateBuffer(ContentType aType, const nsIntSize& aSize, PRUint32 aFlags);
-
-  virtual void SyncFrontBufferToBackBuffer() {}
-private:
-  nsRefPtr<BasicLayerManager> mManager;
+  virtual ImageHostType GetType() { return IMAGE_TEXTURE; }
 };
 
 }

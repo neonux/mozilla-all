@@ -138,7 +138,7 @@ public:
   virtual void CleanupResources() { mImageHost = nullptr; }
 
 private:
-  void EnsureImageHost(const TextureIdentifier& aTextureIdentifier);
+  void EnsureImageHost(ImageHostType aHostType);
 
   RefPtr<ImageHost> mImageHost;
 };

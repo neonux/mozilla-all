@@ -20,7 +20,7 @@ namespace mozilla {
 namespace layers {
 
 class BasicBufferOGL;
-class ThebesBufferHost;
+class AContentHost;
 class ThebesLayerBufferOGL;
 
 class ThebesLayerOGL : public ThebesLayer, 
@@ -62,10 +62,14 @@ public:
   ShadowThebesLayerOGL(LayerManagerOGL *aManager);
   virtual ~ShadowThebesLayerOGL();
 
-  virtual void
-  Swap(const ThebesBuffer& aNewFront, const nsIntRegion& aUpdatedRegion,
-       OptionalThebesBuffer* aNewBack, nsIntRegion* aNewBackValidRegion,
-       OptionalThebesBuffer* aReadOnlyFront, nsIntRegion* aFrontUpdatedRegion);
+  virtual void SwapTexture(const TextureIdentifier& aTextureIdentifier,
+                           const ThebesBuffer& aNewFront,
+                           const nsIntRegion& aUpdatedRegion,
+                           OptionalThebesBuffer* aNewBack,
+                           nsIntRegion* aNewBackValidRegion,
+                           OptionalThebesBuffer* aReadOnlyFront,
+                           nsIntRegion* aFrontUpdatedRegion);
+                           
   virtual void DestroyFrontBuffer();
 
   virtual void Disconnect();
@@ -84,14 +88,16 @@ public:
                            Surface* aPreviousSurface = nullptr);
   virtual void CleanupResources();
 
+  virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost);
+
   //TODO[nrc] this should be the behaviour of the default implementation
   // but that requires having mBuffer/mImageHost in ShadowLayer
   virtual void SetAllocator(ISurfaceDeAllocator* aAllocator);
 
 private:
-  void EnsureBuffer(const ThebesBuffer& aNewFront);
+  void EnsureBuffer(ImageHostType aHostType);
 
-  nsRefPtr<ThebesBufferHost> mBuffer;
+  nsRefPtr<AContentHost> mBuffer;
   nsIntRegion mValidRegionForNextBackBuffer;
 };
 

@@ -85,6 +85,16 @@ public:
   Swap(const ThebesBuffer& aNewFront, const nsIntRegion& aUpdatedRegion,
        OptionalThebesBuffer* aNewBack, nsIntRegion* aNewBackValidRegion,
        OptionalThebesBuffer* aReadOnlyFront, nsIntRegion* aFrontUpdatedRegion);
+
+  virtual void
+  SwapTexture(const TextureIdentifier& aTextureIdentifier,
+              const ThebesBuffer& aNewFront, const nsIntRegion& aUpdatedRegion,
+              OptionalThebesBuffer* aNewBack, nsIntRegion* aNewBackValidRegion,
+              OptionalThebesBuffer* aReadOnlyFront, nsIntRegion* aFrontUpdatedRegion)
+  {
+    NS_ERROR("Not implemented");
+  }
+
   virtual void DestroyFrontBuffer();
 
   virtual void Disconnect();

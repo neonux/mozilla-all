@@ -262,9 +262,9 @@ private:
   ImageHostType GetImageClientType()
   {
     if (mGLContext) {
-      return IMAGE_SHARED_WITH_BUFFER;
+      return IMAGE_SHARED;
     }
-    return IMAGE_SHMEM;
+    return IMAGE_TEXTURE;
   }
 
   bool mBufferIsOpaque;
@@ -297,13 +297,11 @@ BasicShadowableCanvasLayer::Paint(gfxContext* aContext, Layer* aMaskLayer)
   }
 
   if (!mCanvasClient) {
-    //TODO[nrc] canvas flag hack :-(
-    TextureFlags flags = CanvasFlag;
+    TextureFlags flags = NoFlags;
     if (mNeedsYFlip) {
       flags |= NeedsYFlip;
     }
-    RefPtr<ImageClient> imageClient = BasicManager()->CreateImageClientFor(GetImageClientType(), this, flags);
-    mCanvasClient = static_cast<CanvasClient*>(imageClient.get());
+    mCanvasClient = BasicManager()->CreateCanvasClientFor(GetImageClientType(), this, flags);
 
     if (!mCanvasClient) {
       return;
@@ -314,7 +312,7 @@ BasicShadowableCanvasLayer::Paint(gfxContext* aContext, Layer* aMaskLayer)
   FireDidTransactionCallback();
 
   BasicManager()->PaintedImage(BasicManager()->Hold(this),
-                               mCanvasClient);
+                               mCanvasClient->GetAsSharedImage());
 }
 
 class BasicShadowCanvasLayer : public ShadowCanvasLayer,

@@ -47,7 +47,7 @@ public:
   virtual TextureHostIdentifier GetTextureHostIdentifier() MOZ_OVERRIDE
   {
     TextureHostIdentifier result;
-    result.mType = HOST_GL;
+    result.mParentBackend = LAYERS_OPENGL;
     result.mMaxTextureSize = mGLContext->GetMaxTextureSize();
     return result;
   }

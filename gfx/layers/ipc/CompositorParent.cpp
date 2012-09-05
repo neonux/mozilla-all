@@ -750,7 +750,6 @@ CompositorParent::ShadowLayersUpdated(ShadowLayersParent* aLayerTree,
 PLayersParent*
 CompositorParent::AllocPLayers(const LayersBackend& aBackendHint,
                                const uint64_t& aId,
-                               LayersBackend* aBackend,
                                TextureHostIdentifier* aTextureHostIdentifier)
 {
   MOZ_ASSERT(aId == 0);
@@ -761,8 +760,6 @@ CompositorParent::AllocPLayers(const LayersBackend& aBackendHint,
   mWidget->GetBounds(rect);
   mWidgetSize.width = rect.width;
   mWidgetSize.height = rect.height;
-
-  *aBackend = aBackendHint;
 
   if (aBackendHint == mozilla::layers::LAYERS_OPENGL) {
     nsRefPtr<LayerManagerOGL> layerManager;
@@ -934,7 +931,6 @@ public:
 
   virtual PLayersParent* AllocPLayers(const LayersBackend& aBackendType,
                                       const uint64_t& aId,
-                                      LayersBackend* aBackend,
                                       TextureHostIdentifier* aTextureHostIdentifier) MOZ_OVERRIDE;
   virtual bool DeallocPLayers(PLayersParent* aLayers) MOZ_OVERRIDE;
 
@@ -1018,13 +1014,11 @@ CrossProcessCompositorParent::ActorDestroy(ActorDestroyReason aWhy)
 PLayersParent*
 CrossProcessCompositorParent::AllocPLayers(const LayersBackend& aBackendType,
                                            const uint64_t& aId,
-                                           LayersBackend* aBackend,
                                            TextureHostIdentifier* aTextureHostIdentifier)
 {
   MOZ_ASSERT(aId != 0);
 
   nsRefPtr<LayerManager> lm = sCurrentCompositor->GetLayerManager();
-  *aBackend = lm->GetBackendType();
   *aTextureHostIdentifier = lm->GetTextureHostIdentifier();
   return new ShadowLayersParent(lm->AsShadowManager(), this, aId);
 }

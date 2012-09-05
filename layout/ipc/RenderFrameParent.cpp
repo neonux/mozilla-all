@@ -489,7 +489,6 @@ private:
 
 RenderFrameParent::RenderFrameParent(nsFrameLoader* aFrameLoader,
                                      ScrollingBehavior aScrollingBehavior,
-                                     LayersBackend* aBackendType,
                                      TextureHostIdentifier* aTextureHostIdentifier,
                                      uint64_t* aId)
   : mLayersId(0)
@@ -500,11 +499,9 @@ RenderFrameParent::RenderFrameParent(nsFrameLoader* aFrameLoader,
   mContentViews[FrameMetrics::ROOT_SCROLL_ID] =
     new nsContentView(aFrameLoader, FrameMetrics::ROOT_SCROLL_ID);
 
-  *aBackendType = mozilla::layers::LAYERS_NONE;
   *aId = 0;
 
   nsRefPtr<LayerManager> lm = GetFrom(mFrameLoader);
-  *aBackendType = lm->GetBackendType();
   *aTextureHostIdentifier = lm->GetTextureHostIdentifier();
 
   if (CompositorParent::CompositorLoop()) {

@@ -17,8 +17,7 @@ CanvasClientTexture::CanvasClientTexture(ShadowLayerForwarder* aLayerForwarder,
                                          ShadowableLayer* aLayer,
                                          TextureFlags aFlags)
 {
-  mTextureClient = static_cast<TextureClientShmem*>(
-    aLayerForwarder->CreateTextureClientFor(IMAGE_TEXTURE, IMAGE_TEXTURE, aLayer, aFlags, true).drop());
+  mTextureClient = aLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, IMAGE_TEXTURE, aLayer, aFlags, true);
 }
 
 void
@@ -34,54 +33,43 @@ CanvasClientTexture::Update(gfx::IntSize aSize, BasicCanvasLayer* aLayer)
                                               : gfxASurface::CONTENT_COLOR_ALPHA;
   mTextureClient->EnsureTextureClient(aSize, contentType);
 
-  gfxASurface* surface = mTextureClient->GetSurface();
+  gfxASurface* surface = mTextureClient->LockSurface();
   static_cast<BasicCanvasLayer*>(aLayer)->UpdateSurface(surface, nullptr);
   mTextureClient->Unlock();
 }
 
-SharedImage
-CanvasClientTexture::GetAsSharedImage()
-{
-  return SharedImage(mTextureClient->Descriptor());
-}
-
 void
-CanvasClientTexture::SetBuffer(const TextureIdentifier& aTextureIdentifier,
-                               const SharedImage& aBuffer)
+CanvasClient::SetBuffer(const TextureIdentifier& aTextureIdentifier,
+                        const SharedImage& aBuffer)
 {
-  SharedImage::Type type = aBuffer.type();
-
-  if (type != SharedImage::TSurfaceDescriptor) {
-    mTextureClient->Descriptor() = SurfaceDescriptor();
+  if (aBuffer.type() != SharedImage::TSurfaceDescriptor) {
+    mTextureClient->SetDescriptor(SurfaceDescriptor());
     return;
   }
 
-  mTextureClient->Descriptor() = aBuffer.get_SurfaceDescriptor();
+  mTextureClient->SetDescriptor(aBuffer.get_SurfaceDescriptor());
 }
 
 
 CanvasClientShared::CanvasClientShared(ShadowLayerForwarder* aLayerForwarder,
                                        ShadowableLayer* aLayer, 
                                        TextureFlags aFlags)
-  : mDescriptor(0)
 {
-  // we need to create a TextureHost, even though we don't use a texture client
-  aLayerForwarder->CreateTextureClientFor(IMAGE_SHARED, IMAGE_SHARED, aLayer, true, aFlags);
-}
-
-CanvasClientShared::~CanvasClientShared()
-{
-  SharedTextureDescriptor handle = mDescriptor.get_SharedTextureDescriptor();
-  if (mGL && handle.handle()) {
-    mGL->ReleaseSharedHandle(handle.shareType(), handle.handle());
-  }
+  mTextureClient = aLayerForwarder->CreateTextureClientFor(TEXTURE_SHARED_GL, IMAGE_SHARED, aLayer, true, aFlags);
 }
 
 void
 CanvasClientShared::Update(gfx::IntSize aSize, BasicCanvasLayer* aLayer)
 {
+  if (!mTextureClient) {
+    return;
+  }
+
   NS_ASSERTION(aLayer->mGLContext, "CanvasClientShared should only be used with GL canvases");
-  mGL = aLayer->mGLContext;
+
+  // the content type won't be used
+  mTextureClient->EnsureTextureClient(aSize, gfxASurface::CONTENT_COLOR);
+
   TextureImage::TextureShareType flags;
   // if process type is default, then it is single-process (non-e10s)
   if (XRE_GetProcessType() == GeckoProcessType_Default)
@@ -89,35 +77,14 @@ CanvasClientShared::Update(gfx::IntSize aSize, BasicCanvasLayer* aLayer)
   else
     flags = TextureImage::ProcessShared;
 
-  SharedTextureHandle handle = 0;
-  if (mDescriptor.type() == SurfaceDescriptor::TSharedTextureDescriptor) {
-    handle = mDescriptor.get_SharedTextureDescriptor().handle();
-  } else {
-    handle = mGL->CreateSharedHandle(flags);
-    if (!handle) {
-      return;
-    }
-    mDescriptor = SharedTextureDescriptor(flags, handle, nsIntSize(aSize.width, aSize.height), false);
+  SharedTextureHandle handle = mTextureClient->LockHandle(aLayer->mGLContext, flags);
+
+  if (handle) {
+    aLayer->mGLContext->MakeCurrent();
+    aLayer->mGLContext->UpdateSharedHandle(flags, handle);
   }
 
-  mGL->MakeCurrent();
-  mGL->UpdateSharedHandle(flags, handle);
-
-  // Move SharedTextureHandle ownership to ShadowLayer
-  mDescriptor = SurfaceDescriptor();
-}
-
-SharedImage
-CanvasClientShared::GetAsSharedImage()
-{
-  return SharedImage(mDescriptor);
-}
-
-void
-CanvasClientShared::SetBuffer(const TextureIdentifier& aTextureIdentifier,
-                              const SharedImage& aBuffer)
-{
-  mDescriptor = aBuffer.get_SurfaceDescriptor();
+  mTextureClient->Unlock();
 }
 
 }

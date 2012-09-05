@@ -84,7 +84,7 @@ ShadowLayerManager::OpenDescriptorForDirectTexturing(GLContext*,
 }
 
 /*static*/ bool
-ShadowLayerManager::DescriptorDoesDirectTexturing(const SurfaceDescriptor& aDescriptor)
+ShadowLayerManager::SupportsDirectTexturing()
 {
   return false;
 }

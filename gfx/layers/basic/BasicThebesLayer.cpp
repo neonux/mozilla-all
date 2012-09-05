@@ -247,7 +247,14 @@ BasicShadowableThebesLayer::PaintThebes(gfxContext* aContext,
       ->Paint(aContext, nullptr);
   }
 
-  AutoPaintClient autoPaint(AutoPaintClient); 
+  if (!mContentClient) {
+    mContentClient = BasicManager()->CreateContentClientFor(IMAGE_DIRECT, this, NoFlags);
+    if (!mContentClient) {
+      return;
+    }
+  }
+
+  AutoPaintClient autoPaint(mContentClient);
   BasicThebesLayer::PaintThebes(aContext, nullptr, aCallback, aCallbackData, aReadback);
 }
 
@@ -285,16 +292,6 @@ BasicShadowableThebesLayer::Disconnect()
   BasicShadowableLayer::Disconnect();
 }
 
-void
-BasicShadowableThebesLayer::EnsureClient()
-{
-  if (!mContentClient) {
-    //TODO[nrc] how to choose?
-    mContentClient = new ContentClientDirect(BasicManager());
-    mContentClient = new ContentClientTexture(BasicManager());
-  }
-}
-
 
 class BasicShadowThebesLayer : public ShadowThebesLayer, public BasicImplData {
 public:
@@ -327,6 +324,15 @@ public:
   Swap(const ThebesBuffer& aNewFront, const nsIntRegion& aUpdatedRegion,
        OptionalThebesBuffer* aNewBack, nsIntRegion* aNewBackValidRegion,
        OptionalThebesBuffer* aReadOnlyFront, nsIntRegion* aFrontUpdatedRegion);
+
+  virtual void
+  SwapTexture(const TextureIdentifier& aTextureIdentifier,
+              const ThebesBuffer& aNewFront, const nsIntRegion& aUpdatedRegion,
+              OptionalThebesBuffer* aNewBack, nsIntRegion* aNewBackValidRegion,
+              OptionalThebesBuffer* aReadOnlyFront, nsIntRegion* aFrontUpdatedRegion)
+  {
+    NS_ERROR("Not implemented");
+  }
 
   virtual void DestroyFrontBuffer()
   {

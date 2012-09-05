@@ -507,24 +507,22 @@ CompositorOGL::CreateTextureHost(const TextureIdentifier &aIdentifier,
 {
   RefPtr<TextureHost> result = nullptr;
   switch (aIdentifier.mTextureType) {
-  case IMAGE_SHARED:
+  case TEXTURE_SHARED:
     result = new TextureHostOGLShared(mGLContext);
     break;
-  case IMAGE_SHARED_WITH_BUFFER:
+  case TEXTURE_SHARED_GL:
     result = new TextureHostOGLSharedWithBuffer(mGLContext);
     break;
-  case IMAGE_SHMEM:
+  case TEXTURE_SHMEM:
     if (aIdentifier.mImageType == IMAGE_YUV) {
       result = new GLTextureAsTextureHost(mGLContext);
     } else {
       result = new TextureImageAsTextureHost(mGLContext);
     }
     break;
-  case IMAGE_BRIDGE:
+  case TEXTURE_BRIDGE:
     break;
-  case IMAGE_YUV:
-  case IMAGE_TEXTURE:
-  case IMAGE_UNKNOWN:
+  case TEXTURE_UNKNOWN:
   default:
     return nullptr;
   }

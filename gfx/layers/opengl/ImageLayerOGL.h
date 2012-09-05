@@ -191,7 +191,7 @@ public:
   virtual void CleanupResources();
 
 private:
-  void EnsureImageHost(const TextureIdentifier& aTextureIdentifier);
+  void EnsureImageHost(ImageHostType aHostType);
 
   // A ShadowImageLayer should use only one of the ImageHost
   // or ImageBridge mechanisms at one time

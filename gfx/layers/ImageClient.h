@@ -21,7 +21,6 @@ class ImageClient : public RefCounted<ImageClient>
 public:
   virtual ~ImageClient() {}
   //TODO[nrc] comments
-  virtual SharedImage GetAsSharedImage() = 0;
 
   // returns false if this is the wrong kind of ImageClient for aContainer
   // note returning true does not necessarily imply success
@@ -39,13 +38,12 @@ public:
                      TextureFlags aFlags);
   virtual ~ImageClientTexture();
 
-  virtual SharedImage GetAsSharedImage();
   virtual bool UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer);
   virtual void SetBuffer(const TextureIdentifier& aTextureIdentifier,
                          const SharedImage& aBuffer);
 
 private:
-  RefPtr<TextureClientShmem> mTextureClient;
+  RefPtr<TextureClient> mTextureClient;
 };
 
 class ImageClientShared : public ImageClient
@@ -56,14 +54,13 @@ public:
                     TextureFlags aFlags);
   virtual ~ImageClientShared();
 
-  virtual SharedImage GetAsSharedImage();
   virtual bool UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer);
 
   virtual void SetBuffer(const TextureIdentifier& aTextureIdentifier,
                          const SharedImage& aBuffer) {}
 
 private:
-  SurfaceDescriptor mDescriptor;
+  RefPtr<TextureClient> mTextureClient;
 };
 
 class ImageClientYUV : public ImageClient
@@ -74,7 +71,6 @@ public:
                  TextureFlags aFlags);
   virtual ~ImageClientYUV();
 
-  virtual SharedImage GetAsSharedImage();
   virtual bool UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer);
   virtual void SetBuffer(const TextureIdentifier& aTextureIdentifier,
                          const SharedImage& aBuffer);

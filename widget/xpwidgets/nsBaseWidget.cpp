@@ -882,9 +882,8 @@ void nsBaseWidget::CreateCompositor()
   PLayersChild* shadowManager;
   mozilla::layers::LayersBackend backendHint =
     mUseAcceleratedRendering ? mozilla::layers::LAYERS_OPENGL : mozilla::layers::LAYERS_BASIC;
-  mozilla::layers::LayersBackend parentBackend;
   shadowManager = mCompositorChild->SendPLayersConstructor(
-    backendHint, 0, &parentBackend, &textureHostIdentifier);
+    backendHint, 0, &textureHostIdentifier);
 
   if (shadowManager) {
     ShadowLayerForwarder* lf = lm->AsShadowForwarder();
@@ -894,7 +893,6 @@ void nsBaseWidget::CreateCompositor()
       return;
     }
     lf->SetShadowManager(shadowManager);
-    lf->SetParentBackendType(parentBackend);
     lf->IdentifyTextureHost(textureHostIdentifier);
 
     mLayerManager = lm;

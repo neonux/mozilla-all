@@ -183,9 +183,9 @@ ShadowLayerManager::OpenDescriptorForDirectTexturing(GLContext* aGL,
 }
 
 /*static*/ bool
-ShadowLayerManager::DescriptorDoesDirectTexturing(const SurfaceDescriptor& aDescriptor)
+ShadowLayerManager::SupportsDirectTexturing()
 {
-  return SurfaceDescriptor::TSurfaceDescriptorGralloc == aDescriptor.type();
+  return true;
 }
 
 /*static*/ void

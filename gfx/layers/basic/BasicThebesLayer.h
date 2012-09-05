@@ -173,9 +173,6 @@ private:
               LayerManager::DrawThebesLayerCallback aCallback,
               void* aCallbackData) MOZ_OVERRIDE;
 
-
-  void EnsureClient();
-
   void DestroyBackBuffer()
   {
     mContentClient = nullptr;
