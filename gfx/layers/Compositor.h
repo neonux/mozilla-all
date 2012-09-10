@@ -14,8 +14,6 @@
 #include "nsRegion.h"
 #include "LayersTypes.h"
 
-//TODO[nrc] can we break up this header file into host and client parts?
-
 class gfxContext;
 class gfxASurface;
 class nsIWidget;
@@ -46,7 +44,6 @@ enum TextureFormat
 };
 
 
-//TODO[nrc] update E:\Firefox\gfx\ipc\glue\IPCMessageUtils.h
 enum BufferType
 {
   BUFFER_UNKNOWN,
@@ -78,9 +75,9 @@ const TextureFlags AllowRepeat        = 0x10;
 
 //TODO[nrc] comment
 // goes Compositor to ShadowLayerForwarder on LayerManager init
+  //TODO[nrc] add BufferType, use it
 struct TextureHostIdentifier
 {
-  //TODO[nrc] add BufferType, use it
   LayersBackend mParentBackend;
   PRInt32 mMaxTextureSize;
 };
@@ -94,11 +91,6 @@ struct TextureIdentifier
   PRUint32 mDescriptor;
 };
 
-/*static bool operator==(const TextureHostIdentifier& aLeft,const TextureHostIdentifier& aRight)
-{
-  return aLeft.mType == aRight.mType &&
-         aLeft.mMaxTextureSize == aRight.mMaxTextureSize;
-}*/
 static bool operator==(const TextureIdentifier& aLeft, const TextureIdentifier& aRight)
 {
   return aLeft.mBufferType == aRight.mBufferType &&
@@ -119,6 +111,7 @@ public:
   virtual ~Texture() {}
 };
 
+//TODO[nrc]
 class TileIterator
 {
 public:
@@ -132,6 +125,7 @@ class TextureHost : public RefCounted<TextureHost>
 {
 public:
   TextureHost() : mFlags(NoFlags) {}
+  virtual ~TextureHost() {}
   /* This will return an identifier that can be sent accross a process or
    * thread boundary and used to construct a DrawableTextureClient object
    * which can then be used for rendering. If the process is identical to the
@@ -448,6 +442,7 @@ public:
   virtual ~Compositor() {}
 };
 
+
 class TextureClient;
 class ImageClient;
 class CanvasClient;
@@ -459,7 +454,6 @@ class CompositingFactory
 {
 public:
   // TODO[nrc] comment
-  // TODO[nrc] enums shouldn't be const &
   static TemporaryRef<ImageClient> CreateImageClient(LayersBackend aBackendType,
                                                      BufferType aImageHostType,
                                                      ShadowLayerForwarder* aLayerForwarder,
@@ -481,10 +475,9 @@ public:
                                                          ShadowLayerForwarder* aLayerForwarder,
                                                          bool aStrict = false);
 
-  static TemporaryRef<Compositor> CreateCompositorForWidget(nsIWidget *aWidget);
   static BufferType TypeForImage(Image* aImage);
+  static TemporaryRef<Compositor> CreateCompositorForWidget(nsIWidget *aWidget);
 };
-
 
 }
 }

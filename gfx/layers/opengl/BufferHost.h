@@ -14,6 +14,8 @@ namespace layers {
 class BufferHost : public RefCounted<BufferHost>
 {
 public:
+  virtual ~BufferHost() {}
+
   virtual BufferType GetType() = 0;
 
   virtual void Composite(EffectChain& aEffectChain,

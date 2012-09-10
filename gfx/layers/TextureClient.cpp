@@ -21,6 +21,13 @@ TextureClient::Updated(ShadowableLayer* aLayer)
 }
 
 void
+TextureClient::Destroyed(ShadowableLayer* aLayer)
+{
+  mLayerForwarder->DestroyedThebesBuffer(aLayer,
+                                         mDescriptor);
+}
+
+void
 TextureClient::UpdatedRegion(ShadowableLayer* aLayer,
                              const nsIntRegion& aUpdatedRegion,
                              const nsIntRect& aBufferRect,
@@ -45,10 +52,6 @@ TextureClientShmem::TextureClientShmem(ShadowLayerForwarder* aLayerForwarder, Bu
 
 TextureClientShmem::~TextureClientShmem()
 {
-  //TODO[nrc] do I need to tell the host I've died?
-  //yes
-  //mLayerForwarder->DestroyedThebesBuffer(mLayerForwarder->Hold(this),
-  //                                mBackBuffer);
   if (mSurface) {
     mSurface = nullptr;
     ShadowLayerForwarder::CloseDescriptor(mDescriptor);

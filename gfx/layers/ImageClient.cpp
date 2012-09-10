@@ -19,11 +19,6 @@ ImageClientTexture::ImageClientTexture(ShadowLayerForwarder* aLayerForwarder,
   mTextureClient = aLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, BUFFER_TEXTURE, aLayer, aFlags, true);
 }
 
-ImageClientTexture::~ImageClientTexture()
-{
-  //TODO[nrc] do I need to tell the host I've died?
-}
-
 bool
 ImageClientTexture::UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer)
 {
@@ -100,11 +95,6 @@ ImageClientShared::ImageClientShared(ShadowLayerForwarder* aLayerForwarder,
   mTextureClient = aLayerForwarder->CreateTextureClientFor(TEXTURE_SHARED, BUFFER_SHARED, aLayer, true, aFlags);
 }
 
-ImageClientShared::~ImageClientShared()
-{
-  //TODO[nrc] do I need to tell the host I've died?
-}
-
 bool
 ImageClientShared::UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer)
 {
@@ -146,11 +136,6 @@ ImageClientYUV::ImageClientYUV(ShadowLayerForwarder* aLayerForwarder,
   mTextureClientV = static_cast<TextureClientShmem*>(
     aLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, BUFFER_YUV, aLayer, true, aFlags).drop());
   mTextureClientV->SetDescriptor(2);
-}
-
-ImageClientYUV::~ImageClientYUV()
-{
-  //TODO[nrc] do I need to tell the host I've died?
 }
 
 bool

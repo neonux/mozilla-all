@@ -63,7 +63,8 @@ public:
   virtual SharedTextureHandle LockHandle(GLContext* aGL, TextureImage::TextureShareType aFlags) { return 0; }
   virtual void EnsureTextureClient(gfx::IntSize aSize, gfxASurface::gfxContentType aType) = 0;
 
-  /* This unlocks the current DrawableTexture and allows the host to composite
+  /**
+   * This unlocks the current DrawableTexture and allows the host to composite
    * it directly.
    */
   virtual void Unlock() {}
@@ -78,6 +79,7 @@ public:
                              const nsIntRegion& aUpdatedRegion,
                              const nsIntRect& aBufferRect,
                              const nsIntPoint& aBufferRotation);
+  virtual void Destroyed(ShadowableLayer* aLayer);
 
 protected:
   TextureClient(ShadowLayerForwarder* aLayerForwarder, BufferType aBufferType)

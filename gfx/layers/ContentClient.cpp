@@ -68,6 +68,11 @@ ContentClientRemote::CreateBuffer(ContentType aType,
   mIsNewBuffer = true;
 
   mOldTextures.AppendElement(mTextureClient);
+
+  if (mTextureClient) {
+    mTextureClient->Destroyed(mLayer);
+  }
+
   mTextureClient = static_cast<TextureClientShmem*>(
     mLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, GetType(),
                                             mLayer, AllowRepeat, true).drop());
