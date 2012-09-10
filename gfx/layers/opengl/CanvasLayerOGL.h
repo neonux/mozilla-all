@@ -9,6 +9,7 @@
 
 #include "LayerManagerOGL.h"
 #include "gfxASurface.h"
+//#include "ImageHost.h"
 #if defined(MOZ_WIDGET_GTK2) && !defined(MOZ_PLATFORM_MAEMO)
 #include "GLXLibrary.h"
 #include "mozilla/X11Util.h"
@@ -16,6 +17,8 @@
 
 namespace mozilla {
 namespace layers {
+
+class ImageHost;
 
 class THEBES_API CanvasLayerOGL :
   public CanvasLayer,
@@ -98,7 +101,7 @@ class ShadowCanvasLayerOGL : public ShadowCanvasLayer,
 
 public:
   ShadowCanvasLayerOGL(LayerManagerOGL* aManager);
-  virtual ~ShadowCanvasLayerOGL() {}
+  virtual ~ShadowCanvasLayerOGL();
 
   // CanvasLayer impl
   virtual void Initialize(const Data& aData)
@@ -108,6 +111,8 @@ public:
 
   // This isn't meaningful for shadow canvas.
   virtual void Updated(const nsIntRect&) {}
+
+  virtual void SetAllocator(ISurfaceDeAllocator* aAllocator) {}
 
   // ShadowCanvasLayer impl
   virtual void Swap(const SharedImage& aNewFront,
@@ -135,10 +140,10 @@ public:
                            const nsIntRect& aClipRect,
                            Surface* aPreviousSurface = nullptr);
 
-  virtual void CleanupResources() { mImageHost = nullptr; }
+  virtual void CleanupResources();
 
 private:
-  void EnsureImageHost(ImageHostType aHostType);
+  void EnsureImageHost(BufferType aHostType);
 
   RefPtr<ImageHost> mImageHost;
 };

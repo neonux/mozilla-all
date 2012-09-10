@@ -197,9 +197,6 @@ public:
                            const nsIntRect& aBufferRect,
                            const nsIntPoint& aBufferRotation,
                            const SurfaceDescriptor& aNewFrontBuffer);
-  void PaintedThebesBuffer(ShadowableLayer* aThebes,
-                           ContentClientRemote* aContentClient,
-                           const nsIntRegion& aUpdatedRegion);
 
   /**
    * Notify the compositor that a tiled layer buffer has changed
@@ -218,12 +215,20 @@ public:
   //TODO[nrc] remove this one if not used
   void PaintedImage(ShadowableLayer* aImage,
                     const SharedImage& aNewFrontImage);
-  void PaintedImage(ShadowableLayer* aImage,
-                    ImageClient* aImageClient);
 
-  //TODO[nrc]
-  void UpdateTexture(ShadowableLayer* aLayer
-                     TextureClient aTextureClient);
+  //TODO[nrc] comment
+  void UpdateTexture(ShadowableLayer* aLayer,
+                     TextureIdentifier aIdentifier,
+                     const SharedImage& aImage);
+  //TODO[nrc] comment
+  void UpdateTextureRegion(ShadowableLayer* aThebes,
+                           TextureIdentifier aIdentifier,
+                           const ThebesBuffer& aThebesBuffer,
+                           const nsIntRegion& aUpdatedRegion);
+
+  //TODO[nrc] comment
+  void UpdatePictureRect(ShadowableLayer* aLayer,
+                         const nsIntRect& aRect);
 
   /**
    * End the current transaction and forward it to ShadowLayerManager.
@@ -329,17 +334,17 @@ public:
 
   //TODO[nrc] comment
   TemporaryRef<TextureClient> CreateTextureClientFor(const TextureHostType& aTextureHostType,
-                                                     const ImageHostType& aImageHostType,
+                                                     const BufferType& aBufferType,
                                                      ShadowableLayer* aLayer,
                                                      TextureFlags aFlags,
                                                      bool aStrict = false);
-  TemporaryRef<ImageClient> CreateImageClientFor(const ImageHostType& aImageHostType,
+  TemporaryRef<ImageClient> CreateImageClientFor(const BufferType& aBufferType,
                                                  ShadowableLayer* aLayer,
                                                  TextureFlags aFlags);
-  TemporaryRef<CanvasClient> CreateCanvasClientFor(const ImageHostType& aImageHostType,
+  TemporaryRef<CanvasClient> CreateCanvasClientFor(const BufferType& aBufferType,
                                                    ShadowableLayer* aLayer,
                                                    TextureFlags aFlags);
-  TemporaryRef<ContentClient> CreateContentClientFor(const ImageHostType& aImageHostType,
+  TemporaryRef<ContentClient> CreateContentClientFor(const BufferType& aBufferType,
                                                      ShadowableLayer* aLayer,
                                                      TextureFlags aFlags);
 
@@ -536,6 +541,9 @@ public:
    * We should be able to set allocator right before swap call
    * that is why allowed multiple call with the same Allocator
    */
+  // XXX this is only used by non-Compositor ShadowLayers, Compositor ShadowLayers
+  // should override it and pass aAllocator to their image host
+  // remove when we move to Compositor everywhere
   virtual void SetAllocator(ISurfaceDeAllocator* aAllocator)
   {
     NS_ASSERTION(!mAllocator || mAllocator == aAllocator, "Stomping allocator?");
@@ -626,7 +634,11 @@ public:
   SwapTexture(const TextureIdentifier& aTextureIdentifier,
               const ThebesBuffer& aNewFront, const nsIntRegion& aUpdatedRegion,
               OptionalThebesBuffer* aNewBack, nsIntRegion* aNewBackValidRegion,
-              OptionalThebesBuffer* aReadOnlyFront, nsIntRegion* aFrontUpdatedRegion) = 0;
+              OptionalThebesBuffer* aReadOnlyFront, nsIntRegion* aFrontUpdatedRegion);
+  virtual void
+  Swap(const ThebesBuffer& aNewFront, const nsIntRegion& aUpdatedRegion,
+       OptionalThebesBuffer* aNewBack, nsIntRegion* aNewBackValidRegion,
+       OptionalThebesBuffer* aReadOnlyFront, nsIntRegion* aFrontUpdatedRegion) = 0;
 
   /**
    * CONSTRUCTION PHASE ONLY
@@ -698,6 +710,8 @@ public:
                     SharedImage* aNewBack) = 0;
 
   virtual ShadowLayer* AsShadowLayer() { return this; }
+
+  virtual void SetPictureRect(const nsIntRect& aPictureRect) {}
 
   MOZ_LAYER_DECL_NAME("ShadowImageLayer", TYPE_SHADOW)
 

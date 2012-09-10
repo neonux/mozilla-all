@@ -119,7 +119,6 @@ struct OpPaintTiledLayerBuffer {
   uintptr_t tiledLayerBuffer;
 };
 
-//TODO[nrc] remove
 struct OpPaintCanvas  {
   PLayer layer;
   SharedImage newFrontBuffer;
@@ -137,6 +136,17 @@ struct OpPaintTexture {
   SharedImage image;
 };
 
+struct OpPaintTextureRegion {
+  PLayer layer;
+  TextureIdentifier textureIdentifier;
+  ThebesBuffer newFrontBuffer;
+  nsIntRegion updatedRegion;
+};
+
+struct OpUpdatePictureRect {
+  PLayer layer;
+  nsIntRect picture;
+};
 
 // A unit of a changeset; a set of these comprise a changeset
 union Edit {
@@ -161,6 +171,8 @@ union Edit {
   OpPaintCanvas;
   OpPaintImage;
   OpPaintTexture;
+  OpPaintTextureRegion;
+  OpUpdatePictureRect;
 };
 
 

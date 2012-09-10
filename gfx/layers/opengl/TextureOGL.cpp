@@ -9,6 +9,58 @@
 namespace mozilla {
 namespace layers {
 
+static PRUint32
+DataOffset(PRUint32 aStride, PRUint32 aPixelSize, const nsIntPoint &aPoint)
+{
+  unsigned int data = aPoint.y * aStride;
+  data += aPoint.x * aPixelSize;
+  return data;
+}
+
+void
+TextureOGL::UpdateTexture(PRInt8 *aData, PRUint32 aStride)
+{
+  mGL->fBindTexture(LOCAL_GL_TEXTURE_2D, mTextureHandle);
+  mGL->TexImage2D(LOCAL_GL_TEXTURE_2D, 0, mInternalFormat,
+                  mSize.width, mSize.height, aStride, mPixelSize,
+                  0, mFormat, mType, aData);
+}
+
+void
+TextureOGL::UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride)
+{
+  mGL->fBindTexture(LOCAL_GL_TEXTURE_2D, mTextureHandle);
+  if (!mGL->CanUploadSubTextures() ||
+      (aRegion.IsEqual(nsIntRect(0, 0, mSize.width, mSize.height)))) {
+    mGL->TexImage2D(LOCAL_GL_TEXTURE_2D, 0, mInternalFormat,
+                    mSize.width, mSize.height, aStride, mPixelSize,
+                    0, mFormat, mType, aData);
+  } else {
+    nsIntRegionRectIterator iter(aRegion);
+    const nsIntRect *iterRect;
+
+    nsIntPoint topLeft = aRegion.GetBounds().TopLeft();
+
+    while ((iterRect = iter.Next())) {
+      // The inital data pointer is at the top left point of the region's
+      // bounding rectangle. We need to find the offset of this rect
+      // within the region and adjust the data pointer accordingly.
+      PRInt8 *rectData = aData + DataOffset(aStride, mPixelSize, iterRect->TopLeft() - topLeft);
+      mGL->TexSubImage2D(LOCAL_GL_TEXTURE_2D,
+                         0,
+                         iterRect->x,
+                         iterRect->y,
+                         iterRect->width,
+                         iterRect->height,
+                         aStride,
+                         mPixelSize,
+                         mFormat,
+                         mType,
+                         rectData);
+    }
+  }
+}
+
 static void
 MakeTextureIfNeeded(GLContext* gl, GLuint& aTexture)
 {
@@ -65,8 +117,9 @@ TextureImageAsTextureHost::Update(const SharedImage& aImage)
       mTexImage->GetContentType() != surf.ContentType()) {
     mTexImage = mGL->CreateTextureImage(size,
                                         surf.ContentType(),
-                                        WrapMode(mGL, false), //TODO[nrc] probably need to find where AllowRepeat comes from - Image no, Thebes yes
+                                        WrapMode(mGL, mFlags & AllowRepeat),
                                         FlagsToGLFlags(mFlags));
+    mSize = gfx::IntSize(size.width, size.height);
   }
 
   // XXX this is always just ridiculously slow
@@ -84,27 +137,12 @@ TextureImageAsTextureHost::Update(gfxASurface* aSurface, nsIntRegion& aRegion)
       mTexImage->GetContentType() != aSurface->GetContentType()) {
     mTexImage = mGL->CreateTextureImage(aSurface->GetSize(),
                                         aSurface->GetContentType(),
-                                        WrapMode(mGL, true), //TODO[nrc] AllowRepeat
+                                        WrapMode(mGL, mFlags & AllowRepeat),
                                         FlagsToGLFlags(mFlags));
+    mSize = gfx::IntSize(mTexImage->mSize.width, mTexImage->mSize.height);
   }
 
   mTexImage->DirectUpdate(aSurface, aRegion);
-}
-
-bool
-TextureImageAsTextureHost::UpdateDirect(const SurfaceDescriptor& aBuffer)
-{
-  nsRefPtr<TextureImage> texImage =
-      ShadowLayerManager::OpenDescriptorForDirectTexturing(
-        mGL, aBuffer, WrapMode(mGL, true)); //TODO[nrc] AllowRepeat
-
-  if (!texImage) {
-    NS_WARNING("Could not create texture for direct texturing");
-    return false;
-  }
-
-  mTexImage = texImage;
-  return true;
 }
 
 Effect*
@@ -123,58 +161,52 @@ TextureImageAsTextureHost::Lock(const gfx::Filter& aFilter)
   }
 }
 
-
-ImageHostTexture::ImageHostTexture(Compositor* aCompositor)
-  : mTextureHost(nullptr)
-  , mCompositor(aCompositor)
+TextureImageAsTextureHostWithBuffer::~TextureImageAsTextureHostWithBuffer()
 {
-}
-
-const SharedImage*
-ImageHostTexture::UpdateImage(const TextureIdentifier& aTextureIdentifier,
-                              const SharedImage& aImage)
-{
-  return mTextureHost->Update(aImage);
-}
-
-void
-ImageHostTexture::Composite(EffectChain& aEffectChain,
-                            float aOpacity,
-                            const gfx::Matrix4x4& aTransform,
-                            const gfx::Point& aOffset,
-                            const gfx::Filter& aFilter,
-                            const gfx::Rect& aClipRect,
-                            const nsIntRegion* aVisibleRegion)
-{
-  //TODO[nrc] surely we don't need to set the filter twice?
-  if (Effect* effect = mTextureHost->Lock(aFilter)) {
-    aEffectChain.mEffects[effect->mType] = effect;
-  } else {
-    return;
+  if (IsSurfaceDescriptorValid(mBufferDescriptor)) {
+    mDeAllocator->DestroySharedSurface(&mBufferDescriptor);
   }
-  mTextureHost->SetFilter(aFilter);
-  mTextureHost->BeginTileIteration();
-
-  do {
-    nsIntRect tileRect = mTextureHost->GetTileRect();
-    mTextureHost->SetSize(gfx::IntSize(tileRect.width, tileRect.height));
-    gfx::Rect rect(tileRect.x, tileRect.y, tileRect.width, tileRect.height);
-    gfx::Rect sourceRect(0, 0, tileRect.width, tileRect.height);
-    mCompositor->DrawQuad(rect, &sourceRect, &aClipRect, aEffectChain,
-                          aOpacity, aTransform, aOffset);
-  } while (mTextureHost->NextTile());
-
-  mTextureHost->Unlock();
 }
 
-void
-ImageHostTexture::AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
+bool
+TextureImageAsTextureHostWithBuffer::Update(const SurfaceDescriptor& aNewBuffer,
+                                            SurfaceDescriptor* aOldBuffer)
 {
-  NS_ASSERTION(aTextureIdentifier.mImageType == IMAGE_TEXTURE &&
-               aTextureIdentifier.mTextureType == TEXTURE_SHMEM,
-               "ImageHostType mismatch.");
-  mTextureHost = static_cast<TextureImageAsTextureHost*>(aTextureHost);
+  *aOldBuffer = mBufferDescriptor;
+  mBufferDescriptor = aNewBuffer;
+
+  if (!IsSurfaceDescriptorValid(mBufferDescriptor)) {
+    return false;
+  }
+
+  nsRefPtr<TextureImage> texImage =
+      ShadowLayerManager::OpenDescriptorForDirectTexturing(
+        mGL, mBufferDescriptor, WrapMode(mGL, mFlags & AllowRepeat));
+
+  if (!texImage) {
+    NS_WARNING("Could not create texture for direct texturing");
+    return false;
+  }
+
+  mTexImage = texImage;
+  return true;
 }
+
+bool
+TextureImageAsTextureHostWithBuffer::EnsureBuffer(nsIntSize aSize)
+{
+  AutoOpenSurface surf(OPEN_READ_ONLY, mBufferDescriptor);
+  if (surf.Size() != aSize) {
+    mTexImage = nullptr;
+    if (IsSurfaceDescriptorValid(mBufferDescriptor)) {
+      mDeAllocator->DestroySharedSurface(&mBufferDescriptor);
+    }
+    return true;
+  }
+
+  return false;
+}
+
 
 
 const SharedImage*
@@ -210,7 +242,6 @@ TextureHostOGLShared::Lock(const gfx::Filter& aFilter)
     return nullptr;
   }
 
-  //TODO[nrc] can we do this in update instead of here?
   MakeTextureIfNeeded(mGL, mTextureHandle);
 
   mGL->fBindTexture(handleDetails.mTarget, mTextureHandle);
@@ -280,7 +311,6 @@ TextureHostOGLSharedWithBuffer::Lock(const gfx::Filter& aFilter)
     return nullptr;
   }
 
-  //TODO[nrc] can we do this in update instead of here?
   MakeTextureIfNeeded(mGL, mTextureHandle);
 
   mGL->fActiveTexture(LOCAL_GL_TEXTURE0);
@@ -311,102 +341,6 @@ TextureHostOGLSharedWithBuffer::Unlock()
   mGL->fBindTexture(LOCAL_GL_TEXTURE_2D, 0);
 }
 
-
-ImageHostShared::ImageHostShared(Compositor* aCompositor)
-  : mTextureHost(nullptr)
-  , mCompositor(aCompositor)
-{
-}
-
-const SharedImage*
-ImageHostShared::UpdateImage(const TextureIdentifier& aTextureIdentifier,
-                             const SharedImage& aImage)
-{
-  return mTextureHost->Update(aImage);
-}
-
-void
-ImageHostShared::Composite(EffectChain& aEffectChain,
-                           float aOpacity,
-                           const gfx::Matrix4x4& aTransform,
-                           const gfx::Point& aOffset,
-                           const gfx::Filter& aFilter,
-                           const gfx::Rect& aClipRect,
-                           const nsIntRegion* aVisibleRegion)
-{
-  if (Effect* effect = mTextureHost->Lock(aFilter)) {
-    aEffectChain.mEffects[effect->mType] = effect;
-  } else {
-    return;
-  }
-
-  gfx::Rect rect(0, 0, mTextureHost->GetSize().width, mTextureHost->GetSize().height);
-  mCompositor->DrawQuad(rect, nullptr, &aClipRect, aEffectChain,
-                        aOpacity, aTransform, aOffset);
-
-  mTextureHost->Unlock();
-}
-
-void
-ImageHostShared::AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
-{
-  NS_ASSERTION(aTextureIdentifier.mImageType == IMAGE_SHARED &&
-               aTextureIdentifier.mTextureType == TEXTURE_SHARED,
-               "ImageHostType mismatch.");
-  mTextureHost = static_cast<TextureHostOGLShared*>(aTextureHost);
-}
-
-static PRUint32
-DataOffset(PRUint32 aStride, PRUint32 aPixelSize, const nsIntPoint &aPoint)
-{
-  unsigned int data = aPoint.y * aStride;
-  data += aPoint.x * aPixelSize;
-  return data;
-}
-
-void
-TextureOGL::UpdateTexture(PRInt8 *aData, PRUint32 aStride)
-{
-  mGL->fBindTexture(LOCAL_GL_TEXTURE_2D, mTextureHandle);
-  mGL->TexImage2D(LOCAL_GL_TEXTURE_2D, 0, mInternalFormat,
-                  mSize.width, mSize.height, aStride, mPixelSize,
-                  0, mFormat, mType, aData);
-}
-
-void
-TextureOGL::UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride)
-{
-  mGL->fBindTexture(LOCAL_GL_TEXTURE_2D, mTextureHandle);
-  if (!mGL->CanUploadSubTextures() ||
-      (aRegion.IsEqual(nsIntRect(0, 0, mSize.width, mSize.height)))) {
-    mGL->TexImage2D(LOCAL_GL_TEXTURE_2D, 0, mInternalFormat,
-                    mSize.width, mSize.height, aStride, mPixelSize,
-                    0, mFormat, mType, aData);
-  } else {
-    nsIntRegionRectIterator iter(aRegion);
-    const nsIntRect *iterRect;
-
-    nsIntPoint topLeft = aRegion.GetBounds().TopLeft();
-
-    while ((iterRect = iter.Next())) {
-      // The inital data pointer is at the top left point of the region's
-      // bounding rectangle. We need to find the offset of this rect
-      // within the region and adjust the data pointer accordingly.
-      PRInt8 *rectData = aData + DataOffset(aStride, mPixelSize, iterRect->TopLeft() - topLeft);
-      mGL->TexSubImage2D(LOCAL_GL_TEXTURE_2D,
-                         0,
-                         iterRect->x,
-                         iterRect->y,
-                         iterRect->width,
-                         iterRect->height,
-                         aStride,
-                         mPixelSize,
-                         mFormat,
-                         mType,
-                         rectData);
-    }
-  }
-}
 
 const SharedImage*
 GLTextureAsTextureHost::Update(const SharedImage& aImage)

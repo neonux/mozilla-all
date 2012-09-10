@@ -6,7 +6,7 @@
 #include "TextureClient.h"
 #include "ImageClient.h"
 #include "CanvasClient.h"
-#include "ThebesBufferClient.h"
+#include "ContentClient.h"
 #include "mozilla/layers/ShadowLayers.h"
 #include "SharedTextureImage.h"
 
@@ -14,9 +14,28 @@ namespace mozilla {
 namespace layers {
 
 
+void
+TextureClient::Updated(ShadowableLayer* aLayer)
+{
+  mLayerForwarder->UpdateTexture(aLayer, mIdentifier, SharedImage(mDescriptor));
+}
 
-TextureClientShmem::TextureClientShmem(ShadowLayerForwarder* aLayerForwarder, ImageHostType aImageType)
-  : TextureClient(aLayerForwarder, aImageType)
+void
+TextureClient::UpdatedRegion(ShadowableLayer* aLayer,
+                             const nsIntRegion& aUpdatedRegion,
+                             const nsIntRect& aBufferRect,
+                             const nsIntPoint& aBufferRotation)
+{
+  mLayerForwarder->UpdateTextureRegion(aLayer,
+                                       mIdentifier,
+                                       ThebesBuffer(mDescriptor, aBufferRect, aBufferRotation),
+                                       aUpdatedRegion);
+
+}
+
+
+TextureClientShmem::TextureClientShmem(ShadowLayerForwarder* aLayerForwarder, BufferType aBufferType)
+  : TextureClient(aLayerForwarder, aBufferType)
   , mSurface(nullptr)
   , mSurfaceAsImage(nullptr)
 {
@@ -93,6 +112,7 @@ TextureClientShmem::LockImageSurface()
   return mSurfaceAsImage.get();
 }
 
+
 TextureClientShared::~TextureClientShared()
 {
   if (IsSurfaceDescriptorValid(mDescriptor)) {
@@ -101,8 +121,8 @@ TextureClientShared::~TextureClientShared()
 }
 
 TextureClientSharedGL::TextureClientSharedGL(ShadowLayerForwarder* aLayerForwarder,
-                                             ImageHostType aImageType)
-  : TextureClientShared(aLayerForwarder, aImageType)
+                                             BufferType aBufferType)
+  : TextureClientShared(aLayerForwarder, aBufferType)
 {
   mIdentifier.mTextureType = TEXTURE_SHARED_GL;
 }
@@ -148,49 +168,49 @@ TextureClientSharedGL::Unlock()
   mDescriptor = SurfaceDescriptor();
 }
 
-/* static */ ImageHostType
+/* static */ BufferType
 CompositingFactory::TypeForImage(Image* aImage) {
   if (!aImage) {
-    return IMAGE_UNKNOWN;
+    return BUFFER_UNKNOWN;
   }
 
   if (aImage->GetFormat() == Image::SHARED_TEXTURE) {
-    return IMAGE_SHARED;
+    return BUFFER_SHARED;
   }
   if (aImage->GetFormat() == Image::PLANAR_YCBCR) {
-    return IMAGE_YUV;
+    return BUFFER_YUV;
   }
 
-  return IMAGE_TEXTURE;
+  return BUFFER_TEXTURE;
 }
 
 /* static */ TemporaryRef<ImageClient>
 CompositingFactory::CreateImageClient(LayersBackend aParentBackend,
-                                      ImageHostType aImageHostType,
+                                      BufferType aBufferHostType,
                                       ShadowLayerForwarder* aLayerForwarder,
                                       ShadowableLayer* aLayer,
                                       TextureFlags aFlags)
 {
   RefPtr<ImageClient> result = nullptr;
-  switch (aImageHostType) {
-  case IMAGE_SHARED:
+  switch (aBufferHostType) {
+  case BUFFER_SHARED:
     if (aParentBackend == LAYERS_OPENGL) {
       result = new ImageClientShared(aLayerForwarder, aLayer, aFlags);
     }
     break;
-  case IMAGE_YUV:
+  case BUFFER_YUV:
     if (aLayer->AsLayer()->Manager()->IsCompositingCheap()) {
       result = new ImageClientYUV(aLayerForwarder, aLayer, aFlags);
       break;
     }
-    // fall through to IMAGE_TEXTURE
-  case IMAGE_TEXTURE:
+    // fall through to BUFFER_TEXTURE
+  case BUFFER_TEXTURE:
     if (aParentBackend == LAYERS_OPENGL) {
       result = new ImageClientTexture(aLayerForwarder, aLayer, aFlags);
     }
     break;
-  case IMAGE_UNKNOWN:
-    return result.forget();    
+  case BUFFER_UNKNOWN:
+    return nullptr;    
   }
 
   NS_ASSERTION(result, "Failed to create ImageClient");
@@ -200,15 +220,15 @@ CompositingFactory::CreateImageClient(LayersBackend aParentBackend,
 
 /* static */ TemporaryRef<CanvasClient>
 CompositingFactory::CreateCanvasClient(LayersBackend aParentBackend,
-                                       ImageHostType aImageHostType,
+                                       BufferType aBufferHostType,
                                        ShadowLayerForwarder* aLayerForwarder,
                                        ShadowableLayer* aLayer,
                                        TextureFlags aFlags)
 {
-  if (aImageHostType == IMAGE_TEXTURE) {
+  if (aBufferHostType == BUFFER_TEXTURE) {
     return new CanvasClientTexture(aLayerForwarder, aLayer, aFlags);
   }
-  if (aImageHostType == IMAGE_SHARED) {
+  if (aBufferHostType == BUFFER_SHARED) {
     if (aParentBackend == LAYERS_OPENGL) {
       return new CanvasClientShared(aLayerForwarder, aLayer, aFlags);
     }
@@ -219,7 +239,7 @@ CompositingFactory::CreateCanvasClient(LayersBackend aParentBackend,
 
 /* static */ TemporaryRef<ContentClient>
 CompositingFactory::CreateContentClient(LayersBackend aParentBackend,
-                                        ImageHostType aImageHostType,
+                                        BufferType aBufferHostType,
                                         ShadowLayerForwarder* aLayerForwarder,
                                         ShadowableLayer* aLayer,
                                         TextureFlags aFlags)
@@ -227,10 +247,10 @@ CompositingFactory::CreateContentClient(LayersBackend aParentBackend,
   if (aParentBackend != LAYERS_OPENGL) {
     return nullptr;
   }
-  if (aImageHostType == IMAGE_THEBES) {
+  if (aBufferHostType == BUFFER_THEBES) {
     return new ContentClientTexture(aLayerForwarder, aLayer, aFlags);
   }
-  if (aImageHostType == IMAGE_DIRECT) {
+  if (aBufferHostType == BUFFER_DIRECT) {
     if (ShadowLayerManager::SupportsDirectTexturing()) {
       return new ContentClientDirect(aLayerForwarder, aLayer, aFlags);
     }
@@ -242,7 +262,7 @@ CompositingFactory::CreateContentClient(LayersBackend aParentBackend,
 /* static */ TemporaryRef<TextureClient>
 CompositingFactory::CreateTextureClient(LayersBackend aParentBackend,
                                         TextureHostType aTextureHostType,
-                                        ImageHostType aImageHostType,
+                                        BufferType aBufferHostType,
                                         ShadowLayerForwarder* aLayerForwarder,
                                         bool aStrict /* = false */)
 {
@@ -250,17 +270,17 @@ CompositingFactory::CreateTextureClient(LayersBackend aParentBackend,
   switch (aTextureHostType) {
   case TEXTURE_SHARED_GL:
     if (aParentBackend == LAYERS_OPENGL) {
-      result = new TextureClientSharedGL(aLayerForwarder, aImageHostType);
+      result = new TextureClientSharedGL(aLayerForwarder, aBufferHostType);
     }
     break;
   case TEXTURE_SHARED:
     if (aParentBackend == LAYERS_OPENGL) {
-      result = new TextureClientShared(aLayerForwarder, aImageHostType);
+      result = new TextureClientShared(aLayerForwarder, aBufferHostType);
     }
     break;
   case TEXTURE_SHMEM:
     if (aParentBackend == LAYERS_OPENGL) {
-      result = new TextureClientShmem(aLayerForwarder, aImageHostType);
+      result = new TextureClientShmem(aLayerForwarder, aBufferHostType);
     }
     break;
   default:

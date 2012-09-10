@@ -9,7 +9,7 @@
 #include "mozilla/layers/PLayersParent.h"
 #include "BasicBuffers.h"
 #include "BasicLayersImpl.h"
-#include "ThebesBufferClient.h"
+#include "ContentClient.h"
 
 namespace mozilla {
 namespace layers {

@@ -3,7 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "ThebesBufferClient.h"
+#include "ContentClient.h"
 #include "BasicThebesLayer.h"
 #include "nsIWidget.h"
 #include "gfxUtils.h"
@@ -70,7 +70,7 @@ ContentClientRemote::CreateBuffer(ContentType aType,
   mOldTextures.AppendElement(mTextureClient);
   mTextureClient = static_cast<TextureClientShmem*>(
     mLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, GetType(),
-                                            mLayer, NoFlags, true).drop());
+                                            mLayer, AllowRepeat, true).drop());
   mTextureClient->EnsureTextureClient(gfx::IntSize(aSize.width, aSize.height),
                                       aType);
   return mTextureClient->LockSurface();
@@ -143,9 +143,9 @@ ContentClientDirect::SetBackBufferAndAttrs(const TextureIdentifier& aTextureIden
                                            nsIntRegion& aLayerValidRegion)
 {
   if (OptionalThebesBuffer::Tnull_t == aBuffer.type()) {
-    mTextureClient->Descriptor() = SurfaceDescriptor();
+    mTextureClient->SetDescriptor(SurfaceDescriptor());
   } else {
-    mTextureClient->Descriptor() = aBuffer.get_ThebesBuffer().buffer();
+    mTextureClient->SetDescriptor(aBuffer.get_ThebesBuffer().buffer());
   }
 
   MOZ_ASSERT(OptionalThebesBuffer::Tnull_t != aReadOnlyFrontBuffer.type());
@@ -165,14 +165,14 @@ struct AutoTextureClient {
       mTexture->Unlock();
     }
   }
-  gfxASurface* GetSurface(TextureClientShmem* aTexture)
+  gfxASurface* GetSurface(TextureClient* aTexture)
   {
     mTexture = aTexture;
     return mTexture->LockSurface();
   }
 
 private:
-  TextureClientShmem* mTexture;
+  TextureClient* mTexture;
 };
 
 void
@@ -192,7 +192,7 @@ ContentClientDirect::SyncFrontBufferToBackBuffer()
     nsIntSize size = roFrontBuffer.Size();
     mTextureClient = static_cast<TextureClientShmem*>(
       mLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, GetType(),
-                                              mLayer, NoFlags, true).drop());
+                                              mLayer, AllowRepeat, true).drop());
     mTextureClient->EnsureTextureClient(gfx::IntSize(size.width, size.height),
                                         roFrontBuffer.ContentType());
   }
@@ -254,9 +254,9 @@ ContentClientTexture::SetBackBufferAndAttrs(const TextureIdentifier& aTextureIde
   MOZ_ASSERT(OptionalThebesBuffer::Tnull_t == aReadOnlyFrontBuffer.type());
 
   if (OptionalThebesBuffer::Tnull_t == aBuffer.type()) {
-    mTextureClient->Descriptor() = SurfaceDescriptor();
+    mTextureClient->SetDescriptor(SurfaceDescriptor());
   } else {
-    mTextureClient->Descriptor() = aBuffer.get_ThebesBuffer().buffer();
+    mTextureClient->SetDescriptor(aBuffer.get_ThebesBuffer().buffer());
     gfxASurface* backBuffer = GetBuffer();
     if (!backBuffer) {
       backBuffer = mTextureClient->LockSurface();

@@ -792,24 +792,24 @@ struct ParamTraits<mozilla::layers::TextureIdentifier>
   
   static void Write(Message* aMsg, const paramType& aParam)
   {
-    WriteParam(aMsg, aParam.mImageType);
+    WriteParam(aMsg, aParam.mBufferType);
     WriteParam(aMsg, aParam.mTextureType);
     WriteParam(aMsg, aParam.mDescriptor);
   }
 
   static bool Read(const Message* aMsg, void** aIter, paramType* aResult)
   {
-    return ReadParam(aMsg, aIter, &aResult->mImageType) &&
+    return ReadParam(aMsg, aIter, &aResult->mBufferType) &&
            ReadParam(aMsg, aIter, &aResult->mTextureType) &&
            ReadParam(aMsg, aIter, &aResult->mDescriptor);
   }
 };
 
 template <>
-struct ParamTraits<mozilla::layers::ImageHostType>
-  : public EnumSerializer<mozilla::layers::ImageHostType,
-                          mozilla::layers::IMAGE_UNKNOWN,
-                          mozilla::layers::IMAGE_DIRECT
+struct ParamTraits<mozilla::layers::BufferType>
+  : public EnumSerializer<mozilla::layers::BufferType,
+                          mozilla::layers::BUFFER_UNKNOWN,
+                          mozilla::layers::BUFFER_DIRECT
 >
 {};
 

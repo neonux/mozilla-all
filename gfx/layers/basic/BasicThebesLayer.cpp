@@ -248,7 +248,7 @@ BasicShadowableThebesLayer::PaintThebes(gfxContext* aContext,
   }
 
   if (!mContentClient) {
-    mContentClient = BasicManager()->CreateContentClientFor(IMAGE_DIRECT, this, NoFlags);
+    mContentClient = BasicManager()->CreateContentClientFor(BUFFER_DIRECT, this, NoFlags);
     if (!mContentClient) {
       return;
     }
@@ -276,13 +276,10 @@ BasicShadowableThebesLayer::PaintBuffer(gfxContext* aContext,
   }
 
   ContentClientRemote* contentClientRemote = static_cast<ContentClientRemote*>(mContentClient.get());
-
-  nsIntRegion updatedRegion = contentClientRemote->GetUpdatedRegion(aRegionToDraw,
-                                                               mVisibleRegion,
-                                                               aDidSelfCopy);
-  BasicManager()->PaintedThebesBuffer(BasicManager()->Hold(this),
-                                      contentClientRemote,
-                                      updatedRegion);
+  contentClientRemote->Updated(BasicManager()->Hold(this),
+                               aRegionToDraw,
+                               mVisibleRegion,
+                               aDidSelfCopy);
 }
 
 void
@@ -324,15 +321,6 @@ public:
   Swap(const ThebesBuffer& aNewFront, const nsIntRegion& aUpdatedRegion,
        OptionalThebesBuffer* aNewBack, nsIntRegion* aNewBackValidRegion,
        OptionalThebesBuffer* aReadOnlyFront, nsIntRegion* aFrontUpdatedRegion);
-
-  virtual void
-  SwapTexture(const TextureIdentifier& aTextureIdentifier,
-              const ThebesBuffer& aNewFront, const nsIntRegion& aUpdatedRegion,
-              OptionalThebesBuffer* aNewBack, nsIntRegion* aNewBackValidRegion,
-              OptionalThebesBuffer* aReadOnlyFront, nsIntRegion* aFrontUpdatedRegion)
-  {
-    NS_ERROR("Not implemented");
-  }
 
   virtual void DestroyFrontBuffer()
   {

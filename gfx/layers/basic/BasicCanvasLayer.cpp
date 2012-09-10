@@ -259,12 +259,12 @@ private:
     return static_cast<BasicShadowLayerManager*>(mManager);
   }
 
-  ImageHostType GetImageClientType()
+  BufferType GetBufferClientType()
   {
     if (mGLContext) {
-      return IMAGE_SHARED;
+      return BUFFER_SHARED;
     }
-    return IMAGE_TEXTURE;
+    return BUFFER_TEXTURE;
   }
 
   bool mBufferIsOpaque;
@@ -301,7 +301,7 @@ BasicShadowableCanvasLayer::Paint(gfxContext* aContext, Layer* aMaskLayer)
     if (mNeedsYFlip) {
       flags |= NeedsYFlip;
     }
-    mCanvasClient = BasicManager()->CreateCanvasClientFor(GetImageClientType(), this, flags);
+    mCanvasClient = BasicManager()->CreateCanvasClientFor(GetBufferClientType(), this, flags);
 
     if (!mCanvasClient) {
       return;
@@ -311,8 +311,7 @@ BasicShadowableCanvasLayer::Paint(gfxContext* aContext, Layer* aMaskLayer)
 
   FireDidTransactionCallback();
 
-  BasicManager()->PaintedImage(BasicManager()->Hold(this),
-                               mCanvasClient->GetAsSharedImage());
+  mCanvasClient->Updated(BasicManager()->Hold(this));
 }
 
 class BasicShadowCanvasLayer : public ShadowCanvasLayer,

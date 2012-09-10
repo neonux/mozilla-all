@@ -6,11 +6,10 @@
 #include "ipc/AutoOpenSurface.h"
 #include "mozilla/layers/PLayers.h"
 #include "mozilla/layers/ShadowLayers.h"
-
 #include "gfxSharedImageSurface.h"
 
 #include "CanvasLayerOGL.h"
-#include "TextureOGL.h"
+#include "ImageHost.h"
 
 #include "gfxImageSurface.h"
 #include "gfxContext.h"
@@ -291,20 +290,25 @@ ShadowCanvasLayerOGL::ShadowCanvasLayerOGL(LayerManagerOGL* aManager)
   mImplData = static_cast<LayerOGL*>(this);
 }
 
+ShadowCanvasLayerOGL::~ShadowCanvasLayerOGL()
+{
+}
+
 //TODO[nrc] these methods are pretty much shared with ShadowImageLayerOGL, can I pull 'em up to ShadowLayer?
 void
-ShadowCanvasLayerOGL::EnsureImageHost(ImageHostType aHostType)
+ShadowCanvasLayerOGL::EnsureImageHost(BufferType aHostType)
 {
   if (!mImageHost ||
       mImageHost->GetType() != aHostType) {
-    mImageHost = mOGLManager->GetCompositor()->CreateImageHost(aHostType);
+    RefPtr<BufferHost> bufferHost = mOGLManager->GetCompositor()->CreateBufferHost(aHostType);
+    mImageHost = static_cast<ImageHost*>(bufferHost.get());
   }
 }
 
 void
 ShadowCanvasLayerOGL::AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
 {
-  EnsureImageHost(aTextureIdentifier.mImageType);
+  EnsureImageHost(aTextureIdentifier.mBufferType);
 
   if (CanUseOpaqueSurface()) {
     aTextureHost->AddFlag(UseOpaqueSurface);
@@ -379,3 +383,8 @@ ShadowCanvasLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aC
                         clipRect);
 }
 
+void
+ShadowCanvasLayerOGL::CleanupResources()
+{
+  mImageHost = nullptr;
+}

@@ -211,7 +211,7 @@ private:
     return static_cast<BasicShadowLayerManager*>(mManager);
   }
 
-  ImageHostType GetImageClientType()
+  BufferType GetImageClientType()
   {
     nsRefPtr<gfxASurface> surface;
     AutoLockImage autoLock(mContainer, getter_AddRefs(surface));
@@ -262,7 +262,7 @@ BasicShadowableImageLayer::Paint(gfxContext* aContext, Layer* aMaskLayer)
     }
   }
 
-  BasicManager()->PaintedImage(BasicManager()->Hold(this), mImageClient);
+  mImageClient->Updated(BasicManager()->Hold(this));
 }
 
 class BasicShadowImageLayer : public ShadowImageLayer, public BasicImplData {

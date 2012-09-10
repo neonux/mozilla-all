@@ -7,7 +7,7 @@
 #define MOZILLA_GFX_IMAGECLIENT_H
 
 #include "mozilla/layers/LayersSurfaces.h"
-#include "Compositor.h"
+#include "BufferClient.h"
 #include "TextureClient.h"
 
 namespace mozilla {
@@ -16,7 +16,7 @@ namespace layers {
 class ImageContainer;
 class ImageLayer;
 
-class ImageClient : public RefCounted<ImageClient>
+class ImageClient : public BufferClient
 {
 public:
   virtual ~ImageClient() {}
@@ -28,6 +28,8 @@ public:
 
   virtual void SetBuffer(const TextureIdentifier& aTextureIdentifier,
                          const SharedImage& aBuffer) = 0;
+
+  virtual void Updated(ShadowableLayer* aLayer) = 0;
 };
 
 class ImageClientTexture : public ImageClient
@@ -42,6 +44,7 @@ public:
   virtual void SetBuffer(const TextureIdentifier& aTextureIdentifier,
                          const SharedImage& aBuffer);
 
+  virtual void Updated(ShadowableLayer* aLayer);
 private:
   RefPtr<TextureClient> mTextureClient;
 };
@@ -59,6 +62,7 @@ public:
   virtual void SetBuffer(const TextureIdentifier& aTextureIdentifier,
                          const SharedImage& aBuffer) {}
 
+  virtual void Updated(ShadowableLayer* aLayer);
 private:
   RefPtr<TextureClient> mTextureClient;
 };
@@ -75,10 +79,12 @@ public:
   virtual void SetBuffer(const TextureIdentifier& aTextureIdentifier,
                          const SharedImage& aBuffer);
 
+  virtual void Updated(ShadowableLayer* aLayer);
 private:
-  RefPtr<TextureClientShmem> mTextureClientY;
-  RefPtr<TextureClientShmem> mTextureClientU;
-  RefPtr<TextureClientShmem> mTextureClientV;
+  ShadowLayerForwarder* mLayerForwarder;
+  RefPtr<TextureClient> mTextureClientY;
+  RefPtr<TextureClient> mTextureClientU;
+  RefPtr<TextureClient> mTextureClientV;
   nsIntRect mPictureRect;
 };
 

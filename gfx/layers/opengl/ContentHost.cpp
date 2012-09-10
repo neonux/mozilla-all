@@ -11,119 +11,22 @@
 namespace mozilla {
 namespace layers {
 
-class ContentHost : public AContentHost, protected CompositingThebesLayerBuffer
+TextureImage*
+ContentHost::GetTextureImage()
 {
-public:
-  typedef uint32_t UpdateFlags;
-  static const UpdateFlags RESET_BUFFER = 0x1;
-  static const UpdateFlags UPDATE_SUCCESS = 0x2;
-  static const UpdateFlags UPDATE_FAIL = 0x4;
-  static const UpdateFlags UPDATE_NOSWAP = 0x8;
+  return static_cast<TextureImageAsTextureHost*>(mTextureHost.get())->GetTextureImage();
+}
 
-  ContentHost(Compositor* aCompositor)
-    : CompositingThebesLayerBuffer(aCompositor)
-  {
-    mInitialised = false;
-  }
-
-  ~ContentHost()
-  {
-    Reset();
-  }
-
-  void Release() { AContentHost::Release(); }
-  void AddRef() { AContentHost::AddRef(); }
-
-  // AContentHost implementation
-  virtual void Composite(EffectChain& aEffectChain,
-                         float aOpacity,
-                         const gfx::Matrix4x4& aTransform,
-                         const gfx::Point& aOffset,
-                         const gfx::Filter& aFilter,
-                         const gfx::Rect& aClipRect,
-                         const nsIntRegion* aVisibleRegion = nullptr)
-  {
-    CompositingThebesLayerBuffer::Composite(aEffectChain,
-                                            aOpacity,
-                                            aTransform,
-                                            aOffset,
-                                            aFilter,
-                                            aClipRect,
-                                            aVisibleRegion);
-  }
-
-  virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
-  {
-    //TODO[nrc]
-  }
-
-  // CompositingThebesLayerBuffer implementation
-  virtual PaintState BeginPaint(ContentType aContentType, PRUint32) {
-    NS_RUNTIMEABORT("can't BeginPaint for a shadow layer");
-    return PaintState();
-  }
-
-protected:
-  virtual nsIntPoint GetOriginOffset() {
-    return mBufferRect.TopLeft() - mBufferRotation;
-  }
-
-  void Reset() 
-  {
-    mInitialised = false;
-    if (IsSurfaceDescriptorValid(mBufferDescriptor)) {
-      mDeAllocator->DestroySharedSurface(&mBufferDescriptor);
-    }
-  }
-
-  nsIntRect mBufferRect;
-  nsIntPoint mBufferRotation;
-  //TODO[nrc] should be in TextureHost
-  SurfaceDescriptor mBufferDescriptor;
-};
-
-// We can directly texture the drawn surface.  Use that as our new
-// front buffer, and return our previous directly-textured surface
-// to the renderer.
-class ContentHostDirect : public ContentHost
-{
-public:
-  ContentHostDirect(Compositor* aCompositor)
-    : ContentHost(aCompositor)
-  {}
-
-  virtual ImageHostType GetType() { return IMAGE_DIRECT; }
-
-  virtual UpdateFlags UpdateThebes(const TextureIdentifier& aTextureIdentifier,
-                                   const ThebesBuffer& aNewBack,
-                                   const nsIntRegion& aUpdated,
-                                   OptionalThebesBuffer* aNewFront);
-};
-
-// We're using resources owned by our texture as the front buffer.
-// Upload the changed region and then return the surface back to
-// the renderer.
-class ContentHostTexture : public ContentHost
-{
-public:
-  ContentHostTexture(Compositor* aCompositor)
-    : ContentHost(aCompositor)
-  {}
-
-  virtual ImageHostType GetType() { return IMAGE_THEBES; }
-
-  virtual UpdateFlags UpdateThebes(const TextureIdentifier& aTextureIdentifier,
-                                   const ThebesBuffer& aNewBack,
-                                   const nsIntRegion& aUpdated,
-                                   OptionalThebesBuffer* aNewFront);
-};
-
-
-ContentHost::UpdateFlags
+void
 ContentHostTexture::UpdateThebes(const TextureIdentifier& aTextureIdentifier,
                                  const ThebesBuffer& aNewFront,
                                  const nsIntRegion& aUpdated,
-                                 OptionalThebesBuffer* aNewBack)
+                                 OptionalThebesBuffer* aNewBack,
+                                 const nsIntRegion& aOldValidRegionFront,
+                                 const nsIntRegion& aOldValidRegionBack,
+                                 OptionalThebesBuffer* aNewBackResult,
+                                 nsIntRegion* aNewValidRegionFront,
+                                 nsIntRegion* aUpdatedRegionBack)
 {
   AutoOpenSurface surface(OPEN_READ_ONLY, aNewFront.buffer());
   gfxASurface* updated = surface.Get();
@@ -145,7 +48,6 @@ ContentHostTexture::UpdateThebes(const TextureIdentifier& aTextureIdentifier,
                ((destBounds.y % size.height) + destBounds.height <= size.height),
                "Updated region lies across rotation boundaries!");
 
-  // NB: this gfxContext must not escape EndUpdate() below
   mTextureHost->Update(updated, destRegion);
   mInitialised = true;
 
@@ -153,46 +55,68 @@ ContentHostTexture::UpdateThebes(const TextureIdentifier& aTextureIdentifier,
   mBufferRotation = aNewFront.rotation();
 
   *aNewBack = aNewFront;
-  return UPDATE_NOSWAP;
+  *aNewValidRegionFront = aOldValidRegionBack;
+  *aNewBackResult = null_t();
+  aUpdatedRegionBack->SetEmpty();
 }
 
-ContentHost::UpdateFlags
+void
+ContentHostTexture::AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
+{
+  NS_ASSERTION(aTextureIdentifier.mBufferType == BUFFER_THEBES &&
+               aTextureIdentifier.mTextureType == TEXTURE_SHMEM,
+               "BufferType mismatch.");
+  mTextureHost = static_cast<TextureImageAsTextureHost*>(aTextureHost);
+}
+
+void
 ContentHostDirect::UpdateThebes(const TextureIdentifier& aTextureIdentifier,
                                 const ThebesBuffer& aNewBack,
                                 const nsIntRegion& aUpdated,
-                                OptionalThebesBuffer* aNewFront)
+                                OptionalThebesBuffer* aNewFront,
+                                const nsIntRegion& aOldValidRegionFront,
+                                const nsIntRegion& aOldValidRegionBack,
+                                OptionalThebesBuffer* aNewBackResult,
+                                nsIntRegion* aNewValidRegionFront,
+                                nsIntRegion* aUpdatedRegionBack)
 {
-  UpdateFlags result = 0;
-  if (IsSurfaceDescriptorValid(mBufferDescriptor)) {
-    AutoOpenSurface currentFront(OPEN_READ_ONLY, mBufferDescriptor);
-    AutoOpenSurface newFront(OPEN_READ_ONLY, aNewBack.buffer());
-    if (currentFront.Size() != newFront.Size()) {
-      // The buffer changed size making us obsolete.
-      Reset();
-      result |= RESET_BUFFER;
-    }
-  }
-
-  if (IsSurfaceDescriptorValid(mBufferDescriptor)) {
-    ThebesBuffer newFront;
-    newFront.buffer() = mBufferDescriptor;
-    newFront.rect() = mBufferRect;
-    newFront.rotation() = mBufferRotation;
-    *aNewFront = newFront;
-    result |= UPDATE_SUCCESS;
-  } else {
-    *aNewFront = null_t();
-    result |= UPDATE_FAIL;
-  }
-
-  bool success = mTextureHost->UpdateDirect(aNewBack.buffer());
-  mBufferDescriptor = aNewBack.buffer();
   mBufferRect = aNewBack.rect();
   mBufferRotation = aNewBack.rotation();
 
-  mInitialised = success;
+  if (!mTextureHost) {
+    *aNewFront = null_t();
+    mInitialised = false;
 
-  return result;
+    aNewValidRegionFront->SetEmpty();
+    *aNewBackResult = null_t();
+    *aUpdatedRegionBack = aUpdated;
+    return;
+  }
+
+  AutoOpenSurface newBack(OPEN_READ_ONLY, aNewBack.buffer());
+  bool needsReset = static_cast<TextureImageAsTextureHostWithBuffer*>(mTextureHost.get())
+    ->EnsureBuffer(newBack.Size());
+
+  ThebesBuffer newFront;
+  mInitialised = mTextureHost->Update(aNewBack.buffer(), &newFront.buffer());
+  newFront.rect() = mBufferRect;
+  newFront.rotation() = mBufferRotation;
+  *aNewFront = newFront;
+
+  // We have to invalidate the pixels painted into the new buffer.
+  // They might overlap with our old pixels.
+  aNewValidRegionFront->Sub(needsReset ? nsIntRegion() : aOldValidRegionFront, aUpdated);
+  *aNewBackResult = newFront;
+  *aUpdatedRegionBack = aUpdated;
+}
+
+void
+ContentHostDirect::AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
+{
+  NS_ASSERTION(aTextureIdentifier.mBufferType == BUFFER_DIRECT &&
+               aTextureIdentifier.mTextureType == TEXTURE_SHMEM,
+               "BufferType mismatch.");
+  mTextureHost = static_cast<TextureImageAsTextureHostWithBuffer*>(aTextureHost);
 }
 
 }

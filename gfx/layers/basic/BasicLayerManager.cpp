@@ -1074,7 +1074,8 @@ BasicShadowLayerManager::ForwardTransaction()
         break;
       }
       case EditReply::TOpBufferSwap: {
-        /*MOZ_LAYERS_LOG(("[LayersForwarder] BufferSwap"));
+        NS_WARNING("Shouldn't get used with Compositor");
+        MOZ_LAYERS_LOG(("[LayersForwarder] BufferSwap"));
 
         const OpBufferSwap& obs = reply.get_OpBufferSwap();
         const SharedImage& newBack = obs.newBackBuffer();
@@ -1084,12 +1085,11 @@ BasicShadowLayerManager::ForwardTransaction()
           GetBasicShadowable(obs)->SetBackBuffer(SurfaceDescriptor());
         } else {
           NS_RUNTIMEABORT("Unknown back image type");
-        }*/
-        NS_ERROR("Shouldn't get used anymore");
+        }
         break;
       }
       case EditReply::TOpImageSwap: {
-        MOZ_LAYERS_LOG(("[LayersForwarder] YUVBufferSwap"));
+        MOZ_LAYERS_LOG(("[LayersForwarder] BufferSwap (image bridge)"));
 
         const OpImageSwap& ois = reply.get_OpImageSwap();
         BasicShadowableLayer* layer = GetBasicShadowable(ois);

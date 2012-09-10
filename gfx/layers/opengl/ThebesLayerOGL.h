@@ -62,6 +62,16 @@ public:
   ShadowThebesLayerOGL(LayerManagerOGL *aManager);
   virtual ~ShadowThebesLayerOGL();
 
+  virtual void SetAllocator(ISurfaceDeAllocator* aAllocator);
+
+  virtual void Swap(const ThebesBuffer& aNewFront,
+                    const nsIntRegion& aUpdatedRegion,
+                    OptionalThebesBuffer* aNewBack,
+                    nsIntRegion* aNewBackValidRegion,
+                    OptionalThebesBuffer* aReadOnlyFront,
+                    nsIntRegion* aFrontUpdatedRegion)
+  { NS_ERROR("Should not be called with Compsoitor system"); }
+
   virtual void SwapTexture(const TextureIdentifier& aTextureIdentifier,
                            const ThebesBuffer& aNewFront,
                            const nsIntRegion& aUpdatedRegion,
@@ -90,12 +100,8 @@ public:
 
   virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost);
 
-  //TODO[nrc] this should be the behaviour of the default implementation
-  // but that requires having mBuffer/mImageHost in ShadowLayer
-  virtual void SetAllocator(ISurfaceDeAllocator* aAllocator);
-
 private:
-  void EnsureBuffer(ImageHostType aHostType);
+  void EnsureBuffer(BufferType aHostType);
 
   nsRefPtr<AContentHost> mBuffer;
   nsIntRegion mValidRegionForNextBackBuffer;

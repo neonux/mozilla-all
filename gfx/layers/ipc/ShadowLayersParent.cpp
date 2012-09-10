@@ -361,8 +361,6 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       ShadowLayerParent* shadow = AsShadowLayer(op);
       ShadowThebesLayer* thebes =
         static_cast<ShadowThebesLayer*>(shadow->AsLayer());
-      //TODO[nrc]
-      const TextureIdentifier textureId; // = AsTextureId(op);
       const ThebesBuffer& newFront = op.newFrontBuffer();
 
       RenderTraceInvalidateStart(thebes, "FF00FF", op.updatedRegion().GetBounds());
@@ -371,14 +369,13 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       nsIntRegion newValidRegion;
       OptionalThebesBuffer readonlyFront;
       nsIntRegion frontUpdatedRegion;
-      thebes->SwapTexture(textureId,
-                          newFront, op.updatedRegion(),
-                          &newBack, &newValidRegion,
-                          &readonlyFront, &frontUpdatedRegion);
+      thebes->Swap(newFront, op.updatedRegion(),
+                   &newBack, &newValidRegion,
+                   &readonlyFront, &frontUpdatedRegion);
       replyv.push_back(
         OpThebesBufferSwap(
           shadow, NULL,
-          textureId,
+          TextureIdentifier(),
           newBack, newValidRegion,
           readonlyFront, frontUpdatedRegion));
 
@@ -386,7 +383,7 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       break;
     }
     case Edit::TOpPaintCanvas: {
-      /*MOZ_LAYERS_LOG(("[ParentSide] Paint CanvasLayer"));
+      MOZ_LAYERS_LOG(("[ParentSide] Paint CanvasLayer"));
 
       const OpPaintCanvas& op = edit.get_OpPaintCanvas();
       ShadowLayerParent* shadow = AsShadowLayer(op);
@@ -402,8 +399,7 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       replyv.push_back(OpBufferSwap(shadow, NULL,
                                     newBack));
 
-      RenderTraceInvalidateEnd(canvas, "FF00FF");*/
-      NS_ERROR("Should have used PaintTexture");
+      RenderTraceInvalidateEnd(canvas, "FF00FF");
       break;
     }
     case Edit::TOpPaintImage: {
@@ -444,7 +440,46 @@ ShadowLayersParent::RecvUpdate(const InfallibleTArray<Edit>& cset,
       RenderTraceInvalidateEnd(layer, "FF00FF");
       break;
     }
+    case Edit::TOpPaintTextureRegion: {
+      MOZ_LAYERS_LOG(("[ParentSide] Paint ThebesLayer"));
 
+      const OpPaintTextureRegion& op = edit.get_OpPaintTextureRegion();
+      ShadowLayerParent* shadow = AsShadowLayer(op);
+      ShadowThebesLayer* thebes =
+        static_cast<ShadowThebesLayer*>(shadow->AsLayer());
+      const TextureIdentifier textureId = AsTextureId(op);
+      const ThebesBuffer& newFront = op.newFrontBuffer();
+
+      RenderTraceInvalidateStart(thebes, "FF00FF", op.updatedRegion().GetBounds());
+
+      thebes->SetAllocator(this);
+      OptionalThebesBuffer newBack;
+      nsIntRegion newValidRegion;
+      OptionalThebesBuffer readonlyFront;
+      nsIntRegion frontUpdatedRegion;
+      thebes->SwapTexture(textureId,
+                          newFront, op.updatedRegion(),
+                          &newBack, &newValidRegion,
+                          &readonlyFront, &frontUpdatedRegion);
+      replyv.push_back(
+        OpThebesBufferSwap(
+          shadow, NULL,
+          textureId,
+          newBack, newValidRegion,
+          readonlyFront, frontUpdatedRegion));
+
+      RenderTraceInvalidateEnd(thebes, "FF00FF");
+      break;
+    }
+    case Edit::TOpUpdatePictureRect: {
+      const OpUpdatePictureRect& op = edit.get_OpUpdatePictureRect();
+      ShadowLayerParent* shadow = AsShadowLayer(op);
+      ShadowImageLayer* image =
+        static_cast<ShadowImageLayer*>(shadow->AsLayer());
+
+      image->SetPictureRect(op.picture());
+      break;
+    }
     default:
       NS_RUNTIMEABORT("not reached");
     }

@@ -12,71 +12,15 @@
 namespace mozilla {
 namespace layers {
 
-class TextureImageAsTextureHost;
-class TextureHostOGLShared;
-
-// not really a TextureHost, but otherwise we have a screwey inheritance hierarchy
-class ATextureOGL : public TextureHost
-{
-public:
-  virtual GLuint GetTextureHandle() = 0;
-  virtual gfx::IntSize GetSize() = 0;
-  virtual GLenum GetWrapMode() = 0;
-  virtual void SetWrapMode(GLenum aWrapMode) = 0;
-
-  //TODO[nrc] will UpdateTexture work with the other kinds of textures?
-  //default = no op
-  virtual void
-    UpdateTexture(const nsIntRegion& aRegion, PRInt8 *aData, PRUint32 aStride) MOZ_OVERRIDE {}
-
-protected:
-  ATextureOGL() {}
-};
-
-//TODO[nrc] kill this once I sort out TextureOGL
-class CTextureOGL : public ATextureOGL
-{
-public:
-  virtual GLuint GetTextureHandle() = 0;
-
-  virtual gfx::IntSize GetSize()
-  {
-    return mSize;
-  }
-
-  virtual GLenum GetWrapMode()
-  {
-    return mWrapMode;
-  }
-
-  virtual void SetWrapMode(GLenum aWrapMode)
-  {
-    mWrapMode = aWrapMode;
-  }
-
-protected:
-  CTextureOGL()
-    : mWrapMode(LOCAL_GL_REPEAT)
-  {}
-
-  CTextureOGL(gfx::IntSize aSize)
-    : mSize(aSize)
-    , mWrapMode(LOCAL_GL_REPEAT)
-  {}
-
-  gfx::IntSize mSize;
-  GLenum mWrapMode;
-};
-
-
-
-class TextureOGL : public CTextureOGL
+//TODO[nrc] TextureOGL and Texture are only used by CreateTextureForData,
+// which is not used anywhere, so what are they for?
+class TextureOGL : public Texture
 {
 public:
   TextureOGL(GLContext* aGL, GLuint aTextureHandle, const gfx::IntSize& aSize)
-    : CTextureOGL(aSize)
-    , mGL(aGL)
+    : mGL(aGL)
     , mTextureHandle(aTextureHandle)
+    , mSize(aSize)
   {}
 
   virtual GLuint GetTextureHandle()
@@ -84,18 +28,9 @@ public:
     return mTextureHandle;
   }
 
-  // TODO: Remove this once Textures are properly able to manage their own
-  // handles.
-  void SetTextureHandle(GLuint aTextureHandle)
+  virtual gfx::IntSize GetSize()
   {
-    mTextureHandle = aTextureHandle;
-  }
-
-  // TODO: Remove this once Textures are properly able to manager their own
-  // sizes.
-  void SetSize(const gfx::IntSize& aSize)
-  {
-    mSize = aSize;
+    return mSize;
   }
 
   virtual void
@@ -120,79 +55,56 @@ private:
   GLenum mType;
   nsRefPtr<GLContext> mGL;
   uint32_t mPixelSize;
+  gfx::IntSize mSize;
 };
 
-//TODO[nrc] the ImageHosts are tied to a specific TextureHosts, I should fix that, maybe
-// which means that these ImageHosts are GL specific because their TextureHosts are GL
-// specific
-
-class ImageHostTexture : public ImageHost
+//TODO[nrc] kill this once I sort out TextureOGL
+class TextureHostOGL : public TextureHost
 {
 public:
-  ImageHostTexture(Compositor* aCompositor);
+  virtual GLuint GetTextureHandle() = 0;
 
-  virtual ImageHostType GetType() { return IMAGE_TEXTURE; }
+  virtual gfx::IntSize GetSize()
+  {
+    return mSize;
+  }
 
-  virtual const SharedImage* UpdateImage(const TextureIdentifier& aTextureIdentifier,
-                                   const SharedImage& aImage);
+  virtual GLenum GetWrapMode()
+  {
+    return mWrapMode;
+  }
 
-  virtual void Composite(EffectChain& aEffectChain,
-                         float aOpacity,
-                         const gfx::Matrix4x4& aTransform,
-                         const gfx::Point& aOffset,
-                         const gfx::Filter& aFilter,
-                         const gfx::Rect& aClipRect,
-                         const nsIntRegion* aVisibleRegion = nullptr);
+  virtual void SetWrapMode(GLenum aWrapMode)
+  {
+    mWrapMode = aWrapMode;
+  }
 
-  virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost);
+protected:
+  TextureHostOGL()
+    : mWrapMode(LOCAL_GL_REPEAT)
+  {}
 
-private:
-  RefPtr<TextureImageAsTextureHost> mTextureHost;
-  RefPtr<Compositor> mCompositor;
-};
+  TextureHostOGL(gfx::IntSize aSize)
+    : mSize(aSize)
+    , mWrapMode(LOCAL_GL_REPEAT)
+  {}
 
-class ImageHostShared : public ImageHost
-{
-public:
-  ImageHostShared(Compositor* aCompositor);
-
-  virtual ImageHostType GetType() { return IMAGE_SHARED; }
-
-
-  virtual const SharedImage* UpdateImage(const TextureIdentifier& aTextureIdentifier,
-                                         const SharedImage& aImage);
-
-  virtual void Composite(EffectChain& aEffectChain,
-                         float aOpacity,
-                         const gfx::Matrix4x4& aTransform,
-                         const gfx::Point& aOffset,
-                         const gfx::Filter& aFilter,
-                         const gfx::Rect& aClipRect,
-                         const nsIntRegion* aVisibleRegion = nullptr);
-
-  virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost);
-
-private:
-  RefPtr<TextureHostOGLShared> mTextureHost;
-  RefPtr<Compositor> mCompositor;
+  gfx::IntSize mSize;
+  GLenum mWrapMode;
 };
 
 class BasicBufferOGL;
 class SurfaceBufferOGL;
 
 //thin TextureHost wrapper around a TextureImage
-class TextureImageAsTextureHost : public ATextureOGL
+class TextureImageAsTextureHost : public TextureHostOGL, public TileIterator
 {
 public:
-  // XXX returns the size of the current tile being composited to DrawQuad, I think this is a bit of a hack
   virtual gfx::IntSize GetSize()
   {
+    NS_ASSERTION(mSize == gfx::IntSize(mTexImage->mSize.width, mTexImage->mSize.height),
+                 "mSize not synced with mTexImage");
     return mSize;
-  }
-
-  void SetSize(const gfx::IntSize& aSize)
-  {
-    mSize = aSize;
   }
 
   virtual GLuint GetTextureHandle()
@@ -212,21 +124,21 @@ public:
 
   virtual const SharedImage* Update(const SharedImage& aImage);
   virtual void Update(gfxASurface* aSurface, nsIntRegion& aRegion);
+
+  virtual TileIterator* GetAsTileIterator() { return this; }
   virtual Effect* Lock(const gfx::Filter& aFilter);
 
-  // used when this is a double buffered host (TODO[nrc] should that make it a separate class?)
-  bool UpdateDirect(const SurfaceDescriptor& aBuffer);
 
   void SetFilter(const gfx::Filter& aFilter) { mTexImage->SetFilter(gfx::ThebesFilter(aFilter)); }
-  void BeginTileIteration() { mTexImage->BeginTileIteration(); }
-  nsIntRect GetTileRect() { return mTexImage->GetTileRect(); }
-  size_t GetTileCount() { return mTexImage->GetTileCount(); }
-  bool NextTile() { return mTexImage->NextTile(); }
-  bool InUpdate() { return mTexImage->InUpdate(); }
-  void EndUpdate() { mTexImage->EndUpdate(); }
-  gfxASurface* BeginUpdate(nsIntRegion& aRegion) { return mTexImage->BeginUpdate(aRegion); }
+  virtual void BeginTileIteration() { mTexImage->BeginTileIteration(); }
+  virtual nsIntRect GetTileRect() { return mTexImage->GetTileRect(); }
+  virtual size_t GetTileCount() { return mTexImage->GetTileCount(); }
+  virtual bool NextTile() { return mTexImage->NextTile(); }
+  //bool InUpdate() { return mTexImage->InUpdate(); }
+  //void EndUpdate() { mTexImage->EndUpdate(); }
+  //gfxASurface* BeginUpdate(nsIntRegion& aRegion) { return mTexImage->BeginUpdate(aRegion); }
 
-private:
+protected:
   TextureImageAsTextureHost(GLContext* aGL)
     : mGL(aGL)
     , mTexImage(nullptr)
@@ -234,15 +146,12 @@ private:
 
   GLContext* mGL;
   nsRefPtr<TextureImage> mTexImage;
-  gfx::IntSize mSize;
 
   friend class CompositorOGL;
   // YUCK! this is because BasicBufferOGL and SurfaceBufferOGL use this class like a texture image
-  // below methods are meant only for BasicBufferOGL and SurfaceBufferOGL
-  friend class BasicBufferOGL;
-  friend class SurfaceBufferOGL;
-
-  TextureImage::ContentType GetContentType() { return mTexImage->GetContentType(); }
+  // below method is meant only for ContentHost
+  friend class ContentHost;
+  friend class ThebesLayerBufferOGL;
   TextureImage* GetTextureImage() { return mTexImage; }
 
   // TODO[nrc] comment
@@ -253,7 +162,39 @@ private:
   {}
 };
 
-class TextureHostOGLShared : public ATextureOGL
+class TextureImageAsTextureHostWithBuffer : public TextureImageAsTextureHost
+{
+public:
+  ~TextureImageAsTextureHostWithBuffer();
+
+  virtual bool Update(const SurfaceDescriptor& aNewBuffer,
+                      SurfaceDescriptor* aOldBuffer);
+  /**
+   * Set deallocator for data recieved from IPC protocol
+   * We should be able to set allocator right before swap call
+   * that is why allowed multiple call with the same Allocator
+   */
+  virtual void SetDeAllocator(ISurfaceDeAllocator* aDeAllocator)
+  {
+    NS_ASSERTION(!mDeAllocator || mDeAllocator == aDeAllocator, "Stomping allocator?");
+    mDeAllocator = aDeAllocator;
+  }
+
+  // returns true if the buffer was reset
+  bool EnsureBuffer(nsIntSize aSize);
+
+protected:
+  TextureImageAsTextureHostWithBuffer(GLContext* aGL)
+    : TextureImageAsTextureHost(aGL)
+  {}
+
+  ISurfaceDeAllocator* mDeAllocator;
+  SurfaceDescriptor mBufferDescriptor;
+
+  friend class CompositorOGL;
+};
+
+class TextureHostOGLShared : public TextureHostOGL
 {
 public:
   ~TextureHostOGLShared()
@@ -270,6 +211,7 @@ public:
     return mSize;
   }
 
+  //TODO[nrc] delete
   void SetSize(const gfx::IntSize& aSize)
   {
     mSize = aSize;
@@ -279,13 +221,6 @@ public:
   {
     return mTextureHandle;
   }
-
-  virtual GLenum GetWrapMode()
-  {
-    return LOCAL_GL_REPEAT;
-  }
-
-  virtual void SetWrapMode(GLenum aWrapMode) {}
 
   virtual const SharedImage* Update(const SharedImage& aImage);
   virtual Effect* Lock(const gfx::Filter& aFilter);
@@ -299,7 +234,6 @@ protected:
   bool mInverted;
   GLContext* mGL;
   GLuint mTextureHandle;
-  gfx::IntSize mSize;
   gl::SharedTextureHandle mSharedHandle;
   gl::TextureImage::TextureShareType mShareType;
 
@@ -309,6 +243,7 @@ protected:
 class TextureHostOGLSharedWithBuffer : public TextureHostOGLShared
 {
 public:
+  //TODO[nrc] don't we need to de-allocate?
   ~TextureHostOGLSharedWithBuffer()
   {}
 
@@ -326,11 +261,11 @@ protected:
   friend class CompositorOGL;
 };
 
-class GLTextureAsTextureHost : public CTextureOGL
+class GLTextureAsTextureHost : public TextureHostOGL
 {
 public:
   GLTextureAsTextureHost(GLContext* aGL)
-    : CTextureOGL()
+    : TextureHostOGL()
     , mGL(aGL)
   {}
 

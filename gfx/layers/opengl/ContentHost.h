@@ -7,12 +7,11 @@
 #define GFX_CONTENTHOST_H
 
 #include "ThebesLayerBuffer.h"
-#include "Compositor.h"
+#include "BufferHost.h"
 
 namespace mozilla {
 namespace layers {
 
-class TextureImageAsTextureHost;
 class ThebesBuffer;
 class OptionalThebesBuffer;
 
@@ -26,8 +25,6 @@ public:
   CompositingThebesLayerBuffer(Compositor* aCompositor)
     : mCompositor(aCompositor)
     , mPaintWillResample(false)
-    , mTextureHost(nullptr)
-    , mTextureHostOnWhite(nullptr)
     , mInitialised(true)
   {}
   virtual ~CompositingThebesLayerBuffer() {}
@@ -46,49 +43,143 @@ public:
   void SetPaintWillResample(bool aResample) { mPaintWillResample = aResample; }
 
 protected:
+  //TODO[nrc] comment
+  virtual TextureImage* GetTextureImage() = 0;
+  virtual TextureImage* GetTextureImageOnWhite() = 0;
+  virtual TemporaryRef<TextureHost> GetTextureHost() = 0;
+  virtual TemporaryRef<TextureHost> GetTextureHostOnWhite() = 0;
+
   virtual nsIntPoint GetOriginOffset() = 0;
 
   bool PaintWillResample() { return mPaintWillResample; }
 
   bool mPaintWillResample;
   RefPtr<Compositor> mCompositor;
-  RefPtr<TextureImageAsTextureHost> mTextureHost;
-  RefPtr<TextureImageAsTextureHost> mTextureHostOnWhite;
   bool mInitialised;
 };
 
-class AContentHost : public ImageHost
+class AContentHost : public BufferHost
 {
 public:
-  typedef uint32_t UpdateFlags;
-  static const UpdateFlags RESET_BUFFER = 0x1;
-  static const UpdateFlags UPDATE_SUCCESS = 0x2;
-  static const UpdateFlags UPDATE_FAIL = 0x4;
-  static const UpdateFlags UPDATE_NOSWAP = 0x8;
+  //TODO[nrc] comment
+  virtual void UpdateThebes(const TextureIdentifier& aTextureIdentifier,
+                            const ThebesBuffer& aNewBack,
+                            const nsIntRegion& aUpdated,
+                            OptionalThebesBuffer* aNewFront,
+                            const nsIntRegion& aOldValidRegionFront,
+                            const nsIntRegion& aOldValidRegionBack,
+                            OptionalThebesBuffer* aNewBackResult,
+                            nsIntRegion* aNewValidRegionFront,
+                            nsIntRegion* aUpdatedRegionBack) = 0;
 
-  virtual const SharedImage* UpdateImage(const TextureIdentifier& aTextureIdentifier,
-                                         const SharedImage& aImage)
+  virtual void SetDeAllocator(ISurfaceDeAllocator* aDeAllocator) {}
+};
+
+class ContentHost : public AContentHost, protected CompositingThebesLayerBuffer
+{
+public:
+
+  ContentHost(Compositor* aCompositor)
+    : CompositingThebesLayerBuffer(aCompositor)
   {
-    //TODO[nrc]
-    NS_ERROR("Shouldn't call UpdateImage on a Thebes buffer");
-    return nullptr;
+    mInitialised = false;
   }
 
-  //TODO[nrc] comment, maybe move to ImageHost?
-  virtual UpdateFlags UpdateThebes(const TextureIdentifier& aTextureIdentifier,
-                                   const ThebesBuffer& aNewBack,
-                                   const nsIntRegion& aUpdated,
-                                   OptionalThebesBuffer* aNewFront) = 0;
+  void Release() { AContentHost::Release(); }
+  void AddRef() { AContentHost::AddRef(); }
 
+  // AContentHost implementation
   virtual void Composite(EffectChain& aEffectChain,
                          float aOpacity,
                          const gfx::Matrix4x4& aTransform,
                          const gfx::Point& aOffset,
                          const gfx::Filter& aFilter,
                          const gfx::Rect& aClipRect,
-                         const nsIntRegion* aVisibleRegion = nullptr) = 0;
+                         const nsIntRegion* aVisibleRegion = nullptr)
+  {
+    CompositingThebesLayerBuffer::Composite(aEffectChain,
+                                            aOpacity,
+                                            aTransform,
+                                            aOffset,
+                                            aFilter,
+                                            aClipRect,
+                                            aVisibleRegion);
+  }
 
-  virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost) = 0;
+  // CompositingThebesLayerBuffer implementation
+  virtual PaintState BeginPaint(ContentType aContentType, PRUint32) {
+    NS_RUNTIMEABORT("can't BeginPaint for a shadow layer");
+    return PaintState();
+  }
+
+  virtual void SetDeAllocator(ISurfaceDeAllocator* aDeAllocator)
+  {
+    mTextureHost->SetDeAllocator(aDeAllocator);
+  }
+
+protected:
+  virtual TextureImage* GetTextureImage();
+  virtual TextureImage* GetTextureImageOnWhite() { return nullptr; }
+  virtual TemporaryRef<TextureHost> GetTextureHost() { return mTextureHost; }
+  virtual TemporaryRef<TextureHost> GetTextureHostOnWhite() { return nullptr; }
+
+  virtual nsIntPoint GetOriginOffset() {
+    return mBufferRect.TopLeft() - mBufferRotation;
+  }
+
+  RefPtr<TextureHost> mTextureHost;
+  nsIntRect mBufferRect;
+  nsIntPoint mBufferRotation;
+};
+
+// We can directly texture the drawn surface.  Use that as our new
+// front buffer, and return our previous directly-textured surface
+// to the renderer.
+class ContentHostDirect : public ContentHost
+{
+public:
+  ContentHostDirect(Compositor* aCompositor)
+    : ContentHost(aCompositor)
+  {}
+
+  virtual BufferType GetType() { return BUFFER_DIRECT; }
+
+  virtual void UpdateThebes(const TextureIdentifier& aTextureIdentifier,
+                            const ThebesBuffer& aNewBack,
+                            const nsIntRegion& aUpdated,
+                            OptionalThebesBuffer* aNewFront,
+                            const nsIntRegion& aOldValidRegionFront,
+                            const nsIntRegion& aOldValidRegionBack,
+                            OptionalThebesBuffer* aNewBackResult,
+                            nsIntRegion* aNewValidRegionFront,
+                            nsIntRegion* aUpdatedRegionBack);
+
+  virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost);
+};
+
+// We're using resources owned by our texture as the front buffer.
+// Upload the changed region and then return the surface back to
+// the renderer.
+class ContentHostTexture : public ContentHost
+{
+public:
+  ContentHostTexture(Compositor* aCompositor)
+    : ContentHost(aCompositor)
+  {}
+
+  virtual BufferType GetType() { return BUFFER_THEBES; }
+
+  virtual void UpdateThebes(const TextureIdentifier& aTextureIdentifier,
+                            const ThebesBuffer& aNewBack,
+                            const nsIntRegion& aUpdated,
+                            OptionalThebesBuffer* aNewFront,
+                            const nsIntRegion& aOldValidRegionFront,
+                            const nsIntRegion& aOldValidRegionBack,
+                            OptionalThebesBuffer* aNewBackResult,
+                            nsIntRegion* aNewValidRegionFront,
+                            nsIntRegion* aUpdatedRegionBack);
+
+  virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost);
 };
 
 }

@@ -6,16 +6,16 @@
 #ifndef MOZILLA_GFX_CANVASCLIENT_H
 #define MOZILLA_GFX_CANVASCLIENT_H
 
-#include "ImageClient.h"
+#include "TextureClient.h"
+#include "BufferClient.h"
 
 namespace mozilla {
 
 namespace layers {
 
 class BasicCanvasLayer;
-class TextureClientShmem;
 
-class CanvasClient : public RefCounted<CanvasClient>
+class CanvasClient : public BufferClient
 {
 public:
   virtual ~CanvasClient() {}
@@ -26,6 +26,10 @@ public:
 
   virtual void SetBuffer(const TextureIdentifier& aTextureIdentifier,
                          const SharedImage& aBuffer);
+  virtual void Updated(ShadowableLayer* aLayer)
+  {
+    mTextureClient->Updated(aLayer);
+  }
 protected:
   RefPtr<TextureClient> mTextureClient;
 };

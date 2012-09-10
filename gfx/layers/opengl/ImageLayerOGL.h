@@ -17,6 +17,7 @@
 namespace mozilla {
 namespace layers {
 
+class ImageHost;
 class GLTextureAsTextureHost;
 
 /**
@@ -163,6 +164,8 @@ public:
   ShadowImageLayerOGL(LayerManagerOGL* aManager);
   virtual ~ShadowImageLayerOGL();
 
+  virtual void SetAllocator(ISurfaceDeAllocator* aAllocator) {}
+
   // ShadowImageLayer impl
   virtual void Swap(const SharedImage& aFront,
                     SharedImage* aNewBack);
@@ -177,6 +180,7 @@ public:
                            const SharedImage& aFront,
                            SharedImage* aNewBack);
 
+  virtual void SetPictureRect(const nsIntRect& aPictureRect);
 
   // LayerOGL impl
   virtual void Destroy();
@@ -191,7 +195,7 @@ public:
   virtual void CleanupResources();
 
 private:
-  void EnsureImageHost(ImageHostType aHostType);
+  void EnsureImageHost(BufferType aHostType);
 
   // A ShadowImageLayer should use only one of the ImageHost
   // or ImageBridge mechanisms at one time

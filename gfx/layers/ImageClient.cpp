@@ -16,7 +16,7 @@ ImageClientTexture::ImageClientTexture(ShadowLayerForwarder* aLayerForwarder,
                                        ShadowableLayer* aLayer,
                                        TextureFlags aFlags)
 {
-  mTextureClient = aLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, IMAGE_TEXTURE, aLayer, aFlags, true);
+  mTextureClient = aLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, BUFFER_TEXTURE, aLayer, aFlags, true);
 }
 
 ImageClientTexture::~ImageClientTexture()
@@ -35,9 +35,9 @@ ImageClientTexture::UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer)
   AutoLockImage autoLock(aContainer, getter_AddRefs(surface));
   Image *image = autoLock.GetImage();
 
-  ImageHostType type = CompositingFactory::TypeForImage(autoLock.GetImage());
-  if (type != IMAGE_TEXTURE) {
-    return type == IMAGE_UNKNOWN;
+  BufferType type = CompositingFactory::TypeForImage(autoLock.GetImage());
+  if (type != BUFFER_TEXTURE) {
+    return type == BUFFER_UNKNOWN;
   }
 
   nsRefPtr<gfxPattern> pat = new gfxPattern(surface);
@@ -87,12 +87,17 @@ ImageClientTexture::SetBuffer(const TextureIdentifier& aTextureIdentifier,
   mTextureClient->SetDescriptor(aBuffer.get_SurfaceDescriptor());
 }
 
+void
+ImageClientTexture::Updated(ShadowableLayer* aLayer)
+{
+  mTextureClient->Updated(aLayer);
+}
 
 ImageClientShared::ImageClientShared(ShadowLayerForwarder* aLayerForwarder,
                                      ShadowableLayer* aLayer, 
                                      TextureFlags aFlags)
 {
-  mTextureClient = aLayerForwarder->CreateTextureClientFor(TEXTURE_SHARED, IMAGE_SHARED, aLayer, true, aFlags);
+  mTextureClient = aLayerForwarder->CreateTextureClientFor(TEXTURE_SHARED, BUFFER_SHARED, aLayer, true, aFlags);
 }
 
 ImageClientShared::~ImageClientShared()
@@ -106,9 +111,9 @@ ImageClientShared::UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer)
   gfxASurface* dontCare = nullptr;
   AutoLockImage autoLock(aContainer, &dontCare);
   Image *image = autoLock.GetImage();
-  ImageHostType type = CompositingFactory::TypeForImage(autoLock.GetImage());
-  if (type != IMAGE_SHARED) {
-    return type == IMAGE_UNKNOWN;
+  BufferType type = CompositingFactory::TypeForImage(autoLock.GetImage());
+  if (type != BUFFER_SHARED) {
+    return type == BUFFER_UNKNOWN;
   }
 
   SharedTextureImage* sharedImage = static_cast<SharedTextureImage*>(image);
@@ -120,19 +125,26 @@ ImageClientShared::UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer)
   return true;
 }
 
+void
+ImageClientShared::Updated(ShadowableLayer* aLayer)
+{
+  mTextureClient->Updated(aLayer);
+}
+
 
 ImageClientYUV::ImageClientYUV(ShadowLayerForwarder* aLayerForwarder,
                                ShadowableLayer* aLayer,
                                TextureFlags aFlags)
+  : mLayerForwarder(aLayerForwarder)
 {
   mTextureClientY = static_cast<TextureClientShmem*>(
-    aLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, IMAGE_YUV, aLayer, true, aFlags).drop());
+    aLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, BUFFER_YUV, aLayer, true, aFlags).drop());
   mTextureClientY->SetDescriptor(0);
   mTextureClientU = static_cast<TextureClientShmem*>(
-    aLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, IMAGE_YUV, aLayer, true, aFlags).drop());
+    aLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, BUFFER_YUV, aLayer, true, aFlags).drop());
   mTextureClientU->SetDescriptor(1);
   mTextureClientV = static_cast<TextureClientShmem*>(
-    aLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, IMAGE_YUV, aLayer, true, aFlags).drop());
+    aLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, BUFFER_YUV, aLayer, true, aFlags).drop());
   mTextureClientV->SetDescriptor(2);
 }
 
@@ -154,9 +166,9 @@ ImageClientYUV::UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer)
   AutoLockImage autoLock(aContainer, &dontCare);
 
   Image *image = autoLock.GetImage();
-  ImageHostType type = CompositingFactory::TypeForImage(autoLock.GetImage());
-  if (type != IMAGE_YUV) {
-    return type == IMAGE_UNKNOWN;
+  BufferType type = CompositingFactory::TypeForImage(autoLock.GetImage());
+  if (type != BUFFER_YUV) {
+    return type == BUFFER_UNKNOWN;
   }
 
   PlanarYCbCrImage *YCbCrImage = static_cast<PlanarYCbCrImage*>(image);
@@ -197,34 +209,43 @@ ImageClientYUV::UpdateImage(ImageContainer* aContainer, ImageLayer* aLayer)
   return true;
 }
 
-SharedImage
-ImageClientYUV::GetAsSharedImage()
-{
-  //TODO[nrc] pictureRect
-  return YUVImage(mTextureClientY->Descriptor(),
-                  mTextureClientU->Descriptor(),
-                  mTextureClientV->Descriptor(),
-                  mPictureRect);
-}
-
-// we deal with all three textures at once with this kind of reply
 void
 ImageClientYUV::SetBuffer(const TextureIdentifier& aTextureIdentifier,
                           const SharedImage& aBuffer)
 {
   SharedImage::Type type = aBuffer.type();
 
-  if (type != SharedImage::TSurfaceDescriptor) {
-    mTextureClientY->Descriptor() = SurfaceDescriptor();
-    mTextureClientU->Descriptor() = SurfaceDescriptor();
-    mTextureClientV->Descriptor() = SurfaceDescriptor();
+  TextureClient* textureClient;
+  switch (aTextureIdentifier.mDescriptor) {
+  case 0:
+    textureClient = mTextureClientY;
+    break;
+  case 1:
+    textureClient = mTextureClientY;
+    break;
+  case 2:
+    textureClient = mTextureClientY;
+    break;
+  default:
+    NS_WARNING("Bad texture identifier");
     return;
   }
 
-  const YUVImage& yuv = aBuffer.get_YUVImage();
-  mTextureClientY->Descriptor() = yuv.Ydata();
-  mTextureClientU->Descriptor() = yuv.Udata();
-  mTextureClientV->Descriptor() = yuv.Vdata();
+  if (type != SharedImage::TSurfaceDescriptor) {
+    textureClient->SetDescriptor(SurfaceDescriptor());
+    return;
+  }
+
+  textureClient->SetDescriptor(aBuffer.get_SurfaceDescriptor());
+}
+
+void
+ImageClientYUV::Updated(ShadowableLayer* aLayer)
+{
+  mTextureClientY->Updated(aLayer);
+  mTextureClientU->Updated(aLayer);
+  mTextureClientV->Updated(aLayer);
+  mLayerForwarder->UpdatePictureRect(aLayer, mPictureRect);
 }
 
 }

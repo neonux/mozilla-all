@@ -3,11 +3,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#ifndef MOZILLA_GFX_ContentClient_H
-#define MOZILLA_GFX_ContentClient_H
+#ifndef MOZILLA_GFX_CONTENTCLIENT_H
+#define MOZILLA_GFX_CONTENTCLIENT_H
 
 #include "mozilla/layers/LayersSurfaces.h"
-#include "Compositor.h"
+#include "BufferClient.h"
 #include "TextureClient.h"
 #include "BasicBuffers.h"
 #include "mozilla/Attributes.h"
@@ -17,7 +17,7 @@ namespace layers {
 
 class BasicLayerManager;
 
-class ContentClient : public RefCounted<ContentClient>, protected ThebesLayerBuffer
+class ContentClient : public BufferClient, protected ThebesLayerBuffer
 {
 public:
   ContentClient()
@@ -99,17 +99,23 @@ public:
   virtual void BeginPaint();
   virtual void EndPaint();
 
-  virtual nsIntRegion GetUpdatedRegion(const nsIntRegion& aRegionToDraw,
-                                       const nsIntRegion& aVisibleRegion,
-                                       bool aDidSelfCopy);
+  virtual BufferType GetType() = 0;
 
-  ThebesBuffer GetAsThebesBuffer()
+  virtual void Updated(ShadowableLayer* aLayer,
+                       const nsIntRegion& aRegionToDraw,
+                       const nsIntRegion& aVisibleRegion,
+                       bool aDidSelfCopy)
   {
-    NS_ASSERTION(mTextureClient, "No texture client?!");
-    return ThebesBuffer(mTextureClient->Descriptor(), BufferRect(), BufferRotation());
-  }
+    nsIntRegion updatedRegion = GetUpdatedRegion(aRegionToDraw,
+                                                 aVisibleRegion,
+                                                 aDidSelfCopy);
 
-  virtual ImageHostType GetType() = 0;
+    NS_ASSERTION(mTextureClient, "No texture client?!");
+    mTextureClient->UpdatedRegion(aLayer,
+                                  updatedRegion,
+                                  BufferRect(),
+                                  BufferRotation());
+  }
 
 protected:
   /**
@@ -118,12 +124,16 @@ protected:
   void SetBackingBuffer(gfxASurface* aBuffer,
                         const nsIntRect& aRect, const nsIntPoint& aRotation);
 
+  virtual nsIntRegion GetUpdatedRegion(const nsIntRegion& aRegionToDraw,
+                                       const nsIntRegion& aVisibleRegion,
+                                       bool aDidSelfCopy);
+
   ShadowLayerForwarder* mLayerForwarder;
   ShadowableLayer* mLayer;
 
-  RefPtr<TextureClientShmem> mTextureClient;
+  RefPtr<TextureClient> mTextureClient;
   // keep a record of texture clients we have created and need to keep around, then unlock
-  nsTArray<RefPtr<TextureClientShmem>> mOldTextures;
+  nsTArray<RefPtr<TextureClient>> mOldTextures;
 
   bool mIsNewBuffer;
 };
@@ -137,6 +147,13 @@ public:
     : ContentClientRemote(aLayerForwarder, aLayer, aFlags)
   {}
 
+  virtual already_AddRefed<gfxASurface> CreateBuffer(ContentType aType,
+                                                     const nsIntSize& aSize,
+                                                     PRUint32 aFlags)
+  {
+    return ContentClientRemote::CreateBuffer(aType, aSize, aFlags);
+  }
+
   virtual void SetBackBufferAndAttrs(const TextureIdentifier& aTextureIdentifier,
                                      const OptionalThebesBuffer& aBuffer,
                                      const nsIntRegion& aValidRegion,
@@ -146,7 +163,7 @@ public:
 
   virtual void SyncFrontBufferToBackBuffer();
 
-  virtual ImageHostType GetType() { return IMAGE_DIRECT; }
+  virtual BufferType GetType() { return BUFFER_DIRECT; }
 
 private:
   ContentClientDirect(gfxASurface* aBuffer,
@@ -187,7 +204,7 @@ public:
 
   virtual void SyncFrontBufferToBackBuffer(); 
 
-  virtual ImageHostType GetType() { return IMAGE_TEXTURE; }
+  virtual BufferType GetType() { return BUFFER_TEXTURE; }
 };
 
 }

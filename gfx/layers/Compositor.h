@@ -16,22 +16,9 @@
 
 //TODO[nrc] can we break up this header file into host and client parts?
 
-//TODO: I'm pretty sure we don't want to do this
-//this is just for the definition of HANDLE, used to typedef ProcessHandle
-//#ifdef OS_WIN
-//#include <windows.h>
-//#endif
-
 class gfxContext;
+class gfxASurface;
 class nsIWidget;
-
-/*namespace base {
-#if defined(OS_WIN)
-typedef HANDLE int ProcessHandle;
-#elif defined(OS_POSIX)
-typedef pid_t ProcessHandle;
-#endif
-}*/
 
 namespace mozilla {
 
@@ -45,14 +32,10 @@ class Compositor;
 struct Effect;
 struct EffectChain;
 class SharedImage;
-class ShadowLayerForwarder;
-class ShadowableLayer;
-class TextureClient;
-class ImageClient;
-class CanvasClient;
-class ContentClient;
 class Image;
 class ISurfaceDeAllocator;
+class BufferHost;
+class SurfaceDescriptor;
 
 enum TextureFormat
 {
@@ -63,17 +46,16 @@ enum TextureFormat
 };
 
 
-//TODO[nrc] rename this crap
 //TODO[nrc] update E:\Firefox\gfx\ipc\glue\IPCMessageUtils.h
-enum ImageHostType
+enum BufferType
 {
-  IMAGE_UNKNOWN,
-  IMAGE_YUV,
-  IMAGE_SHARED,
-  IMAGE_TEXTURE,
-  IMAGE_BRIDGE,
-  IMAGE_THEBES,
-  IMAGE_DIRECT
+  BUFFER_UNKNOWN,
+  BUFFER_YUV,
+  BUFFER_SHARED,
+  BUFFER_TEXTURE,
+  BUFFER_BRIDGE,
+  BUFFER_THEBES,
+  BUFFER_DIRECT
 };
 
 enum TextureHostType
@@ -91,13 +73,14 @@ const TextureFlags UseNearestFilter   = 0x1;
 const TextureFlags NeedsYFlip         = 0x2;
 const TextureFlags ForceSingleTile    = 0x4;
 const TextureFlags UseOpaqueSurface   = 0x8;
+const TextureFlags AllowRepeat        = 0x10;
 
 
 //TODO[nrc] comment
 // goes Compositor to ShadowLayerForwarder on LayerManager init
 struct TextureHostIdentifier
 {
-  //TODO[nrc] add ImageHostType, use it
+  //TODO[nrc] add BufferType, use it
   LayersBackend mParentBackend;
   PRInt32 mMaxTextureSize;
 };
@@ -106,7 +89,7 @@ struct TextureHostIdentifier
 // goes LayerManager to Compositor on TextureClient creation
 struct TextureIdentifier
 {
-  ImageHostType mImageType;
+  BufferType mBufferType;
   TextureHostType mTextureType;
   PRUint32 mDescriptor;
 };
@@ -118,7 +101,7 @@ struct TextureIdentifier
 }*/
 static bool operator==(const TextureIdentifier& aLeft, const TextureIdentifier& aRight)
 {
-  return aLeft.mImageType == aRight.mImageType &&
+  return aLeft.mBufferType == aRight.mBufferType &&
          aLeft.mTextureType == aRight.mTextureType &&
          aLeft.mDescriptor == aRight.mDescriptor;
 }
@@ -136,10 +119,16 @@ public:
   virtual ~Texture() {}
 };
 
+class TileIterator
+{
+public:
+  virtual void BeginTileIteration() = 0;
+  virtual nsIntRect GetTileRect() = 0;
+  virtual size_t GetTileCount() = 0;
+  virtual bool NextTile() = 0;
+};
 
-//TODO[nrc] IPC interface is a bit of a mess:
-// ImageClient -> SharedImage -> TextureHost
-class TextureHost : public Texture
+class TextureHost : public RefCounted<TextureHost>
 {
 public:
   TextureHost() : mFlags(NoFlags) {}
@@ -158,50 +147,22 @@ public:
 
   //TODO[nrc] comments
   virtual const SharedImage* Update(const SharedImage& aImage) { return nullptr; }
+  virtual void Update(gfxASurface* aSurface, nsIntRegion& aRegion) {}
+  virtual bool Update(const SurfaceDescriptor& aNewBuffer,
+                      SurfaceDescriptor* aOldBuffer) { return false; }
   virtual Effect* Lock(const gfx::Filter& aFilter) { return nullptr; }
   virtual void Unlock() {}
 
   void SetFlags(TextureFlags aFlags) { mFlags = aFlags; }
   void AddFlag(TextureFlags aFlag) { mFlags |= aFlag; }
+
+  virtual gfx::IntSize GetSize() = 0;
+
+  virtual void SetDeAllocator(ISurfaceDeAllocator* aDeAllocator) {}
+
+  virtual TileIterator* GetAsTileIterator() { return nullptr; }
 protected:
   TextureFlags mFlags;
-};
-
-class ImageHost : public RefCounted<ImageHost>
-{
-public:
-  ImageHost()
-    : mDeAllocator(nullptr)
-  {}
-
-  virtual ImageHostType GetType() = 0;
-
-  virtual const SharedImage* UpdateImage(const TextureIdentifier& aTextureIdentifier,
-                                         const SharedImage& aImage) = 0;
-
-  virtual void Composite(EffectChain& aEffectChain,
-                         float aOpacity,
-                         const gfx::Matrix4x4& aTransform,
-                         const gfx::Point& aOffset,
-                         const gfx::Filter& aFilter,
-                         const gfx::Rect& aClipRect,
-                         const nsIntRegion* aVisibleRegion = nullptr) = 0;
-
-  virtual void AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost) = 0;
-
-  /**
-   * Set deallocator for data recieved from IPC protocol
-   * We should be able to set allocator right before swap call
-   * that is why allowed multiple call with the same Allocator
-   */
-  void SetDeAllocator(ISurfaceDeAllocator* aDeAllocator)
-  {
-    NS_ASSERTION(!mDeAllocator || mDeAllocator == aDeAllocator, "Stomping allocator?");
-    mDeAllocator = aDeAllocator;
-  }
-
-protected:
-  ISurfaceDeAllocator* mDeAllocator;
 };
 
 /* This can be used as an offscreen rendering target by the compositor, and
@@ -243,13 +204,13 @@ struct Effect : public RefCounted<Effect>
 
 struct EffectMask : public Effect
 {
-  EffectMask(Texture *aMaskTexture,
+  EffectMask(TextureHost *aMaskTexture,
              const gfx::Matrix4x4 &aMaskTransform)
     : Effect(EFFECT_MASK), mMaskTexture(aMaskTexture)
     , mMaskTransform(aMaskTransform)
   {}
 
-  RefPtr<Texture> mMaskTexture;
+  RefPtr<TextureHost> mMaskTexture;
   gfx::Matrix4x4 mMaskTransform;
 };
 
@@ -264,7 +225,7 @@ struct EffectSurface : public Effect
 
 struct EffectBGRX : public Effect
 {
-  EffectBGRX(Texture *aBGRXTexture,
+  EffectBGRX(TextureHost *aBGRXTexture,
              bool aPremultiplied,
              mozilla::gfx::Filter aFilter,
              bool aFlipped = false)
@@ -273,7 +234,7 @@ struct EffectBGRX : public Effect
     , mFlipped(aFlipped)
   {}
 
-  RefPtr<Texture> mBGRXTexture;
+  RefPtr<TextureHost> mBGRXTexture;
   bool mPremultiplied;
   mozilla::gfx::Filter mFilter;
   bool mFlipped;
@@ -281,7 +242,7 @@ struct EffectBGRX : public Effect
 
 struct EffectRGBX : public Effect
 {
-  EffectRGBX(Texture *aRGBXTexture,
+  EffectRGBX(TextureHost *aRGBXTexture,
              bool aPremultiplied,
              mozilla::gfx::Filter aFilter,
              bool aFlipped = false)
@@ -290,7 +251,7 @@ struct EffectRGBX : public Effect
     , mFlipped(aFlipped)
   {}
 
-  RefPtr<Texture> mRGBXTexture;
+  RefPtr<TextureHost> mRGBXTexture;
   bool mPremultiplied;
   mozilla::gfx::Filter mFilter;
   bool mFlipped;
@@ -298,7 +259,7 @@ struct EffectRGBX : public Effect
 
 struct EffectBGRA : public Effect
 {
-  EffectBGRA(Texture *aBGRATexture,
+  EffectBGRA(TextureHost *aBGRATexture,
              bool aPremultiplied,
              mozilla::gfx::Filter aFilter,
              bool aFlipped = false)
@@ -307,7 +268,7 @@ struct EffectBGRA : public Effect
     , mFlipped(aFlipped)
   {}
 
-  RefPtr<Texture> mBGRATexture;
+  RefPtr<TextureHost> mBGRATexture;
   bool mPremultiplied;
   mozilla::gfx::Filter mFilter;
   bool mFlipped;
@@ -315,7 +276,7 @@ struct EffectBGRA : public Effect
 
 struct EffectRGB : public Effect
 {
-  EffectRGB(Texture *aRGBTexture,
+  EffectRGB(TextureHost *aRGBTexture,
              bool aPremultiplied,
              mozilla::gfx::Filter aFilter,
              bool aFlipped = false)
@@ -324,7 +285,7 @@ struct EffectRGB : public Effect
     , mFlipped(aFlipped)
   {}
 
-  RefPtr<Texture> mRGBTexture;
+  RefPtr<TextureHost> mRGBTexture;
   bool mPremultiplied;
   mozilla::gfx::Filter mFilter;
   bool mFlipped;
@@ -332,7 +293,7 @@ struct EffectRGB : public Effect
 
 struct EffectRGBA : public Effect
 {
-  EffectRGBA(Texture *aRGBATexture,
+  EffectRGBA(TextureHost *aRGBATexture,
              bool aPremultiplied,
              mozilla::gfx::Filter aFilter,
              bool aFlipped = false)
@@ -341,7 +302,7 @@ struct EffectRGBA : public Effect
     , mFlipped(aFlipped)
   {}
 
-  RefPtr<Texture> mRGBATexture;
+  RefPtr<TextureHost> mRGBATexture;
   bool mPremultiplied;
   mozilla::gfx::Filter mFilter;
   bool mFlipped;
@@ -349,7 +310,7 @@ struct EffectRGBA : public Effect
 
 struct EffectRGBAExternal : public Effect
 {
-  EffectRGBAExternal(Texture *aRGBATexture,
+  EffectRGBAExternal(TextureHost *aRGBATexture,
                      const gfx::Matrix4x4 &aTextureTransform,
                      bool aPremultiplied,
                      mozilla::gfx::Filter aFilter,
@@ -359,7 +320,7 @@ struct EffectRGBAExternal : public Effect
     , mFilter(aFilter), mFlipped(aFlipped)
   {}
 
-  RefPtr<Texture> mRGBATexture;
+  RefPtr<TextureHost> mRGBATexture;
   gfx::Matrix4x4 mTextureTransform;
   bool mPremultiplied;
   mozilla::gfx::Filter mFilter;
@@ -368,26 +329,26 @@ struct EffectRGBAExternal : public Effect
 
 struct EffectYCbCr : public Effect
 {
-  EffectYCbCr(Texture *aY, Texture *aCb, Texture *aCr,
+  EffectYCbCr(TextureHost *aY, TextureHost *aCb, TextureHost *aCr,
               mozilla::gfx::Filter aFilter)
     : Effect(EFFECT_YCBCR), mY(aY), mCb(aCb), mCr(aCr)
     , mFilter(aFilter)
   {}
 
-  RefPtr<Texture> mY;
-  RefPtr<Texture> mCb;
-  RefPtr<Texture> mCr;
+  RefPtr<TextureHost> mY;
+  RefPtr<TextureHost> mCb;
+  RefPtr<TextureHost> mCr;
   mozilla::gfx::Filter mFilter;
 };
 
 struct EffectComponentAlpha : public Effect
 {
-  EffectComponentAlpha(Texture *aOnWhite, Texture *aOnBlack)
+  EffectComponentAlpha(TextureHost *aOnWhite, TextureHost *aOnBlack)
     : Effect(EFFECT_COMPONENT_ALPHA), mOnWhite(aOnWhite), mOnBlack(aOnBlack)
   {}
 
-  RefPtr<Texture> mOnWhite;
-  RefPtr<Texture> mOnBlack;
+  RefPtr<TextureHost> mOnWhite;
+  RefPtr<TextureHost> mOnBlack;
 };
 
 struct EffectSolidColor : public Effect
@@ -433,10 +394,10 @@ public:
     CreateTextureHost(const TextureIdentifier &aIdentifier, TextureFlags aFlags) = 0;
 
   /**
-   * TODO[nrc] comment, name
+   * TODO[nrc] comment
    */
-  virtual TemporaryRef<ImageHost> 
-    CreateImageHost(ImageHostType aType) = 0;
+  virtual TemporaryRef<BufferHost> 
+    CreateBufferHost(BufferType aType) = 0;
 
   /* This creates a Surface that can be used as a rendering target by this
    * compositor.
@@ -487,34 +448,41 @@ public:
   virtual ~Compositor() {}
 };
 
+class TextureClient;
+class ImageClient;
+class CanvasClient;
+class ContentClient;
+class ShadowLayerForwarder;
+class ShadowableLayer;
+
 class CompositingFactory
 {
 public:
   // TODO[nrc] comment
   // TODO[nrc] enums shouldn't be const &
   static TemporaryRef<ImageClient> CreateImageClient(LayersBackend aBackendType,
-                                                     ImageHostType aImageHostType,
+                                                     BufferType aImageHostType,
                                                      ShadowLayerForwarder* aLayerForwarder,
                                                      ShadowableLayer* aLayer,
                                                      TextureFlags aFlags);
   static TemporaryRef<CanvasClient> CreateCanvasClient(LayersBackend aBackendType,
-                                                       ImageHostType aImageHostType,
+                                                       BufferType aImageHostType,
                                                        ShadowLayerForwarder* aLayerForwarder,
                                                        ShadowableLayer* aLayer,
                                                        TextureFlags aFlags);
   static TemporaryRef<ContentClient> CreateContentClient(LayersBackend aBackendType,
-                                                         ImageHostType aImageHostType,
+                                                         BufferType aImageHostType,
                                                          ShadowLayerForwarder* aLayerForwarder,
                                                          ShadowableLayer* aLayer,
                                                          TextureFlags aFlags);
   static TemporaryRef<TextureClient> CreateTextureClient(LayersBackend aBackendType,
                                                          TextureHostType aTextureHostType,
-                                                         ImageHostType aImageHostType,
+                                                         BufferType aImageHostType,
                                                          ShadowLayerForwarder* aLayerForwarder,
                                                          bool aStrict = false);
 
   static TemporaryRef<Compositor> CreateCompositorForWidget(nsIWidget *aWidget);
-  static ImageHostType TypeForImage(Image* aImage);
+  static BufferType TypeForImage(Image* aImage);
 };
 
 

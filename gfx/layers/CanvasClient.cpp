@@ -17,7 +17,7 @@ CanvasClientTexture::CanvasClientTexture(ShadowLayerForwarder* aLayerForwarder,
                                          ShadowableLayer* aLayer,
                                          TextureFlags aFlags)
 {
-  mTextureClient = aLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, IMAGE_TEXTURE, aLayer, aFlags, true);
+  mTextureClient = aLayerForwarder->CreateTextureClientFor(TEXTURE_SHMEM, BUFFER_TEXTURE, aLayer, aFlags, true);
 }
 
 void
@@ -55,7 +55,7 @@ CanvasClientShared::CanvasClientShared(ShadowLayerForwarder* aLayerForwarder,
                                        ShadowableLayer* aLayer, 
                                        TextureFlags aFlags)
 {
-  mTextureClient = aLayerForwarder->CreateTextureClientFor(TEXTURE_SHARED_GL, IMAGE_SHARED, aLayer, true, aFlags);
+  mTextureClient = aLayerForwarder->CreateTextureClientFor(TEXTURE_SHARED_GL, BUFFER_SHARED, aLayer, true, aFlags);
 }
 
 void

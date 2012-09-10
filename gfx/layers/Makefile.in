@@ -63,6 +63,7 @@ CPPSRCS = \
         BasicTiledThebesLayer.cpp \
         CanvasClient.cpp \
         CompositorOGL.cpp \
+        ContentClient.cpp \
         ContentHost.cpp \
         Layers.cpp \
         RenderTrace.cpp \
@@ -72,11 +73,11 @@ CPPSRCS = \
         ColorLayerOGL.cpp \
         ContainerLayerOGL.cpp \
         ImageClient.cpp \
+        ImageHost.cpp \
         ImageLayerOGL.cpp \
         LayerManagerOGL.cpp \
         TextureClient.cpp \
         TextureOGL.cpp \
-        ThebesBufferClient.cpp \
         ThebesLayerOGL.cpp \
         TiledThebesLayerOGL.cpp \
         ReusableTileStoreOGL.cpp \

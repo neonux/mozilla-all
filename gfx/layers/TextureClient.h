@@ -11,8 +11,6 @@
 #include "Compositor.h"
 #include "mozilla/layers/ShadowLayers.h"
 
-//TODO[nrc] rename this file maybe? CompositorClient (also make CompositorHost?)
-
 namespace mozilla {
 
 namespace gl {
@@ -75,16 +73,17 @@ public:
     mDescriptor = aDescriptor;
   }
 
-  SharedImage GetAsSharedImage()
-  {
-    return SharedImage(mDescriptor);
-  }
+  virtual void Updated(ShadowableLayer* aLayer);
+  virtual void UpdatedRegion(ShadowableLayer* aLayer,
+                             const nsIntRegion& aUpdatedRegion,
+                             const nsIntRect& aBufferRect,
+                             const nsIntPoint& aBufferRotation);
 
 protected:
-  TextureClient(ShadowLayerForwarder* aLayerForwarder, ImageHostType aImageType)
+  TextureClient(ShadowLayerForwarder* aLayerForwarder, BufferType aBufferType)
     : mLayerForwarder(aLayerForwarder)
   {
-    mIdentifier.mImageType = aImageType;
+    mIdentifier.mBufferType = aBufferType;
   }
 
   ShadowLayerForwarder* mLayerForwarder;
@@ -102,8 +101,9 @@ public:
   virtual gfxASurface* LockSurface() { return GetSurface(); }
   virtual void Unlock();
   virtual void EnsureTextureClient(gfx::IntSize aSize, gfxASurface::gfxContentType aType);
+
 private:
-  TextureClientShmem(ShadowLayerForwarder* aLayerForwarder, ImageHostType aImageType);
+  TextureClientShmem(ShadowLayerForwarder* aLayerForwarder, BufferType aBufferType);
 
   gfxASurface* GetSurface();
 
@@ -125,8 +125,8 @@ public:
   virtual void EnsureTextureClient(gfx::IntSize aSize, gfxASurface::gfxContentType aType) {}
 
 protected:
-  TextureClientShared(ShadowLayerForwarder* aLayerForwarder, ImageHostType aImageType)
-    : TextureClient(aLayerForwarder, aImageType)
+  TextureClientShared(ShadowLayerForwarder* aLayerForwarder, BufferType aBufferType)
+    : TextureClient(aLayerForwarder, aBufferType)
   {
     mIdentifier.mTextureType = TEXTURE_SHARED;
   }
@@ -141,8 +141,9 @@ public:
   virtual void EnsureTextureClient(gfx::IntSize aSize, gfxASurface::gfxContentType aType);
   virtual SharedTextureHandle LockHandle(GLContext* aGL, TextureImage::TextureShareType aFlags);
   virtual void Unlock();
+
 protected:
-  TextureClientSharedGL(ShadowLayerForwarder* aLayerForwarder, ImageHostType aImageType);
+  TextureClientSharedGL(ShadowLayerForwarder* aLayerForwarder, BufferType aBufferType);
 
   GLContext* mGL;
   gfx::IntSize mSize;

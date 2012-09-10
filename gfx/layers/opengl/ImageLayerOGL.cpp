@@ -6,9 +6,9 @@
 #include "gfxSharedImageSurface.h"
 #include "mozilla/layers/ImageContainerParent.h"
 
-#include "ImageSource.h"
 #include "ipc/AutoOpenSurface.h"
 #include "ImageLayerOGL.h"
+#include "ImageHost.h"
 #include "gfxImageSurface.h"
 #include "gfxUtils.h"
 #include "yuv_convert.h"
@@ -693,7 +693,7 @@ ShadowImageLayerOGL::~ShadowImageLayerOGL()
 void
 ShadowImageLayerOGL::AddTextureHost(const TextureIdentifier& aTextureIdentifier, TextureHost* aTextureHost)
 {
-  EnsureImageHost(aTextureIdentifier.mImageType);
+  EnsureImageHost(aTextureIdentifier.mBufferType);
 
   mImageHost->AddTextureHost(aTextureIdentifier, aTextureHost);
 }
@@ -718,11 +718,12 @@ ShadowImageLayerOGL::SwapTexture(const TextureIdentifier& aTextureIdentifier,
 }
 
 void
-ShadowImageLayerOGL::EnsureImageHost(ImageHostType aHostType)
+ShadowImageLayerOGL::EnsureImageHost(BufferType aHostType)
 {
   if (!mImageHost ||
       mImageHost->GetType() != aHostType) {
-    mImageHost = mOGLManager->GetCompositor()->CreateImageHost(aHostType);
+    RefPtr<BufferHost> bufferHost = mOGLManager->GetCompositor()->CreateBufferHost(aHostType);
+    mImageHost = static_cast<ImageHost*>(bufferHost.get());
   }
 }
 
@@ -784,9 +785,10 @@ ShadowImageLayerOGL::RenderLayer(const nsIntPoint& aOffset, const nsIntRect& aCl
     if (imgVersion != mImageVersion) {
       SharedImage* img = ImageContainerParent::GetSharedImage(mImageContainerID);
       if (img && (img->type() == SharedImage::TYUVImage)) {
-        mImageHost = mOGLManager->GetCompositor()->CreateImageHost(IMAGE_YUV);
+        RefPtr<BufferHost> bufferHost = mOGLManager->GetCompositor()->CreateBufferHost(BUFFER_YUV);
+        mImageHost = static_cast<ImageHost*>(bufferHost.get());
         TextureIdentifier textureId;
-        textureId.mImageType = IMAGE_YUV;
+        textureId.mBufferType = BUFFER_YUV;
         textureId.mTextureType = TEXTURE_SHMEM;
         mImageHost->UpdateImage(textureId, *img);
   
@@ -822,6 +824,14 @@ ShadowImageLayerOGL::LoadAsTexture(GLuint aTextureUnit, gfxIntSize* aSize)
 {
   //TODO[nrc] remove this - we shouldn't be doing LoadAsTexture on shadow side
   return true;
+}
+
+void
+ShadowImageLayerOGL::SetPictureRect(const nsIntRect& aPictureRect)
+{
+  if (mImageHost) {
+    mImageHost->SetPictureRect(aPictureRect);
+  }
 }
 
 void
